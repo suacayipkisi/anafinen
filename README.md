@@ -1,4 +1,4 @@
-# nC-CONENGAN
+# ANAFINEN
 
-(nonContinious-continious materials engineering analysis)  
+(finite element engineering analysis)  
 -uneder construction-
