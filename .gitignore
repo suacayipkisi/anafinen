@@ -2,5 +2,6 @@ build/
 .cache/
 .test_data/
 .deps_cache/
+.vscode/
 
 .clangd
