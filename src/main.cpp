@@ -10,6 +10,8 @@
 #include <Eigen/Sparse>
 #include <Spectra/SymGEigsShiftSolver.h>
 
+#include <gmsh.h>
+
 #include "info.hpp"
 
 #ifdef _WIN32

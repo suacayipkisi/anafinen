@@ -5,3 +5,6 @@ build/
 .vscode/
 
 .clangd
+.ini
+
+imgui.ini

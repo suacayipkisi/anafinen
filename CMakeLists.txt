@@ -10,6 +10,14 @@ find_package(Eigen3 CONFIG REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(OpenGL REQUIRED)
 
+find_path(GMSH_INCLUDE_DIRS NAMES "gmsh.h" HINTS "${GMSH_SDK_DIR}/include")
+find_library(GMSH_LIBRARIES NAMES gmsh HINTS "${GMSH_SDK_DIR}/lib")
+
+if(NOT GMSH_INCLUDE_DIRS OR NOT GMSH_LIBRARIES)
+    message(FATAL_ERROR "Gmsh SDK not found!")
+endif()
+
+
 include(FetchContent)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -72,6 +80,7 @@ target_include_directories(anafinen PRIVATE
     ${IMGUIZMO_DIR}/src
     ${IMPLOT_DIR}
     ${SPECTRA_DIR}/include
+    ${GMSH_INCLUDE_DIRS}
 )
 
 target_link_libraries(anafinen PRIVATE 
@@ -79,4 +88,5 @@ target_link_libraries(anafinen PRIVATE
     OpenGL::GL
     OpenMP::OpenMP_CXX 
     Eigen3::Eigen
+    ${GMSH_LIBRARIES}
 )
