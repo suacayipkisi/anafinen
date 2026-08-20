@@ -1,5 +1,6 @@
 #include "gui.hpp"
 
+#include <array>
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
@@ -9,6 +10,7 @@
 #include <imgui_impl_opengl3.h>
 
 #include "../anafInfo.hpp"
+#include "../test/status.hpp"
 
 void Framebuffer::init(int w, int h) {
     width = w;
@@ -90,7 +92,7 @@ void setup_cad_theme() {
     colors[ImGuiCol_Border]               = ImVec4(0.20f, 0.22f, 0.24f, 0.60f);
 }
 
-int initRunGUI() {
+int initRunGUI(AllStatus& status) {
 
     if (!glfwInit()) {
         anafLog::error("GLFW initialization failed.");
@@ -122,8 +124,10 @@ int initRunGUI() {
     const char* gl_version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
     const char* gl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
 
+    std::array<int, 2> graphStatus{1, 1};
     if(gl_version){
         anafLog::success("OpenGL Version: {}", gl_version);
+        graphStatus[0] = 0;
     }
     else{
         anafLog::warn("OpenGL Version Couldn't Determined: {}", "Unknown");
@@ -131,10 +135,13 @@ int initRunGUI() {
 
     if(gl_renderer){
         anafLog::success("GPU Renderer  : {}", gl_renderer);
+        graphStatus[1] = 0;
     }
     else{
         anafLog::warn("GPU Renderer Couldn't Determined  : {}", "Unknown");
     }
+
+    status.setGraphicsStatus(graphStatus);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();

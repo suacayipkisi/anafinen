@@ -31,7 +31,7 @@ int main() {
     AllStatus mainStatus{};
 
 
-    if(initRunGUI() != -1){
+    if(initRunGUI(mainStatus) != -1){
         Log::info("Main window processed succesfully.");
     }
     else{

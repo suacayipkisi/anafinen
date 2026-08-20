@@ -8,6 +8,8 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include "../test/status.hpp"
+
 struct Framebuffer {
     GLuint fbo = 0;
     GLuint texture = 0;
@@ -22,4 +24,4 @@ struct Framebuffer {
 
 void setup_cad_theme();
 
-int initRunGUI();
+int initRunGUI(AllStatus& allStatus);
