@@ -59,6 +59,9 @@ public:
     inline void setShearModulues(const double shearModulus) {
         if(m_shearModulus == 0) m_shearModulus = shearModulus;
     }
+    inline void setElasticityModulues(const double elasticityModulus) {
+        if(m_elasticityModulus == 0) m_elasticityModulus = elasticityModulus;
+    }
     inline void setMaterialType(const std::string type) {
         if(m_materialType.empty()) m_materialType = type;
     }
@@ -70,5 +73,6 @@ public:
     inline const double getYieldTensile() const {return m_yieldTensileStrength;}
     inline const double getBulkModulus() const {return m_bulkModulus;}
     inline const double getShearModulues() const {return m_shearModulus;}
+    inline const double getElasticityModulues() const {return m_elasticityModulus;}
     inline const std::string getMaterialType() const {return m_materialType;}
 };

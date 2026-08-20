@@ -3,46 +3,55 @@
 #include "../material/properties.hpp"
 #include "node.hpp"
 #include "../anafInfo.hpp"
+#include <Eigen/Core>
 #include <memory>
+#include <array>
 
-class TrussElement{
+// initializing 1D element in 3D space
+// 2 nodes, one size_dimention
+class TrussElement_1D{
 private:
-    double m_elementLength{};
-    double m_elementCrossSectionArea{};
-    double m_elementElongation{};
-    std::shared_ptr<Material> m_elementProperties;
-    std::shared_ptr<Node> m_node_1;
-    std::shared_ptr<Node> m_node_2;
+    std::array<float, 3> m_angle{0.0, 0.0, 0.0};
+    double m_length{};
+    double m_crossSectionArea{};
+    double m_elongation{};
+    std::shared_ptr<Material> m_properties;
+    std::array<double, 2> m_nodeForce{};
+    std::array<std::shared_ptr<Node>, 2> m_nodes{};
+    Eigen::Matrix<double, 6, 6> m_stiffnessMatrix;
 protected:
 public:
-    TrussElement(
+    TrussElement_1D(
         std::shared_ptr<Material> type,
         double area,
         std::shared_ptr<Node> node_1,
         std::shared_ptr<Node> node_2
     ):
-        m_elementProperties(type),
-        m_elementCrossSectionArea(area),
-        m_node_1(node_1),
-        m_node_2(node_2)
+        m_properties(type),
+        m_crossSectionArea(area),
+        m_nodes({node_1, node_2})
     {
-        m_elementLength = nodeDistance(m_node_1, m_node_2);
+        m_length = nodeDistance(m_nodes);
     }
 
     // static determined properties of element
-    inline void setNode1(std::shared_ptr<Node> node1_ID) {m_node_1 = node1_ID;}
-    inline void setNode2(std::shared_ptr<Node> node2_ID) {m_node_2 = node2_ID;}
+    inline void setNodes(std::array<std::shared_ptr<Node>, 2> nodes){
+        m_nodes = nodes;
+    }
     inline void setEleLength() {
-        if(m_node_1 && m_node_2){
-            m_elementLength = nodeDistance(m_node_1, m_node_2);
+        if(m_nodes[0] && m_nodes[1]){
+            m_length = nodeDistance(m_nodes);
         }
         else{
             anafLog::warn("You have not initialize all required nodes yet for calculating distance between them!");
+            return;
         }
     }
-    inline void setEleCrossSectionArea(const double area) {m_elementCrossSectionArea = area;}
-    inline void setElementProperty(std::shared_ptr<Material> material) {m_elementProperties = material;}
+    inline void setEleCrossSectionArea(const double area) {m_crossSectionArea = area;}
+    inline void setEleProperty(std::shared_ptr<Material> material) {m_properties = material;}
 
     // calcuilated properties of element
-    inline void setElementElongation(const double elongation) {m_elementElongation = elongation;}
+    inline void setEleElongation(const double elongation) {m_elongation = elongation;}
+
+    void determineEleStiffnessMatrix();
 };

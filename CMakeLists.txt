@@ -53,6 +53,7 @@ set(SOURCES
     src/glad.c
     src/gui/gui.cpp
     src/test/test.cpp
+    src/truss/element.cpp
 )
 
 add_executable(anafinen ${SOURCES})
