@@ -4,7 +4,7 @@
 #include <string_view>
 #include <format>
 
-namespace anafinen::logger {
+namespace anafLog {
 
 namespace color {
     constexpr std::string_view reset   = "\033[0m";

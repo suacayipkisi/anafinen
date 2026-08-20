@@ -41,6 +41,7 @@ set(SPECTRA_DIR  "${EXTERNAL_DIR}/spectra")
 set(SOURCES
     src/main.cpp
     src/glad.c
+    src/gui/gui.cpp
     
     # Dear ImGui Core & Backends
     ${IMGUI_DIR}/imgui.cpp
