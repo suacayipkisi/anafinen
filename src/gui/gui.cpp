@@ -96,6 +96,7 @@ int initRunGUI() {
         anafLog::error("GLFW initialization failed.");
         return -1;
     }
+    anafLog::success("GLFW initialized successfully.");
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
@@ -117,6 +118,23 @@ int initRunGUI() {
         return -1;
     }
     anafLog::success("OpenGL context and subsystems initialized successfully.");
+
+    const char* gl_version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    const char* gl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+
+    if(gl_version){
+        anafLog::success("OpenGL Version: {}", gl_version);
+    }
+    else{
+        anafLog::warn("OpenGL Version Couldn't Determined: {}", "Unknown");
+    }
+
+    if(gl_renderer){
+        anafLog::success("GPU Renderer  : {}", gl_renderer);
+    }
+    else{
+        anafLog::warn("GPU Renderer Couldn't Determined  : {}", "Unknown");
+    }
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();

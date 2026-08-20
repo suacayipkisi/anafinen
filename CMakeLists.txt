@@ -39,24 +39,20 @@ set(IMPLOT_DIR   "${EXTERNAL_DIR}/implot")
 set(SPECTRA_DIR  "${EXTERNAL_DIR}/spectra")
 
 set(SOURCES
-    src/main.cpp
-    src/glad.c
-    src/gui/gui.cpp
-    
-    # Dear ImGui Core & Backends
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
-    
-    # ImGuizmo (Located under src/ in the repository)
     ${IMGUIZMO_DIR}/src/ImGuizmo.cpp
-    
-    # ImPlot
     ${IMPLOT_DIR}/implot.cpp
     ${IMPLOT_DIR}/implot_items.cpp
+
+    src/main.cpp
+    src/glad.c
+    src/gui/gui.cpp
+    src/test/test.cpp
 )
 
 add_executable(anafinen ${SOURCES})

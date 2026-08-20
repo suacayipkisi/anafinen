@@ -14,6 +14,7 @@
 
 #include "anafInfo.hpp"
 #include "gui/gui.hpp"
+#include "test/status.hpp"
 
 #ifdef _WIN32
 extern "C" {
@@ -26,6 +27,9 @@ namespace Log = anafLog;
 
 int main() {
     Log::core("Initializing ANAFINEN Workspace (C++23)...");
+
+    AllStatus mainStatus{};
+
 
     if(initRunGUI() != -1){
         Log::info("Main window processed succesfully.");
