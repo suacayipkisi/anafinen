@@ -17,7 +17,6 @@ if(NOT GMSH_INCLUDE_DIRS OR NOT GMSH_LIBRARIES)
     message(FATAL_ERROR "Gmsh SDK not found!")
 endif()
 
-
 include(FetchContent)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -37,6 +36,11 @@ set(IMGUI_DIR    "${EXTERNAL_DIR}/imgui")
 set(IMGUIZMO_DIR "${EXTERNAL_DIR}/ImGuizmo")
 set(IMPLOT_DIR   "${EXTERNAL_DIR}/implot")
 set(SPECTRA_DIR  "${EXTERNAL_DIR}/spectra")
+set(GLAD_DIR     "${EXTERNAL_DIR}/glad")
+
+# Glad target
+add_library(glad STATIC "${GLAD_DIR}/src/glad.c")
+target_include_directories(glad PUBLIC "${GLAD_DIR}/include")
 
 set(SOURCES
     ${IMGUI_DIR}/imgui.cpp
@@ -50,7 +54,6 @@ set(SOURCES
     ${IMPLOT_DIR}/implot_items.cpp
 
     src/main.cpp
-    src/glad.c
     src/gui/gui.cpp
     src/test/test.cpp
     src/truss/element.cpp
@@ -85,6 +88,7 @@ target_include_directories(anafinen PRIVATE
 )
 
 target_link_libraries(anafinen PRIVATE 
+    glad
     glfw 
     OpenGL::GL
     OpenMP::OpenMP_CXX 
