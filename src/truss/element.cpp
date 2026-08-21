@@ -2,7 +2,6 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <array>
-#include <cmath>
 #include "../anafInfo.hpp"
 
 void TrussElement_1D::determineEleStiffnessMatrix(){
@@ -29,11 +28,7 @@ void TrussElement_1D::determineEleStiffnessMatrix(){
     double AE_L = (m_crossSectionArea * m_properties->getElasticityModulues()) / m_length;
 
     Eigen::Matrix3d lambda;
-    std::array<float, 3> cos {
-        std::cosf(m_angle[0]),
-        std::cosf(m_angle[1]),
-        std::cosf(m_angle[2])
-    };
+    std::array<float, 3>& cos {m_cosinuses};
 
     // lambda is symmetrix
     lambda << (cos[0] * cos[0] * AE_L), (cos[0] * cos[1] * AE_L), (cos[0] * cos[2] * AE_L),

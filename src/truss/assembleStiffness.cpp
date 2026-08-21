@@ -32,13 +32,30 @@ const std::vector<Eigen::Triplet<double>> assembleStiffness(const std::vector<Tr
         // send half column by half column
         for(size_t lambda_topIndex{0}; lambda_topIndex < 3; ++lambda_topIndex){
             for(size_t lambda_rightIndex{0}; lambda_rightIndex < 3; ++lambda_rightIndex){
-                globalStiffnessMatrix.emplace_back(zeroPos_1 + lambda_rightIndex, zeroPos_1 + lambda_topIndex, elementStiffness(lambda_rightIndex, lambda_topIndex));
-                globalStiffnessMatrix.emplace_back(zeroPos_1 + lambda_rightIndex, zeroPos_2 + lambda_topIndex, elementStiffness(lambda_rightIndex, lambda_topIndex + 3));
-                globalStiffnessMatrix.emplace_back(zeroPos_2 + lambda_rightIndex, zeroPos_1 + lambda_topIndex, elementStiffness(lambda_rightIndex + 3, lambda_topIndex));
-                globalStiffnessMatrix.emplace_back(zeroPos_2 + lambda_rightIndex, zeroPos_2 + lambda_topIndex, elementStiffness(lambda_rightIndex + 3, lambda_topIndex + 3));
+                globalStiffnessMatrix.emplace_back(
+                    zeroPos_1 + lambda_rightIndex, 
+                    zeroPos_1 + lambda_topIndex, 
+                    elementStiffness(lambda_rightIndex, lambda_topIndex)
+                );
+                globalStiffnessMatrix.emplace_back(
+                    zeroPos_1 + lambda_rightIndex, 
+                    zeroPos_2 + lambda_topIndex, 
+                    elementStiffness(lambda_rightIndex, lambda_topIndex + 3)
+                );
+                globalStiffnessMatrix.emplace_back(
+                    zeroPos_2 + lambda_rightIndex, 
+                    zeroPos_1 + lambda_topIndex, 
+                    elementStiffness(lambda_rightIndex + 3, lambda_topIndex)
+                );
+                globalStiffnessMatrix.emplace_back(
+                    zeroPos_2 + lambda_rightIndex, 
+                    zeroPos_2 + lambda_topIndex, 
+                    elementStiffness(lambda_rightIndex + 3, lambda_topIndex + 3)
+                );
             }
         }
     }
+    
     anafLog::info("Global Stiffness Matrix Created, size: {}x{}", (nodeNum * 3), (nodeNum * 3));
     return globalStiffnessMatrix;
 }

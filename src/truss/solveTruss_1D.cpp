@@ -1,11 +1,16 @@
 #include "solveTruss_1D.hpp"
+#include "element.hpp"
+#include "node.hpp"
+#include <Eigen/Core>
 #include <Eigen/SparseCholesky>
 #include <Eigen/SparseCore>
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
-void Truss_1D_Calculated::calculate(){
+void Truss_1D_Calculated::calculateDisplacements(){
     const std::uint32_t totalNodes = static_cast<std::uint32_t>(m_allNodes.size());
     const std::uint32_t totalDofs = totalNodes * 3;
 
@@ -82,5 +87,41 @@ void Truss_1D_Calculated::calculate(){
         for(std::uint8_t j{0}; j < 3; ++j){
             m_resultDisplacements[i][j] = d_full[3 * i + j];
         }
+    }
+}
+
+void Truss_1D_Calculated::calculateElementForces(){
+    for(std::size_t eleNum{0}; eleNum < m_forceVec.size(); ++eleNum){
+        TrussElement_1D& element = m_allElements[eleNum];
+        // set element global disp vec (6x1) d
+        Eigen::Vector<double, 6> elementGlobalDispVec;
+        const std::array<std::shared_ptr<Node>, 2> elementNodes{element.getEleNodes()};
+        const std::uint32_t nodeID_1{elementNodes[0]->getNodeID()};
+        const std::uint32_t nodeID_2{elementNodes[1]->getNodeID()};
+        for(std::uint8_t i{0}; i < 3; ++i){
+            elementGlobalDispVec[i] = m_resultDisplacements[nodeID_1][i];
+            elementGlobalDispVec[i + 3] = m_resultDisplacements[nodeID_2][i];
+        }
+
+        // set element transformation vec (1x6) T
+        Eigen::Vector<float, 6> elementTransformationVec;
+        std::array<float, 3> eleCosinuses;
+        for(std::uint8_t i{0}; i < 3; ++i){
+            elementTransformationVec[i] = eleCosinuses[i] * (-1);
+            elementTransformationVec[i + 3] = eleCosinuses[i];
+        }
+
+        // axial deformation Txd
+        double elongation{};
+        for(std::uint8_t i{0}; i < 6; ++i){
+            elongation += elementTransformationVec[i] * elementGlobalDispVec[i];
+        }
+        element.setEleElongation(elongation);
+        element.setEleAxialForce(
+            elongation / 
+            element.getEleLength() * 
+            element.getEleProperties()->getElasticityModulues() * 
+            element.getEleCrossSection()
+        );
     }
 }

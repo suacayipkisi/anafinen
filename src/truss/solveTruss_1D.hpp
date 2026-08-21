@@ -28,5 +28,7 @@ public:
         m_allElements(allElements)
     {}
 
-    void calculate();
+    void calculateDisplacements();
+    
+    void calculateElementForces();
 };
