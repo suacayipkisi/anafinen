@@ -1,0 +1,5 @@
+# Ignore GLAD from language statistics
+external/glad/** linguist-vendored
+src/glad.c linguist-vendored
+include/glad/** linguist-vendored
+include/KHR/** linguist-vendored
