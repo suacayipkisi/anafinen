@@ -54,6 +54,9 @@ set(SOURCES
     src/gui/gui.cpp
     src/test/test.cpp
     src/truss/element.cpp
+    src/truss/node.cpp
+    src/truss/assembleStiffness.cpp
+    src/truss/solveTruss_1D.cpp
 )
 
 add_executable(anafinen ${SOURCES})

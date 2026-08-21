@@ -53,5 +53,14 @@ public:
     // calcuilated properties of element
     inline void setEleElongation(const double elongation) {m_elongation = elongation;}
 
+    inline const std::array<float, 3>& getEleAngle() const {return m_angle;}
+    inline const double getEleLength() const {return m_length;}
+    inline const double getEleCrossSection() const {return m_crossSectionArea;}
+    inline const double getEleElongation() const {return m_elongation;}
+    inline const std::shared_ptr<Material> getEleProperties() const {return m_properties;}
+    inline const std::array<double, 2>& getEleForces() const {return m_nodeForce;}
+    inline const std::array<std::shared_ptr<Node>, 2>& getEleNodes() const {return m_nodes;}
+    inline const Eigen::Matrix<double, 6, 6>& getEleStiffness() const {return m_stiffnessMatrix;}
+
     void determineEleStiffnessMatrix();
 };

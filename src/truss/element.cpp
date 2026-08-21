@@ -35,8 +35,6 @@ void TrussElement_1D::determineEleStiffnessMatrix(){
         std::cosf(m_angle[2])
     };
 
-
-
     // lambda is symmetrix
     lambda << (cos[0] * cos[0] * AE_L), (cos[0] * cos[1] * AE_L), (cos[0] * cos[2] * AE_L),
             (cos[0] * cos[1] * AE_L), (cos[1] * cos[1] * AE_L), (cos[1] * cos[2] * AE_L),
