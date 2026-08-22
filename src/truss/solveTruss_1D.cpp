@@ -63,7 +63,6 @@ void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& e
     m_globalStiffnessMatrix = globalStiffnessMatrix;
 }
 
-
 void Truss_1D_Container::calculateDisplacements(){
     const std::uint32_t totalNodes = static_cast<std::uint32_t>(m_allNodes.size());
     const std::uint32_t totalDofs = totalNodes * 3;
@@ -148,7 +147,7 @@ void Truss_1D_Container::calculateDisplacements(){
     }
 }
 
-void Truss_1D_Container::calculateElementForces(){
+void Truss_1D_Container::calculateElementForcesAndStress(){
     for(std::size_t eleNum{0}; eleNum < m_forceVec.size(); ++eleNum){
         TrussElement_1D& element = m_allElements[eleNum];
         // set element global disp vec (6x1) d
@@ -176,7 +175,9 @@ void Truss_1D_Container::calculateElementForces(){
         }
         element.setEleElongation(elongation);
 
+        const double eleForce{elongation / element.getEleLength() * element.getEleProperties()->getElasticityModulues() * element.getEleCrossSection()};
         // F-axial = EA/L * T-transformationVec(1x6) * d-displacementVec(6x1)
-        element.setEleAxialForce(elongation / element.getEleLength() * element.getEleProperties()->getElasticityModulues() * element.getEleCrossSection());
+        element.setEleAxialForce(eleForce);
+        element.setEleStress(eleForce / element.getEleCrossSection());
     }
 }

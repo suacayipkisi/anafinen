@@ -35,5 +35,5 @@ public:
 
     void calculateDisplacements();
     
-    void calculateElementForces();
+    void calculateElementForcesAndStress();
 };
