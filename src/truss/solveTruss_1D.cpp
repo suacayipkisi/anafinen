@@ -1,7 +1,10 @@
 #include "solveTruss_1D.hpp"
 #include "element.hpp"
 #include "node.hpp"
+#include "../anafInfo.hpp"
+
 #include <Eigen/Core>
+#include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
 #include <Eigen/SparseCore>
 #include <array>
@@ -10,7 +13,58 @@
 #include <memory>
 #include <vector>
 
-void Truss_1D_Calculated::calculateDisplacements(){
+void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& elements, const std::uint32_t nodeNum){
+    const size_t elementNum{elements.size()};
+    std::vector<Eigen::Triplet<double>> globalStiffnessMatrix;
+
+    //every node has 3 dof(dgrees of freedom), this creates 3n x 3n matrix
+    globalStiffnessMatrix.reserve(nodeNum * 3 * nodeNum * 3);
+
+    // fills global stiffness matrix
+    for (size_t index{0}; index < elementNum; ++index){
+
+        // 1d element in 3D space, 6 dof (element dgrees of freedom)
+        const Eigen::Matrix<double, 6, 6>& elementStiffness{elements[index].getEleStiffness()};
+        const std::array<std::shared_ptr<Node>, 2>& elementNodes{elements[index].getEleNodes()};
+        const std::uint32_t globalMatrixIndex_1{elementNodes[0]->getNodeID()};
+        const std::uint32_t globalMatrixIndex_2{elementNodes[1]->getNodeID()};
+        const std::uint32_t zeroPos_1{6 * globalMatrixIndex_1};
+        const std::uint32_t zeroPos_2{6 * globalMatrixIndex_2};
+
+        // first send assebmle up half of the element stiffness matrix
+        // send half column by half column
+        for(size_t lambda_topIndex{0}; lambda_topIndex < 3; ++lambda_topIndex){
+            for(size_t lambda_rightIndex{0}; lambda_rightIndex < 3; ++lambda_rightIndex){
+                globalStiffnessMatrix.emplace_back(
+                    zeroPos_1 + lambda_rightIndex, 
+                    zeroPos_1 + lambda_topIndex, 
+                    elementStiffness(lambda_rightIndex, lambda_topIndex)
+                );
+                globalStiffnessMatrix.emplace_back(
+                    zeroPos_1 + lambda_rightIndex, 
+                    zeroPos_2 + lambda_topIndex, 
+                    elementStiffness(lambda_rightIndex, lambda_topIndex + 3)
+                );
+                globalStiffnessMatrix.emplace_back(
+                    zeroPos_2 + lambda_rightIndex, 
+                    zeroPos_1 + lambda_topIndex, 
+                    elementStiffness(lambda_rightIndex + 3, lambda_topIndex)
+                );
+                globalStiffnessMatrix.emplace_back(
+                    zeroPos_2 + lambda_rightIndex, 
+                    zeroPos_2 + lambda_topIndex, 
+                    elementStiffness(lambda_rightIndex + 3, lambda_topIndex + 3)
+                );
+            }
+        }
+    }
+    
+    anafLog::info("Global Stiffness Matrix Created, size: {}x{}", (nodeNum * 3), (nodeNum * 3));
+    m_globalStiffnessMatrix = globalStiffnessMatrix;
+}
+
+
+void Truss_1D_Container::calculateDisplacements(){
     const std::uint32_t totalNodes = static_cast<std::uint32_t>(m_allNodes.size());
     const std::uint32_t totalDofs = totalNodes * 3;
 
@@ -86,11 +140,15 @@ void Truss_1D_Calculated::calculateDisplacements(){
     for(std::uint32_t i{0}; i < m_resultDisplacements.size(); ++i){
         for(std::uint8_t j{0}; j < 3; ++j){
             m_resultDisplacements[i][j] = d_full[3 * i + j];
+            
         }
+
+        // send the displacement info to the node classes
+        m_allNodes[i].setDisplacements(m_resultDisplacements[i]);
     }
 }
 
-void Truss_1D_Calculated::calculateElementForces(){
+void Truss_1D_Container::calculateElementForces(){
     for(std::size_t eleNum{0}; eleNum < m_forceVec.size(); ++eleNum){
         TrussElement_1D& element = m_allElements[eleNum];
         // set element global disp vec (6x1) d
@@ -117,11 +175,8 @@ void Truss_1D_Calculated::calculateElementForces(){
             elongation += elementTransformationVec[i] * elementGlobalDispVec[i];
         }
         element.setEleElongation(elongation);
-        element.setEleAxialForce(
-            elongation / 
-            element.getEleLength() * 
-            element.getEleProperties()->getElasticityModulues() * 
-            element.getEleCrossSection()
-        );
+
+        // F-axial = EA/L * T-transformationVec(1x6) * d-displacementVec(6x1)
+        element.setEleAxialForce(elongation / element.getEleLength() * element.getEleProperties()->getElasticityModulues() * element.getEleCrossSection());
     }
 }

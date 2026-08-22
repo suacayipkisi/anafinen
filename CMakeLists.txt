@@ -58,7 +58,6 @@ set(SOURCES
     src/test/test.cpp
     src/truss/element.cpp
     src/truss/node.cpp
-    src/truss/assembleStiffness.cpp
     src/truss/solveTruss_1D.cpp
 )
 

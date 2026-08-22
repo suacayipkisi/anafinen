@@ -6,5 +6,3 @@ build/
 
 .clangd
 .ini
-
-imgui.ini

@@ -14,18 +14,18 @@ void TrussElement_1D::determineEleStiffnessMatrix(){
         m_stiffnessMatrix = Eigen::Matrix<double, 6, 6>::Zero();
         return;
     }
-    if(m_properties){
+    if(m_type){
         anafLog::warn("Assign an element propert for calculating stiffness matrix!");
         m_stiffnessMatrix = Eigen::Matrix<double, 6, 6>::Zero();
         return;
     }
-    if(m_properties->getElasticityModulues() == 0){
+    if(m_type->getElasticityModulues() == 0){
         anafLog::warn("No Elasticity modulus defined for this type of material!");
         m_stiffnessMatrix = Eigen::Matrix<double, 6, 6>::Zero();
         return;
     }
 
-    double AE_L = (m_crossSectionArea * m_properties->getElasticityModulues()) / m_length;
+    double AE_L = (m_crossSectionArea * m_type->getElasticityModulues()) / m_length;
 
     Eigen::Matrix3d lambda;
     std::array<float, 3>& cos {m_cosinuses};
