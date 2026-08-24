@@ -104,7 +104,7 @@ int initRunGUI(AllStatus& status) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(1440, 900, "ANAFINEN - FEM Modal Workspace", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1440, 900, "ANAFINEN", nullptr, nullptr);
     if (!window) {
         anafLog::error("Failed to create GLFW window context.");
         glfwTerminate();

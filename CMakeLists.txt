@@ -39,7 +39,7 @@ set(SPECTRA_DIR  "${EXTERNAL_DIR}/spectra")
 set(GLAD_DIR     "${EXTERNAL_DIR}/glad")
 
 # Glad target
-add_library(glad STATIC "${GLAD_DIR}/src/glad.c")
+add_library(glad STATIC "${GLAD_DIR}/src/gl.c")
 target_include_directories(glad PUBLIC "${GLAD_DIR}/include")
 
 set(SOURCES

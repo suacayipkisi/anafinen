@@ -89,7 +89,7 @@ public:
     inline void setEleCrossSectionArea(const double area) {m_crossSectionArea = area;}
     inline void setEleProperty(std::shared_ptr<Material> material) {m_type = material;}
 
-    // calcuilated properties of element
+    // calculated properties of element
     inline void setEleElongation(const double elongation) {m_elongation = elongation;}
     inline void setEleAxialForce(const double axialForce) {m_axialForce = axialForce;}
     inline void setEleStress(const double stress) {m_stress = stress;}
