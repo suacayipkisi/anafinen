@@ -1,15 +1,10 @@
-# ANAFINEN
-
-(finite element engineering analysis)  
+# ANAFINEN (Analyze Finite Element Engineering) 
 -uneder construction-
 
-# BUILD
+### Libraries
+- Calculation: Eigen, Spectra
+- Visualisation and GUI: OpenGL, GLAD, GFLW, ImGUI, ImGuizmo, ImPlot
+- Multithreading: OpenMP
 
-Libraries:
-- glad
-- glfw (fetching via cmakelists.txt)
-- opengl
-- imgui (fetching via cmakelists.txt)
-- openmp
-- eigen
-- spectra (fetching via cmakelists.txt)
+### For roadmap, open AIM.md
+
