@@ -16,12 +16,12 @@ void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& e
     const std::size_t elementNum = elements.size();
     const std::size_t totalTriplets = elementNum * 36;
     std::vector<Eigen::Triplet<double>> globalStiffnessMatrix(totalTriplets);
-    const std::size_t nodeNum{m_allNodes.size()};
+    const auto nodeNum{m_allNodes.size()};
 
     #pragma omp parallel for schedule(static)
     for (std::size_t index = 0; index < elementNum; ++index) {
         const auto& element = elements[index];
-        const std::array<std::uint32_t, 2>& elementNodes = element.getEleNodes();
+        const auto& elementNodes = element.getEleNodes();
         
         const std::uint32_t globalMatrixIndex_1 = m_allNodes[elementNodes[0]].getNodeID();
         const std::uint32_t globalMatrixIndex_2 = m_allNodes[elementNodes[1]].getNodeID();
@@ -69,7 +69,7 @@ void Truss_1D_Container::calculateDisplacements() {
 
     std::vector<bool> isFixed(totalDofs, false);
     for (std::uint32_t i = 0; i < totalNodes; ++i) {
-        const std::array<bool, 3>& nodeMovablility = m_allNodes[i].getMovable();
+        const auto& nodeMovablility = m_allNodes[i].getMovable();
         for (std::uint32_t j = 0; j < 3; ++j) {
             if (!nodeMovablility[j]) {
                 isFixed[3 * i + j] = true;
@@ -153,8 +153,8 @@ void Truss_1D_Container::calculateElementForcesAndStress() {
 
     #pragma omp parallel for schedule(static)
     for (std::size_t eleNum = 0; eleNum < totalElements; ++eleNum) {
-        TrussElement_1D& element = m_allElements[eleNum];
-        const std::array<std::uint32_t, 2>& elementNodes = element.getEleNodes();
+        auto& element = m_allElements[eleNum];
+        const auto& elementNodes = element.getEleNodes();
         
         const std::uint32_t nodeID_1 = m_allNodes[elementNodes[0]].getNodeID();
         const std::uint32_t nodeID_2 = m_allNodes[elementNodes[1]].getNodeID();
@@ -166,18 +166,25 @@ void Truss_1D_Container::calculateElementForcesAndStress() {
         }
 
         // fetch precomputed cosines directly from element
-        const std::array<float, 3>& eleCosinuses = element.getEleCosinuses();
+        const auto& eleCosinuses = element.getEleCosinuses();
 
         Eigen::Vector<double, 6> elementTransformationVec;
-        elementTransformationVec << -eleCosinuses[0], -eleCosinuses[1], -eleCosinuses[2],
-                                     eleCosinuses[0],  eleCosinuses[1],  eleCosinuses[2];
+        elementTransformationVec << -static_cast<double>(eleCosinuses[0]), 
+                                    -static_cast<double>(eleCosinuses[1]), 
+                                    -static_cast<double>(eleCosinuses[2]),
+                                    static_cast<double>(eleCosinuses[0]),  
+                                    static_cast<double>(eleCosinuses[1]), 
+                                    static_cast<double>(eleCosinuses[2]);
 
-        double elongation = elementTransformationVec.dot(elementGlobalDispVec);
+        const double elongation = elementTransformationVec.dot(elementGlobalDispVec);
         element.setEleElongation(elongation);
 
-        double eleForce = (elongation / element.getEleLength()) * 
-                          element.getEleProperties()->getElasticityModulues() * 
-                          element.getEleCrossSection();
+        const double eleCrossSection = element.getEleCrossSection();
+        const double eleLength = element.getEleLength();
+        const double elasticity = element.getEleProperties()->getElasticityModulues();
+
+        double eleForce = (elongation / eleLength) * elasticity * eleCrossSection;
+        const double eleStress = eleForce / eleCrossSection;
                           
         element.setEleAxialForce(eleForce);
         element.setEleStress(eleForce / element.getEleCrossSection());

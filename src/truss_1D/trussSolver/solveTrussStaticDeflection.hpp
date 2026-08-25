@@ -8,18 +8,18 @@
 
 class Truss_1D_Container{
 private:
-    std::vector<double> m_forceVec;
-    std::vector<Eigen::Triplet<double>> m_globalStiffnessMatrix;
-    std::vector<Node> m_allNodes;
-    std::vector<TrussElement_1D> m_allElements;
+    std::span<const double> m_forceVec;
+    std::span<Node> m_allNodes;
+    std::span<TrussElement_1D> m_allElements;
 
+    std::vector<Eigen::Triplet<double>> m_globalStiffnessMatrix;
     std::vector<std::array<double, 3>> m_resultDisplacements;
     std::vector<std::array<double, 3>> m_resultForces;
 public:
     Truss_1D_Container(
-        const std::vector<double>& forceVec,
-        const std::vector<Node>& allNodes,
-        const std::vector<TrussElement_1D> allElements
+        std::span<const double> forceVec,
+        std::span<Node> allNodes,
+        std::span<TrussElement_1D> allElements
     ): 
         m_forceVec(forceVec),
         m_allNodes(allNodes),
