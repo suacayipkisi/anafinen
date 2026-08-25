@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <array>
+#include <span>
 #include <stdexcept>
 #include <string>
 
@@ -30,12 +31,13 @@ public:
     TrussElement_1D(
         std::shared_ptr<Material> type,
         double area,
-        const Node& node_1,
-        const Node& node_2
+        const std::uint32_t node_1,
+        const std::uint32_t node_2,
+        std::span<const Node> allNodes
     ):
         m_type(type),
         m_crossSectionArea(area),
-        m_nodes({node_1.getNodeID(), node_2.getNodeID()})
+        m_nodes({node_1, node_2})
     {
         // if type, area and nodes are not given, destroy element
         if(!type){
@@ -43,8 +45,8 @@ public:
                 "Destroying element that under construction: 'type: {}', 'area: {}', 'nodes: {},{}'", 
                 "unknownType",
                 area,
-                std::to_string(node_1.getNodeID()),
-                std::to_string(node_2.getNodeID())
+                std::to_string(node_1),
+                std::to_string(node_2)
             );
             throw std::invalid_argument("Element type cannot be undefined");
         }
@@ -53,22 +55,28 @@ public:
                 "Destroying element that under construction: 'type: {}', 'area: {}', 'nodes: {},{}'", 
                 type->getMaterialType(),
                 0.0,
-                std::to_string(node_1.getNodeID()),
-                std::to_string(node_2.getNodeID())
+                std::to_string(node_1),
+                std::to_string(node_2)
             );
             throw std::invalid_argument("Element cross sectional area must be greater than 0");
         }
-        if(node_1.getNodeID() == node_2.getNodeID()){
+        if(node_1 == node_2){
             throw std::invalid_argument("An elements nodes cannot be same");
+        }
+        if (node_1 >= allNodes.size() || node_2 >= allNodes.size()) {
+            throw std::out_of_range("Node index is outside the node span");
         }//destroyment finish
         
         //calculate second degree element info
-        double dx = node_2.getLocX() - node_1.getLocX();
-        double dy = node_2.getLocY() - node_1.getLocY();
-        double dz = node_2.getLocZ() - node_1.getLocZ();
+        double dx = allNodes[node_2].getLocX() - allNodes[node_1].getLocX();
+        double dy = allNodes[node_2].getLocY() - allNodes[node_1].getLocY();
+        double dz = allNodes[node_2].getLocZ() - allNodes[node_1].getLocZ();
         m_length = std::sqrt(dx * dx + dy * dy + dz * dz);
-        std::array<double, 3> loc1{node_1.getLocation()};
-        std::array<double, 3> loc2{node_2.getLocation()};
+        if (m_length <= 0.0) {
+            throw std::invalid_argument("Element length must be greater than zero");
+        }
+        std::array<double, 3> loc1{allNodes[node_1].getLocation()};
+        std::array<double, 3> loc2{allNodes[node_2].getLocation()};
         for (std::size_t i{0}; i < 3; ++i){
             m_cosinuses[i] = (loc2[i] - loc1[i]) / m_length;
         }

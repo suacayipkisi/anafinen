@@ -65,6 +65,7 @@ void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& e
 
 void Truss_1D_Container::calculateDisplacements() {
     const std::uint32_t totalNodes = static_cast<std::uint32_t>(m_allNodes.size());
+    m_resultDisplacements.resize(totalNodes);
     const std::uint32_t totalDofs = totalNodes * 3;
 
     std::vector<bool> isFixed(totalDofs, false);
