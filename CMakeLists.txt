@@ -56,13 +56,13 @@ set(SOURCES
     src/main.cpp
     src/gui/gui.cpp
     src/test/test.cpp
-    src/truss/element.cpp
-    src/truss/node.cpp
-    src/truss/solveTruss_1D.cpp
+    src/truss_1D/node.cpp
+    src/truss_1D/element.cpp
+    src/truss_1D/solveTruss_1D_StaticDeflection.cpp
+    src/truss_1D/simpleTrussCreate.cpp
 )
 
-add_executable(anafinen ${SOURCES}
-    src/truss/simpleTrussCreate.cpp)
+add_executable(anafinen ${SOURCES})
 
 target_compile_definitions(anafinen PRIVATE 
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
