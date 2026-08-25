@@ -106,8 +106,18 @@ void SimpleTruss::setTruss(){
                 std::uint32_t n11 = (i + 1) + (j + 1) * nx_nodes + k * (nx_nodes * ny_nodes);
 
                 std::size_t baseIdx = offset_xyCross + 2 * (i + j * nx + k * (nx * ny));
-                m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, m_allNodes[n00], m_allNodes[n11]);
-                m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, m_allNodes[n10], m_allNodes[n01]);
+                m_allElements[baseIdx]     = TrussElement_1D(
+                                                m_type, 
+                                                m_area, 
+                                                m_allNodes[n00], 
+                                                m_allNodes[n11]
+                                            );
+                m_allElements[baseIdx + 1] = TrussElement_1D(
+                                                m_type, 
+                                                m_area, 
+                                                m_allNodes[n10], 
+                                                m_allNodes[n01]
+                                            );
             }
         }
     }
@@ -123,8 +133,18 @@ void SimpleTruss::setTruss(){
                 std::uint32_t n11 = (i + 1) + j * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
 
                 std::size_t baseIdx = offset_xzCross + 2 * (i + j * nx + k * (nx * ny_nodes));
-                m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, m_allNodes[n00], m_allNodes[n11]);
-                m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, m_allNodes[n10], m_allNodes[n01]);
+                m_allElements[baseIdx]     = TrussElement_1D(
+                                                m_type, 
+                                                m_area, 
+                                                m_allNodes[n00], 
+                                                m_allNodes[n11]
+                                            );
+                m_allElements[baseIdx + 1] = TrussElement_1D(
+                                                m_type, 
+                                                m_area, 
+                                                m_allNodes[n10], 
+                                                m_allNodes[n01]
+                                            );
             }
         }
     }
@@ -140,8 +160,18 @@ void SimpleTruss::setTruss(){
                 std::uint32_t n11 = i + (j + 1) * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
 
                 std::size_t baseIdx = offset_yzCross + 2 * (i + j * nx_nodes + k * (nx_nodes * ny));
-                m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, m_allNodes[n00], m_allNodes[n11]);
-                m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, m_allNodes[n10], m_allNodes[n01]);
+                m_allElements[baseIdx]     = TrussElement_1D(
+                                                m_type, 
+                                                m_area, 
+                                                m_allNodes[n00], 
+                                                m_allNodes[n11]
+                                            );
+                m_allElements[baseIdx + 1] = TrussElement_1D(
+                                                m_type, 
+                                                m_area, 
+                                                m_allNodes[n10], 
+                                                m_allNodes[n01]
+                                            );
             }
         }
     }
