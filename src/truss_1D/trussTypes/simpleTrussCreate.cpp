@@ -1,5 +1,6 @@
 #include "simpleTrussCreate.hpp"
-#include "element.hpp"
+#include "../element.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <vector>

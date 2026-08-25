@@ -1,4 +1,4 @@
-#include "solveTruss_1D_StaticDeflection.hpp"
+#include "solveTrussStaticDeflection.hpp"
 #include "../element.hpp"
 #include "../../anafInfo.hpp"
 

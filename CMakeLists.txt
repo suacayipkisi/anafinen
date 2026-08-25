@@ -54,12 +54,14 @@ set(SOURCES
     ${IMPLOT_DIR}/implot_items.cpp
 
     src/main.cpp
+
     src/gui/gui.cpp
+
     src/test/test.cpp
-    src/truss_1D/node.cpp
+    
     src/truss_1D/element.cpp
-    src/truss_1D/solveTruss_1D_StaticDeflection.cpp
-    src/truss_1D/simpleTrussCreate.cpp
+    src/truss_1D/trussSolver/solveTrussStaticDeflection.cpp
+    src/truss_1D/trussTypes/simpleTrussCreate.cpp
 )
 
 add_executable(anafinen ${SOURCES})
