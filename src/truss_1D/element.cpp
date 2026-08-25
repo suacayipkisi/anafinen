@@ -4,21 +4,9 @@
 #include <array>
 #include "../anafInfo.hpp"
 
+//unnecesary if you want to reach global stiffness matrix
 void TrussElement_1D::determineEleStiffnessMatrix(){
 
-    if(m_length == 0){
-        setEleLength();
-    }
-    if(m_crossSectionArea == 0){
-        anafLog::warn("Element cross section have not assigned, cant calcualte stiffness matrix!");
-        m_stiffnessMatrix = Eigen::Matrix<double, 6, 6>::Zero();
-        return;
-    }
-    if(m_type){
-        anafLog::warn("Assign an element propert for calculating stiffness matrix!");
-        m_stiffnessMatrix = Eigen::Matrix<double, 6, 6>::Zero();
-        return;
-    }
     if(m_type->getElasticityModulues() == 0){
         anafLog::warn("No Elasticity modulus defined for this type of material!");
         m_stiffnessMatrix = Eigen::Matrix<double, 6, 6>::Zero();

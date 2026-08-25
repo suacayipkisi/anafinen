@@ -2,8 +2,6 @@
 
 #include <array>
 #include <cstdint>
-#include <memory>
-#include <vector>
 
 class Node{
 private:
@@ -12,10 +10,9 @@ private:
     std::array<bool, 3> m_isMovable{true, true, true};
     std::array<double, 3> m_Location{};
     std::array<double, 3> m_displacement{};
-
-    // node forces are the total forces applies on this node
-    //std::optional<std::array<double, 3>> m_force{std::array<double, 3>{0, 0, 0}};
+    
 public:
+    Node() = default;
     Node(
         const std::uint32_t ID,
         const double locX,
@@ -55,9 +52,10 @@ public:
 
     const std::uint32_t getNodeID() const {return m_nodeID;}
     const std::array<double, 3>& getLocation() const {return m_Location;}
+    const double getLocX() const {return m_Location[0];}
+    const double getLocY() const {return m_Location[1];}
+    const double getLocZ() const {return m_Location[2];}
+
     const std::array<double, 3>& getDisplacmenet() const {return m_displacement;}
-    //const std::array<double, 3>& getForce() const {return *m_force;}
     const std::array<bool, 3>& getMovable() const {return m_isMovable;}
 };
-
-const double nodeDistance(std::array<std::shared_ptr<Node>, 2> nodes);

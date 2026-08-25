@@ -10,7 +10,6 @@
 #include <array>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 // initializing 1D element in 3D space
 // 2 nodes, one size_dimention
@@ -23,73 +22,57 @@ private:
     double m_stress{};
     std::shared_ptr<Material> m_type;
     std::array<float, 3> m_cosinuses;
-    std::array<std::shared_ptr<Node>, 2> m_nodes{};
+    std::array<std::uint32_t, 2> m_nodes{};
     Eigen::Matrix<double, 6, 6> m_stiffnessMatrix;
 protected:
 public:
+    TrussElement_1D() = default;
     TrussElement_1D(
         std::shared_ptr<Material> type,
         double area,
-        std::shared_ptr<Node> node_1,
-        std::shared_ptr<Node> node_2
+        const Node& node_1,
+        const Node& node_2
     ):
         m_type(type),
         m_crossSectionArea(area),
-        m_nodes({node_1, node_2})
+        m_nodes({node_1.getNodeID(), node_2.getNodeID()})
     {
         // if type, area and nodes are not given, destroy element
-        if(type.get() == nullptr){
+        if(!type){
             anafLog::info(
                 "Destroying element that under construction: 'type: {}', 'area: {}', 'nodes: {},{}'", 
-                type ? type->getMaterialType() : "unknownType",
+                "unknownType",
                 area,
-                node_1 ? std::to_string(node_1->getNodeID()) : "unknown node",
-                node_2 ? std::to_string(node_2->getNodeID()) : "unknown node"
+                std::to_string(node_1.getNodeID()),
+                std::to_string(node_2.getNodeID())
             );
             throw std::invalid_argument("Element type cannot be undefined");
         }
         if(area <= 0.0){
             anafLog::info(
                 "Destroying element that under construction: 'type: {}', 'area: {}', 'nodes: {},{}'", 
-                type ? type->getMaterialType() : "unknownType",
-                double {0},
-                node_1 ? std::to_string(node_1->getNodeID()) : "unknown node",
-                node_2 ? std::to_string(node_2->getNodeID()) : "unknown node"
+                type->getMaterialType(),
+                0.0,
+                std::to_string(node_1.getNodeID()),
+                std::to_string(node_2.getNodeID())
             );
             throw std::invalid_argument("Element cross sectional area must be greater than 0");
         }
-        if(!node_1 || !node_2){
-            anafLog::info(
-                "Destroying element that under construction: 'type: {}', 'area: {}', 'nodes: {},{}'", 
-                type ? type->getMaterialType() : "unknownType",
-                double {0},
-                node_1 ? std::to_string(node_1->getNodeID()) : "unknown node",
-                node_2 ? std::to_string(node_2->getNodeID()) : "unknown node"
-            );
-            throw std::invalid_argument("Element nodes cannot be undefined");
+        if(node_1.getNodeID() == node_2.getNodeID()){
+            throw std::invalid_argument("An elements nodes cannot be same");
         }//destroyment finish
         
         //calculate second degree element info
-        m_length = nodeDistance(m_nodes);
-        std::array<double, 3> loc1{node_1->getLocation()};
-        std::array<double, 3> loc2{node_2->getLocation()};
+        double dx = node_2.getLocX() - node_1.getLocX();
+        double dy = node_2.getLocY() - node_1.getLocY();
+        double dz = node_2.getLocZ() - node_1.getLocZ();
+        m_length = std::sqrt(dx * dx + dy * dy + dz * dz);
+        std::array<double, 3> loc1{node_1.getLocation()};
+        std::array<double, 3> loc2{node_2.getLocation()};
         for (std::size_t i{0}; i < 3; ++i){
             m_cosinuses[i] = (loc2[i] - loc1[i]) / m_length;
         }
-    }
-
-    // static determined properties of element
-    inline void setEleLength() {
-        if(m_nodes[0] && m_nodes[1]){
-            m_length = nodeDistance(m_nodes);
-        }
-        else{
-            anafLog::warn("You have not initialize all required nodes yet for calculating distance between them!");
-            return;
-        }
-    }
-    inline void setEleCrossSectionArea(const double area) {m_crossSectionArea = area;}
-    inline void setEleProperty(std::shared_ptr<Material> material) {m_type = material;}
+    } // TrussElement_1D(.......) Contructor end
 
     // calculated properties of element
     inline void setEleElongation(const double elongation) {m_elongation = elongation;}
@@ -103,7 +86,7 @@ public:
     inline const double getEleStress() const {return m_stress;}
     inline const std::shared_ptr<Material> getEleProperties() const {return m_type;}
     inline const std::array<float, 3>& getEleCosinuses() const {return m_cosinuses;}
-    inline const std::array<std::shared_ptr<Node>, 2>& getEleNodes() const {return m_nodes;}
+    inline const std::array<std::uint32_t, 2>& getEleNodes() const {return m_nodes;}
 
     void determineEleStiffnessMatrix();
     inline const Eigen::Matrix<double, 6, 6>& getEleStiffness() const {return m_stiffnessMatrix;}

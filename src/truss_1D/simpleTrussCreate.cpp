@@ -25,7 +25,7 @@ void SimpleTruss::setTruss(){
         for (std::uint32_t j = 0; j < ny_nodes; ++j) {
             for (std::uint32_t i = 0; i < nx_nodes; ++i) {
                 std::uint32_t nodeID = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
-                m_allNodes[nodeID] = std::make_shared<Node>(
+                m_allNodes[nodeID] = Node(
                     nodeID,
                     static_cast<double>(m_cubeEdgeLength * i),
                     static_cast<double>(m_cubeEdgeLength * j),
@@ -55,6 +55,7 @@ void SimpleTruss::setTruss(){
     const std::size_t offset_xzCross = offset_xyCross + xyCrossCount;
     const std::size_t offset_yzCross = offset_xzCross + xzCrossCount;
 
+    // parallel to X-direction
     #pragma omp parallel for collapse(3) schedule(static)
     for (std::uint32_t k = 0; k < nz_nodes; ++k) {
         for (std::uint32_t j = 0; j < ny_nodes; ++j) {
@@ -62,11 +63,12 @@ void SimpleTruss::setTruss(){
                 std::uint32_t n1 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
                 std::uint32_t n2 = (i + 1) + j * nx_nodes + k * (nx_nodes * ny_nodes);
                 std::size_t idx = offset_xEdges + (i + j * nx + k * (nx * ny_nodes));
-                m_allElements[idx] = std::make_shared<TrussElement_1D>(m_type, m_area, m_allNodes[n1], m_allNodes[n2]);
+                m_allElements[idx] = TrussElement_1D(m_type, m_area, m_allNodes[n1], m_allNodes[n2]);
             }
         }
     }
 
+    // parallel to Y-directiom
     #pragma omp parallel for collapse(3) schedule(static)
     for (std::uint32_t k = 0; k < nz_nodes; ++k) {
         for (std::uint32_t j = 0; j < ny; ++j) {
@@ -74,11 +76,12 @@ void SimpleTruss::setTruss(){
                 std::uint32_t n1 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
                 std::uint32_t n2 = i + (j + 1) * nx_nodes + k * (nx_nodes * ny_nodes);
                 std::size_t idx = offset_yEdges + (i + j * nx_nodes + k * (nx_nodes * ny));
-                m_allElements[idx] = std::make_shared<TrussElement_1D>(m_type, m_area, m_allNodes[n1], m_allNodes[n2]);
+                m_allElements[idx] = TrussElement_1D(m_type, m_area, m_allNodes[n1], m_allNodes[n2]);
             }
         }
     }
 
+    // parallel to Z-direction
     #pragma omp parallel for collapse(3) schedule(static)
     for (std::uint32_t k = 0; k < nz; ++k) {
         for (std::uint32_t j = 0; j < ny_nodes; ++j) {
@@ -86,11 +89,12 @@ void SimpleTruss::setTruss(){
                 std::uint32_t n1 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
                 std::uint32_t n2 = i + j * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
                 std::size_t idx = offset_zEdges + (i + j * nx_nodes + k * (nx_nodes * ny_nodes));
-                m_allElements[idx] = std::make_shared<TrussElement_1D>(m_type, m_area, m_allNodes[n1], m_allNodes[n2]);
+                m_allElements[idx] = TrussElement_1D(m_type, m_area, m_allNodes[n1], m_allNodes[n2]);
             }
         }
     }
 
+    // cross in X-Y plane
     #pragma omp parallel for collapse(3) schedule(static)
     for (std::uint32_t k = 0; k < nz_nodes; ++k) {
         for (std::uint32_t j = 0; j < ny; ++j) {
@@ -101,12 +105,13 @@ void SimpleTruss::setTruss(){
                 std::uint32_t n11 = (i + 1) + (j + 1) * nx_nodes + k * (nx_nodes * ny_nodes);
 
                 std::size_t baseIdx = offset_xyCross + 2 * (i + j * nx + k * (nx * ny));
-                m_allElements[baseIdx]     = std::make_shared<TrussElement_1D>(m_type, m_area, m_allNodes[n00], m_allNodes[n11]);
-                m_allElements[baseIdx + 1] = std::make_shared<TrussElement_1D>(m_type, m_area, m_allNodes[n10], m_allNodes[n01]);
+                m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, m_allNodes[n00], m_allNodes[n11]);
+                m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, m_allNodes[n10], m_allNodes[n01]);
             }
         }
     }
 
+    // cross in X-Z plane
     #pragma omp parallel for collapse(3) schedule(static)
     for (std::uint32_t k = 0; k < nz; ++k) {
         for (std::uint32_t j = 0; j < ny_nodes; ++j) {
@@ -117,12 +122,13 @@ void SimpleTruss::setTruss(){
                 std::uint32_t n11 = (i + 1) + j * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
 
                 std::size_t baseIdx = offset_xzCross + 2 * (i + j * nx + k * (nx * ny_nodes));
-                m_allElements[baseIdx]     = std::make_shared<TrussElement_1D>(m_type, m_area, m_allNodes[n00], m_allNodes[n11]);
-                m_allElements[baseIdx + 1] = std::make_shared<TrussElement_1D>(m_type, m_area, m_allNodes[n10], m_allNodes[n01]);
+                m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, m_allNodes[n00], m_allNodes[n11]);
+                m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, m_allNodes[n10], m_allNodes[n01]);
             }
         }
     }
 
+    // cross in Y-Z plane
     #pragma omp parallel for collapse(3) schedule(static)
     for (std::uint32_t k = 0; k < nz; ++k) {
         for (std::uint32_t j = 0; j < ny; ++j) {
@@ -133,8 +139,8 @@ void SimpleTruss::setTruss(){
                 std::uint32_t n11 = i + (j + 1) * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
 
                 std::size_t baseIdx = offset_yzCross + 2 * (i + j * nx_nodes + k * (nx_nodes * ny));
-                m_allElements[baseIdx]     = std::make_shared<TrussElement_1D>(m_type, m_area, m_allNodes[n00], m_allNodes[n11]);
-                m_allElements[baseIdx + 1] = std::make_shared<TrussElement_1D>(m_type, m_area, m_allNodes[n10], m_allNodes[n01]);
+                m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, m_allNodes[n00], m_allNodes[n11]);
+                m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, m_allNodes[n10], m_allNodes[n01]);
             }
         }
     }

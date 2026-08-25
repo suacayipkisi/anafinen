@@ -1,7 +1,7 @@
 #pragma once
 
-#include "element.hpp"
-#include "node.hpp"
+#include "../element.hpp"
+#include "../node.hpp"
 #include <Eigen/SparseCore>
 #include <vector>
 #include <array>
@@ -27,11 +27,9 @@ public:
     {}
 
     void assembleStiffness(
-        const std::vector<TrussElement_1D>& elements, 
-        const std::uint32_t nodeNum
+        const std::vector<TrussElement_1D>& elements
     );
 
     void calculateDisplacements();
-    
     void calculateElementForcesAndStress();
 };

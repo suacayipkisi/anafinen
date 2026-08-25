@@ -13,7 +13,6 @@ public:
     {}
 
     inline void updateForce(std::array<double, 3> force){m_force = force;}
-
     inline std::shared_ptr<Node> getApliedNode() const {return m_appliedNode;}
     inline const std::array<double, 3>& getForce() const {return m_force;}
 };

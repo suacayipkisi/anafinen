@@ -1,7 +1,6 @@
 #include "solveTruss_1D_StaticDeflection.hpp"
-#include "element.hpp"
-#include "node.hpp"
-#include "../anafInfo.hpp"
+#include "../element.hpp"
+#include "../../anafInfo.hpp"
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
@@ -10,72 +9,52 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <vector>
 #include <omp.h>
 
-void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& elements, const std::uint32_t nodeNum) {
+void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& elements) {
     const std::size_t elementNum = elements.size();
-    
-    // each 1D truss element contributes 36 entries (6x6)
     const std::size_t totalTriplets = elementNum * 36;
     std::vector<Eigen::Triplet<double>> globalStiffnessMatrix(totalTriplets);
+    const std::size_t nodeNum{m_allNodes.size()};
 
     #pragma omp parallel for schedule(static)
     for (std::size_t index = 0; index < elementNum; ++index) {
-        const Eigen::Matrix<double, 6, 6>& elementStiffness = elements[index].getEleStiffness();
-        const std::array<std::shared_ptr<Node>, 2>& elementNodes = elements[index].getEleNodes();
+        const auto& element = elements[index];
+        const std::array<std::uint32_t, 2>& elementNodes = element.getEleNodes();
         
-        const std::uint32_t globalMatrixIndex_1 = elementNodes[0]->getNodeID();
-        const std::uint32_t globalMatrixIndex_2 = elementNodes[1]->getNodeID();
+        const std::uint32_t globalMatrixIndex_1 = m_allNodes[elementNodes[0]].getNodeID();
+        const std::uint32_t globalMatrixIndex_2 = m_allNodes[elementNodes[1]].getNodeID();
         
-        // 3 DOFs per node (x, y, z)
         const std::uint32_t zeroPos_1 = 3 * globalMatrixIndex_1;
         const std::uint32_t zeroPos_2 = 3 * globalMatrixIndex_2;
+
+        double AE_L = (element.getEleCrossSection() * element.getEleProperties()->getElasticityModulues()) / element.getEleLength();
+        const auto& cos = element.getEleCosinuses();
 
         std::size_t tripletOffset = index * 36;
         std::size_t localCounter = 0;
 
+        // filling global stiff. matrix directly (not calculate and assemble element by element)
         for (std::size_t lambda_topIndex = 0; lambda_topIndex < 3; ++lambda_topIndex) {
             for (std::size_t lambda_rightIndex = 0; lambda_rightIndex < 3; ++lambda_rightIndex) {
+                double val = cos[lambda_rightIndex] * cos[lambda_topIndex] * AE_L;
+
+                // lambda top left
                 globalStiffnessMatrix[tripletOffset + localCounter++] = 
-                    Eigen::Triplet<double>(
-                        zeroPos_1 + lambda_rightIndex, 
-                        zeroPos_1 + lambda_topIndex, 
-                        elementStiffness(
-                            lambda_rightIndex, 
-                            lambda_topIndex
-                        )
-                    );
+                    Eigen::Triplet<double>(zeroPos_1 + lambda_rightIndex, zeroPos_1 + lambda_topIndex, val);
                 
+                // -lambda top right 
                 globalStiffnessMatrix[tripletOffset + localCounter++] = 
-                    Eigen::Triplet<double>(
-                        zeroPos_1 + lambda_rightIndex, 
-                        zeroPos_2 + lambda_topIndex, 
-                        elementStiffness(
-                            lambda_rightIndex, 
-                            lambda_topIndex + 3
-                        )
-                    );
+                    Eigen::Triplet<double>(zeroPos_1 + lambda_rightIndex, zeroPos_2 + lambda_topIndex, -val);
                 
+                // -lambda bottom left
                 globalStiffnessMatrix[tripletOffset + localCounter++] = 
-                    Eigen::Triplet<double>(zeroPos_2 + lambda_rightIndex, 
-                        zeroPos_1 + lambda_topIndex, 
-                        elementStiffness(
-                            lambda_rightIndex + 3, 
-                            lambda_topIndex
-                        )
-                    );
+                    Eigen::Triplet<double>(zeroPos_2 + lambda_rightIndex, zeroPos_1 + lambda_topIndex, -val);
                 
+                // lambda bottom right
                 globalStiffnessMatrix[tripletOffset + localCounter++] = 
-                    Eigen::Triplet<double>(
-                        zeroPos_2 + lambda_rightIndex, 
-                        zeroPos_2 + lambda_topIndex, 
-                        elementStiffness(
-                            lambda_rightIndex + 3, 
-                            lambda_topIndex + 3
-                        )
-                    );
+                    Eigen::Triplet<double>(zeroPos_2 + lambda_rightIndex, zeroPos_2 + lambda_topIndex, val);
             }
         }
     }
@@ -106,7 +85,7 @@ void Truss_1D_Container::calculateDisplacements() {
         }
     }
 
-    // Parallel filtering of triplets via private vector merge
+    // parallel filtering of triplets via private vector merge
     std::vector<Eigen::Triplet<double>> reducedTriplets;
     
     #pragma omp parallel
@@ -175,10 +154,10 @@ void Truss_1D_Container::calculateElementForcesAndStress() {
     #pragma omp parallel for schedule(static)
     for (std::size_t eleNum = 0; eleNum < totalElements; ++eleNum) {
         TrussElement_1D& element = m_allElements[eleNum];
-        const std::array<std::shared_ptr<Node>, 2>& elementNodes = element.getEleNodes();
+        const std::array<std::uint32_t, 2>& elementNodes = element.getEleNodes();
         
-        const std::uint32_t nodeID_1 = elementNodes[0]->getNodeID();
-        const std::uint32_t nodeID_2 = elementNodes[1]->getNodeID();
+        const std::uint32_t nodeID_1 = m_allNodes[elementNodes[0]].getNodeID();
+        const std::uint32_t nodeID_2 = m_allNodes[elementNodes[1]].getNodeID();
 
         Eigen::Vector<double, 6> elementGlobalDispVec;
         for (std::uint8_t i = 0; i < 3; ++i) {
@@ -186,7 +165,7 @@ void Truss_1D_Container::calculateElementForcesAndStress() {
             elementGlobalDispVec[i + 3] = m_resultDisplacements[nodeID_2][i];
         }
 
-        // Fetch precomputed cosines directly from element
+        // fetch precomputed cosines directly from element
         const std::array<float, 3>& eleCosinuses = element.getEleCosinuses();
 
         Eigen::Vector<double, 6> elementTransformationVec;
