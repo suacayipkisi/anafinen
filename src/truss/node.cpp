@@ -2,7 +2,9 @@
 
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <memory>
+#include <vector>
 #include "../anafInfo.hpp"
 
 const double nodeDistance(std::array<std::shared_ptr<Node>, 2> nodes){

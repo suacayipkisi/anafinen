@@ -61,7 +61,8 @@ set(SOURCES
     src/truss/solveTruss_1D.cpp
 )
 
-add_executable(anafinen ${SOURCES})
+add_executable(anafinen ${SOURCES}
+    src/truss/simpleTrussCreate.cpp)
 
 target_compile_definitions(anafinen PRIVATE 
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"

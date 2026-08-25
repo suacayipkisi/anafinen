@@ -18,12 +18,10 @@ private:
 public:
     Truss_1D_Container(
         const std::vector<double>& forceVec,
-        const std::vector<Eigen::Triplet<double>>& stiffnessMatrix,
         const std::vector<Node>& allNodes,
         const std::vector<TrussElement_1D> allElements
     ): 
         m_forceVec(forceVec),
-        m_globalStiffnessMatrix(stiffnessMatrix),
         m_allNodes(allNodes),
         m_allElements(allElements)
     {}
