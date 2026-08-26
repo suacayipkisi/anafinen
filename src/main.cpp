@@ -35,6 +35,10 @@ int main() {
 
     AllStatus mainStatus{};
 
+    // add two material for experimental reasons
+    // if you see that code block below that means
+    // not even phase 1 is finished
+    // you are currently watching the born of an analysis program
     anafGen::IdGenerator materialIDs;
     std::vector<Material> allMaterials;
     allMaterials.push_back({

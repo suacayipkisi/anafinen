@@ -1,8 +1,7 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
-
-#include "../gen/genNum.hpp"
 
 class Material{
 private:
