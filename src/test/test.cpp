@@ -4,7 +4,7 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
-#include "../anafInfo.hpp"
+#include "../log/anaf_info.h"
 #include "test.hpp"
 
 int testEigen(){
@@ -16,10 +16,10 @@ int testEigen(){
 
     double det = K.determinant();
     if (det == 3.0) {
-        anafLog::success("Eigen math backend verified. Det(K) = {}", det);
+        anaf_success("Eigen math backend verified. Det(K) = {}", det);
         eigenStatus = 0;
     } else {
-        anafLog::warn("Eigen determinant mismatch. Result: {}", det);
+        anaf_warn("Eigen determinant mismatch. Result: {}", det);
         eigenStatus = 1;
     }
 

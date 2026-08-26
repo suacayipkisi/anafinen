@@ -12,7 +12,7 @@
 
 #include <gmsh.h>
 
-#include "anafInfo.hpp"
+#include "log/anaf_info.h"
 #include "gui/gui.hpp"
 #include "test/status.hpp"
 
@@ -23,21 +23,23 @@ extern "C" {
 }
 #endif
 
-namespace Log = anafLog;
-
 int main() {
-    Log::core("Initializing ANAFINEN Workspace (C++23)...");
+    if (!anaf_log_init("anafinen_run.log")) {
+        anaf_error("Failed to open log file!");
+        return 1;
+    }
+    anaf_core("Initializing ANAFINEN Workspace (C++23)...");
 
     AllStatus mainStatus{};
 
 
     if(initRunGUI(mainStatus) != -1){
-        Log::info("Main window processed succesfully.");
+        anaf_info("Main window processed succesfully.");
     }
     else{
-        Log::error("Main window initrun is not succesful!");
+        anaf_error("Main window initrun is not succesful!");
     }
 
-    Log::core("Anafinen is closed.");
+    anaf_core("Anafinen is closed.");
     return 0;
 }

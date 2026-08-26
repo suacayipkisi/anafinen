@@ -2,7 +2,8 @@
 
 #include "../material/properties.hpp"
 #include "node.hpp"
-#include "../anafInfo.hpp"
+#include "../log/anaf_info.h"
+
 #include <Eigen/Core>
 #include <cstddef>
 #include <cstdint>
@@ -40,30 +41,25 @@ public:
         m_nodes({node_1, node_2})
     {
         // if type, area and nodes are not given, destroy element
-        if(!type){
-            anafLog::info(
-                "Destroying element that under construction: 'type: {}', 'area: {}', 'nodes: {},{}'", 
-                "unknownType",
-                area,
-                std::to_string(node_1),
-                std::to_string(node_2)
-            );
+        if (!type) {
+            anaf_error("Destroying invalid element: material type is null, area=%.4f, nodes=[%u, %u]", 
+                       area, node_1, node_2);
             throw std::invalid_argument("Element type cannot be undefined");
         }
-        if(area <= 0.0){
-            anafLog::info(
-                "Destroying element that under construction: 'type: {}', 'area: {}', 'nodes: {},{}'", 
-                type->getMaterialType(),
-                0.0,
-                std::to_string(node_1),
-                std::to_string(node_2)
-            );
+
+        if (area <= 0.0) {
+            anaf_error("Destroying invalid element: area must be positive (got %.4f), material=%s, nodes=[%u, %u]", 
+                       area, type->getMaterialType().c_str(), node_1, node_2);
             throw std::invalid_argument("Element cross sectional area must be greater than 0");
         }
-        if(node_1 == node_2){
-            throw std::invalid_argument("An elements nodes cannot be same");
+
+        if (node_1 == node_2) {
+            anaf_error("Destroying invalid element: node indices cannot be identical (%u == %u)", node_1, node_2);
+            throw std::invalid_argument("An element's nodes cannot be same");
         }
+
         if (node_1 >= allNodes.size() || node_2 >= allNodes.size()) {
+            anaf_error("Node index out of range: n1=%u, n2=%u, total_nodes=%zu", node_1, node_2, allNodes.size());
             throw std::out_of_range("Node index is outside the node span");
         }//destroyment finish
         

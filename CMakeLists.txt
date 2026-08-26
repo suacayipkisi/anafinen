@@ -1,10 +1,19 @@
 cmake_minimum_required(VERSION 3.20...3.31)
 project(anafinen VERSION 0.1.0 LANGUAGES C CXX)
 
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+add_library(anaf_logger STATIC
+    src/log/anaf_info.c
+)
+
+target_include_directories(anaf_logger PUBLIC src/log)
 
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(OpenMP REQUIRED)
@@ -62,6 +71,8 @@ set(SOURCES
     src/truss_1D/element.cpp
     src/truss_1D/trussSolver/solveTrussStaticDeflection.cpp
     src/truss_1D/trussTypes/simpleTrussCreate.cpp
+
+    src/log/anaf_info.c
 )
 
 add_executable(anafinen ${SOURCES})

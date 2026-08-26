@@ -1,6 +1,6 @@
 #include "solveTrussStaticDeflection.hpp"
 #include "../element.hpp"
-#include "../../anafInfo.hpp"
+#include "../../log/anaf_info.h"
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
@@ -59,7 +59,7 @@ void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& e
         }
     }
     
-    anafLog::info("Global Stiffness Matrix Created, size: {}x{}", (nodeNum * 3), (nodeNum * 3));
+    anaf_info("Global Stiffness Matrix Created, size: {}x{}", (nodeNum * 3), (nodeNum * 3));
     m_globalStiffnessMatrix = std::move(globalStiffnessMatrix);
 }
 

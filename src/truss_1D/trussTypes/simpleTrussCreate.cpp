@@ -37,6 +37,8 @@ void SimpleTruss::setTruss(){
         }
     }
 
+    anaf_info("All nodes for simple truss created. NodeNum: ", totalNodes);
+
     // determine elements
     const std::size_t xEdgesCount = static_cast<std::size_t>(nx) * ny_nodes * nz_nodes;
     const std::size_t yEdgesCount = static_cast<std::size_t>(nx_nodes) * ny * nz_nodes;
@@ -183,5 +185,7 @@ void SimpleTruss::setTruss(){
             }
         }
     }
+
+    anaf_info("All elements for simple truss created. ElementNum: ", totalElements);
 
 } // end: setTruss()

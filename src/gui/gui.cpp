@@ -9,7 +9,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
-#include "../anafInfo.hpp"
+#include "../log/anaf_info.h"
 #include "../test/status.hpp"
 
 void Framebuffer::init(int w, int h) {
@@ -32,7 +32,7 @@ void Framebuffer::init(int w, int h) {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        anafLog::error("Framebuffer initialization failed.");
+        anaf_error("Framebuffer initialization failed.");
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -95,10 +95,10 @@ void setup_cad_theme() {
 int initRunGUI(AllStatus& status) {
 
     if (!glfwInit()) {
-        anafLog::error("GLFW initialization failed.");
+        anaf_error("GLFW initialization failed.");
         return -1;
     }
-    anafLog::success("GLFW initialized successfully.");
+    anaf_success("GLFW initialized successfully.");
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
@@ -106,7 +106,7 @@ int initRunGUI(AllStatus& status) {
 
     GLFWwindow* window = glfwCreateWindow(1440, 900, "ANAFINEN", nullptr, nullptr);
     if (!window) {
-        anafLog::error("Failed to create GLFW window context.");
+        anaf_error("Failed to create GLFW window context.");
         glfwTerminate();
         return -1;
     }
@@ -114,31 +114,31 @@ int initRunGUI(AllStatus& status) {
     glfwSwapInterval(1);
 
     if (!gladLoadGL((GLADloadfunc)glfwGetProcAddress)) {
-        anafLog::error("GLAD loader failed to bind OpenGL context.");
+        anaf_error("GLAD loader failed to bind OpenGL context.");
         glfwDestroyWindow(window);
         glfwTerminate();
         return -1;
     }
-    anafLog::success("OpenGL context and subsystems initialized successfully.");
+    anaf_success("OpenGL context and subsystems initialized successfully.");
 
     const char* gl_version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
     const char* gl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
 
     std::array<int, 2> graphStatus{1, 1};
     if(gl_version){
-        anafLog::success("OpenGL Version: {}", gl_version);
+        anaf_success("OpenGL Version: {}", gl_version);
         graphStatus[0] = 0;
     }
     else{
-        anafLog::warn("OpenGL Version Couldn't Determined: {}", "Unknown");
+        anaf_warn("OpenGL Version Couldn't Determined: {}", "Unknown");
     }
 
     if(gl_renderer){
-        anafLog::success("GPU Renderer  : {}", gl_renderer);
+        anaf_success("GPU Renderer  : {}", gl_renderer);
         graphStatus[1] = 0;
     }
     else{
-        anafLog::warn("GPU Renderer Couldn't Determined  : {}", "Unknown");
+        anaf_warn("GPU Renderer Couldn't Determined  : {}", "Unknown");
     }
 
     status.setGraphicsStatus(graphStatus);
@@ -248,7 +248,7 @@ int initRunGUI(AllStatus& status) {
         ImGui::SliderInt("Extracted Modes", &target_modes, 1, 32);
 
         if (ImGui::Button("Execute Solver", ImVec2(-1, 32))) {
-            anafLog::info("Modal Solver triggered for {} eigenvalues.", target_modes);
+            anaf_info("Modal Solver triggered for {} eigenvalues.", target_modes);
         }
         ImGui::End();
 
@@ -283,7 +283,7 @@ int initRunGUI(AllStatus& status) {
 
     // Cleanup Subsystems
     viewport_fbo.destroy();
-    anafLog::info("Closing the main window.");
+    anaf_info("Closing the main window.");
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
