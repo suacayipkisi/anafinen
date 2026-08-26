@@ -17,12 +17,12 @@
 // 2 nodes, one size_dimention
 class TrussElement_1D{
 private:
+    std::uint32_t m_type;
     double m_length{};
     double m_crossSectionArea{};
     double m_elongation{};
     double m_axialForce{};
     double m_stress{};
-    std::shared_ptr<Material> m_type;
     std::array<float, 3> m_cosinuses;
     std::array<std::uint32_t, 2> m_nodes{};
     Eigen::Matrix<double, 6, 6> m_stiffnessMatrix;
@@ -30,7 +30,7 @@ protected:
 public:
     TrussElement_1D() = default;
     TrussElement_1D(
-        std::shared_ptr<Material> type,
+        std::uint32_t type,
         double area,
         const std::uint32_t node_1,
         const std::uint32_t node_2,
@@ -42,19 +42,19 @@ public:
     {
         // if type, area and nodes are not given, destroy element
         if (!type) {
-            anaf_error("Destroying invalid element: material type is null, area=%.4f, nodes=[%u, %u]", 
+            anaf_error("Destroying invalid element: material type is null, area{%.4f}, nodes[%u, %u]", 
                        area, node_1, node_2);
             throw std::invalid_argument("Element type cannot be undefined");
         }
 
         if (area <= 0.0) {
-            anaf_error("Destroying invalid element: area must be positive (got %.4f), material=%s, nodes=[%u, %u]", 
-                       area, type->getMaterialType().c_str(), node_1, node_2);
+            anaf_error("Destroying invalid element: area must be positive (got {%.4f}), material{%s}, nodes[%u, %u]", 
+                       area, type, node_1, node_2);
             throw std::invalid_argument("Element cross sectional area must be greater than 0");
         }
 
         if (node_1 == node_2) {
-            anaf_error("Destroying invalid element: node indices cannot be identical (%u == %u)", node_1, node_2);
+            anaf_error("Destroying invalid element: node indices cannot be identical ({%u} == {%u})", node_1, node_2);
             throw std::invalid_argument("An element's nodes cannot be same");
         }
 
@@ -88,11 +88,11 @@ public:
     inline const double getEleElongation() const {return m_elongation;}
     inline const double getEleAxialForces() const {return m_axialForce;}
     inline const double getEleStress() const {return m_stress;}
-    inline const std::shared_ptr<Material> getEleProperties() const {return m_type;}
+    inline const std::uint32_t getEleProperties() const {return m_type;}
     inline const std::array<float, 3>& getEleCosinuses() const {return m_cosinuses;}
     inline const std::array<std::uint32_t, 2>& getEleNodes() const {return m_nodes;}
 
-    void determineEleStiffnessMatrix();
+    void determineEleStiffnessMatrix(const std::span<const Material> allMaterials);
     inline const Eigen::Matrix<double, 6, 6>& getEleStiffness() const {return m_stiffnessMatrix;}
 
 };

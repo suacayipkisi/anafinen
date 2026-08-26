@@ -12,7 +12,7 @@
 #include <vector>
 #include <omp.h>
 
-void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& elements) {
+void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& elements, const std::span<const Material> allMaterials) {
     const std::size_t elementNum = elements.size();
     const std::size_t totalTriplets = elementNum * 36;
     std::vector<Eigen::Triplet<double>> globalStiffnessMatrix(totalTriplets);
@@ -23,13 +23,13 @@ void Truss_1D_Container::assembleStiffness(const std::vector<TrussElement_1D>& e
         const auto& element = elements[index];
         const auto& elementNodes = element.getEleNodes();
         
-        const std::uint32_t globalMatrixIndex_1 = m_allNodes[elementNodes[0]].getNodeID();
-        const std::uint32_t globalMatrixIndex_2 = m_allNodes[elementNodes[1]].getNodeID();
+        const std::uint32_t globalMatrixIndex_1 = elementNodes[0];
+        const std::uint32_t globalMatrixIndex_2 = elementNodes[1];
         
         const std::uint32_t zeroPos_1 = 3 * globalMatrixIndex_1;
         const std::uint32_t zeroPos_2 = 3 * globalMatrixIndex_2;
 
-        double AE_L = (element.getEleCrossSection() * element.getEleProperties()->getElasticityModulues()) / element.getEleLength();
+        double AE_L = (element.getEleCrossSection() * allMaterials[element.getEleProperties()].getElasticityModulues()) / element.getEleLength();
         const auto& cos = element.getEleCosinuses();
 
         std::size_t tripletOffset = index * 36;
@@ -149,7 +149,7 @@ void Truss_1D_Container::calculateDisplacements() {
     }
 }
 
-void Truss_1D_Container::calculateElementForcesAndStress() {
+void Truss_1D_Container::calculateElementForcesAndStress(const std::span<const Material> allMaterials) {
     const std::size_t totalElements = m_allElements.size();
 
     #pragma omp parallel for schedule(static)
@@ -157,8 +157,8 @@ void Truss_1D_Container::calculateElementForcesAndStress() {
         auto& element = m_allElements[eleNum];
         const auto& elementNodes = element.getEleNodes();
         
-        const std::uint32_t nodeID_1 = m_allNodes[elementNodes[0]].getNodeID();
-        const std::uint32_t nodeID_2 = m_allNodes[elementNodes[1]].getNodeID();
+        const std::uint32_t nodeID_1 = elementNodes[0];
+        const std::uint32_t nodeID_2 = elementNodes[1];
 
         Eigen::Vector<double, 6> elementGlobalDispVec;
         for (std::uint8_t i = 0; i < 3; ++i) {
@@ -182,7 +182,7 @@ void Truss_1D_Container::calculateElementForcesAndStress() {
 
         const double eleCrossSection = element.getEleCrossSection();
         const double eleLength = element.getEleLength();
-        const double elasticity = element.getEleProperties()->getElasticityModulues();
+        const double elasticity = allMaterials[element.getEleProperties()].getElasticityModulues();
 
         double eleForce = (elongation / eleLength) * elasticity * eleCrossSection;
         const double eleStress = eleForce / eleCrossSection;

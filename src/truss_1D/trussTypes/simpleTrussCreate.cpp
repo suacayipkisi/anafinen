@@ -2,7 +2,6 @@
 #include "../element.hpp"
 
 #include <cstdint>
-#include <memory>
 #include <vector>
 #include <omp.h>
 #include <span>

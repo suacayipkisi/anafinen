@@ -11,10 +11,13 @@
 #include <Spectra/SymGEigsShiftSolver.h>
 
 #include <gmsh.h>
+#include <vector>
 
 #include "log/anaf_info.h"
 #include "gui/gui.hpp"
+#include "material/properties.hpp"
 #include "test/status.hpp"
+#include "gen/genNum.hpp"
 
 #ifdef _WIN32
 extern "C" {
@@ -32,6 +35,32 @@ int main() {
 
     AllStatus mainStatus{};
 
+    anafGen::IdGenerator materialIDs;
+    std::vector<Material> allMaterials;
+    allMaterials.push_back({
+        "Structural Steel (AISI 4130)",
+        205.0e9,
+        78.0e9,
+        160.0e9,
+        435.0e6,
+        670.0e6,
+        205.0e9,
+        0.29f,
+        0.25f,
+        materialIDs.next_u32()
+    });
+    allMaterials.push_back({
+        "Aluminum 6061-T6",
+        68.9e9,
+        26.0e9,
+        67.5e9,
+        276.0e9 / 1e3,
+        310.0e6,
+        68.9e9,
+        0.33f,
+        0.12f,
+        materialIDs.next_u32()
+    });
 
     if(initRunGUI(mainStatus) != -1){
         anaf_info("Main window processed succesfully.");

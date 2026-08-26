@@ -1,8 +1,13 @@
 #pragma once
 
 #include <string>
+
+#include "../gen/genNum.hpp"
+
 class Material{
 private:
+    std::uint32_t m_materialID;
+
     float m_ductility{}; // elongation at break / %
     float m_poissonsRatio{}; // uniteless
     double m_youngModulus{}; // GPa (only axial)
@@ -17,14 +22,15 @@ private:
 public:
     Material(
         std::string name,
-        double elasticityModulusE,
-        double shearModulusG,
-        double bulkModulusK,
-        double yieldTensileStrength,
-        double ultimateTensileStrength,
-        double youngModulus,
-        float poissonsRatio,
-        float ductility
+        const double elasticityModulusE,
+        const double shearModulusG,
+        const double bulkModulusK,
+        const double yieldTensileStrength,
+        const double ultimateTensileStrength,
+        const double youngModulus,
+        const float poissonsRatio,
+        const float ductility,
+        const std::uint32_t materialID
     ):
         m_materialType(name),
         m_elasticityModulus(elasticityModulusE),
@@ -34,7 +40,8 @@ public:
         m_ultimateTensileStrength(ultimateTensileStrength),
         m_youngModulus(youngModulus),
         m_poissonsRatio(poissonsRatio),
-        m_ductility(ductility)
+        m_ductility(ductility),
+        m_materialID(materialID)
     {}
 
     // if all properties not determined we can determine later
@@ -66,6 +73,7 @@ public:
         if(m_materialType.empty()) m_materialType = type;
     }
 
+    inline const std::uint32_t getMaterialID() const {return m_materialID;}
     inline const float getDuctility() const {return m_ductility;}
     inline const float getPoisson() const {return m_poissonsRatio;}
     inline const double getYoungModulus() const {return m_youngModulus;}

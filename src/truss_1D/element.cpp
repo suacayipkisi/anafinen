@@ -5,15 +5,15 @@
 #include "../log/anaf_info.h"
 
 //unnecesary if you want to reach global stiffness matrix
-void TrussElement_1D::determineEleStiffnessMatrix(){
+void TrussElement_1D::determineEleStiffnessMatrix(const std::span<const Material> allMaterials){
 
-    if(m_type->getElasticityModulues() == 0){
+    if(allMaterials[m_type].getElasticityModulues() == 0){
         anaf_warn("No Elasticity modulus defined for this type of material!");
         m_stiffnessMatrix = Eigen::Matrix<double, 6, 6>::Zero();
         return;
     }
 
-    double AE_L = (m_crossSectionArea * m_type->getElasticityModulues()) / m_length;
+    double AE_L = (m_crossSectionArea * allMaterials[m_type].getElasticityModulues()) / m_length;
 
     Eigen::Matrix3d lambda;
     std::array<float, 3>& cos {m_cosinuses};

@@ -16,10 +16,10 @@ int testEigen(){
 
     double det = K.determinant();
     if (det == 3.0) {
-        anaf_success("Eigen math backend verified. Det(K) = {}", det);
+        anaf_success("Eigen math backend verified. Det(K) = {%f}", det);
         eigenStatus = 0;
     } else {
-        anaf_warn("Eigen determinant mismatch. Result: {}", det);
+        anaf_warn("Eigen determinant mismatch. Result: {%f}", det);
         eigenStatus = 1;
     }
 

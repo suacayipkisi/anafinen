@@ -1,7 +1,9 @@
 #include "anaf_info.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <time.h>
 
 static FILE* g_log_file = NULL;
 
@@ -47,8 +49,16 @@ void anaf_log_write(AnafLogLevel level, const char* fmt, ...){
             break;
     }
 
+    // get current time
+    time_t raw_time = time(NULL);
+    struct tm time_info;
+    localtime_r(&raw_time, &time_info);
+
+    char time_str[16];
+    strftime(time_str, sizeof(time_str), "%H:%M:%S", &time_info);
+
     // terminal output
-    fprintf(stream, "%s%s%s%s", ANAF_COLOR_BOLD, tag_color, tag, ANAF_COLOR_RESET);
+    fprintf(stream, "[%s] %s%s%s%s", time_str, ANAF_COLOR_BOLD, tag_color, tag, ANAF_COLOR_RESET);
     va_list args_term;
     va_start(args_term, fmt);
     vfprintf(stream, fmt, args_term);
@@ -57,7 +67,7 @@ void anaf_log_write(AnafLogLevel level, const char* fmt, ...){
     
     // file output
     if (g_log_file) {
-        fprintf(g_log_file, "%s", tag);
+        fprintf(g_log_file, "[%s] %s", time_str, tag);
         va_list args_file;
         va_start(args_file, fmt);
         vfprintf(g_log_file, fmt, args_file);

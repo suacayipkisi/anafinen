@@ -13,7 +13,7 @@ private:
     std::array<std::uint32_t, 3> m_cubeNum{1, 1, 1}; // x y z added unit truss cube, cannot be zero none of them
     std::vector<Node> m_allNodes;
     std::vector<TrussElement_1D> m_allElements;
-    std::shared_ptr<Material> m_type;
+    std::uint32_t m_type;
     double m_cubeEdgeLength{};
     double m_area{};
 public:
@@ -21,7 +21,7 @@ public:
         std::array<std::uint32_t, 3> cubeNum,
         double cubeEdgeLength,
         double area,
-        std::shared_ptr<Material> type
+        std::uint32_t type
     ): 
         m_cubeNum(cubeNum),
         m_cubeEdgeLength(cubeEdgeLength),

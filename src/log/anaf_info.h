@@ -1,7 +1,6 @@
 #ifndef ANAF_LOG_H
 #define ANAF_LOG_H
 
-#include <stdio.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus

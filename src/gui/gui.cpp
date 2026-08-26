@@ -126,19 +126,19 @@ int initRunGUI(AllStatus& status) {
 
     std::array<int, 2> graphStatus{1, 1};
     if(gl_version){
-        anaf_success("OpenGL Version: {}", gl_version);
+        anaf_success("OpenGL Version: {%s}", gl_version);
         graphStatus[0] = 0;
     }
     else{
-        anaf_warn("OpenGL Version Couldn't Determined: {}", "Unknown");
+        anaf_warn("OpenGL Version Couldn't Determined: {%s}", "Unknown");
     }
 
     if(gl_renderer){
-        anaf_success("GPU Renderer  : {}", gl_renderer);
+        anaf_success("GPU Renderer  : {%s}", gl_renderer);
         graphStatus[1] = 0;
     }
     else{
-        anaf_warn("GPU Renderer Couldn't Determined  : {}", "Unknown");
+        anaf_warn("GPU Renderer Couldn't Determined  : {%s}", "Unknown");
     }
 
     status.setGraphicsStatus(graphStatus);
@@ -248,7 +248,7 @@ int initRunGUI(AllStatus& status) {
         ImGui::SliderInt("Extracted Modes", &target_modes, 1, 32);
 
         if (ImGui::Button("Execute Solver", ImVec2(-1, 32))) {
-            anaf_info("Modal Solver triggered for {} eigenvalues.", target_modes);
+            anaf_info("Modal Solver triggered for {%d} eigenvalues.", target_modes);
         }
         ImGui::End();
 
