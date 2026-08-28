@@ -5,7 +5,6 @@
 
 #include <cstdint>
 #include <array>
-#include <memory>
 #include <vector>
 
 class SimpleTruss{

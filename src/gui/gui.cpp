@@ -9,6 +9,8 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include "linuxCursor.hpp"
+
 #include "../log/anaf_info.h"
 #include "../test/status.hpp"
 
@@ -93,7 +95,10 @@ void setup_cad_theme() {
 }
 
 int initRunGUI(AllStatus& status) {
-
+#ifdef __linux__
+    platform_utils::setupSystemCursor();
+#endif // __linux__
+    
     if (!glfwInit()) {
         anaf_error("GLFW initialization failed.");
         return -1;

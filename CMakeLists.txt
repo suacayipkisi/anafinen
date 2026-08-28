@@ -70,7 +70,6 @@ set(SOURCES
     
     src/truss_1D/element.cpp
     src/truss_1D/trussSolver/solveTrussStaticDeflection.cpp
-    src/truss_1D/trussTypes/simpleTrussCreate.cpp
 
     src/log/anaf_info.c
 )

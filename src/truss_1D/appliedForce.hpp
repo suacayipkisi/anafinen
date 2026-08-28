@@ -2,17 +2,17 @@
 
 #include "node.hpp"
 #include <array>
-#include <memory>
+#include <span>
 class ForceApplied{
 private:
-    std::shared_ptr<Node> m_appliedNode;
+    std::span<const Node> m_nodes;
     std::array<double, 3> m_force;
 public:
-    ForceApplied(std::shared_ptr<Node> node, std::array<double, 3> force):
-        m_appliedNode(node), m_force(force)
+    ForceApplied(std::span<const Node> nodes, std::array<double, 3> force):
+        m_nodes(nodes), m_force(force)
     {}
 
     inline void updateForce(std::array<double, 3> force){m_force = force;}
-    inline std::shared_ptr<Node> getApliedNode() const {return m_appliedNode;}
+    inline std::span<const Node> getApliedNode() const {return m_nodes;}
     inline const std::array<double, 3>& getForce() const {return m_force;}
 };

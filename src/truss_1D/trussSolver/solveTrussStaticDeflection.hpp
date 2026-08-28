@@ -2,6 +2,7 @@
 
 #include "../element.hpp"
 #include "../node.hpp"
+
 #include <Eigen/SparseCore>
 #include <span>
 #include <vector>
@@ -29,7 +30,7 @@ public:
 
     void assembleStiffness(
         const std::vector<TrussElement_1D>& elements,
-        const std::span<const Material> allMaterials
+        std::span<const Material> allMaterials
     );
 
     void calculateDisplacements();

@@ -7,11 +7,9 @@
 #include <Eigen/Core>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <array>
 #include <span>
 #include <stdexcept>
-#include <string>
 
 // initializing 1D element in 3D space
 // 2 nodes, one size_dimention

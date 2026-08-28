@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 class Material{
 private:
@@ -81,5 +82,5 @@ public:
     inline const double getBulkModulus() const {return m_bulkModulus;}
     inline const double getShearModulues() const {return m_shearModulus;}
     inline const double getElasticityModulues() const {return m_elasticityModulus;}
-    inline const std::string getMaterialType() const {return m_materialType;}
+    inline const std::string_view getMaterialType() const {return m_materialType;}
 };
