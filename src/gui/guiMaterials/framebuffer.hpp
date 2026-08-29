@@ -21,11 +21,7 @@
 
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
-#include <iostream>
-
-
-
-
+#include "../../log/anaf_info.h"
 
 class Framebuffer {
 private:
@@ -107,7 +103,7 @@ public:
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_rbo_id_);
 
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-            std::cerr << "ERROR: Framebuffer is not complete!" << '\n';
+            anaf_error("ERROR: Framebuffer is not complete!");
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);

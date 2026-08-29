@@ -20,7 +20,6 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
-#include <iostream>
 #include <memory>
 
 #include "guiMaterials/framebuffer.hpp"
@@ -32,18 +31,20 @@
 #include "panels/trussControlPanel.hpp"
 #include "panels/viewportPanel.hpp"
 #include "panels/trussControlPanel.hpp"
+#include "linuxCursor.hpp"
 
 
 int initgui(){
 #ifdef __linux__
+    platform_utils::setupSystemCursor();
     glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
 #endif
 
     if(!glfwInit()){
-        std::cerr << "Failed to initialize GLFW" << '\n';
+        anaf_error("Failed to initialize GLFW");
         glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
         if (!glfwInit()) {
-            std::cerr << "Fatal: GLFW initialization failed completely.\n";
+            anaf_error("Fatal: GLFW initialization failed completely");
             return -1;
         }
     }
@@ -59,7 +60,7 @@ int initgui(){
     GLFWwindow* window = glfwCreateWindow(1600, 900, "Modular Simulation Engine", nullptr, nullptr);
 
     if (!window) {
-        std::cerr << "Failed to create GLFW window\n";
+        anaf_error("Failed to create GLFW window");
         glfwTerminate();
         return -1;
     }
