@@ -1,7 +1,7 @@
 #pragma once
 
 #ifdef __linux__
-#include <cstdlib>
+
 #include <array>
 #include <cstdio>
 #include <memory>

@@ -3,11 +3,9 @@
 #include "../node.hpp"
 #include "../element.hpp"
 #include "../appliedForce.hpp"
-#include "imgui.h"
 
 #include <array>
 #include <cstdint>
-#include <iostream>
 #include <span>
 
 struct SimpleQuadranglePrismTrussInput{

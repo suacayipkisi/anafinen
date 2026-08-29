@@ -66,12 +66,7 @@ int main() {
         materialIDs.next_u32()
     });
 
-    if(initRunGUI(mainStatus) != -1){
-        anaf_info("Main window processed succesfully.");
-    }
-    else{
-        anaf_error("Main window initrun is not succesful!");
-    }
+    initgui();
 
     anaf_core("Anafinen is closed.");
     return 0;

@@ -65,11 +65,14 @@ set(SOURCES
     src/main.cpp
 
     src/gui/gui.cpp
+    src/gui/imGuiLayer.cpp
 
     src/test/test.cpp
     
     src/truss_1D/element.cpp
     src/truss_1D/trussSolver/solveTrussStaticDeflection.cpp
+
+    src/trussEngine/trussSolver.cpp
 
     src/log/anaf_info.c
 )
