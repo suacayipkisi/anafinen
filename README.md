@@ -15,7 +15,7 @@ This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. 
 ### Commercial Licensing
 If you require this software for proprietary, commercial, or closed-source integration without the copyleft obligations of GPLv3, commercial licenses are available.
 
-Contact: `your-email@example.com`
+Contact: `konuki8523@gmail.com`
 
 ### Third-Party Dependencies
 This project builds upon several open-source libraries:
