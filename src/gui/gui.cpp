@@ -26,6 +26,7 @@
 #include "guiMaterials/framebuffer.hpp"
 #include "guiMaterials/imGuiLayer.hpp"
 #include "guiMaterials/iPanel.hpp"
+#include "panels/logTerminal.hpp"
 #include "panels/mainDockSpaceHost.hpp"
 #include "panels/modelTree.hpp"
 #include "panels/trussControlPanel.hpp"
@@ -79,6 +80,7 @@ int initgui(){
     panelManager.addPanel<ViewportPanel>(fbo);
     panelManager.addPanel<TrussControlPanel>();
     panelManager.addPanel<ModelTree>();
+    panelManager.addPanel<LogTerminal>();
 
     // game loop
     while (!glfwWindowShouldClose(window)){

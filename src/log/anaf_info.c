@@ -17,12 +17,19 @@
 
 #include "anaf_info.h"
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <stdarg.h>
 #include <time.h>
 
+#define ANAF_LOG_BUFFER_SIZE 2048
+
+static AnafLogCallbackFn g_anaf_log_callback = NULL;
 static FILE* g_log_file = NULL;
+
+void anaf_logger_set_callback(AnafLogCallbackFn cb) {
+    g_anaf_log_callback = cb;
+}
 
 bool anaf_log_init(const char *filepath){
     if (!filepath) {
@@ -58,7 +65,7 @@ void anaf_log_write(AnafLogLevel level, const char* fmt, ...){
             break;
         case ANAF_LOG_SUCCESS:
             tag = "[SUCCESS]";
-            tag_color = ANAF_COLOR_GREEWN;
+            tag_color = ANAF_COLOR_GREEN;
             break;
         case ANAF_LOG_CORE:
             tag = "[AMAFINEN]";
@@ -74,22 +81,25 @@ void anaf_log_write(AnafLogLevel level, const char* fmt, ...){
     char time_str[16];
     strftime(time_str, sizeof(time_str), "%H:%M:%S", &time_info);
 
+    char message_buffer[ANAF_LOG_BUFFER_SIZE];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(message_buffer, sizeof(message_buffer), fmt, args);
+    va_end(args);
+
     // terminal output
-    fprintf(stream, "[%s] %s%s%s%s", time_str, ANAF_COLOR_BOLD, tag_color, tag, ANAF_COLOR_RESET);
-    va_list args_term;
-    va_start(args_term, fmt);
-    vfprintf(stream, fmt, args_term);
-    va_end(args_term);
-    fputc('\n', stream);
+    fprintf(stream, "[%s] %s%s%s%s %s\n", time_str, ANAF_COLOR_BOLD, tag_color, tag, ANAF_COLOR_RESET, message_buffer);
     
     // file output
     if (g_log_file) {
-        fprintf(g_log_file, "[%s] %s", time_str, tag);
-        va_list args_file;
-        va_start(args_file, fmt);
-        vfprintf(g_log_file, fmt, args_file);
-        va_end(args_file);
-        fputc('\n', g_log_file);
+        fprintf(g_log_file, "[%s] %s %s\n", time_str, tag, message_buffer);
         fflush(g_log_file);
+    }
+
+    // UI callback dispatch
+    if(g_anaf_log_callback) {
+        char ui_formatted[ANAF_LOG_BUFFER_SIZE + 64];
+        snprintf(ui_formatted, sizeof(ui_formatted), "[%s] %s %s", time_str, tag, message_buffer);
+        g_anaf_log_callback(level, ui_formatted);
     }
 }

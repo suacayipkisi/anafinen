@@ -35,6 +35,7 @@
 #include "material/properties.hpp"
 #include "test/status.hpp"
 #include "gen/genNum.hpp"
+#include "gui/panels/logTerminal.hpp"
 
 #ifdef _WIN32
 extern "C" {
@@ -44,6 +45,7 @@ extern "C" {
 #endif
 
 int main() {
+    anaf_logger_set_callback(anafUILogSink);
     if (!anaf_log_init("anafinen_run.log")) {
         anaf_error("Failed to open log file!");
         return 1;
