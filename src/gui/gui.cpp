@@ -23,13 +23,14 @@
 #include <iostream>
 #include <memory>
 
-#include "framebuffer.hpp"
-#include "imGuiLayer.hpp"
-#include "iPanel.hpp"
-#include "mainDockSpaceHost.hpp"
-#include "trussControlPanel.hpp"
-#include "viewportPanel.hpp"
-#include "trussControlPanel.hpp"
+#include "guiMaterials/framebuffer.hpp"
+#include "guiMaterials/imGuiLayer.hpp"
+#include "guiMaterials/iPanel.hpp"
+#include "panels/mainDockSpaceHost.hpp"
+#include "panels/modelTree.hpp"
+#include "panels/trussControlPanel.hpp"
+#include "panels/viewportPanel.hpp"
+#include "panels/trussControlPanel.hpp"
 
 
 int initgui(){
@@ -77,6 +78,7 @@ int initgui(){
     panelManager.addPanel<MainDockSpaceHost>(window);
     panelManager.addPanel<ViewportPanel>(fbo);
     panelManager.addPanel<TrussControlPanel>();
+    panelManager.addPanel<ModelTree>();
 
     // game loop
     while (!glfwWindowShouldClose(window)){

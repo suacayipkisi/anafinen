@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "iPanel.hpp"
+#include "../guiMaterials/iPanel.hpp"
 #include "imgui.h"
 #include <GLFW/glfw3.h>
 #include <functional>

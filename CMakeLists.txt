@@ -65,7 +65,7 @@ set(SOURCES
     src/main.cpp
 
     src/gui/gui.cpp
-    src/gui/imGuiLayer.cpp
+    src/gui/guiMaterials/imGuiLayer.cpp
 
     src/test/test.cpp
     

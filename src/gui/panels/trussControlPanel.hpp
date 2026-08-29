@@ -17,14 +17,14 @@
 
 #pragma once
 
-#include "iPanel.hpp"
+#include "../guiMaterials/iPanel.hpp"
 
 #include "imgui.h"
 
 #include <array>
 #include <cstdint>
 
-#include "../trussEngine/trussSolver.hpp"
+#include "../../trussEngine/trussSolver.hpp"
 
 class TrussControlPanel : public IPanel {
 private:
