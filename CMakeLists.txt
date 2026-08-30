@@ -79,6 +79,13 @@ set(SOURCES
 
 add_executable(anafinen ${SOURCES})
 
+add_custom_command(
+    TARGET anafinen POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:anafinen>/assets
+)
+
 target_compile_definitions(anafinen PRIVATE 
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     GLFW_INCLUDE_NONE
@@ -100,6 +107,7 @@ target_include_directories(anafinen PRIVATE
     ${IMPLOT_DIR}
     ${SPECTRA_DIR}/include
     ${GMSH_INCLUDE_DIRS}
+    ${FREETYPE_INCLUDE_DIRS}
 )
 
 target_link_libraries(anafinen PRIVATE 
@@ -109,4 +117,5 @@ target_link_libraries(anafinen PRIVATE
     OpenMP::OpenMP_CXX 
     Eigen3::Eigen
     ${GMSH_LIBRARIES}
+    ${FREETYPE_LIBRARIES}
 )

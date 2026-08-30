@@ -30,6 +30,9 @@ class ImGuiLayer {
 private:
     bool m_notCloseWindow{true};
 public:
+    static inline ImFont* font_ui = nullptr;
+    static inline ImFont* font_console = nullptr;
+
     void init(GLFWwindow* window);
 
     void beginFrame();

@@ -15,6 +15,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <filesystem>
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
@@ -24,7 +25,9 @@
 
 #include "imGuiLayer.hpp"
 
-void setupSpecialTheme(float scale) {
+#include "../../log/anaf_info.h"
+
+void setupSpecialTheme(float scale){
     ImGuiStyle& style = ImGui::GetStyle();
 
     // -------------------------------------------------------------
@@ -32,7 +35,7 @@ void setupSpecialTheme(float scale) {
     // -------------------------------------------------------------
     style.WindowRounding    = 8.0f * scale; // Main window corners
     style.ChildRounding     = 6.0f * scale; // Sub-panels & regions
-    style.FrameRounding     = 5.0f * scale; // Input boxes, buttons, sliders
+    style.FrameRounding     = 8.0f * scale; // Input boxes, buttons, sliders
     style.PopupRounding     = 6.0f * scale; // Context menus & tooltips
     style.ScrollbarRounding = 9.0f * scale; // Scrollbar handles
     style.GrabRounding      = 4.0f * scale; // Slider grab handles
@@ -101,25 +104,30 @@ void ImGuiLayer::init(GLFWwindow* window) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-    float xscale = 1.0f;
-    float yscale = 1.0f;
-    glfwGetWindowContentScale(window, &xscale, &yscale);
-
+    constexpr float render_scale = 2.0f;
     ImFontConfig font_config;
-    font_config.OversampleH = 3; // Smooth horizontal anti-aliasing
-    font_config.OversampleV = 3; // Smooth vertical anti-aliasing
-    font_config.PixelSnapH = false;
+    font_config.OversampleH = 1; 
+    font_config.OversampleV = 1; 
+    font_config.PixelSnapH = true;
+    const std::string ui_font_path = "assets/fonts/Inter/ttf/Inter-Medium.ttf";
+    const std::string console_font_path = "assets/fonts/CascadiaCode/ttf/CascadiaMono.ttf";
 
-    const char* font_path = "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf";
-    float font_size = 15.0f * xscale; // Scaled font size
-
-    ImFont* custom_font = io.Fonts->AddFontFromFileTTF(font_path, font_size, &font_config);
-
-    if (!custom_font) {
-        io.Fonts->AddFontDefault();
+    if (std::filesystem::exists(ui_font_path)) {
+        font_ui = io.Fonts->AddFontFromFileTTF(ui_font_path.c_str(), 16.0f * render_scale, &font_config);
+    } else {
+        anaf_error("[ImGuiLayer] UI font missing at: %s using fallback.\n", ui_font_path.c_str());
+        font_ui = io.Fonts->AddFontDefault(&font_config);
     }
 
-    setupSpecialTheme(xscale);
+    if (std::filesystem::exists(console_font_path)) {
+        font_console = io.Fonts->AddFontFromFileTTF(console_font_path.c_str(), 14.0f * render_scale, &font_config);
+    } else {
+        font_console = font_ui;
+    }
+    
+    io.FontGlobalScale = 1.0f / render_scale;
+
+    setupSpecialTheme(1.0f);
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 460");

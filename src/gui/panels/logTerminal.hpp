@@ -18,8 +18,9 @@
 #pragma once
 
 #include "../../log/anaf_info.h"
-
 #include "../guiMaterials/iPanel.hpp"
+#include "../guiMaterials/imGuiLayer.hpp"
+
 #include "imgui.h"
 #include <mutex>
 #include <string>
@@ -47,6 +48,8 @@ public:
     }
 
     void  onImGuiRender() override {
+        ImGui::PushFont(ImGuiLayer::font_console);
+
         ImGui::Begin("Console");
 
         if (ImGui::Button("Clear")) {
@@ -83,6 +86,8 @@ public:
 
         ImGui::EndChild();
         ImGui::End();
+
+        ImGui::PopFont();
     }
     
 };

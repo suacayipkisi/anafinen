@@ -28,7 +28,7 @@ void trussCalculator(
     double area,
     std::uint32_t type
 ) {
-    anaf_info("\n\tcube_num_X: {%d} \n\tcube_num_Y: {%d} \n\tcube_num_Z: {%d} \n\telement_length: {%f} \n\telement_crossSectional_area: {%f} \n\tmaterial_trype: {%d}",
+    anaf_info("\n\tcube_num_X_Y_Z_(N): {%d, %d, %d} \n\telement_length_(m): {%f} \n\telement_crossSectional_area_(cm^2): {%f} \n\tmaterial_trype: {%d}",
         cubeNumX,
         cubeNumY,
         cubeNumZ,
