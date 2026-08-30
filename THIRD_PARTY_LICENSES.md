@@ -1,6 +1,6 @@
 # Third-Party Notices and Licenses
 
-This project incorporates and builds upon the following third-party software:
+This project incorporates and builds upon the following third-party software and fonts:
 
 1. **Gmsh**
    - License: GNU General Public License v2 or later (GPL-2.0-or-later)
@@ -24,3 +24,9 @@ This project incorporates and builds upon the following third-party software:
 
 6. **GLAD**
    - License: Public Domain / MIT
+
+7. **Inter Font**
+   - See license at assets/fonts/Inter/LICENSE.txt
+
+8. **CascadiaCode Font**
+   - See license at assets/fonts/CascadiaCode/LICENSE.txt

@@ -68,7 +68,7 @@ void anaf_log_write(AnafLogLevel level, const char* fmt, ...){
             tag_color = ANAF_COLOR_GREEN;
             break;
         case ANAF_LOG_CORE:
-            tag = "[AMAFINEN]";
+            tag = "[ANAFINEN]";
             tag_color = ANAF_COLOR_CYAN;
             break;
     }

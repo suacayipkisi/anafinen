@@ -10,7 +10,7 @@
 
 ## Licensing & Dual-License Model
 
-This project is open-source software licensed under the **GNU General Public License v3.0 (GPLv3)**. See the [LICENSE](LICENSE) file for details.
+This project is open-source software licensed under the **GNU General Public License v3.0 (GPLv3)**. See the [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES) file for details.
 
 ### Commercial & Enterprise Licensing
 If you wish to integrate this project into proprietary, closed-source software without being bound by the copyleft terms of the GPLv3, commercial licenses and custom support agreements are available directly from the copyright holder.

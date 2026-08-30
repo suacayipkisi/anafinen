@@ -115,12 +115,12 @@ void ImGuiLayer::init(GLFWwindow* window) {
     if (std::filesystem::exists(ui_font_path)) {
         font_ui = io.Fonts->AddFontFromFileTTF(ui_font_path.c_str(), 16.0f * render_scale, &font_config);
     } else {
-        anaf_error("[ImGuiLayer] UI font missing at: %s using fallback.\n", ui_font_path.c_str());
+        anaf_warn("[ImGuiLayer] UI font missing at: %s using fallback.\n", ui_font_path.c_str());
         font_ui = io.Fonts->AddFontDefault(&font_config);
     }
 
     if (std::filesystem::exists(console_font_path)) {
-        font_console = io.Fonts->AddFontFromFileTTF(console_font_path.c_str(), 14.0f * render_scale, &font_config);
+        font_console = io.Fonts->AddFontFromFileTTF(console_font_path.c_str(), 16.0f * render_scale, &font_config);
     } else {
         font_console = font_ui;
     }
