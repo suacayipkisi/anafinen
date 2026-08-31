@@ -1,9 +1,9 @@
-[19:29:33] [AMAFINEN]Initializing ANAFINEN Workspace (C++23)...
-[19:29:33] [SUCCESS]Eigen math backend verified. Det(K) = {3.000000}
-[19:29:34] [SUCCESS]GLFW initialized successfully.
-[19:29:34] [SUCCESS]OpenGL context and subsystems initialized successfully.
-[19:29:34] [SUCCESS]OpenGL Version: {4.6 (Core Profile) Mesa 26.1.8}
-[19:29:34] [SUCCESS]GPU Renderer  : {AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.1.10-200.fc44.x86_64)}
-[19:29:41] [INFO]Closing the main window.
-[19:29:41] [INFO]Main window processed succesfully.
-[19:29:41] [AMAFINEN]Anafinen is closed.
+[18:33:33] [ANAFINEN]
+Initializing ANAFINEN Workspace (C++23)...
+[18:33:33] [SUCCESS]
+Eigen math backend verified. Det(K) = {0.000000}
+[18:34:21] [INFO]
+cube_num_X_Y_Z_(N): {-10008, 1, 0} 
+element_length_(m): {0.000000} 
+element_crossSectional_area_(cm^2): {0.000000} 
+material_trype: {5422138}

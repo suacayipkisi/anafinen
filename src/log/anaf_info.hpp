@@ -20,12 +20,18 @@
 #ifndef ANAF_INTERNAL_LOG_ACCESS
     #define ANAF_INTERNAL_LOG_ACCESS
 #endif
+
+
 #include "anaf_info.h"
 
 #include <cstdarg>
-#include <stdarg.h>
 
 namespace anaf::LOG {
+    #if defined(__GNUC__) || defined(__clang__)
+        #define ANAF_CXX_PRINTF_FORMAT __attribute__((format(printf, 1, 2)))
+    #else
+        #define ANAF_CXX_PRINTF_FORMAT
+    #endif
 
     inline void setCallback(AnafLogCallbackFn cb) {
         anaf_logger_set_callback(cb);
@@ -39,38 +45,38 @@ namespace anaf::LOG {
         anaf_log_close();
     }
 
-    inline void info(const char* fmt, ...){
+    inline void ANAF_CXX_PRINTF_FORMAT info(const char* fmt, ...){
         va_list args;
         va_start(args, fmt);
-        anaf_log_write(ANAF_LOG_INFO, fmt, args);
+        anaf_log_write_va(ANAF_LOG_INFO, fmt, args);
         va_end(args);
     }
 
-    inline void warn(const char* fmt, ...){
+    inline void ANAF_CXX_PRINTF_FORMAT warn(const char* fmt, ...){
         va_list args;
         va_start(args, fmt);
-        anaf_log_write(ANAF_LOG_WARN, fmt, args);
+        anaf_log_write_va(ANAF_LOG_WARN, fmt, args);
         va_end(args);
     }
 
-    inline void error(const char* fmt, ...){
+    inline void ANAF_CXX_PRINTF_FORMAT error(const char* fmt, ...){
         va_list args;
         va_start(args, fmt);
-        anaf_log_write(ANAF_LOG_ERROR, fmt, args);
+        anaf_log_write_va(ANAF_LOG_ERROR, fmt, args);
         va_end(args);
     }
 
-    inline void success(const char* fmt, ...){
+    inline void ANAF_CXX_PRINTF_FORMAT success(const char* fmt, ...){
         va_list args;
         va_start(args, fmt);
-        anaf_log_write(ANAF_LOG_SUCCESS, fmt, args);
+        anaf_log_write_va(ANAF_LOG_SUCCESS, fmt, args);
         va_end(args);
     }
 
-    inline void core(const char* fmt, ...){
+    inline void ANAF_CXX_PRINTF_FORMAT core(const char* fmt, ...){
         va_list args;
         va_start(args, fmt);
-        anaf_log_write(ANAF_LOG_CORE, fmt, args);
+        anaf_log_write_va(ANAF_LOG_CORE, fmt, args);
         va_end(args);
     }
 

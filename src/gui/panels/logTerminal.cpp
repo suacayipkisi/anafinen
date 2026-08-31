@@ -37,8 +37,35 @@ namespace anaf::GUI {
             g_ui_logs.clear();
         }
 
+        if (g_ui_logs.size() > g_ui_log_max_num) {
+            g_ui_logs.erase(g_ui_logs.begin());
+        }
+
         ImGui::SameLine();
         ImGui::Checkbox("Auto-scroll", &m_autoScroll);
+
+        ImGui::SameLine();
+
+        const float input_width = 80.0f;
+        const char* label_text = "Max Output";
+        const float text_width = ImGui::CalcTextSize(label_text).x;
+        const float style_spacing = ImGui::GetStyle().ItemSpacing.x;
+        const float total_width = text_width + style_spacing + input_width;
+
+        float right_cursor_x = ImGui::GetWindowContentRegionMax().x - total_width;
+
+        if (right_cursor_x > ImGui::GetCursorPosX()) {
+            ImGui::SameLine(right_cursor_x);
+        } else {
+            ImGui::SameLine();
+        }
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label_text);
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(input_width);
+        ImGui::InputScalar("##output_num", ImGuiDataType_U32, &g_ui_log_max_num);
 
         ImGui::Separator();
         

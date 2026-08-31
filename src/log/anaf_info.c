@@ -48,7 +48,7 @@ void anaf_log_close(void) {
         g_log_file = NULL;
     }
 }
-void anaf_log_write(AnafLogLevel level, const char* fmt, ...){
+void anaf_log_write_va(AnafLogLevel level, const char* fmt, va_list args){
     const char* tag = "";
     const char* tag_color = "";
     FILE* stream = stdout;
@@ -85,24 +85,28 @@ void anaf_log_write(AnafLogLevel level, const char* fmt, ...){
     strftime(time_str, sizeof(time_str), "%H:%M:%S", &time_info);
 
     char message_buffer[ANAF_LOG_BUFFER_SIZE];
-    va_list args;
-    va_start(args, fmt);
     vsnprintf(message_buffer, sizeof(message_buffer), fmt, args);
-    va_end(args);
 
     // terminal output
-    fprintf(stream, "[%s] %s%s%s%s %s\n", time_str, ANAF_COLOR_BOLD, tag_color, tag, ANAF_COLOR_RESET, message_buffer);
+    fprintf(stream, "[%s] %s%s%s%s\n%s\n", time_str, ANAF_COLOR_BOLD, tag_color, tag, ANAF_COLOR_RESET, message_buffer);
     
     // file output
     if (g_log_file) {
-        fprintf(g_log_file, "[%s] %s %s\n", time_str, tag, message_buffer);
+        fprintf(g_log_file, "[%s] %s\n%s\n", time_str, tag, message_buffer);
         fflush(g_log_file);
     }
 
     // UI callback dispatch
     if(g_anaf_log_callback) {
         char ui_formatted[ANAF_LOG_BUFFER_SIZE + 64];
-        snprintf(ui_formatted, sizeof(ui_formatted), "[%s] %s %s", time_str, tag, message_buffer);
+        snprintf(ui_formatted, sizeof(ui_formatted), "[%s] %s\n%s", time_str, tag, message_buffer);
         g_anaf_log_callback(level, ui_formatted);
     }
+}
+
+void anaf_log_write(AnafLogLevel level, const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    anaf_log_write_va(level, fmt, args);
+    va_end(args);
 }

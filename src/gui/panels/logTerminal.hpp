@@ -20,6 +20,7 @@
 #include "../../log/anaf_info.hpp"
 #include "../guiMaterials/iPanel.hpp"
 
+#include <cstddef>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -32,6 +33,7 @@ namespace anaf::GUI {
     };
 
     inline std::vector<LogEntry> g_ui_logs;
+    inline size_t g_ui_log_max_num{10000};
     inline std::mutex g_log_mutex;
 
     inline void anafUILogSink(AnafLogLevel level, const char* message) {

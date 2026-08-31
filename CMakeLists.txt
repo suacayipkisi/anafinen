@@ -74,6 +74,7 @@ add_library(anaf_logger STATIC
 )
 target_include_directories(anaf_logger PUBLIC src/log)
 
+# Core SOURCES ####################################################################################
 set(ANAF_CORE_SOURCES
     src/truss_1D/element.cpp
     src/truss_1D/trussSolver/solveTrussStaticDeflection.cpp
@@ -120,8 +121,10 @@ target_include_directories(imgui_suite PUBLIC
 target_link_libraries(imgui_suite PUBLIC glad glfw OpenGL::GL)
 target_compile_definitions(imgui_suite PUBLIC GLFW_INCLUDE_NONE)
 
+# SOURCES #########################################################################################
 set(ANAFINEN_SOURCES
     src/main.cpp
+
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
     src/gui/guiMaterials/framebuffer.cpp
@@ -130,6 +133,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/modelTree.cpp
     src/gui/panels/trussControlPanel.cpp
     src/gui/panels/viewportPanel.cpp
+
     src/test/test.cpp
 )
 
