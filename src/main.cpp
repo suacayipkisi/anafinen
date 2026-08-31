@@ -30,7 +30,7 @@
 #include <gmsh.h>
 #include <vector>
 
-#include "log/anaf_info.h"
+#include "log/anaf_info.hpp"
 #include "gui/gui.hpp"
 #include "material/properties.hpp"
 #include "test/status.hpp"
@@ -45,21 +45,21 @@ extern "C" {
 #endif
 
 int main() {
-    anaf_logger_set_callback(anafUILogSink);
-    if (!anaf_log_init("anafinen_run.log")) {
-        anaf_error("Failed to open log file!");
+    anaf::LOG::setCallback(anaf::GUI::anafUILogSink);
+    if (!anaf::LOG::init("anafinen_run.log")) {
+        anaf::LOG::error("Failed to open log file!");
         return 1;
     }
-    anaf_core("Initializing ANAFINEN Workspace (C++23)...");
+    anaf::LOG::core("Initializing ANAFINEN Workspace (C++23)...");
 
-    AllStatus mainStatus{};
+    anaf::TEST::AllStatus mainStatus{};
 
     // add two material for experimental reasons
     // if you see that code block below that means
     // not even phase 1 is finished
     // you are currently watching the born of an analysis program
     anafGen::IdGenerator materialIDs;
-    std::vector<Material> allMaterials;
+    std::vector<anaf::MATERIAL::Material> allMaterials;
     allMaterials.push_back({
         "Structural Steel (AISI 4130)",
         205.0e9,
@@ -85,8 +85,10 @@ int main() {
         materialIDs.next_u32()
     });
 
-    initgui();
+    anaf::GUI::initgui();
 
-    anaf_core("Anafinen is closed.");
+    anaf::LOG::core("Anafinen is closing.");
+    anaf::LOG::close();
+    anaf::LOG::core("Anafinen is closed.");
     return 0;
 }

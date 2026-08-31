@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "../../log/anaf_info.h"
+#include "../../log/anaf_info.hpp"
 #include "../guiMaterials/iPanel.hpp"
 #include "../guiMaterials/imGuiLayer.hpp"
 
@@ -26,71 +26,72 @@
 #include <string>
 #include <vector>
 
-struct LogEntry {
-    AnafLogLevel level;
-    std::string text;
-};
+namespace anaf::GUI {
 
-inline std::vector<LogEntry> g_ui_logs;
-inline std::mutex g_log_mutex;
+    struct LogEntry {
+        AnafLogLevel level;
+        std::string text;
+    };
 
-inline void anafUILogSink(AnafLogLevel level, const char* message) {
-    std::lock_guard<std::mutex> lock(g_log_mutex);
-    g_ui_logs.push_back({level, std::string(message)});
-}
+    inline std::vector<LogEntry> g_ui_logs;
+    inline std::mutex g_log_mutex;
 
-class LogTerminal : public IPanel {
-private:
-    bool m_autoScroll {true};
-public:
-    LogTerminal() {
-        anaf_logger_set_callback(anafUILogSink);
+    inline void anafUILogSink(AnafLogLevel level, const char* message) {
+        std::lock_guard<std::mutex> lock(g_log_mutex);
+        g_ui_logs.push_back({level, std::string(message)});
     }
 
-    void  onImGuiRender() override {
-        ImGui::PushFont(ImGuiLayer::font_console);
-
-        ImGui::Begin("Console");
-
-        if (ImGui::Button("Clear")) {
-            std::lock_guard<std::mutex> lock(g_log_mutex);
-            g_ui_logs.clear();
+    class LogTerminal : public IPanel {
+    private:
+        bool m_autoScroll {true};
+    public:
+        LogTerminal() {
+            anaf::LOG::setCallback(anafUILogSink);
         }
 
-        ImGui::SameLine();
-        ImGui::Checkbox("Auto-scroll", &m_autoScroll);
+        void  onImGuiRender() override {
+            ImGui::PushFont(ImGuiLayer::font_console);
 
-        ImGui::Separator();
-        
-        ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
-        {
-            std::lock_guard<std::mutex> lock(g_log_mutex);
-            for (const auto& log : g_ui_logs) {
-                ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-                switch (log.level) {
-                    case ANAF_LOG_INFO:    color = ImVec4(0.4f, 0.7f, 1.0f, 1.0f); break;
-                    case ANAF_LOG_WARN:    color = ImVec4(1.0f, 0.8f, 0.2f, 1.0f); break;
-                    case ANAF_LOG_ERROR:   color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); break;
-                    case ANAF_LOG_SUCCESS: color = ImVec4(0.3f, 1.0f, 0.3f, 1.0f); break;
-                    case ANAF_LOG_CORE:    color = ImVec4(0.0f, 0.9f, 0.9f, 1.0f); break;
-                }
-                ImGui::PushStyleColor(ImGuiCol_Text, color);
-                ImGui::TextUnformatted(log.text.c_str());
-                ImGui::PopStyleColor();
+            ImGui::Begin("Console");
+
+            if (ImGui::Button("Clear")) {
+                std::lock_guard<std::mutex> lock(g_log_mutex);
+                g_ui_logs.clear();
             }
+
+            ImGui::SameLine();
+            ImGui::Checkbox("Auto-scroll", &m_autoScroll);
+
+            ImGui::Separator();
+            
+            ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+            {
+                std::lock_guard<std::mutex> lock(g_log_mutex);
+                for (const auto& log : g_ui_logs) {
+                    ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+                    switch (log.level) {
+                        case ANAF_LOG_INFO:    color = ImVec4(0.4f, 0.7f, 1.0f, 1.0f); break;
+                        case ANAF_LOG_WARN:    color = ImVec4(1.0f, 0.8f, 0.2f, 1.0f); break;
+                        case ANAF_LOG_ERROR:   color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); break;
+                        case ANAF_LOG_SUCCESS: color = ImVec4(0.3f, 1.0f, 0.3f, 1.0f); break;
+                        case ANAF_LOG_CORE:    color = ImVec4(0.0f, 0.9f, 0.9f, 1.0f); break;
+                    }
+                    ImGui::PushStyleColor(ImGuiCol_Text, color);
+                    ImGui::TextUnformatted(log.text.c_str());
+                    ImGui::PopStyleColor();
+                }
+            }
+
+            if (m_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+                ImGui::SetScrollHereY(1.0f);
+            }
+
+            ImGui::EndChild();
+            ImGui::End();
+
+            ImGui::PopFont();
         }
+        
+    };
 
-        if (m_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
-            ImGui::SetScrollHereY(1.0f);
-        }
-
-        ImGui::EndChild();
-        ImGui::End();
-
-        ImGui::PopFont();
-    }
-    
-};
-
-
-
+} //namespace anaf::GUI end

@@ -17,4 +17,8 @@
 
 #pragma once
 
-int initgui();
+namespace anaf::GUI{
+
+    int initgui();
+
+} // namespace anaf::GUI end

@@ -18,11 +18,15 @@
 #ifndef ANAF_LOG_H
 #define ANAF_LOG_H
 
-#include <stdbool.h>
+#ifndef ANAF_INTERNAL_LOG_ACCESS
+#error "Do not include 'anaf_info.h' directly! Include 'anaf_info.hpp' instead."
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdbool.h>
 
 #define ANAF_COLOR_RESET    "\033[0m"
 #define ANAF_COLOR_BOLD     "\033[1m"
@@ -46,12 +50,6 @@ void anaf_logger_set_callback(AnafLogCallbackFn cb);
 bool anaf_log_init(const char* filepath);
 void anaf_log_close(void);
 void anaf_log_write(AnafLogLevel level, const char* fmt, ...);
-
-#define anaf_info(...)    anaf_log_write(ANAF_LOG_INFO, ##__VA_ARGS__)
-#define anaf_warn(...)    anaf_log_write(ANAF_LOG_WARN, ##__VA_ARGS__)
-#define anaf_error(...)   anaf_log_write(ANAF_LOG_ERROR, ##__VA_ARGS__)
-#define anaf_success(...) anaf_log_write(ANAF_LOG_SUCCESS, ##__VA_ARGS__)
-#define anaf_core(...)    anaf_log_write(ANAF_LOG_CORE, ##__VA_ARGS__)
 
 #ifdef __cplusplus
 }

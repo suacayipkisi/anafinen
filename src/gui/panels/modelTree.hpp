@@ -21,25 +21,28 @@
 
 #include "imgui.h"
 
-class ModelTree : public IPanel {
-private:
+namespace anaf::GUI {
 
-public:
-    void onImGuiRender() {
-        ImGui::Begin("Model Tree");
-        if (ImGui::TreeNode("Root Assembly")) {
-            if (ImGui::TreeNode("1D Truss Subsystem")) {
-                ImGui::BulletText("Element 0: [Node 0 -> Node 1]");
-                ImGui::BulletText("Element 1: [Node 1 -> Node 2]");
+    class ModelTree : public IPanel {
+    private:
+
+    public:
+        void onImGuiRender() {
+            ImGui::Begin("Model Tree");
+            if (ImGui::TreeNode("Root Assembly")) {
+                if (ImGui::TreeNode("1D Truss Subsystem")) {
+                    ImGui::BulletText("Element 0: [Node 0 -> Node 1]");
+                    ImGui::BulletText("Element 1: [Node 1 -> Node 2]");
+                    ImGui::TreePop();
+                }
+                if (ImGui::TreeNode("Boundary Conditions")) {
+                    ImGui::BulletText("Fixed: Node 0 (UX, UY, UZ)");
+                    ImGui::TreePop();
+                }
                 ImGui::TreePop();
             }
-            if (ImGui::TreeNode("Boundary Conditions")) {
-                ImGui::BulletText("Fixed: Node 0 (UX, UY, UZ)");
-                ImGui::TreePop();
-            }
-            ImGui::TreePop();
+            ImGui::End();
         }
-        ImGui::End();
-    }
-};
+    };
 
+} // namespace anaf::GUI end

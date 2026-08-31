@@ -17,4 +17,8 @@
 
 #pragma once
 
-int testEigen();
+namespace anaf::TEST {
+
+    int testEigen();
+
+} // namespace anaf::TEST end

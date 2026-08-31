@@ -24,29 +24,32 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
-void setupSpecialTheme(float scale);
+namespace anaf::GUI {
 
-class ImGuiLayer {
-private:
-    bool m_notCloseWindow{true};
-public:
-    static inline ImFont* font_ui = nullptr;
-    static inline ImFont* font_console = nullptr;
+    void setupSpecialTheme();
 
-    void init(GLFWwindow* window);
+    class ImGuiLayer {
+    private:
+        bool m_notCloseWindow{true};
+    public:
+        static inline ImFont* font_ui = nullptr;
+        static inline ImFont* font_console = nullptr;
 
-    void beginFrame();
+        void init(GLFWwindow* window);
 
-    void endFrame() {
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    }
+        void beginFrame();
 
-    void shutdown() {
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
-    }
+        void endFrame() {
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        }
 
-};
+        void shutdown() {
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+        }
 
+    };
+
+} // namespace anaf::GUI end

@@ -24,26 +24,30 @@
 #include <array>
 #include <vector>
 
-class SimpleTruss{
-private:
-    std::array<std::uint32_t, 3> m_cubeNum{1, 1, 1}; // x y z added unit truss cube, cannot be zero none of them
-    std::vector<Node> m_allNodes;
-    std::vector<TrussElement_1D> m_allElements;
-    std::uint32_t m_type;
-    double m_cubeEdgeLength{};
-    double m_area{};
-public:
-    SimpleTruss(
-        std::array<std::uint32_t, 3> cubeNum,
-        double cubeEdgeLength,
-        double area,
-        std::uint32_t type
-    ): 
-        m_cubeNum(cubeNum),
-        m_cubeEdgeLength(cubeEdgeLength),
-        m_area(area),
-        m_type(type)
-    {}
+namespace FEM::TRUSS {
 
-    void setTruss();
-};
+    class SimpleTruss{
+    private:
+        std::array<std::uint32_t, 3> m_cubeNum{1, 1, 1}; // x y z added unit truss cube, cannot be zero none of them
+        std::vector<Node> m_allNodes;
+        std::vector<TrussElement_1D> m_allElements;
+        std::uint32_t m_type;
+        double m_cubeEdgeLength{};
+        double m_area{};
+    public:
+        SimpleTruss(
+            std::array<std::uint32_t, 3> cubeNum,
+            double cubeEdgeLength,
+            double area,
+            std::uint32_t type
+        ): 
+            m_cubeNum(cubeNum),
+            m_cubeEdgeLength(cubeEdgeLength),
+            m_area(area),
+            m_type(type)
+        {}
+
+        void setTruss();
+    };
+
+} // namespace FEM::TRUSS end

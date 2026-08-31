@@ -22,66 +22,70 @@
 #include <GLFW/glfw3.h>
 #include <functional>
 
-class MainDockSpaceHost : public IPanel {
-private:
-    GLFWwindow* m_window_;
+namespace anaf::GUI {
 
-public:
-    std::function<void()> on_import_mesh;
-    std::function<void()> on_export_results;
-    std::function<void()> on_run_solver;
+    class MainDockSpaceHost : public IPanel {
+    private:
+        GLFWwindow* m_window_;
 
-    MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
+    public:
+        std::function<void()> on_import_mesh;
+        std::function<void()> on_export_results;
+        std::function<void()> on_run_solver;
 
-    void onImGuiRender() override {
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
-        ImGui::SetNextWindowViewport(viewport->ID);
+        MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
 
-        ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | 
-                                      ImGuiWindowFlags_NoCollapse | 
-                                      ImGuiWindowFlags_NoResize | 
-                                      ImGuiWindowFlags_NoMove | 
-                                      ImGuiWindowFlags_NoBringToFrontOnFocus | 
-                                      ImGuiWindowFlags_NoNavFocus | 
-                                      ImGuiWindowFlags_NoBackground |
-                                      ImGuiWindowFlags_MenuBar;
+        void onImGuiRender() override {
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(viewport->WorkPos);
+            ImGui::SetNextWindowSize(viewport->WorkSize);
+            ImGui::SetNextWindowViewport(viewport->ID);
 
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+            ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | 
+                                        ImGuiWindowFlags_NoCollapse | 
+                                        ImGuiWindowFlags_NoResize | 
+                                        ImGuiWindowFlags_NoMove | 
+                                        ImGuiWindowFlags_NoBringToFrontOnFocus | 
+                                        ImGuiWindowFlags_NoNavFocus | 
+                                        ImGuiWindowFlags_NoBackground |
+                                        ImGuiWindowFlags_MenuBar;
 
-        ImGui::Begin("MainDockSpaceHostWindow", nullptr, host_flags);
-        ImGui::PopStyleVar(3);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-        if (ImGui::BeginMenuBar()) {
-            if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Import Mesh (.vtk / .obj)...")) {
-                    if (on_import_mesh) on_import_mesh();
+            ImGui::Begin("MainDockSpaceHostWindow", nullptr, host_flags);
+            ImGui::PopStyleVar(3);
+
+            if (ImGui::BeginMenuBar()) {
+                if (ImGui::BeginMenu("File")) {
+                    if (ImGui::MenuItem("Import Mesh (.vtk / .obj)...")) {
+                        if (on_import_mesh) on_import_mesh();
+                    }
+                    if (ImGui::MenuItem("Export Results (.vtk)...")) {
+                        if (on_export_results) on_export_results();
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Exit", "Alt+F4")) {
+                        glfwSetWindowShouldClose(m_window_, GLFW_TRUE);
+                    }
+                    ImGui::EndMenu();
                 }
-                if (ImGui::MenuItem("Export Results (.vtk)...")) {
-                    if (on_export_results) on_export_results();
+
+                if (ImGui::BeginMenu("Solver")) {
+                    if (ImGui::MenuItem("Run Modal Analysis (Spectra)...")) {
+                        if (on_run_solver) on_run_solver();
+                    }
+                    ImGui::EndMenu();
                 }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Exit", "Alt+F4")) {
-                    glfwSetWindowShouldClose(m_window_, GLFW_TRUE);
-                }
-                ImGui::EndMenu();
+                ImGui::EndMenuBar();
             }
 
-            if (ImGui::BeginMenu("Solver")) {
-                if (ImGui::MenuItem("Run Modal Analysis (Spectra)...")) {
-                    if (on_run_solver) on_run_solver();
-                }
-                ImGui::EndMenu();
-            }
-            ImGui::EndMenuBar();
+            ImGuiID dockspace_id = ImGui::GetID("AppMainDockSpace");
+            ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+            ImGui::End();
         }
+    };
 
-        ImGuiID dockspace_id = ImGui::GetID("AppMainDockSpace");
-        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-
-        ImGui::End();
-    }
-};
+} // namespace anaf:GUI end

@@ -21,30 +21,34 @@
 #include <utility>
 #include <vector>
 
-class IPanel {
-public:
-    virtual ~IPanel() = default;
-    virtual void onImGuiRender() = 0;
+namespace anaf::GUI {
 
-    bool isOpen = true;
-};
+    class IPanel {
+    public:
+        virtual ~IPanel() = default;
+        virtual void onImGuiRender() = 0;
 
-class PanelManager {
-private:
-    std::vector<std::shared_ptr<IPanel>> m_panels_ ;
-public:
-    template<typename  T, typename ... Args>
-    std::shared_ptr<T> addPanel(Args&& ... args) {
-        auto panel = std::make_shared<T>(std::forward<Args>(args) ...);
-        m_panels_.push_back(panel);
-        return panel;
-    }
+        bool isOpen = true;
+    };
 
-    void onImGuiRender() {
-        for (auto& panel : m_panels_) {
-            if (panel->isOpen) {
-                panel->onImGuiRender();
+    class PanelManager {
+    private:
+        std::vector<std::shared_ptr<IPanel>> m_panels_ ;
+    public:
+        template<typename  T, typename ... Args>
+        std::shared_ptr<T> addPanel(Args&& ... args) {
+            auto panel = std::make_shared<T>(std::forward<Args>(args) ...);
+            m_panels_.push_back(panel);
+            return panel;
+        }
+
+        void onImGuiRender() {
+            for (auto& panel : m_panels_) {
+                if (panel->isOpen) {
+                    panel->onImGuiRender();
+                }
             }
         }
-    }
-};
+    };
+
+} //namespace anaf::GUI end

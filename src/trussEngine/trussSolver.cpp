@@ -16,7 +16,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "trussSolver.hpp"
-#include "../log/anaf_info.h"
+#include "../log/anaf_info.hpp"
+#include "anaf_info.hpp"
 
 #include <cstdint>
 
@@ -28,7 +29,8 @@ void trussCalculator(
     double area,
     std::uint32_t type
 ) {
-    anaf_info("\n\tcube_num_X_Y_Z_(N): {%d, %d, %d} \n\telement_length_(m): {%f} \n\telement_crossSectional_area_(cm^2): {%f} \n\tmaterial_trype: {%d}",
+    anaf::LOG::info(
+        "\n\tcube_num_X_Y_Z_(N): {%d, %d, %d} \n\telement_length_(m): {%f} \n\telement_crossSectional_area_(cm^2): {%f} \n\tmaterial_trype: {%d}",
         cubeNumX,
         cubeNumY,
         cubeNumZ,

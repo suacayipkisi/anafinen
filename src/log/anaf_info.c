@@ -15,6 +15,9 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#ifndef ANAF_INTERNAL_LOG_ACCESS
+    #define ANAF_INTERNAL_LOG_ACCESS
+#endif
 #include "anaf_info.h"
 
 #include <stdarg.h>

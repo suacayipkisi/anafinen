@@ -22,6 +22,8 @@
 
 #include <memory>
 
+#include "../log/anaf_info.hpp"
+
 #include "guiMaterials/framebuffer.hpp"
 #include "guiMaterials/imGuiLayer.hpp"
 #include "guiMaterials/iPanel.hpp"
@@ -34,6 +36,8 @@
 #include "linuxCursor.hpp"
 
 
+namespace anaf::GUI {
+
 int initgui(){
 #ifdef __linux__
     platform_utils::setupSystemCursor();
@@ -41,10 +45,10 @@ int initgui(){
 #endif
 
     if(!glfwInit()){
-        anaf_error("Failed to initialize GLFW");
+        anaf::LOG::error("Failed to initialize GLFW");
         glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
         if (!glfwInit()) {
-            anaf_error("Fatal: GLFW initialization failed completely");
+            anaf::LOG::error("Fatal: GLFW initialization failed completely");
             return -1;
         }
     }
@@ -60,7 +64,7 @@ int initgui(){
     GLFWwindow* window = glfwCreateWindow(1600, 900, "Modular Simulation Engine", nullptr, nullptr);
 
     if (!window) {
-        anaf_error("Failed to create GLFW window");
+        anaf::LOG::error("Failed to create GLFW window");
         glfwTerminate();
         return -1;
     }
@@ -119,3 +123,5 @@ int initgui(){
 
     return 0;
 }
+
+} // namespace anaf::GUI end
