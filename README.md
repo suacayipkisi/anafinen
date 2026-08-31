@@ -8,7 +8,7 @@
 
 ## For roadmap, open AIM.md
 
-## Licensing & Dual-License Model
+## Licensing & Third Party Library and Font Licenses
 
 This project is open-source software licensed under the **GNU General Public License v3.0 (GPLv3)**. See the [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES) file for details.
 

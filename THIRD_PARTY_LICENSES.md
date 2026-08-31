@@ -26,7 +26,7 @@ This project incorporates and builds upon the following third-party software and
    - License: Public Domain / MIT
 
 7. **Inter Font**
-   - See license at assets/fonts/Inter/LICENSE.txt
+   - See license at [assets/fonts/Inter/LICENSE.txt](assets/fonts/Inter/LICENSE.txt)
 
 8. **CascadiaCode Font**
-   - See license at assets/fonts/CascadiaCode/LICENSE.txt
+   - See license at [assets/fonts/CascadiaCode/LICENSE.txt](assets/fonts/CascadiaCode/LICENSE.txt)
