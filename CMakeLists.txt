@@ -1,3 +1,20 @@
+# Copyright (c) 2026 Ufuk Deniz Konuk
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 cmake_minimum_required(VERSION 3.20...3.31)
 project(anafinen VERSION 0.1.0 LANGUAGES C CXX)
 
@@ -57,11 +74,13 @@ add_library(anaf_logger STATIC
 )
 target_include_directories(anaf_logger PUBLIC src/log)
 
-add_library(anaf_core STATIC
+set(ANAF_CORE_SOURCES
     src/truss_1D/element.cpp
     src/truss_1D/trussSolver/solveTrussStaticDeflection.cpp
     src/trussEngine/trussSolver.cpp
 )
+
+add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
 
 target_include_directories(anaf_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -101,12 +120,20 @@ target_include_directories(imgui_suite PUBLIC
 target_link_libraries(imgui_suite PUBLIC glad glfw OpenGL::GL)
 target_compile_definitions(imgui_suite PUBLIC GLFW_INCLUDE_NONE)
 
-add_executable(anafinen
+set(ANAFINEN_SOURCES
     src/main.cpp
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
+    src/gui/guiMaterials/framebuffer.cpp
+    src/gui/panels/logTerminal.cpp
+    src/gui/panels/mainDockSpaceHost.cpp
+    src/gui/panels/modelTree.cpp
+    src/gui/panels/trussControlPanel.cpp
+    src/gui/panels/viewportPanel.cpp
     src/test/test.cpp
 )
+
+add_executable(anafinen ${ANAFINEN_SOURCES})
 
 target_compile_definitions(anafinen PRIVATE 
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"

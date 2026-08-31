@@ -15,28 +15,29 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#pragma once
+#include "modelTree.hpp"
 
-#include "../guiMaterials/iPanel.hpp"
-#include "../guiMaterials/framebuffer.hpp"
+#include "imgui.h"
 
-#include <memory>
+namespace anaf::GUI {
 
-namespace anaf::GUI{
+    
+    void ModelTree::onImGuiRender() {
+        ImGui::Begin("Model Tree");
+        if (ImGui::TreeNode("Root Assembly")) {
+            if (ImGui::TreeNode("1D Truss Subsystem")) {
+                ImGui::BulletText("Element 0: [Node 0 -> Node 1]");
+                ImGui::BulletText("Element 1: [Node 1 -> Node 2]");
+                ImGui::TreePop();
+            }
+            if (ImGui::TreeNode("Boundary Conditions")) {
+                ImGui::BulletText("Fixed: Node 0 (UX, UY, UZ)");
+                ImGui::TreePop();
+            }
+            ImGui::TreePop();
+        }
+        ImGui::End();
+    }
 
-    class ViewportPanel : public IPanel {
-    private:
-        std::shared_ptr<Framebuffer> m_fbo_ ;
-        bool m_viewportFocused_ {false};
-        bool m_viewportHovered_ {false};
-    public:
-        ViewportPanel(std::shared_ptr<Framebuffer> fbo) : m_fbo_(fbo) {}
-
-        void onImGuiRender() override;
-
-        bool isFocused() const { return m_viewportFocused_; }
-        bool isHovered() const { return m_viewportHovered_; }
-        
-    };
 
 } // namespace anaf::GUI end
