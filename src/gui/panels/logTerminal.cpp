@@ -21,11 +21,24 @@
 #include "../guiMaterials/imGuiLayer.hpp"
 
 #include "imgui.h"
+#include <cstddef>
 #include <mutex>
 #include <string>
 #include <vector>
+#include <string_view>
 
 namespace anaf::GUI {
+
+    LogTerminal::LogTerminal() {
+        anaf::LOG::setCallback([](anaf::LOG::Level level, std::string_view message) {
+            std::lock_guard<std::mutex> lock(g_log_mutex);
+            g_ui_logs.push_back({level, std::string(message)});
+
+            if (g_ui_logs.size() > g_ui_log_max_num) {
+                g_ui_logs.erase(g_ui_logs.begin());
+            }
+        });
+    }
 
     void LogTerminal::onImGuiRender() {
         ImGui::PushFont(ImGuiLayer::font_console);
@@ -43,6 +56,17 @@ namespace anaf::GUI {
 
         ImGui::SameLine();
         ImGui::Checkbox("Auto-scroll", &m_autoScroll);
+
+        static float s_copiedFeedbackTimer = 0.0f;
+        ImGui::SameLine();
+        if (ImGui::Button("Copy Last Log")) {
+            std::lock_guard<std::mutex> lock(g_log_mutex);
+            if(!g_ui_logs.empty()) {
+                ImGui::SetClipboardText(g_ui_logs.back().text.c_str());
+                s_copiedFeedbackTimer = 1.5f;
+                glfwPostEmptyEvent();
+            }
+        }
 
         ImGui::SameLine();
 
@@ -72,7 +96,11 @@ namespace anaf::GUI {
         ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
         {
             std::lock_guard<std::mutex> lock(g_log_mutex);
-            for (const auto& log : g_ui_logs) {
+            for (std::size_t i{0}; i < g_ui_logs.size(); ++i) {
+                const auto& log = g_ui_logs[i];
+
+                ImGui::PushID(static_cast<int>(i));
+
                 ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
                 switch (log.level) {
                     case anaf::LOG::Level::INFO: color = ImVec4(0.4f, 0.7f, 1.0f, 1.0f); break;
@@ -84,7 +112,57 @@ namespace anaf::GUI {
                 ImGui::PushStyleColor(ImGuiCol_Text, color);
                 ImGui::TextUnformatted(log.text.c_str());
                 ImGui::PopStyleColor();
+
+                if (ImGui::BeginPopupContextItem("LogLineContextMenu")) {
+                    if(ImGui::MenuItem("Copy Line")) {
+                        ImGui::SetClipboardText(log.text.c_str());
+                        glfwPostEmptyEvent();
+                    }
+                    ImGui::EndPopup();
+                }
+
+                ImGui::PopID();
             }
+        }
+
+        if (ImGui::BeginPopupContextWindow(nullptr, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+            if(ImGui::MenuItem("Copy Last Log")) {
+                std::lock_guard<std::mutex> lock(g_log_mutex);
+                if(!g_ui_logs.empty()) {
+                    ImGui::SetClipboardText(g_ui_logs.back().text.c_str());
+                    glfwPostEmptyEvent();
+                    s_copiedFeedbackTimer = 1.5f;
+                }
+            }
+            if (ImGui::MenuItem("Copy All Logs")) {
+                std::string full_log;
+                {
+                    std::lock_guard<std::mutex> lock(g_log_mutex);
+                    std::size_t total_size {0};
+                    for (const auto& log : g_ui_logs) {
+                        total_size += log.text.size() + 1;
+                    }
+                    full_log.reserve(total_size);
+                    for (const auto& log : g_ui_logs) {
+                        full_log.append(log.text);
+                        full_log.push_back('\n');
+                    }
+                    ImGui::SetClipboardText(full_log.c_str());
+                    glfwPostEmptyEvent();
+                    s_copiedFeedbackTimer = 1.5f;
+                }
+            }
+            if (ImGui::MenuItem("Clear All")) {
+                std::lock_guard<std::mutex> lock(g_log_mutex);
+                g_ui_logs.clear();
+            }
+            ImGui::EndPopup();
+        }
+
+        if (s_copiedFeedbackTimer > 0.0f) {
+            s_copiedFeedbackTimer -= ImGui::GetIO().DeltaTime;
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Copied!");
         }
 
         if (m_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {

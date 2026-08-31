@@ -24,7 +24,7 @@
 namespace anaf::GUI {
 
     void TrussControlPanel::onImGuiRender() {
-        ImGui::Begin("Truss(1D Element) Analysis Set", &isOpen);
+        ImGui::Begin("Truss(1D) Analysis Set", &isOpen);
 
         ImGui::Text("Truss Parameters");
         ImGui::Separator();
@@ -39,7 +39,7 @@ namespace anaf::GUI {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding(); // Metni input kutusuyla dikeyde hizalar
-            ImGui::Text("Cube Num X (N)");
+            ImGui::Text("Cube Number X (N)");
             ImGui::TableSetColumnIndex(1);
             ImGui::SetNextItemWidth(-FLT_MIN); // Kutuyu sutunun tamamina yayar
             ImGui::InputScalar("##cube_x", ImGuiDataType_U32, &m_cubeNumX);
@@ -48,7 +48,7 @@ namespace anaf::GUI {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
-            ImGui::Text("Cube Num Y (N)");
+            ImGui::Text("Cube Number Y (N)");
             ImGui::TableSetColumnIndex(1);
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputScalar("##cube_y", ImGuiDataType_U32, &m_cubeNumY);
@@ -57,7 +57,7 @@ namespace anaf::GUI {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
-            ImGui::Text("Cube Num Z (N)");
+            ImGui::Text("Cube Number Z (N)");
             ImGui::TableSetColumnIndex(1);
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputScalar("##cube_z", ImGuiDataType_U32, &m_cubeNumZ);
@@ -75,7 +75,7 @@ namespace anaf::GUI {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
-            ImGui::Text("Cube Edge Length (m)");
+            ImGui::Text("Element Length (m)");
             ImGui::TableSetColumnIndex(1);
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputDouble("##edge_length", &m_cubeEdgeLength, 0.0, 0.0, "%.2f");
@@ -84,7 +84,7 @@ namespace anaf::GUI {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
-            ImGui::Text("Cross Sectional Area");
+            ImGui::Text("Cross-Sectional Area");
             ImGui::TableSetColumnIndex(1);
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputDouble("##cross_area", &m_crossSectionalArea, 0.0, 0.0, "%.2f");

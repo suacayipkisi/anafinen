@@ -23,7 +23,6 @@
 #include <cstddef>
 #include <mutex>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace anaf::GUI {
@@ -46,16 +45,7 @@ namespace anaf::GUI {
     private:
         bool m_autoScroll {true};
     public:
-        LogTerminal() {
-            anaf::LOG::setCallback([](anaf::LOG::Level level, std::string_view message) {
-                std::lock_guard<std::mutex> lock(g_log_mutex);
-                g_ui_logs.push_back({level, std::string(message)});
-
-                if (g_ui_logs.size() > g_ui_log_max_num) {
-                    g_ui_logs.erase(g_ui_logs.begin());
-                }
-            });
-        }
+        LogTerminal();
 
         void onImGuiRender() override;
         
