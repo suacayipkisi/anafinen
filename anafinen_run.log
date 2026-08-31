@@ -1,9 +1,0 @@
-[18:33:33] [ANAFINEN]
-Initializing ANAFINEN Workspace (C++23)...
-[18:33:33] [SUCCESS]
-Eigen math backend verified. Det(K) = {0.000000}
-[18:34:21] [INFO]
-cube_num_X_Y_Z_(N): {-10008, 1, 0} 
-element_length_(m): {0.000000} 
-element_crossSectional_area_(cm^2): {0.000000} 
-material_trype: {5422138}
