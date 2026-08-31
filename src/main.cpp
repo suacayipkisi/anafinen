@@ -45,7 +45,9 @@ extern "C" {
 #endif
 
 int main() {
-    anaf::LOG::setCallback(anaf::GUI::anafUILogSink);
+    anaf::LOG::setCallback([](anaf::LOG::Level level, std::string_view message) {
+        anaf::GUI::anafUILogSink(level, std::string(message).c_str());
+    });
     if (!anaf::LOG::init("anafinen_run.log")) {
         anaf::LOG::error("Failed to open log file!");
         return 1;

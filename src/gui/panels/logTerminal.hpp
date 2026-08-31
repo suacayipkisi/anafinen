@@ -23,12 +23,13 @@
 #include <cstddef>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace anaf::GUI {
 
     struct LogEntry {
-        AnafLogLevel level;
+        anaf::LOG::Level level;
         std::string text;
     };
 
@@ -36,7 +37,7 @@ namespace anaf::GUI {
     inline size_t g_ui_log_max_num{10000};
     inline std::mutex g_log_mutex;
 
-    inline void anafUILogSink(AnafLogLevel level, const char* message) {
+    inline void anafUILogSink(anaf::LOG::Level level, const char* message) {
         std::lock_guard<std::mutex> lock(g_log_mutex);
         g_ui_logs.push_back({level, std::string(message)});
     }
@@ -46,7 +47,14 @@ namespace anaf::GUI {
         bool m_autoScroll {true};
     public:
         LogTerminal() {
-            anaf::LOG::setCallback(anafUILogSink);
+            anaf::LOG::setCallback([](anaf::LOG::Level level, std::string_view message) {
+                std::lock_guard<std::mutex> lock(g_log_mutex);
+                g_ui_logs.push_back({level, std::string(message)});
+
+                if (g_ui_logs.size() > g_ui_log_max_num) {
+                    g_ui_logs.erase(g_ui_logs.begin());
+                }
+            });
         }
 
         void onImGuiRender() override;

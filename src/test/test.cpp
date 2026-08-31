@@ -35,10 +35,10 @@ namespace anaf::TEST {
 
         double det = K.determinant();
         if (det == 3.0) {
-            anaf::LOG::success("Eigen math backend verified. Det(K) = {%f}", det);
+            anaf::LOG::success("Eigen math backend verified. Det(K) = {}", det);
             eigenStatus = 0;
         } else {
-            anaf::LOG::warn("Eigen determinant mismatch. Result: {%f}", det);
+            anaf::LOG::warn("Eigen determinant mismatch. Result: {}", det);
             eigenStatus = 1;
         }
 

@@ -17,7 +17,6 @@
 
 #include "trussSolver.hpp"
 #include "../log/anaf_info.hpp"
-#include "anaf_info.hpp"
 
 #include <cstdint>
 #include <iostream>
@@ -31,7 +30,7 @@ void trussCalculator(
     std::uint32_t type
 ) {
     anaf::LOG::info(
-        "cube_num_X_Y_Z_(N): {%u, %u, %u} \nelement_length_(m): {%f} \nelement_crossSectional_area_(cm^2): {%f} \nmaterial_trype: {%u}",
+        "cube_num_X_Y_Z_(N): {}, {}, {} \nelement_length_(m): {} \nelement_crossSectional_area_(cm^2): {} \nmaterial_trype: {}",
         cubeNumX,
         cubeNumY,
         cubeNumZ,

@@ -59,19 +59,19 @@ namespace FEM::TRUSS {
         {
             // if type, area and nodes are not given, destroy element
             if (!type) {
-                anaf::LOG::error("Destroying invalid element: material type is null, area{%.4f}, nodes[%u, %u]", 
+                anaf::LOG::error("Destroying invalid element: material type is null, area{}, nodes[{}, {}]", 
                         area, node_1, node_2);
                 throw std::invalid_argument("Element type cannot be undefined");
             }
 
             if (area <= 0.0) {
-                anaf::LOG::error("Destroying invalid element: area must be positive (got {%.4f}), material{%s}, nodes[%u, %u]", 
+                anaf::LOG::error("Destroying invalid element: area must be positive (got {}), material{}, nodes[{}, {}]", 
                         area, type, node_1, node_2);
                 throw std::invalid_argument("Element cross sectional area must be greater than 0");
             }
 
             if (node_1 == node_2) {
-                anaf::LOG::error("Destroying invalid element: node indices cannot be identical ({%u} == {%u})", node_1, node_2);
+                anaf::LOG::error("Destroying invalid element: node indices cannot be identical ({} == {})", node_1, node_2);
                 throw std::invalid_argument("An element's nodes cannot be same");
             }
 

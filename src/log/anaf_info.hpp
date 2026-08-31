@@ -17,67 +17,88 @@
 
 #pragma once
 
-#ifndef ANAF_INTERNAL_LOG_ACCESS
-    #define ANAF_INTERNAL_LOG_ACCESS
-#endif
-
-
-#include "anaf_info.h"
-
-#include <cstdarg>
+#include <format>
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <mutex>
+#include <string>
+#include <string_view>
 
 namespace anaf::LOG {
-    #if defined(__GNUC__) || defined(__clang__)
-        #define ANAF_CXX_PRINTF_FORMAT __attribute__((format(printf, 1, 2)))
-    #else
-        #define ANAF_CXX_PRINTF_FORMAT
-    #endif
 
-    inline void setCallback(AnafLogCallbackFn cb) {
-        anaf_logger_set_callback(cb);
+    enum class Level {
+        INFO,
+        WARN,
+        ERROR,
+        SUCCESS,
+        CORE
+    };
+
+    inline constexpr std::string_view COLOR_RESET  = "\033[0m";
+    inline constexpr std::string_view COLOR_BOLD   = "\033[1m";
+    inline constexpr std::string_view COLOR_RED    = "\033[31m";
+    inline constexpr std::string_view COLOR_GREEN  = "\033[32m";
+    inline constexpr std::string_view COLOR_YELLOW = "\033[33m";
+    inline constexpr std::string_view COLOR_BLUE   = "\033[34m";
+    inline constexpr std::string_view COLOR_CYAN   = "\033[36m";
+
+    struct LoggerContext {
+        std::mutex mtx;
+        std::ofstream logFile;
+        std::function<void(Level, std::string_view)> callback = nullptr;
+    };
+
+    inline LoggerContext& getContext() noexcept {
+        static LoggerContext instance;
+        return instance;
     }
 
-    inline bool init(const char* filepath) {
-        return anaf_log_init(filepath);
+    void write(Level level, std::string_view formattedMessage);
+
+    inline void setCallback(std::function<void(Level, std::string_view)> cb) {
+        std::lock_guard<std::mutex> lock(getContext().mtx);
+        getContext().callback = std::move(cb);
+    }
+
+    inline bool init(const std::string& filepath) {
+        auto& ctx = getContext();
+        std::lock_guard<std::mutex> lock(ctx.mtx);
+        ctx.logFile.open(filepath, std::ios::out | std::ios::trunc);
+        return ctx.logFile.is_open();
     }
 
     inline void close() {
-        anaf_log_close();
+        auto& ctx = getContext();
+        std::lock_guard<std::mutex> lock(ctx.mtx);
+        if (ctx.logFile.is_open()) {
+            ctx.logFile.close();
+        }
     }
 
-    inline void ANAF_CXX_PRINTF_FORMAT info(const char* fmt, ...){
-        va_list args;
-        va_start(args, fmt);
-        anaf_log_write_va(ANAF_LOG_INFO, fmt, args);
-        va_end(args);
+    template <typename... Args>
+    void info(std::format_string<Args...> fmt, Args&&... args) {
+        write(Level::INFO, std::format(fmt, std::forward<Args>(args)...));
     }
 
-    inline void ANAF_CXX_PRINTF_FORMAT warn(const char* fmt, ...){
-        va_list args;
-        va_start(args, fmt);
-        anaf_log_write_va(ANAF_LOG_WARN, fmt, args);
-        va_end(args);
+    template <typename... Args>
+    void warn(std::format_string<Args...> fmt, Args&&... args) {
+        write(Level::WARN, std::format(fmt, std::forward<Args>(args)...));
     }
 
-    inline void ANAF_CXX_PRINTF_FORMAT error(const char* fmt, ...){
-        va_list args;
-        va_start(args, fmt);
-        anaf_log_write_va(ANAF_LOG_ERROR, fmt, args);
-        va_end(args);
+    template <typename... Args>
+    void error(std::format_string<Args...> fmt, Args&&... args) {
+        write(Level::ERROR, std::format(fmt, std::forward<Args>(args)...));
     }
 
-    inline void ANAF_CXX_PRINTF_FORMAT success(const char* fmt, ...){
-        va_list args;
-        va_start(args, fmt);
-        anaf_log_write_va(ANAF_LOG_SUCCESS, fmt, args);
-        va_end(args);
+    template <typename... Args>
+    void success(std::format_string<Args...> fmt, Args&&... args) {
+        write(Level::SUCCESS, std::format(fmt, std::forward<Args>(args)...));
     }
 
-    inline void ANAF_CXX_PRINTF_FORMAT core(const char* fmt, ...){
-        va_list args;
-        va_start(args, fmt);
-        anaf_log_write_va(ANAF_LOG_CORE, fmt, args);
-        va_end(args);
+    template <typename... Args>
+    void core(std::format_string<Args...> fmt, Args&&... args) {
+        write(Level::CORE, std::format(fmt, std::forward<Args>(args)...));
     }
 
 } // namespace anaf::LOG end

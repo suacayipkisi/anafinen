@@ -69,11 +69,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glfw)
 
-add_library(anaf_logger STATIC
-    src/log/anaf_info.c
-)
-target_include_directories(anaf_logger PUBLIC src/log)
-
 # Core SOURCES ####################################################################################
 set(ANAF_CORE_SOURCES
     src/truss_1D/element.cpp
@@ -90,7 +85,6 @@ target_include_directories(anaf_core PUBLIC
 )
 
 target_link_libraries(anaf_core PUBLIC
-    anaf_logger
     Eigen3::Eigen
     OpenMP::OpenMP_CXX
     ${GMSH_LIBRARIES}
@@ -124,6 +118,8 @@ target_compile_definitions(imgui_suite PUBLIC GLFW_INCLUDE_NONE)
 # SOURCES #########################################################################################
 set(ANAFINEN_SOURCES
     src/main.cpp
+
+    src/log/anaf_info.cpp
 
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
