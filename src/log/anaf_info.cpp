@@ -17,8 +17,21 @@
 
 #include "anaf_info.hpp"
 
+#include <chrono>
 #include <ctime>
 #include <iostream>
+#include <mutex>
+#include <string>
+
+namespace {
+    inline void portableLocalTime(const std::time_t* timer, std::tm* buf) {
+#if defined(_WIN32) || defined(_MSC_VER)
+        localtime_s(buf, timer);
+#else
+        localtime_r(timer, buf);
+#endif
+    }
+} // namespace
 
 namespace anaf::LOG {
 
@@ -51,7 +64,8 @@ namespace anaf::LOG {
 
         const auto raw_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         std::tm tm_buf{};
-        localtime_r(&raw_time, &tm_buf);
+        portableLocalTime(&raw_time, &tm_buf);
+
         const std::string timeStr = std::format("{:02d}:{:02d}:{:02d}", tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec);
         auto& ctx = getContext();
         std::lock_guard<std::mutex> lock(ctx.mtx);
