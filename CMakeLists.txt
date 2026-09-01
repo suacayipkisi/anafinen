@@ -1,42 +1,75 @@
 # Copyright (c) 2026 Ufuk Deniz Konuk
-
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
-
+#
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-
+#
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 cmake_minimum_required(VERSION 3.20...3.31)
 project(anafinen VERSION 0.1.0 LANGUAGES C CXX)
-
-set(CMAKE_C_STANDARD 23)
-set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# compiler warnings and architecture-specific optimizations
 add_library(project_warnings_and_optimizations INTERFACE)
+
 if(MSVC)
     target_compile_definitions(project_warnings_and_optimizations INTERFACE 
         NOMINMAX _CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN
     )
-    target_compile_options(project_warnings_and_optimizations INTERFACE /O2 /arch:AVX2)
+    target_compile_options(project_warnings_and_optimizations INTERFACE
+        $<$<CONFIG:Release>:/O2>
+        /arch:AVX2
+    )
 else()
-    target_compile_options(project_warnings_and_optimizations INTERFACE -O3 -march=native)
-    target_link_options(project_warnings_and_optimizations INTERFACE -O3)
+    target_compile_options(project_warnings_and_optimizations INTERFACE
+        $<$<CONFIG:Release>:-O3>
+        -march=native
+    )
+    target_link_options(project_warnings_and_optimizations INTERFACE
+        $<$<CONFIG:Release>:-O3>
+    )
 endif()
 
+# core system dependencies
+find_package(Eigen3 REQUIRED)
+find_package(OpenMP REQUIRED)
+find_package(OpenGL REQUIRED)
+
+# gmsh detection
+if(WIN32)
+    set(GMSH_SDK_DIR "C:/libs/gmsh-sdk" CACHE PATH "Path to Gmsh SDK on Windows")
+    find_path(GMSH_INCLUDE_DIR NAMES "gmsh.h" HINTS "${GMSH_SDK_DIR}/include")
+    find_library(GMSH_LIBRARY NAMES gmsh HINTS "${GMSH_SDK_DIR}/lib")
+else()
+    find_path(GMSH_INCLUDE_DIR NAMES "gmsh.h")
+    find_library(GMSH_LIBRARY NAMES gmsh)
+endif()
+
+if(NOT GMSH_INCLUDE_DIR OR NOT GMSH_LIBRARY)
+    message(FATAL_ERROR "Gmsh SDK or headers not found! Set GMSH_SDK_DIR to your Gmsh installation path.")
+endif()
+
+add_library(Gmsh::Gmsh UNKNOWN IMPORTED)
+set_target_properties(Gmsh::Gmsh PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${GMSH_INCLUDE_DIR}"
+    IMPORTED_LOCATION "${GMSH_LIBRARY}"
+)
+
+# external submodules configuration
 set(EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
 set(IMGUI_DIR    "${EXTERNAL_DIR}/imgui")
 set(IMGUIZMO_DIR "${EXTERNAL_DIR}/ImGuizmo")
@@ -44,32 +77,142 @@ set(IMPLOT_DIR   "${EXTERNAL_DIR}/implot")
 set(SPECTRA_DIR  "${EXTERNAL_DIR}/spectra")
 set(GLAD_DIR     "${EXTERNAL_DIR}/glad")
 
-find_package(Eigen3 CONFIG REQUIRED)
-find_package(OpenMP REQUIRED)
-find_package(OpenGL REQUIRED)
-
-find_path(GMSH_INCLUDE_DIRS NAMES "gmsh.h" HINTS "${GMSH_SDK_DIR}/include")
-find_library(GMSH_LIBRARIES NAMES gmsh HINTS "${GMSH_SDK_DIR}/lib")
-
-if(NOT GMSH_INCLUDE_DIRS OR NOT GMSH_LIBRARIES)
-    message(FATAL_ERROR "Gmsh SDK not found!")
+# spectra setup
+set(SPECTRA_TARGET "")
+if(EXISTS "${SPECTRA_DIR}/include/Spectra/SymEigsSolver.h")
+    add_library(spectra_local INTERFACE)
+    target_include_directories(spectra_local INTERFACE "${SPECTRA_DIR}/include")
+    set(SPECTRA_TARGET spectra_local)
+else()
+    find_package(Spectra CONFIG QUIET)
+    find_package(spectra CONFIG QUIET)
+    if(TARGET Spectra::Spectra)
+        set(SPECTRA_TARGET Spectra::Spectra)
+    elseif(TARGET spectra::spectra)
+        set(SPECTRA_TARGET spectra::spectra)
+    elseif(TARGET spectra)
+        set(SPECTRA_TARGET spectra)
+    endif()
 endif()
 
-include(FetchContent)
-set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# GLAD setup
+if(EXISTS "${GLAD_DIR}/src/gl.c")
+    add_library(glad_local STATIC "${GLAD_DIR}/src/gl.c")
+    target_include_directories(glad_local PUBLIC "${GLAD_DIR}/include")
+    set(GLAD_TARGET glad_local)
+else()
+    find_package(glad CONFIG REQUIRED)
+    set(GLAD_TARGET glad::glad)
+endif()
 
-FetchContent_Declare(
-    glfw
-    GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG        3.4
-)
-FetchContent_MakeAvailable(glfw)
+# GLFW setup
+set(GLFW_TARGET "")
 
-# Core SOURCES ####################################################################################
+if(EXISTS "${EXTERNAL_DIR}/glfw/CMakeLists.txt")
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${EXTERNAL_DIR}/glfw" EXCLUDE_FROM_ALL)
+    set(GLFW_TARGET glfw)
+else()
+    # 1. Try CMake Config mode
+    find_package(glfw3 CONFIG QUIET)
+    if(TARGET glfw)
+        set(GLFW_TARGET glfw)
+    elseif(TARGET glfw3::glfw3)
+        set(GLFW_TARGET glfw3::glfw3)
+    endif()
+
+    # 2. Try PkgConfig mode
+    if(NOT GLFW_TARGET)
+        find_package(PkgConfig QUIET)
+        if(PKG_CONFIG_FOUND)
+            pkg_check_modules(GLFW QUIET IMPORTED_TARGET glfw3)
+            if(TARGET PkgConfig::GLFW)
+                set(GLFW_TARGET PkgConfig::GLFW)
+            endif()
+        endif()
+    endif()
+
+    # 3. Fallback to FetchContent if no local library or system package exists
+    if(NOT GLFW_TARGET)
+        message(STATUS "GLFW not found locally or via system package; fetching from GitHub...")
+        include(FetchContent)
+        set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+
+        FetchContent_Declare(
+            glfw
+            GIT_REPOSITORY https://github.com/glfw/glfw.git
+            GIT_TAG 3.4
+        )
+        FetchContent_MakeAvailable(glfw)
+        set(GLFW_TARGET glfw)
+    endif()
+endif()
+
+if(NOT GLFW_TARGET)
+    message(FATAL_ERROR "Failed to resolve GLFW target.")
+endif()
+
+# ImGui Suite setup
+set(GUI_DEPENDENCIES "")
+if(EXISTS "${IMGUI_DIR}/imgui.cpp")
+    set(IMGUIZMO_SRC "${IMGUIZMO_DIR}/ImGuizmo.cpp")
+    if(NOT EXISTS "${IMGUIZMO_SRC}")
+        set(IMGUIZMO_SRC "${IMGUIZMO_DIR}/src/ImGuizmo.cpp")
+    endif()
+
+    add_library(imgui_suite STATIC
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+        ${IMGUIZMO_SRC}
+        ${IMPLOT_DIR}/implot.cpp
+        ${IMPLOT_DIR}/implot_items.cpp
+    )
+    target_include_directories(imgui_suite PUBLIC
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
+        ${IMGUIZMO_DIR}
+        ${IMGUIZMO_DIR}/src
+        ${IMPLOT_DIR}
+    )
+    target_link_libraries(imgui_suite PUBLIC ${GLAD_TARGET} ${GLFW_TARGET} OpenGL::GL)
+    target_compile_definitions(imgui_suite PUBLIC GLFW_INCLUDE_NONE)
+    list(APPEND GUI_DEPENDENCIES imgui_suite)
+else()
+    find_package(imgui CONFIG REQUIRED)
+    find_package(implot CONFIG REQUIRED)
+    find_package(imguizmo CONFIG QUIET)
+    if(TARGET imgui::imgui)
+        list(APPEND GUI_DEPENDENCIES imgui::imgui)
+    endif()
+    if(TARGET imgui::imgui_impl_glfw)
+        list(APPEND GUI_DEPENDENCIES imgui::imgui_impl_glfw)
+    endif()
+    if(TARGET imgui::imgui_impl_opengl3)
+        list(APPEND GUI_DEPENDENCIES imgui::imgui_impl_opengl3)
+    endif()
+    if(TARGET implot::implot)
+        list(APPEND GUI_DEPENDENCIES implot::implot)
+    endif()
+    if(TARGET imguizmo::imguizmo)
+        list(APPEND GUI_DEPENDENCIES imguizmo::imguizmo)
+    elseif(TARGET ImGuizmo::ImGuizmo)
+        list(APPEND GUI_DEPENDENCIES ImGuizmo::ImGuizmo)
+    elseif(TARGET imguizmo)
+        list(APPEND GUI_DEPENDENCIES imguizmo)
+    endif()
+endif()
+
+# core FEM & engine library
 set(ANAF_CORE_SOURCES
     src/truss_1D/element.cpp
     src/truss_1D/trussSolver/solveTrussStaticDeflection.cpp
@@ -77,50 +220,25 @@ set(ANAF_CORE_SOURCES
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
-
 target_include_directories(anaf_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${SPECTRA_DIR}/include
-    ${GMSH_INCLUDE_DIRS}
 )
+
+if(SPECTRA_TARGET)
+    target_link_libraries(anaf_core PUBLIC ${SPECTRA_TARGET})
+endif()
 
 target_link_libraries(anaf_core PUBLIC
     Eigen3::Eigen
     OpenMP::OpenMP_CXX
-    ${GMSH_LIBRARIES}
+    Gmsh::Gmsh
     project_warnings_and_optimizations
 )
 
-add_library(glad STATIC "${GLAD_DIR}/src/gl.c")
-target_include_directories(glad PUBLIC "${GLAD_DIR}/include")
-
-add_library(imgui_suite STATIC
-    ${IMGUI_DIR}/imgui.cpp
-    ${IMGUI_DIR}/imgui_draw.cpp
-    ${IMGUI_DIR}/imgui_tables.cpp
-    ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
-    ${IMGUIZMO_DIR}/src/ImGuizmo.cpp
-    ${IMPLOT_DIR}/implot.cpp
-    ${IMPLOT_DIR}/implot_items.cpp
-)
-
-target_include_directories(imgui_suite PUBLIC
-    ${IMGUI_DIR}
-    ${IMGUI_DIR}/backends
-    ${IMGUIZMO_DIR}/src
-    ${IMPLOT_DIR}
-)
-target_link_libraries(imgui_suite PUBLIC glad glfw OpenGL::GL)
-target_compile_definitions(imgui_suite PUBLIC GLFW_INCLUDE_NONE)
-
-# SOURCES #########################################################################################
+# main exec
 set(ANAFINEN_SOURCES
     src/main.cpp
-
     src/log/anaf_info.cpp
-
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
     src/gui/guiMaterials/framebuffer.cpp
@@ -129,7 +247,6 @@ set(ANAFINEN_SOURCES
     src/gui/panels/modelTree.cpp
     src/gui/panels/trussControlPanel.cpp
     src/gui/panels/viewportPanel.cpp
-
     src/test/test.cpp
 )
 
@@ -141,16 +258,32 @@ target_compile_definitions(anafinen PRIVATE
 
 target_link_libraries(anafinen PRIVATE 
     anaf_core
-    imgui_suite
-    glad
-    glfw
+    ${GUI_DEPENDENCIES}
+    ${GLAD_TARGET}
+    ${GLFW_TARGET}
     OpenGL::GL
     project_warnings_and_optimizations
 )
 
+# post build
+
+# copy assets
 add_custom_command(
     TARGET anafinen POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:anafinen>/assets
 )
+
+# copy Gmsh dll (winslop only)
+if(WIN32)
+    find_file(GMSH_DLL NAMES gmsh.dll HINTS "${GMSH_SDK_DIR}/bin" "${GMSH_SDK_DIR}/lib")
+    if(GMSH_DLL)
+        add_custom_command(
+            TARGET anafinen POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${GMSH_DLL}"
+                $<TARGET_FILE_DIR:anafinen>
+        )
+    endif()
+endif()

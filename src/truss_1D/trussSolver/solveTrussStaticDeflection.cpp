@@ -39,7 +39,7 @@ namespace FEM::TRUSS {
         const auto nodeNum{m_allNodes.size()};
 
         #pragma omp parallel for schedule(static)
-        for (std::size_t index = 0; index < elementNum; ++index) {
+        for (long long index = 0; index < elementNum; ++index) {
             const auto& element = elements[index];
             const auto& elementNodes = element.getEleNodes();
             
@@ -115,7 +115,7 @@ namespace FEM::TRUSS {
             localReducedTriplets.reserve(m_globalStiffnessMatrix.size() / omp_get_num_threads());
 
             #pragma omp for schedule(static) nowait
-            for (std::size_t i = 0; i < m_globalStiffnessMatrix.size(); ++i) {
+            for (long long i = 0; i < m_globalStiffnessMatrix.size(); ++i) {
                 const auto& triplet = m_globalStiffnessMatrix[i];
                 auto r = static_cast<std::uint32_t>(triplet.row());
                 auto c = static_cast<std::uint32_t>(triplet.col());
@@ -150,7 +150,7 @@ namespace FEM::TRUSS {
 
         Eigen::VectorXd d_full = Eigen::VectorXd::Zero(totalDofs);
         #pragma omp parallel for schedule(static)
-        for (std::uint32_t i = 0; i < totalDofs; ++i) {
+        for (long long i = 0; i < totalDofs; ++i) {
             if (!isFixed[i]) {
                 std::int32_t reduced_idx = remapTable[i];
                 d_full(i) = reducedDisplacements(reduced_idx);
@@ -158,7 +158,7 @@ namespace FEM::TRUSS {
         }
 
         #pragma omp parallel for schedule(static)
-        for (std::uint32_t i = 0; i < totalNodes; ++i) {
+        for (long long i = 0; i < totalNodes; ++i) {
             std::array<double, 3> disp = {
                 d_full[3 * i + 0],
                 d_full[3 * i + 1],
@@ -173,7 +173,7 @@ namespace FEM::TRUSS {
         const std::size_t totalElements = m_allElements.size();
 
         #pragma omp parallel for schedule(static)
-        for (std::size_t eleNum = 0; eleNum < totalElements; ++eleNum) {
+        for (long long eleNum = 0; eleNum < totalElements; ++eleNum) {
             auto& element = m_allElements[eleNum];
             const auto& elementNodes = element.getEleNodes();
             
