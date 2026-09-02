@@ -1,0 +1,15 @@
+name: Publish to Winget
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-winget:
+    runs-on: windows-latest
+    steps:
+      - name: Submit to Windows Package Manager
+        uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: suacayipkisi.anafinen
+          token: ${{ secrets.WINGET_TOKEN }}
