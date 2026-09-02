@@ -96,14 +96,9 @@ else()
 endif()
 
 # GLAD setup
-if(EXISTS "${GLAD_DIR}/src/gl.c")
-    add_library(glad_local STATIC "${GLAD_DIR}/src/gl.c")
-    target_include_directories(glad_local PUBLIC "${GLAD_DIR}/include")
-    set(GLAD_TARGET glad_local)
-else()
-    find_package(glad CONFIG REQUIRED)
-    set(GLAD_TARGET glad::glad)
-endif()
+add_library(glad_local STATIC "${GLAD_DIR}/src/gl.c")
+target_include_directories(glad_local PUBLIC "${GLAD_DIR}/include")
+set(GLAD_TARGET glad_local)
 
 # GLFW setup
 set(GLFW_TARGET "")
@@ -255,7 +250,9 @@ add_executable(anafinen ${ANAFINEN_SOURCES})
 
 target_compile_definitions(anafinen PRIVATE 
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    GLFW_INCLUDE_NONE
 )
+
 
 target_link_libraries(anafinen PRIVATE 
     anaf_core

@@ -88,14 +88,16 @@ namespace anaf::GUI {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
-        //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-        constexpr float render_scale = 2.0f;
-        //ImFontConfig font_config;
-        //font_config.OversampleH = 1; 
-        //font_config.OversampleV = 1; 
-        //.PixelSnapH = true;
+        float xscale = 1.0f;
+        float yscale = 1.0f;
+        glfwGetWindowContentScale(window, &xscale, &yscale);
+        constexpr float render_scale = 1.0f;
+        
+// for linux
+#ifdef __linux__
         const std::string ui_font_path = "assets/fonts/Inter/ttf/Inter-Medium.ttf";
         const std::string console_font_path = "assets/fonts/CascadiaCode/ttf/CascadiaMono.ttf";
 
@@ -111,6 +113,27 @@ namespace anaf::GUI {
         } else {
             font_console = font_ui;
         }
+#endif
+
+// for windows
+#ifdef _WIN32
+        const std::filesystem::path ui_font_path= std::filesystem::path(MAIN_DIR) / "assets" / "fonts" / "Inter" / "ttf" / "Inter-Medium.ttf ";
+        const std::filesystem::path console_font_path = std::filesystem::path(MAIN_DIR) / "assets" / "fonts" / "CascadiaCode" / "ttf" / "CascadiaMono.ttf";
+
+        if (std::filesystem::exists(ui_font_path)) {
+            font_ui = io.Fonts->AddFontFromFileTTF(ui_font_path.string().c_str(), 18.0f * render_scale);
+        } else {
+            anaf::LOG::warn("[ImGuiLayer] UI font missing at: %s using fallback.\n", ui_font_path.string().c_str());
+            font_ui = io.Fonts->AddFontDefault();
+        }
+
+        if (std::filesystem::exists(console_font_path)) {
+            font_console = io.Fonts->AddFontFromFileTTF(console_font_path.string().c_str(), 18.0f * render_scale);
+        } else {
+            font_console = font_ui;
+        }
+
+#endif
         
         io.FontGlobalScale = 1.0f / render_scale;
 
