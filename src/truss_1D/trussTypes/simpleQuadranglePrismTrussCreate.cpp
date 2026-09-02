@@ -42,7 +42,7 @@ namespace FEM::TRUSS {
         // id = i + j * nx_nodes + k * (nx_nodes * ny_nodes)
         // set all truss nodes
         #pragma omp parallel for collapse(3) schedule(static)
-        for (std::uint32_t k = 0; k < nz_nodes; ++k) {
+        for (long long k = 0; k < nz_nodes; ++k) {
             for (std::uint32_t j = 0; j < ny_nodes; ++j) {
                 for (std::uint32_t i = 0; i < nx_nodes; ++i) {
                     std::uint32_t nodeID = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
@@ -81,7 +81,7 @@ namespace FEM::TRUSS {
 
         // parallel to X-direction
         #pragma omp parallel for collapse(3) schedule(static)
-        for (std::uint32_t k = 0; k < nz_nodes; ++k) {
+        for (long long k = 0; k < nz_nodes; ++k) {
             for (std::uint32_t j = 0; j < ny_nodes; ++j) {
                 for (std::uint32_t i = 0; i < nx; ++i) {
                     std::uint32_t n1 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
@@ -94,7 +94,7 @@ namespace FEM::TRUSS {
 
         // parallel to Y-directiom
         #pragma omp parallel for collapse(3) schedule(static)
-        for (std::uint32_t k = 0; k < nz_nodes; ++k) {
+        for (long long k = 0; k < nz_nodes; ++k) {
             for (std::uint32_t j = 0; j < ny; ++j) {
                 for (std::uint32_t i = 0; i < nx_nodes; ++i) {
                     std::uint32_t n1 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
@@ -107,7 +107,7 @@ namespace FEM::TRUSS {
 
         // parallel to Z-direction
         #pragma omp parallel for collapse(3) schedule(static)
-        for (std::uint32_t k = 0; k < nz; ++k) {
+        for (long long k = 0; k < nz; ++k) {
             for (std::uint32_t j = 0; j < ny_nodes; ++j) {
                 for (std::uint32_t i = 0; i < nx_nodes; ++i) {
                     std::uint32_t n1 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
@@ -120,7 +120,7 @@ namespace FEM::TRUSS {
 
         // cross in X-Y plane
         #pragma omp parallel for collapse(3) schedule(static)
-        for (std::uint32_t k = 0; k < nz_nodes; ++k) {
+        for (long long k = 0; k < nz_nodes; ++k) {
             for (std::uint32_t j = 0; j < ny; ++j) {
                 for (std::uint32_t i = 0; i < nx; ++i) {
                     std::uint32_t n00 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
@@ -137,7 +137,7 @@ namespace FEM::TRUSS {
 
         // cross in X-Z plane
         #pragma omp parallel for collapse(3) schedule(static)
-        for (std::uint32_t k = 0; k < nz; ++k) {
+        for (long long k = 0; k < nz; ++k) {
             for (std::uint32_t j = 0; j < ny_nodes; ++j) {
                 for (std::uint32_t i = 0; i < nx; ++i) {
                     std::uint32_t n00 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
@@ -154,7 +154,7 @@ namespace FEM::TRUSS {
 
         // cross in Y-Z plane
         #pragma omp parallel for collapse(3) schedule(static)
-        for (std::uint32_t k = 0; k < nz; ++k) {
+        for (long long k = 0; k < nz; ++k) {
             for (std::uint32_t j = 0; j < ny; ++j) {
                 for (std::uint32_t i = 0; i < nx_nodes; ++i) {
                     std::uint32_t n00 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);

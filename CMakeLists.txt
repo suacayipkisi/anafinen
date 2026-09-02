@@ -33,6 +33,7 @@ if(MSVC)
     )
     target_compile_options(project_warnings_and_optimizations INTERFACE
         $<$<CONFIG:Release>:/O2>
+        /openmp:llvm
     )
     if(ANAFINEN_NATIVE_OPTIMIZATIONS)
         target_compile_options(project_warnings_and_optimizations INTERFACE /arch:AVX2)
@@ -57,9 +58,20 @@ find_package(OpenGL REQUIRED)
 # gmsh detection
 if(WIN32)
     set(GMSH_SDK_DIR "C:/libs/gmsh-sdk" CACHE PATH "Path to Gmsh SDK on Windows")
-    find_path(GMSH_INCLUDE_DIR NAMES "gmsh.h" HINTS "${GMSH_SDK_DIR}/include")
-    find_library(GMSH_LIBRARY NAMES gmsh HINTS "${GMSH_SDK_DIR}/lib")
-    find_file(GMSH_DLL NAMES gmsh.dll HINTS "${GMSH_SDK_DIR}/bin" "${GMSH_SDK_DIR}/lib")
+    find_path(GMSH_INCLUDE_DIR NAMES "gmsh.h" HINTS "${GMSH_SDK_DIR}/include" NO_DEFAULT_PATH)
+
+    find_library(GMSH_LIBRARY NAMES gmsh.dll gmsh HINTS "${GMSH_SDK_DIR}/lib" NO_DEFAULT_PATH)
+    file(GLOB GMSH_DLL_FILES LIST_DIRECTORIES false
+        "${GMSH_SDK_DIR}/bin/*.dll"
+        "${GMSH_SDK_DIR}/lib/*.dll"
+    )
+
+    list(FILTER GMSH_DLL_FILES EXCLUDE REGEX "\\.lib$")
+
+    if(GMSH_DLL_FILES)
+        list(GET GMSH_DLL_FILES 0 _DETECTED_DLL)
+        set(GMSH_DLL "${_DETECTED_DLL}" CACHE FILEPATH "Path to Gmsh runtime DLL" FORCE)
+    endif()
 else()
     find_path(GMSH_INCLUDE_DIR NAMES "gmsh.h")
     find_library(GMSH_LIBRARY NAMES gmsh)
@@ -69,10 +81,18 @@ if(NOT GMSH_INCLUDE_DIR OR NOT GMSH_LIBRARY OR (WIN32 AND NOT GMSH_DLL))
     message(FATAL_ERROR "Gmsh SDK or headers not found! Set GMSH_SDK_DIR to your Gmsh installation path.")
 endif()
 
-add_library(Gmsh::Gmsh UNKNOWN IMPORTED)
+if(NOT GMSH_INCLUDE_DIR OR NOT GMSH_LIBRARY OR (WIN32 AND NOT GMSH_DLL))
+    message(STATUS "GMSH_INCLUDE_DIR: ${GMSH_INCLUDE_DIR}")
+    message(STATUS "GMSH_LIBRARY: ${GMSH_LIBRARY}")
+    message(STATUS "GMSH_DLL: ${GMSH_DLL}")
+    message(FATAL_ERROR "Gmsh SDK or headers not found! Set GMSH_SDK_DIR properly")
+endif()
+
+add_library(Gmsh::Gmsh SHARED IMPORTED)
 set_target_properties(Gmsh::Gmsh PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${GMSH_INCLUDE_DIR}"
 )
+
 if(WIN32)
     set_target_properties(Gmsh::Gmsh PROPERTIES
         IMPORTED_IMPLIB "${GMSH_LIBRARY}"

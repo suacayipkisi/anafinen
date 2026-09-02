@@ -11,7 +11,7 @@ git submodule update --init --recursive
 $cmakeArgs = @(
     "-S", ".",
     "-B", $BuildDir,
-    "-G", "Visual Studio 17 2022",
+    "-G", "Ninja",
     "-A", "x64",
     "-DCMAKE_BUILD_TYPE=Release",
     "-DGMSH_SDK_DIR=$GmshSdkDir"

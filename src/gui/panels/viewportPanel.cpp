@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <limits>
 #include <vector>
+#include <string>
 
 namespace anaf::GUI {
 
