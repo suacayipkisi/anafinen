@@ -78,10 +78,10 @@ namespace anaf::GUI {
     }
 
     int initgui(){
-    #ifdef __linux__
+#ifdef __linux__
         platform_utils::setupSystemCursor();
         glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
-    #endif
+#endif
 
         if(!glfwInit()){
             anaf::LOG::error("Failed to initialize GLFW");
@@ -96,9 +96,9 @@ namespace anaf::GUI {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    #ifdef __APPLE__
+#ifdef __APPLE__
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    #endif
+#endif
 
         GLFWwindow* window = glfwCreateWindow(1600, 900, "Modular Simulation Engine", nullptr, nullptr);
 

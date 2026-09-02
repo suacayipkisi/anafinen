@@ -16,8 +16,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "solveTrussStaticDeflection.hpp"
-#include "../element.hpp"
-#include "../../log/anaf_info.hpp"
+#include "../../trussProperties/element.hpp"
+#include "../../../log/anaf_info.hpp"
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>

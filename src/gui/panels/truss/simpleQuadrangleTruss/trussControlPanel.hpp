@@ -18,8 +18,12 @@
 #pragma once
 
 #include "../../../guiMaterials/iPanel.hpp"
+#include "../../../../truss_1D/trussProperties/appliedForce.hpp"
 
+#include <array>
 #include <cstdint>
+#include <functional>
+#include <vector>
 
 namespace anaf::GUI {
 
@@ -28,16 +32,16 @@ namespace anaf::GUI {
         std::uint32_t m_cubeNumX {5};
         std::uint32_t m_cubeNumY {1};
         std::uint32_t m_cubeNumZ {1};
-        std::uint32_t m_type{0};
+        std::uint32_t m_type{1};
         double m_cubeEdgeLength{1.0};
         double m_crossSectionalArea{80.0};
+        std::uint32_t m_forceNodeId{5};
+        std::array<double, 3> m_forceVector{0.0, 0.0, 0.0};
+        std::vector<FEM::TRUSS::ForceApplied> m_appliedForces;
     public:
+        ~TrussControlPanel() override = default;
+        std::function<void()> onCalculated;
         void onImGuiRender() override;
-
-        // inline std::array<std::uint32_t, 3> getTrussSize() const {return {m_cubeNumX, m_cubeNumY, m_cubeNumZ};};
-        // inline std::uint32_t getType() const {return m_type;}
-        // inline double geElementLength() const {return m_cubeEdgeLength;}
-        // inline double getelementArea() const {return m_crossSectionalArea;}
         
     };
 

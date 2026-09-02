@@ -15,15 +15,14 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#pragma once
+#include "generalStatus.hpp"
 
-#include <cstdint>
+namespace anaf::BRIDGE {
 
-void trussCalculator(
-    std::uint32_t cubeNumX,
-    std::uint32_t cubeNumY,
-    std::uint32_t cubeNumZ,
-    double elementLength,
-    double area,
-    std::uint32_t type
-);
+    Gui_Calc_Bridge& buildBridge() {
+        static Gui_Calc_Bridge bridge{};
+        Gui_Calc_Bridge& ref = bridge;
+        return ref;
+    }
+    
+} // namespace anaf::BRIDGE end

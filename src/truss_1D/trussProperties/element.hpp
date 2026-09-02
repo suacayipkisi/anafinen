@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include "../material/properties.hpp"
+#include "../../material/properties.hpp"
 #include "node.hpp"
-#include "../log/anaf_info.hpp"
+#include "../../log/anaf_info.hpp"
 
 #include <Eigen/Core>
 #include <cstddef>

@@ -19,23 +19,118 @@
 
 #include "imgui.h"
 
-#include "../../../../trussEngine/trussSolver.hpp"
+#include <stop_token>
+#include <thread>
+
+#include "../../../../material/properties.hpp"
+#include "../../../../truss_1D/trussEngine/trussSolver.hpp"
+#include "../../../../bridge/generalStatus.hpp"
 
 namespace anaf::GUI {
 
+    namespace {
+        void ensureDemoTrussCase(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t forceNodeId) {
+            bridge.fixedDOFsByNode.clear();
+            bridge.fixedDOFsByNode[0u] = {true, true, true};
+            bridge.appliedForces.clear();
+            bridge.appliedForces.emplace_back(forceNodeId, std::array<double, 3>{1000.0, 0.0, 0.0});
+            bridge.selectedNodeId = forceNodeId;
+        }
+    }
+
     void TrussControlPanel::onImGuiRender() {
+        BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
+
         ImGui::Begin("Truss(1D) Analysis Set", &isOpen);
 
         ImGui::Text("Truss Parameters");
         ImGui::Separator();
 
+        if (bridge.fixedDOFsByNode.empty() || bridge.appliedForces.empty()) {
+            ensureDemoTrussCase(bridge, m_forceNodeId);
+        }
+
+        if (bridge.selectedNodeId == std::numeric_limits<std::uint32_t>::max()) {
+            bridge.selectedNodeId = m_forceNodeId;
+        }
+
+        if (bridge.selectedNodeId != std::numeric_limits<std::uint32_t>::max()) {
+            ImGui::Text("Selected node: %u", bridge.selectedNodeId);
+        }
+        else {
+            ImGui::Text("Selected node: none");
+        }
+
+        if (m_type == 0u) {
+            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.7f, 1.0f), "Material Type must be > 0.");
+        }
+
+        if (bridge.m_isGeneratingPreview.load()) {
+            ImGui::BeginDisabled();
+            ImGui::Button("Generating Preview...");
+            ImGui::EndDisabled();
+        }
+        else if (ImGui::Button("Generate Preview")) {
+            if (m_type == 0u) {
+                m_type = 1u;
+            }
+
+            if (bridge.fixedDOFsByNode.empty()) {
+                bridge.fixedDOFsByNode[0] = {true, true, true};
+            }
+            if (bridge.appliedForces.empty()) {
+                bridge.appliedForces.emplace_back(1u, std::array<double, 3>{1000.0, 0.0, 0.0});
+            }
+
+            bridge.m_isGeneratingPreview = true;
+            bridge.workerThread = std::jthread(
+                [&bridge,
+                 cubeNumX = m_cubeNumX,
+                 cubeNumY = m_cubeNumY,
+                 cubeNumZ = m_cubeNumZ,
+                 cubeEdgeLength = m_cubeEdgeLength,
+                 crossSectionalArea = m_crossSectionalArea,
+                 type = m_type](std::stop_token st) mutable {
+                    try {
+                        FEM::TRUSS::SimpleTruss preview{{cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea, type};
+                        preview.setTruss();
+
+                        {
+                            std::lock_guard lock(bridge.dataMutex);
+                            bridge.trussNodes.assign(preview.getNodes().begin(), preview.getNodes().end());
+                            bridge.trussElements.clear();
+                            for (const auto& element : preview.getElements()) {
+                                const auto& nodes = element.getEleNodes();
+                                bridge.trussElements.emplace_back(std::array<std::uint32_t, 2>{nodes[0], nodes[1]});
+                            }
+                            for (auto& node : bridge.trussNodes) {
+                                std::array<bool, 3> movable{true, true, true};
+                                const auto it = bridge.fixedDOFsByNode.find(node.getNodeID());
+                                if (it != bridge.fixedDOFsByNode.end()) {
+                                    movable = { !it->second[0], !it->second[1], !it->second[2] };
+                                }
+                                node.setMovable(movable);
+                            }
+                            bridge.hasTrussPreview = true;
+                            bridge.selectedNodeId = bridge.trussNodes.empty() ? std::numeric_limits<std::uint32_t>::max() : 0u;
+                        }
+                    } catch (const std::exception&) {
+                        std::lock_guard lock(bridge.dataMutex);
+                        bridge.hasTrussPreview = false;
+                        bridge.trussNodes.clear();
+                        bridge.trussElements.clear();
+                    }
+
+                    bridge.m_isGeneratingPreview = false;
+            });
+        }
+
         if (ImGui::BeginTable("TrussParamsTable", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerH)) {
         
-            // Sutun oranlari: Sol sutun %60, Sag girdi sutunu %40
             ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.6f);
             ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch, 0.4f);
 
-            // Satir 1: Cube Num X
+            // cube num x
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding(); // Metni input kutusuyla dikeyde hizalar
@@ -44,7 +139,7 @@ namespace anaf::GUI {
             ImGui::SetNextItemWidth(-FLT_MIN); // Kutuyu sutunun tamamina yayar
             ImGui::InputScalar("##cube_x", ImGuiDataType_U32, &m_cubeNumX);
 
-            // Satir 2: Cube Num Y
+            // cube num y
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
@@ -53,7 +148,7 @@ namespace anaf::GUI {
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputScalar("##cube_y", ImGuiDataType_U32, &m_cubeNumY);
 
-            // Satir 3: Cube Num Z
+            // cube num z
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
@@ -62,7 +157,7 @@ namespace anaf::GUI {
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputScalar("##cube_z", ImGuiDataType_U32, &m_cubeNumZ);
 
-            // Satir 4: Material Type
+            // material type
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
@@ -71,7 +166,7 @@ namespace anaf::GUI {
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputScalar("##mat_type", ImGuiDataType_U32, &m_type);
 
-            // Satir 5: Edge Length
+            // element length
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
@@ -80,7 +175,7 @@ namespace anaf::GUI {
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputDouble("##edge_length", &m_cubeEdgeLength, 0.0, 0.0, "%.2f");
 
-            // Satir 6: Cross Section Area
+            // cross-sectional area
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
@@ -92,12 +187,227 @@ namespace anaf::GUI {
             ImGui::EndTable();
         }
 
-        if (ImGui::Button("Run Solver for Truss", ImVec2(-1, 32))){
-            trussCalculator(m_cubeNumX, m_cubeNumY, m_cubeNumZ, m_cubeEdgeLength, m_crossSectionalArea, m_type);
+        ImGui::Separator();
+        ImGui::Text("Node Forces & Constraints");
+
+        if (bridge.selectedNodeId != std::numeric_limits<std::uint32_t>::max()) {
+            m_forceNodeId = bridge.selectedNodeId;
+        }
+        if (bridge.appliedForces.empty()) {
+            bridge.appliedForces.emplace_back(m_forceNodeId, m_forceVector);
         }
 
-        ImGui::End();
+        m_appliedForces = bridge.appliedForces;
 
+        ImGui::InputScalar("Node ID##force_node", ImGuiDataType_U32, &m_forceNodeId);
+        ImGui::InputDouble("Fx##force_fx", &m_forceVector[0], 0.0, 0.0, "%.3f");
+        ImGui::InputDouble("Fy##force_fy", &m_forceVector[1], 0.0, 0.0, "%.3f");
+        ImGui::InputDouble("Fz##force_fz", &m_forceVector[2], 0.0, 0.0, "%.3f");
+
+        if (ImGui::Button("Apply Load to Selected Node")) {
+            if (bridge.selectedNodeId != std::numeric_limits<std::uint32_t>::max()) {
+                m_forceNodeId = bridge.selectedNodeId;
+            }
+            bridge.appliedForces.erase(
+                std::remove_if(bridge.appliedForces.begin(), bridge.appliedForces.end(),
+                    [&](const FEM::TRUSS::ForceApplied& f) { return f.getApliedNode() == m_forceNodeId; }),
+                bridge.appliedForces.end());
+            bridge.appliedForces.emplace_back(m_forceNodeId, m_forceVector);
+            m_appliedForces = bridge.appliedForces;
+        }
+
+        std::array<bool, 3> fixedDOFs = {false, false, false};
+        const auto it = bridge.fixedDOFsByNode.find(m_forceNodeId);
+        if (it != bridge.fixedDOFsByNode.end()) {
+            fixedDOFs = it->second;
+        }
+
+        bool fixedX = fixedDOFs[0];
+        bool fixedY = fixedDOFs[1];
+        bool fixedZ = fixedDOFs[2];
+        if (ImGui::Checkbox("Fix X##fix_x", &fixedX)) {
+            bridge.fixedDOFsByNode[m_forceNodeId] = {fixedX, fixedY, fixedZ};
+            for (auto& node : bridge.trussNodes) {
+                if (node.getNodeID() == m_forceNodeId) {
+                    node.setMovable({ !fixedX, !fixedY, !fixedZ });
+                    break;
+                }
+            }
+        }
+        if (ImGui::Checkbox("Fix Y##fix_y", &fixedY)) {
+            bridge.fixedDOFsByNode[m_forceNodeId] = {fixedX, fixedY, fixedZ};
+            for (auto& node : bridge.trussNodes) {
+                if (node.getNodeID() == m_forceNodeId) {
+                    node.setMovable({ !fixedX, !fixedY, !fixedZ });
+                    break;
+                }
+            }
+        }
+        if (ImGui::Checkbox("Fix Z##fix_z", &fixedZ)) {
+            bridge.fixedDOFsByNode[m_forceNodeId] = {fixedX, fixedY, fixedZ};
+            for (auto& node : bridge.trussNodes) {
+                if (node.getNodeID() == m_forceNodeId) {
+                    node.setMovable({ !fixedX, !fixedY, !fixedZ });
+                    break;
+                }
+            }
+        }
+
+        if (ImGui::Button("Apply Fixity")) {
+            if (bridge.selectedNodeId != std::numeric_limits<std::uint32_t>::max()) {
+                m_forceNodeId = bridge.selectedNodeId;
+            }
+            bridge.fixedDOFsByNode[m_forceNodeId] = {fixedX, fixedY, fixedZ};
+
+            for (auto& node : bridge.trussNodes) {
+                if (node.getNodeID() == m_forceNodeId) {
+                    node.setMovable({ !fixedX, !fixedY, !fixedZ });
+                    break;
+                }
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Fixity log");
+        if (bridge.fixedDOFsByNode.empty()) {
+            ImGui::TextDisabled("No fixed DOFs yet.");
+        } else {
+            for (const auto& [nodeId, dofs] : bridge.fixedDOFsByNode) {
+                ImGui::Text("Node %u: X=%s, Y=%s, Z=%s",
+                    nodeId,
+                    dofs[0] ? "fixed" : "free",
+                    dofs[1] ? "fixed" : "free",
+                    dofs[2] ? "fixed" : "free");
+            }
+        }
+
+        if (!bridge.appliedForces.empty()) {
+            ImGui::BeginChild("AppliedForceList", ImVec2(0, 110), true);
+            for (const auto& force : bridge.appliedForces) {
+                ImGui::Text("Node %u: Fx=%.3f, Fy=%.3f, Fz=%.3f",
+                    force.getApliedNode(),
+                    force.getForce()[0],
+                    force.getForce()[1],
+                    force.getForce()[2]);
+            }
+            ImGui::EndChild();
+        }
+
+        if (bridge.m_isRunning) {
+            ImGui::ProgressBar(bridge.m_progress.load(), ImVec2(0.0f, 0.0f));
+            ImGui::BeginDisabled();
+            ImGui::Button("Calculating");
+            ImGui::EndDisabled();
+        }
+        else if (ImGui::Button("Run Solver for Truss", ImVec2(-1, 32))) {
+            bridge.m_isRunning = true;
+            bridge.m_progress = 0.0f;
+
+            const auto appliedForces = bridge.appliedForces.empty() ? std::vector<FEM::TRUSS::ForceApplied>{m_appliedForces.empty() ? FEM::TRUSS::ForceApplied{m_forceNodeId, m_forceVector} : m_appliedForces.front()} : bridge.appliedForces;
+            m_appliedForces = appliedForces;
+            bridge.workerThread = std::jthread(
+                [&bridge,
+                 cubeNumX = m_cubeNumX,
+                 cubeNumY = m_cubeNumY,
+                 cubeNumZ = m_cubeNumZ,
+                 cubeEdgeLength = m_cubeEdgeLength,
+                 crossSectionalArea = m_crossSectionalArea,
+                 type = m_type,
+                 appliedForces](std::stop_token st) mutable {
+                    std::vector<anaf::MATERIAL::Material> allMaterials;
+                    allMaterials.push_back({
+                        "Structural Steel (AISI 4130)",
+                        205.0e9,
+                        78.0e9,
+                        160.0e9,
+                        435.0e6,
+                        670.0e6,
+                        205.0e9,
+                        0.29f,
+                        0.25f,
+                        1u
+                    });
+                    allMaterials.push_back({
+                        "Aluminum 6061-T6",
+                        68.9e9,
+                        26.0e9,
+                        67.5e9,
+                        276.0e9 / 1e3,
+                        310.0e6,
+                        68.9e9,
+                        0.33f,
+                        0.12f,
+                        2u
+                    });
+
+                    FEM::TRUSS::Truss_SQPT solver{
+                        bridge,
+                        st,
+                        cubeNumX,
+                        cubeNumY,
+                        cubeNumZ,
+                        cubeEdgeLength,
+                        crossSectionalArea,
+                        type
+                    };
+
+                    solver.trussCalculator_SQPT(bridge, st);
+                    solver.trussSetForce_SQRT(bridge, st, appliedForces);
+                    solver.setContainer(bridge, st);
+                    solver.calculate(bridge, st, allMaterials);
+
+                    {
+                        std::lock_guard lock(bridge.dataMutex);
+                        bridge.trussNodes.assign(solver.getNodes().begin(), solver.getNodes().end());
+                        bridge.trussElements.clear();
+                        for (const auto& element : solver.getElements()) {
+                            const auto& nodes = element.getEleNodes();
+                            bridge.trussElements.emplace_back(std::array<std::uint32_t, 2>{nodes[0], nodes[1]});
+                        }
+                        bridge.hasTrussPreview = true;
+                        bridge.selectedNodeId = bridge.trussNodes.empty() ? std::numeric_limits<std::uint32_t>::max() : 0u;
+                    }
+
+                    bridge.m_progress = 1.0f;
+                    bridge.m_isRunning = false;
+            });
+        }
+
+        if (ImGui::Button("Clear All", ImVec2(-1, 32))) {
+            // stop worker thread if running
+            if (bridge.workerThread.joinable()) {
+                bridge.workerThread.request_stop();
+            }
+
+            // reset flags and progress
+            bridge.m_isRunning = false;
+            bridge.m_isGeneratingPreview = false;
+            bridge.m_progress = 0.0f;
+
+            // reset panel variables
+            m_cubeNumX = 5;
+            m_cubeNumY = 1;
+            m_cubeNumZ = 1;
+            m_type = 1;
+            m_cubeEdgeLength = 1.0;
+            m_crossSectionalArea = 80.0;
+            m_forceNodeId = 5;
+            m_forceVector = {0.0, 0.0, 0.0};
+            m_appliedForces.clear();
+
+            // reset bridge data
+            {
+                std::lock_guard lock(bridge.dataMutex);
+                bridge.trussNodes.clear();
+                bridge.trussElements.clear();
+                bridge.appliedForces.clear();
+                bridge.fixedDOFsByNode.clear();
+                bridge.hasTrussPreview = false;
+                bridge.selectedNodeId = std::numeric_limits<std::uint32_t>::max();
+            }
+        }
+        
+        ImGui::End();
     }
 
 } // namespace anaf::GUI end

@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include "../element.hpp"
-#include "../node.hpp"
+#include "../trussProperties/element.hpp"
+#include "../trussProperties/node.hpp"
 
 #include <cstdint>
 #include <array>
@@ -35,6 +35,7 @@ namespace FEM::TRUSS {
         double m_cubeEdgeLength{};
         double m_area{};
     public:
+        //SimpleTruss() = default;
         SimpleTruss(
             std::array<std::uint32_t, 3> cubeNum,
             double cubeEdgeLength,
@@ -48,6 +49,14 @@ namespace FEM::TRUSS {
         {}
 
         void setTruss();
+
+        std::vector<Node>& getNodes() { return m_allNodes; }
+        const std::vector<Node>& getNodes() const { return m_allNodes; }
+
+        std::vector<TrussElement_1D>& getElements() { return m_allElements; }
+        const std::vector<TrussElement_1D>& getElements() const { return m_allElements; }
+
+        std::uint32_t getNodeNum() const {return m_allNodes.size();}
     };
 
 } // namespace FEM::TRUSS end

@@ -19,6 +19,7 @@
 
 #include "../guiMaterials/iPanel.hpp"
 #include "../guiMaterials/framebuffer.hpp"
+#include "imgui.h"
 
 #include <memory>
 
@@ -29,6 +30,14 @@ namespace anaf::GUI{
         std::shared_ptr<Framebuffer> m_fbo_ ;
         bool m_viewportFocused_ {false};
         bool m_viewportHovered_ {false};
+        float m_rotationYaw {0.9f};
+        float m_rotationPitch {-0.7f};
+        float m_cameraDistance {18.0f};
+        float m_targetX {0.0f};
+        float m_targetY {0.0f};
+        float m_targetZ {0.0f};
+        bool m_draggingView {false};
+        ImVec2 m_lastMousePos {0.0f, 0.0f};
     public:
         ViewportPanel(std::shared_ptr<Framebuffer> fbo) : m_fbo_(fbo) {}
 
@@ -36,7 +45,6 @@ namespace anaf::GUI{
 
         bool isFocused() const { return m_viewportFocused_; }
         bool isHovered() const { return m_viewportHovered_; }
-        
     };
 
 } // namespace anaf::GUI end

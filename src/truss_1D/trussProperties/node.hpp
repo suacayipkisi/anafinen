@@ -40,7 +40,6 @@ namespace FEM::TRUSS {
         ):
             m_nodeID(ID),
             m_Location({locX, locY, locZ})
-            //m_force(std::nullopt)
         {}
 
         Node(
@@ -54,19 +53,14 @@ namespace FEM::TRUSS {
         ):
             m_nodeID(ID),
             m_Location({locX, locY, locZ})
-            //m_force(std::array<double, 3>{forceX, forceY, forceZ})
         {}
 
-        // nonMovable values must be false if they are non-movable
-        inline void setMovable(const std::array<bool, 3> nonMovable) {
-            m_isMovable = nonMovable;
-            for(std::uint8_t i{0}; i < 3; ++i){
-                if(!nonMovable[i]){
-                    m_Location[i] = 0.0;
-                }
-            }
+        // isMovable[i] == true means the DOF is free to move.
+        inline void setMovable(const std::array<bool, 3> isMovable) {
+            m_isMovable = isMovable;
         }
 
+        inline void setLocation(const std::array<double, 3> location) {m_Location = location;}
         inline void setDisplacements(std::array<double, 3> displacementOfNode) {m_displacement = displacementOfNode;}
 
         const std::uint32_t getNodeID() const {return m_nodeID;}

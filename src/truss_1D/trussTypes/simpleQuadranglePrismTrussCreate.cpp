@@ -17,7 +17,7 @@
 
 #include "../../log/anaf_info.hpp"
 #include "simpleQuadranglePrismTrussCreate.hpp"
-#include "../element.hpp"
+#include "../trussProperties/element.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -163,7 +163,7 @@ namespace FEM::TRUSS {
                     std::uint32_t n11 = i + (j + 1) * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
 
                     std::size_t baseIdx = offset_yzCross + 2 * (i + j * nx_nodes + k * (nx_nodes * ny));
-                    m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, n00, 11, allNodes);
+                    m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, n00, n11, allNodes);
                     m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, n10, n01, allNodes);
                 }
             }

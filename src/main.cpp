@@ -37,6 +37,8 @@
 #include "gen/genNum.hpp"
 #include "gui/panels/logTerminal.hpp"
 
+#include "bridge/generalStatus.hpp"
+
 #ifdef _WIN32
 extern "C" {
     __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
@@ -45,6 +47,8 @@ extern "C" {
 #endif
 
 int main() {
+    anaf::BRIDGE::Gui_Calc_Bridge& GUI_CALC_BRIDGE = anaf::BRIDGE::buildBridge();
+
     anaf::LOG::setCallback(
         [](anaf::LOG::Level level, std::string_view message) {
             anaf::GUI::anafUILogSink(level, std::string(message).c_str());

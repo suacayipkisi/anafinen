@@ -17,23 +17,22 @@
 
 #pragma once
 
-#include "node.hpp"
 #include <array>
-#include <span>
+#include <cstdint>
 
 namespace FEM::TRUSS {
 
     class ForceApplied{
     private:
-        std::span<const Node> m_nodes;
+        std::uint32_t m_nodeID;
         std::array<double, 3> m_force;
     public:
-        ForceApplied(std::span<const Node> nodes, std::array<double, 3> force):
-            m_nodes(nodes), m_force(force)
+        ForceApplied(std::uint32_t nodeID, std::array<double, 3> force):
+            m_nodeID(nodeID), m_force(force)
         {}
 
         inline void updateForce(std::array<double, 3> force){m_force = force;}
-        inline std::span<const Node> getApliedNode() const {return m_nodes;}
+        inline std::uint32_t getApliedNode() const {return m_nodeID;}
         inline const std::array<double, 3>& getForce() const {return m_force;}
     };
 

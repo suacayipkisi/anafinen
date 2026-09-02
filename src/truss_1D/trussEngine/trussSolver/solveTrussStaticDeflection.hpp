@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include "../element.hpp"
-#include "../node.hpp"
+#include "../../trussProperties/element.hpp"
+#include "../../trussProperties/node.hpp"
 
 #include <Eigen/SparseCore>
 #include <span>
@@ -37,6 +37,7 @@ namespace FEM::TRUSS {
         std::vector<std::array<double, 3>> m_resultDisplacements;
         std::vector<std::array<double, 3>> m_resultForces;
     public:
+        Truss_1D_Container() = default;
         Truss_1D_Container(
             std::span<const double> forceVec,
             std::span<Node> allNodes,
@@ -46,6 +47,16 @@ namespace FEM::TRUSS {
             m_allNodes(allNodes),
             m_allElements(allElements)
         {}
+
+        void set(
+            std::span<const double> forceVec,
+            std::span<Node> allNodes,
+            std::span<TrussElement_1D> allElements
+        ) {
+            m_forceVec = forceVec;
+            m_allNodes = allNodes;
+            m_allElements = allElements;
+        }
 
         void assembleStiffness(
             const std::vector<TrussElement_1D>& elements,

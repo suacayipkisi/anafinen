@@ -95,7 +95,7 @@ namespace anaf::GUI {
         float yscale = 1.0f;
         glfwGetWindowContentScale(window, &xscale, &yscale);
         constexpr float render_scale = 1.0f;
-        
+
 // for linux
 #ifdef __linux__
         const std::string ui_font_path = "assets/fonts/Inter/ttf/Inter-Medium.ttf";
@@ -103,14 +103,16 @@ namespace anaf::GUI {
 
         if (std::filesystem::exists(ui_font_path)) {
             font_ui = io.Fonts->AddFontFromFileTTF(ui_font_path.c_str(), 18.0f * render_scale);
-        } else {
+        }
+        else {
             anaf::LOG::warn("[ImGuiLayer] UI font missing at: %s using fallback.\n", ui_font_path.c_str());
             font_ui = io.Fonts->AddFontDefault();
         }
 
         if (std::filesystem::exists(console_font_path)) {
             font_console = io.Fonts->AddFontFromFileTTF(console_font_path.c_str(), 18.0f * render_scale);
-        } else {
+        }
+        else {
             font_console = font_ui;
         }
 #endif
@@ -122,14 +124,16 @@ namespace anaf::GUI {
 
         if (std::filesystem::exists(ui_font_path)) {
             font_ui = io.Fonts->AddFontFromFileTTF(ui_font_path.string().c_str(), 18.0f * render_scale);
-        } else {
+        }
+        else {
             anaf::LOG::warn("[ImGuiLayer] UI font missing at: %s using fallback.\n", ui_font_path.string().c_str());
             font_ui = io.Fonts->AddFontDefault();
         }
 
         if (std::filesystem::exists(console_font_path)) {
             font_console = io.Fonts->AddFontFromFileTTF(console_font_path.string().c_str(), 18.0f * render_scale);
-        } else {
+        }
+        else {
             font_console = font_ui;
         }
 

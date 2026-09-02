@@ -209,9 +209,10 @@ endif()
 
 # core FEM & engine library
 set(ANAF_CORE_SOURCES
-    src/truss_1D/element.cpp
-    src/truss_1D/trussSolver/solveTrussStaticDeflection.cpp
-    src/trussEngine/trussSolver.cpp
+    src/truss_1D/trussProperties/element.cpp
+    src/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
+    src/truss_1D/trussEngine/trussSolver/solveTrussStaticDeflection.cpp
+    src/truss_1D/trussEngine/trussSolver.cpp
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
@@ -233,6 +234,7 @@ target_link_libraries(anaf_core PUBLIC
 # main exec
 set(ANAFINEN_SOURCES
     src/main.cpp
+    src/bridge/generalStatus.cpp
     src/log/anaf_info.cpp
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp

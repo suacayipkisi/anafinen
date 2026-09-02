@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include "../node.hpp"
-#include "../element.hpp"
-#include "../appliedForce.hpp"
+#include "../trussProperties/node.hpp"
+#include "../trussProperties/element.hpp"
+#include "../trussProperties/appliedForce.hpp"
 
 #include <array>
 #include <cstdint>
