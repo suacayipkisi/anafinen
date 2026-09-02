@@ -1,5 +1,23 @@
 # ANAFINEN (Analyze Finite Element Engineering) 
 
+<!-- Release & Downloads Badges -->
+[![GitHub Release](https://img.shields.io/github/v/release/suacayipkisi/anafinen?include_prereleases&style=flat-square&color=blue)](https://github.com/suacayipkisi/anafinen/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/suacayipkisi/anafinen/total?style=flat-square&color=green)](https://github.com/suacayipkisi/anafinen/releases)
+
+---
+
+## 📦 Downloads (v0.1.0-alpha)
+
+Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases/tag/v0.1.0-alpha).
+
+| Platform | File | Quick Run / Install Command |
+| --- | --- | --- |
+| **Windows** (via Winget) | *Package Manager* | `winget install suacayipkisi.anafinen` |
+| **Windows** (10/11 x64 Portable) | [`anafinen-0.1.0-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.0-alpha/anafinen-0.1.0-windows-AMD64-alpha.zip) | Extract `.zip` and run `bin/anafinen.exe` |
+| **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.1.0-1.x86_64.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.0-alpha/anafinen-0.1.0-1.x86_64.rpm) | `sudo dnf install ./anafinen-0.1.0-1.x86_64.rpm` |
+
+---
+
 **Finite Element Analysis Engine** -*under construction*- 
 
 Currently project is at phase 1
