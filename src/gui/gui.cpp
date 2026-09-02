@@ -100,7 +100,7 @@ namespace anaf::GUI {
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-        GLFWwindow* window = glfwCreateWindow(1600, 900, "Modular Simulation Engine", nullptr, nullptr);
+        GLFWwindow* window = glfwCreateWindow(1600, 900, "Anafinen", nullptr, nullptr);
 
         if (!window) {
             anaf::LOG::error("Failed to create GLFW window");

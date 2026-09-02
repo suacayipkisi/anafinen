@@ -22,7 +22,7 @@ As you can understand I'm making this project for educational purposes
 - Visualisation and GUI: OpenGL, GLAD, GLFW, ImGUI, ImGuizmo, ImPlot
 - Multithreading: OpenMP
 
-# Build (Linux and Windows)
+# Build and package (Linux and Windows)
 
 I don't have money to buy a mac, sorry...  
 So, there is no build for macOS
@@ -33,6 +33,21 @@ If I would be succeed somehow, then I will add build instruction for arch too.
 Also I will try in debian and add build instruction for it too.
 
 If you are using another distro (not arch, fedora, debian or based on them) like gentoo, I'm sorry I will not try for them but somehow you did succeed, you can send me.
+
+## Fedora, Arch/CachyOS, and Debian
+
+After installing the libraries listed below for your distribution, run the
+same command from the repository root. The script initializes submodules,
+builds a Release binary, and selects RPM, pacman, or DEB according to the
+distribution.
+
+```bash
+./package.sh
+```
+
+For Arch/CachyOS, `makepkg` uses [PKGBUILD](PKGBUILD). For Debian, the script
+uses CPack's DEB generator and derives shared-library dependencies with
+`dpkg-shlibdeps`.
 
 ## Fedora
 
@@ -126,6 +141,18 @@ Mesh engine:
 - Pres ctrl+shift+b to start build.
 - After build press f5 to open debug mode or ctrl+f5 to open normally.
 - DONE!
+
+### Package from Windows
+
+Run PowerShell from the repository root. The Gmsh SDK must contain `include`,
+`lib`, and `bin/gmsh.dll`.
+
+```powershell
+.\package.ps1 -VcpkgRoot "C:/Users/<your username>/vcpkg" -GmshSdkDir "C:/libs/gmsh-sdk"
+```
+
+The result is a ZIP containing the executable, `gmsh.dll`, and the required
+assets beside the executable.
 
 
 ## Licensing & Third Party Library and Font Licenses

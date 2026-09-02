@@ -16,18 +16,66 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <filesystem>
+#include <string>
+#include <vector>
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
+
+#ifdef __linux__
+#include <unistd.h>
+#include <linux/limits.h>
+#endif
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
 #include "imGuiLayer.hpp"
-
 #include "../../log/anaf_info.hpp"
 
 namespace anaf::GUI {
+
+    namespace {
+        std::filesystem::path get_executable_directory() {
+#ifdef __linux__
+            char result[PATH_MAX];
+            ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+            if (count != -1) {
+                return std::filesystem::path(std::string(result, count)).parent_path();
+            }
+#elif defined(_WIN32)
+            char result[MAX_PATH];
+            GetModuleFileNameA(NULL, result, MAX_PATH);
+            return std::filesystem::path(result).parent_path();
+#endif
+            return std::filesystem::current_path();
+        }
+
+        std::filesystem::path resolve_asset_path(const std::filesystem::path& relative_subpath) {
+            const std::filesystem::path exe_dir = get_executable_directory();
+
+            const std::vector<std::filesystem::path> search_paths = {
+                std::filesystem::path("/usr/share/anafinen/assets") / relative_subpath,
+                exe_dir / "assets" / relative_subpath,
+                std::filesystem::path("assets") / relative_subpath,
+#ifdef MAIN_DIR
+                std::filesystem::path(MAIN_DIR) / "assets" / relative_subpath
+#endif
+            };
+
+            for (const auto& candidate : search_paths) {
+                if (std::filesystem::exists(candidate)) {
+                    return candidate;
+                }
+            }
+
+            return {};
+        }
+    }
 
     void setupSpecialTheme(){
         ImGuiStyle& style = ImGui::GetStyle();
@@ -58,7 +106,7 @@ namespace anaf::GUI {
 
         colors[ImGuiCol_TitleBg]              = ImVec4(0.10f, 0.105f, 0.11f, 1.0f);
         colors[ImGuiCol_TitleBgActive]        = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
-        colors[ImGuiCol_TitleBgCollapsed]   = ImVec4(0.10f, 0.105f, 0.11f, 1.0f);
+        colors[ImGuiCol_TitleBgCollapsed]     = ImVec4(0.10f, 0.105f, 0.11f, 1.0f);
         colors[ImGuiCol_Header]               = ImVec4(0.20f, 0.205f, 0.21f, 1.0f);
         colors[ImGuiCol_HeaderHovered]        = ImVec4(0.30f, 0.305f, 0.31f, 1.0f);
         colors[ImGuiCol_HeaderActive]         = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
@@ -96,49 +144,25 @@ namespace anaf::GUI {
         glfwGetWindowContentScale(window, &xscale, &yscale);
         constexpr float render_scale = 1.0f;
 
-// for linux
-#ifdef __linux__
-        const std::string ui_font_path = "assets/fonts/Inter/ttf/Inter-Medium.ttf";
-        const std::string console_font_path = "assets/fonts/CascadiaCode/ttf/CascadiaMono.ttf";
+        const std::filesystem::path ui_font_subpath = std::filesystem::path("fonts") / "Inter" / "ttf" / "Inter-Medium.ttf";
+        const std::filesystem::path console_font_subpath = std::filesystem::path("fonts") / "CascadiaCode" / "ttf" / "CascadiaMono.ttf";
 
-        if (std::filesystem::exists(ui_font_path)) {
-            font_ui = io.Fonts->AddFontFromFileTTF(ui_font_path.c_str(), 18.0f * render_scale);
-        }
-        else {
-            anaf::LOG::warn("[ImGuiLayer] UI font missing at: %s using fallback.\n", ui_font_path.c_str());
+        const std::filesystem::path ui_font_resolved = resolve_asset_path(ui_font_subpath);
+        const std::filesystem::path console_font_resolved = resolve_asset_path(console_font_subpath);
+
+        if (!ui_font_resolved.empty()) {
+            font_ui = io.Fonts->AddFontFromFileTTF(ui_font_resolved.string().c_str(), 18.0f * render_scale);
+        } else {
+            anaf::LOG::warn("[ImGuiLayer] UI font missing, using fallback.");
             font_ui = io.Fonts->AddFontDefault();
         }
 
-        if (std::filesystem::exists(console_font_path)) {
-            font_console = io.Fonts->AddFontFromFileTTF(console_font_path.c_str(), 18.0f * render_scale);
-        }
-        else {
-            font_console = font_ui;
-        }
-#endif
-
-// for windows
-#ifdef _WIN32
-        const std::filesystem::path ui_font_path= std::filesystem::path(MAIN_DIR) / "assets" / "fonts" / "Inter" / "ttf" / "Inter-Medium.ttf ";
-        const std::filesystem::path console_font_path = std::filesystem::path(MAIN_DIR) / "assets" / "fonts" / "CascadiaCode" / "ttf" / "CascadiaMono.ttf";
-
-        if (std::filesystem::exists(ui_font_path)) {
-            font_ui = io.Fonts->AddFontFromFileTTF(ui_font_path.string().c_str(), 18.0f * render_scale);
-        }
-        else {
-            anaf::LOG::warn("[ImGuiLayer] UI font missing at: %s using fallback.\n", ui_font_path.string().c_str());
-            font_ui = io.Fonts->AddFontDefault();
-        }
-
-        if (std::filesystem::exists(console_font_path)) {
-            font_console = io.Fonts->AddFontFromFileTTF(console_font_path.string().c_str(), 18.0f * render_scale);
-        }
-        else {
+        if (!console_font_resolved.empty()) {
+            font_console = io.Fonts->AddFontFromFileTTF(console_font_resolved.string().c_str(), 18.0f * render_scale);
+        } else {
             font_console = font_ui;
         }
 
-#endif
-        
         io.FontGlobalScale = 1.0f / render_scale;
 
         setupSpecialTheme();

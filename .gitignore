@@ -1,8 +1,15 @@
 build/
+_CPack_Packages/
 .cache/
 .test_data/
 .deps_cache/
 .vscode/
 
 .clangd
-anafinen_run.log
+*.log
+*.rpm
+*.deb
+*.pkg.tar.zst
+*.pkg.tar.xz
+*.zip
+*.tar.gz

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ANAFINEN
+Comment=3D FEM Dynamic and Modal Analysis Engine
+Exec=anafinen
+Icon=anafinen
+Terminal=false
+Categories=Development;Engineering;Science;
+StartupNotify=true
