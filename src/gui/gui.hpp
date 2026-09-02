@@ -17,8 +17,34 @@
 
 #pragma once
 
+#include "GLFW/glfw3.h"
+
+#include "guiMaterials/framebuffer.hpp"
+#include "guiMaterials/iPanel.hpp"
+#include "panels/logTerminal.hpp"
+#include "panels/mainDockSpaceHost.hpp"
+#include "panels/modelTree.hpp"
+#include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
+#include "panels/viewportPanel.hpp"
+#include "panels/truss/trussTypePanel.hpp"
+#include <memory>
+
 namespace anaf::GUI{
 
+    struct UIPanels {
+        MainDockSpaceHost* dock = nullptr;
+        ViewportPanel* viewport = nullptr;
+        TrussSelector* selector = nullptr;
+        TrussControlPanel* control = nullptr;
+        ModelTree* tree = nullptr;
+        LogTerminal* log = nullptr;
+    };
+
+    void bindAnalysisFlow(UIPanels panels);
+    void openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo);
+
     int initgui();
+
+    
 
 } // namespace anaf::GUI end

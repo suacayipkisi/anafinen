@@ -30,97 +30,133 @@
 #include "panels/logTerminal.hpp"
 #include "panels/mainDockSpaceHost.hpp"
 #include "panels/modelTree.hpp"
-#include "panels/trussControlPanel.hpp"
+#include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
+#include "panels/truss/trussTypePanel.hpp"
 #include "panels/viewportPanel.hpp"
-#include "panels/trussControlPanel.hpp"
 #include "linuxCursor.hpp"
 
 
 namespace anaf::GUI {
 
-int initgui(){
-#ifdef __linux__
-    platform_utils::setupSystemCursor();
-    glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
-#endif
+    void bindAnalysisFlow(UIPanels panels) {
+        panels.dock->on_select_analyze_structure = [panels](AnalyzeStructureType type) {
+            if (type == Truss_1D) {
+                panels.selector->isOpen = true;
+            }
+        };
 
-    if(!glfwInit()){
-        anaf::LOG::error("Failed to initialize GLFW");
+        panels.selector->onSelected = [panels](TrussTypes type) {
+            panels.control->isOpen = (type == simpleQuadranglePrism);
+            panels.tree->isOpen = (type == simpleQuadranglePrism);
+        };
+    }
+
+    void openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo) {
+        auto dock = panelManager.addPanel<MainDockSpaceHost>(window);
+        auto viewport = panelManager.addPanel<ViewportPanel>(fbo);
+        auto tree = panelManager.addPanel<ModelTree>();
+        auto trussSelector = panelManager.addPanel<TrussSelector>();
+        auto trussControl = panelManager.addPanel<TrussControlPanel>();
+        auto log = panelManager.addPanel<LogTerminal>();
+
+        UIPanels panels{
+            dock.get(),
+            viewport.get(),
+            trussSelector.get(),
+            trussControl.get(),
+            tree.get(),
+            log.get()
+        };
+
+        trussSelector->isOpen = false;
+        trussControl->isOpen = false;
+        tree->isOpen = false;
+
+        bindAnalysisFlow(panels);
+
+
+    }
+
+    int initgui(){
+    #ifdef __linux__
+        platform_utils::setupSystemCursor();
         glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
-        if (!glfwInit()) {
-            anaf::LOG::error("Fatal: GLFW initialization failed completely");
+    #endif
+
+        if(!glfwInit()){
+            anaf::LOG::error("Failed to initialize GLFW");
+            glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
+            if (!glfwInit()) {
+                anaf::LOG::error("Fatal: GLFW initialization failed completely");
+                return -1;
+            }
+        }
+
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    #ifdef __APPLE__
+        glfwwindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    #endif
+
+        GLFWwindow* window = glfwCreateWindow(1600, 900, "Modular Simulation Engine", nullptr, nullptr);
+
+        if (!window) {
+            anaf::LOG::error("Failed to create GLFW window");
+            glfwTerminate();
             return -1;
         }
-    }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwMakeContextCurrent(window);
+        glfwSwapInterval(1);
+        gladLoadGL((GLADloadfunc)glfwGetProcAddress);
 
-#ifdef __APPLE__
-    glfwwindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
+        //core system initialization
+        ImGuiLayer imguiLayer;
+        imguiLayer.init(window);
 
-    GLFWwindow* window = glfwCreateWindow(1600, 900, "Modular Simulation Engine", nullptr, nullptr);
+        auto fbo = std::make_shared<Framebuffer>(1280, 720);
 
-    if (!window) {
-        anaf::LOG::error("Failed to create GLFW window");
-        glfwTerminate();
-        return -1;
-    }
-
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
-    gladLoadGL((GLADloadfunc)glfwGetProcAddress);
-
-    //core system initialization
-    ImGuiLayer imguiLayer;
-    imguiLayer.init(window);
-
-    auto fbo = std::make_shared<Framebuffer>(1280, 720);
-
-    // register UI panels
-    PanelManager panelManager;
-    panelManager.addPanel<MainDockSpaceHost>(window);
-    panelManager.addPanel<ViewportPanel>(fbo);
-    panelManager.addPanel<TrussControlPanel>();
-    panelManager.addPanel<ModelTree>();
-    panelManager.addPanel<LogTerminal>();
-
-    // game loop
-    while (!glfwWindowShouldClose(window)){
-        glfwPollEvents();
-
-        // render 3d sim scene into custom fbo
-        fbo->bind();
-        glEnable(GL_DEPTH_TEST);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        //native 3d draw calls
-        fbo->unbind();
-
-        //clear default framebuffer and render imgui panels
-        int w, h;
-        glfwGetFramebufferSize(window, &w, &h);
-        glViewport(0, 0, w, h);
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        imguiLayer.beginFrame();
+        // register UI panels
+        PanelManager panelManager;
+        openPanels(panelManager, window, fbo);
         
-        panelManager.onImGuiRender();
-        imguiLayer.endFrame();
 
-        glfwSwapBuffers(window);
+        // game loop
+        while (!glfwWindowShouldClose(window)){
+            glfwPollEvents();
 
+            // render 3d sim scene into custom fbo
+            fbo->bind();
+            glEnable(GL_DEPTH_TEST);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            //native 3d draw calls
+            fbo->unbind();
+
+            //clear default framebuffer and render imgui panels
+            int w, h;
+            glfwGetFramebufferSize(window, &w, &h);
+            glViewport(0, 0, w, h);
+            glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            imguiLayer.beginFrame();
+            
+            panelManager.onImGuiRender();
+            imguiLayer.endFrame();
+
+            glfwSwapBuffers(window);
+
+        }
+
+        imguiLayer.shutdown();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+
+        return 0;
     }
-
-    imguiLayer.shutdown();
-    glfwDestroyWindow(window);
-    glfwTerminate();
-
-    return 0;
-}
 
 } // namespace anaf::GUI end

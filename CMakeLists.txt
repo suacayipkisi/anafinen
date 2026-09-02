@@ -245,7 +245,8 @@ set(ANAFINEN_SOURCES
     src/gui/panels/logTerminal.cpp
     src/gui/panels/mainDockSpaceHost.cpp
     src/gui/panels/modelTree.cpp
-    src/gui/panels/trussControlPanel.cpp
+    src/gui/panels/truss/trussTypePanel.cpp
+    src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp
     src/gui/panels/viewportPanel.cpp
     src/test/test.cpp
 )

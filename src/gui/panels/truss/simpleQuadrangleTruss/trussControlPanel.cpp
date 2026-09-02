@@ -19,7 +19,7 @@
 
 #include "imgui.h"
 
-#include "../../trussEngine/trussSolver.hpp"
+#include "../../../../trussEngine/trussSolver.hpp"
 
 namespace anaf::GUI {
 

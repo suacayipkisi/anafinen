@@ -17,29 +17,27 @@
 
 #pragma once
 
-#include "../guiMaterials/iPanel.hpp"
+#include "../../guiMaterials/iPanel.hpp"
 
-#include <array>
-#include <cstdint>
+#include <functional>
+#include <string_view>
+#include <vector>
 
 namespace anaf::GUI {
 
-    class TrussControlPanel : public IPanel {
-    private:
-        std::uint32_t m_cubeNumX {5};
-        std::uint32_t m_cubeNumY {1};
-        std::uint32_t m_cubeNumZ {1};
-        std::uint32_t m_type{0};
-        double m_cubeEdgeLength{1.0};
-        double m_crossSectionalArea{80.0};
-    public:
-        void onImGuiRender() override;
-
-        inline std::array<std::uint32_t, 3> getTrussSize() const {return {m_cubeNumX, m_cubeNumY, m_cubeNumZ};};
-        inline std::uint32_t getType() const {return m_type;}
-        inline double geElementLength() const {return m_cubeEdgeLength;}
-        inline double getelementArea() const {return m_crossSectionalArea;}
-        
+    enum TrussTypes {
+        simpleQuadranglePrism,
+        nodeEntered
     };
 
+    class TrussSelector : public IPanel {
+    private:
+        TrussTypes m_trussType;
+        const std::vector<std::string_view> m_types {"Simple Quadrangle", "Self Build (element and nodes)"};
+    public:
+        std::function<void(TrussTypes)> onSelected;
+        
+        void onImGuiRender() override;
+    };
 } // namespace anaf::GUI end
+

@@ -17,32 +17,28 @@
 
 #pragma once
 
-#include "../guiMaterials/iPanel.hpp"
+#include "../../../guiMaterials/iPanel.hpp"
 
-#include <GLFW/glfw3.h>
-
-#include <functional>
+#include <cstdint>
 
 namespace anaf::GUI {
 
-    enum AnalyzeStructureType {
-        Truss_1D,
-        Truss_3D
-    };
-
-    class MainDockSpaceHost : public IPanel {
+    class TrussControlPanel : public IPanel {
     private:
-        GLFWwindow* m_window_;
-
+        std::uint32_t m_cubeNumX {5};
+        std::uint32_t m_cubeNumY {1};
+        std::uint32_t m_cubeNumZ {1};
+        std::uint32_t m_type{0};
+        double m_cubeEdgeLength{1.0};
+        double m_crossSectionalArea{80.0};
     public:
-        std::function<void(AnalyzeStructureType)> on_select_analyze_structure;
-        std::function<void()> on_import_mesh;
-        std::function<void()> on_export_results;
-        std::function<void()> on_run_solver;
-
-        MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
-
         void onImGuiRender() override;
+
+        // inline std::array<std::uint32_t, 3> getTrussSize() const {return {m_cubeNumX, m_cubeNumY, m_cubeNumZ};};
+        // inline std::uint32_t getType() const {return m_type;}
+        // inline double geElementLength() const {return m_cubeEdgeLength;}
+        // inline double getelementArea() const {return m_crossSectionalArea;}
+        
     };
 
-} // namespace anaf:GUI end
+} // namespace anaf::GUI end
