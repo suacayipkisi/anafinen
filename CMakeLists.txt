@@ -50,6 +50,7 @@ target_link_libraries(anaf_core PUBLIC
 set(ANAFINEN_SOURCES
     src/main.cpp
     src/bridge/generalStatus.cpp
+    src/directory/getExecutableDirectory.cpp
     src/log/anaf_info.cpp
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp

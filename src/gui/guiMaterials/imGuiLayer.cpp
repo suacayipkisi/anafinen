@@ -21,14 +21,7 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
-#ifdef __linux__
-#include <unistd.h>
-#include <linux/limits.h>
-#endif
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
+#include "../../directory/getExecutableDirectory.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -40,23 +33,8 @@
 namespace anaf::GUI {
 
     namespace {
-        std::filesystem::path get_executable_directory() {
-#ifdef __linux__
-            char result[PATH_MAX];
-            ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
-            if (count != -1) {
-                return std::filesystem::path(std::string(result, count)).parent_path();
-            }
-#elif defined(_WIN32)
-            char result[MAX_PATH];
-            GetModuleFileNameA(NULL, result, MAX_PATH);
-            return std::filesystem::path(result).parent_path();
-#endif
-            return std::filesystem::current_path();
-        }
-
-        std::filesystem::path resolve_asset_path(const std::filesystem::path& relative_subpath) {
-            const std::filesystem::path exe_dir = get_executable_directory();
+        std::filesystem::path resolveAssetPath(const std::filesystem::path& relative_subpath) {
+            const std::filesystem::path exe_dir = anaf::DIRECTORY::getExecutableDirectory();
 
             const std::vector<std::filesystem::path> search_paths = {
                 std::filesystem::path("/usr/share/anafinen/assets") / relative_subpath,
@@ -147,8 +125,8 @@ namespace anaf::GUI {
         const std::filesystem::path ui_font_subpath = std::filesystem::path("fonts") / "Inter" / "ttf" / "Inter-Medium.ttf";
         const std::filesystem::path console_font_subpath = std::filesystem::path("fonts") / "CascadiaCode" / "ttf" / "CascadiaMono.ttf";
 
-        const std::filesystem::path ui_font_resolved = resolve_asset_path(ui_font_subpath);
-        const std::filesystem::path console_font_resolved = resolve_asset_path(console_font_subpath);
+        const std::filesystem::path ui_font_resolved = resolveAssetPath(ui_font_subpath);
+        const std::filesystem::path console_font_resolved = resolveAssetPath(console_font_subpath);
 
         if (!ui_font_resolved.empty()) {
             font_ui = io.Fonts->AddFontFromFileTTF(ui_font_resolved.string().c_str(), 18.0f * render_scale);

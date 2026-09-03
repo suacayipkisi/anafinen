@@ -19,6 +19,7 @@
 
 #include "../truss_1D/trussProperties/appliedForce.hpp"
 #include "../truss_1D/trussProperties/node.hpp"
+#include "../truss_1D/trussProperties/element.hpp"
 
 #include <array>
 #include <atomic>
@@ -37,8 +38,9 @@ namespace anaf::BRIDGE {
         std::mutex dataMutex;
         std::jthread workerThread;
 
+        // truss (1_D element) deformation under constant applied force
         std::vector<FEM::TRUSS::Node> trussNodes;
-        std::vector<std::array<std::uint32_t, 2>> trussElements;
+        std::vector<FEM::TRUSS::TrussElement_1D> trussElements;
         std::vector<FEM::TRUSS::ForceApplied> appliedForces;
         std::unordered_map<std::uint32_t, std::array<bool, 3>> fixedDOFsByNode;
         std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};

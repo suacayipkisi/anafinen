@@ -21,7 +21,9 @@
 #include "../trussTypes/simpleQuadranglePrismTrussCreate.hpp"
 #include "../trussProperties/appliedForce.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <stop_token>
 #include <vector>
 
@@ -119,8 +121,16 @@ namespace FEM::TRUSS {
             node.setLocation(loc);
         }
 
-        anaf::LOG::info("Solver completed. Max nodal displacement magnitude: {}", maxDisp);
         m_container.calculateElementForcesAndStress(materials);
+
+        double maxStress = 0.0;
+        for (auto& element : elements) {
+            maxStress = std::max(maxStress, element.getEleStress());
+        }
+
+        anaf::LOG::info("Solver completed");
+        anaf::LOG::info("Max nodal displacement magnitude: {}", maxDisp);
+        anaf::LOG::info("Max element stress: {}", maxStress);
     }
     
 } // namespace FEM::TRUSS end

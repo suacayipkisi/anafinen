@@ -93,11 +93,7 @@ namespace anaf::GUI {
                         {
                             std::lock_guard lock(bridge.dataMutex);
                             bridge.trussNodes.assign(preview.getNodes().begin(), preview.getNodes().end());
-                            bridge.trussElements.clear();
-                            for (const auto& element : preview.getElements()) {
-                                const auto& nodes = element.getEleNodes();
-                                bridge.trussElements.emplace_back(std::array<std::uint32_t, 2>{nodes[0], nodes[1]});
-                            }
+                            bridge.trussElements.assign(preview.getElements().begin(), preview.getElements().end());
                             for (auto& node : bridge.trussNodes) {
                                 std::array<bool, 3> movable{true, true, true};
                                 const auto it = bridge.fixedDOFsByNode.find(node.getNodeID());
@@ -354,11 +350,8 @@ namespace anaf::GUI {
                     {
                         std::lock_guard lock(bridge.dataMutex);
                         bridge.trussNodes.assign(solver.getNodes().begin(), solver.getNodes().end());
-                        bridge.trussElements.clear();
-                        for (const auto& element : solver.getElements()) {
-                            const auto& nodes = element.getEleNodes();
-                            bridge.trussElements.emplace_back(std::array<std::uint32_t, 2>{nodes[0], nodes[1]});
-                        }
+                        bridge.trussElements.assign(solver.getElements().begin(), solver.getElements().end());
+                        
                         bridge.hasTrussPreview = true;
                         bridge.selectedNodeId = bridge.trussNodes.empty() ? std::numeric_limits<std::uint32_t>::max() : 0u;
                     }

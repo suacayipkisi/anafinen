@@ -27,16 +27,11 @@
 #include <string>
 #include <vector>
 
-#ifdef __linux__
-#include <unistd.h>
-#include <linux/limits.h>
-#endif
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 #include "../log/anaf_info.hpp"
+
+#include "../directory/getExecutableDirectory.hpp"
 
 #include "guiMaterials/framebuffer.hpp"
 #include "guiMaterials/imGuiLayer.hpp"
@@ -53,27 +48,10 @@
 namespace anaf::GUI {
 
     namespace {
-        std::filesystem::path getExecutableDirectory() {
-#ifdef __linux__
-            char result[PATH_MAX];
-            const ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
-            if (count != -1) {
-                return std::filesystem::path(std::string(result, count)).parent_path();
-            }
-#elif defined(_WIN32)
-            char result[MAX_PATH];
-            const DWORD count = GetModuleFileNameA(nullptr, result, MAX_PATH);
-            if (count != 0) {
-                return std::filesystem::path(std::string(result, count)).parent_path();
-            }
-#endif
-            return std::filesystem::current_path();
-        }
-
         void setWindowIcon(GLFWwindow* window) {
             const std::filesystem::path icon_subpath = std::filesystem::path("icons") / "anafinen.png";
             const std::vector<std::filesystem::path> candidates = {
-                getExecutableDirectory() / "assets" / icon_subpath,
+                anaf::DIRECTORY::getExecutableDirectory() / "assets" / icon_subpath,
                 std::filesystem::path("assets") / icon_subpath,
 #ifdef MAIN_DIR
                 std::filesystem::path(MAIN_DIR) / "assets" / icon_subpath,
