@@ -56,7 +56,7 @@ namespace FEM::TRUSS {
             }
         }
 
-        anaf::LOG::info("All nodes for simple truss created. NodeNum: ", totalNodes);
+        anaf::LOG::info("All nodes for simple truss created. NodeNum: {}", totalNodes);
 
         // determine elements
         const std::size_t xEdgesCount = static_cast<std::size_t>(nx) * ny_nodes * nz_nodes;
@@ -169,7 +169,7 @@ namespace FEM::TRUSS {
             }
         }
 
-        anaf::LOG::info("All elements for simple truss created. ElementNum: ", totalElements);
+        anaf::LOG::info("All elements for simple truss created. ElementNum: {}", totalElements);
 
     } // end: setTruss()
 
