@@ -44,7 +44,6 @@ namespace anaf::GUI {
         ImGui::Begin("Truss(1D) Analysis Set", &isOpen);
 
         ImGui::Text("Truss Parameters");
-        ImGui::Text("Toggle 'ctrl' to show nodes");
         ImGui::Separator();
 
         if (bridge.fixedDOFsByNode.empty() || bridge.appliedForces.empty()) {
@@ -75,6 +74,8 @@ namespace anaf::GUI {
             if (m_type == 0u) {
                 m_type = 1u;
             }
+
+            anaf::LOG::core("Press 'ctrl' to toggle node visibility");
 
             bridge.m_isGeneratingPreview = true;
             bridge.workerThread = std::jthread(
