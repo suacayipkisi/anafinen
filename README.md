@@ -12,7 +12,7 @@ Pre-compiled binary releases for Windows and Linux are available under [GitHub R
 
 | Platform | File | Quick Run / Install Command |
 | --- | --- | --- |
-| **Windows** (via Winget) | *Package Manager* | `winget install suacayipkisi.anafinen` |
+| **Windows** (via Winget) | *Package Manager* (moderator approve waiting) | `winget install suacayipkisi.anafinen` |
 | **Windows** (10/11 x64 Portable) | [`anafinen-0.1.0-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.0-alpha/anafinen-0.1.0-windows-AMD64-alpha.zip) | Extract `.zip` and **run as administrator** `bin/anafinen.exe` |
 | **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.1.0-1.x86_64.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.0-alpha/anafinen-0.1.0-1.x86_64.rpm) | `sudo dnf install ./anafinen-0.1.0-1.x86_64.rpm` |
 
