@@ -45,6 +45,10 @@ namespace anaf::GUI {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(origin, rectMax, IM_COL32(20, 23, 30, 255));
 
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftCtrl) || ImGui::IsKeyPressed(ImGuiKey_RightCtrl)) {
+            m_showNodes = !m_showNodes;
+        }
+
         if (m_viewportHovered_ && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) {
             m_draggingView = true;
             m_lastMousePos = ImGui::GetMousePos();
@@ -246,6 +250,10 @@ namespace anaf::GUI {
             }
 
             for (const auto& pair : projected) {
+                if (!m_showNodes) {
+                    continue;
+                }
+
                 const bool isSelected = bridge.selectedNodeId == pair.first;
                 const bool isFixed = bridge.fixedDOFsByNode.find(pair.first) != bridge.fixedDOFsByNode.end() &&
                     (bridge.fixedDOFsByNode[pair.first][0] || bridge.fixedDOFsByNode[pair.first][1] || bridge.fixedDOFsByNode[pair.first][2]);

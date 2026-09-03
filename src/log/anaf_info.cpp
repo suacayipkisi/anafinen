@@ -48,7 +48,7 @@ namespace anaf::LOG {
                 tag = "[WARN]";
                 tagColor = COLOR_YELLOW;
                 break;
-            case Level::ERROR:
+            case Level::ERR:
                 tag = "[ERROR]";
                 tagColor = COLOR_RED;
                 break;

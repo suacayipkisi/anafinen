@@ -20,7 +20,21 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#include <png.h>
+
+#include <filesystem>
 #include <memory>
+#include <string>
+#include <vector>
+
+#ifdef __linux__
+#include <unistd.h>
+#include <linux/limits.h>
+#endif
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "../log/anaf_info.hpp"
 
@@ -37,6 +51,71 @@
 
 
 namespace anaf::GUI {
+
+    namespace {
+        std::filesystem::path getExecutableDirectory() {
+#ifdef __linux__
+            char result[PATH_MAX];
+            const ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+            if (count != -1) {
+                return std::filesystem::path(std::string(result, count)).parent_path();
+            }
+#elif defined(_WIN32)
+            char result[MAX_PATH];
+            const DWORD count = GetModuleFileNameA(nullptr, result, MAX_PATH);
+            if (count != 0) {
+                return std::filesystem::path(std::string(result, count)).parent_path();
+            }
+#endif
+            return std::filesystem::current_path();
+        }
+
+        void setWindowIcon(GLFWwindow* window) {
+            const std::filesystem::path icon_subpath = std::filesystem::path("icons") / "anafinen.png";
+            const std::vector<std::filesystem::path> candidates = {
+                getExecutableDirectory() / "assets" / icon_subpath,
+                std::filesystem::path("assets") / icon_subpath,
+#ifdef MAIN_DIR
+                std::filesystem::path(MAIN_DIR) / "assets" / icon_subpath,
+#endif
+                std::filesystem::path("/usr/share/anafinen/assets") / icon_subpath
+            };
+
+            std::filesystem::path icon_path;
+            for (const auto& candidate : candidates) {
+                if (std::filesystem::exists(candidate)) {
+                    icon_path = candidate;
+                    break;
+                }
+            }
+            if (icon_path.empty()) {
+                anaf::LOG::warn("[GUI] Application icon not found.");
+                return;
+            }
+
+            png_image image{};
+            image.version = PNG_IMAGE_VERSION;
+            if (!png_image_begin_read_from_file(&image, icon_path.string().c_str())) {
+                anaf::LOG::warn("[GUI] Failed to read application icon.");
+                return;
+            }
+            image.format = PNG_FORMAT_RGBA;
+            std::vector<png_byte> pixels(PNG_IMAGE_SIZE(image));
+            if (!png_image_finish_read(&image, nullptr, pixels.data(), 0, nullptr)) {
+                png_image_free(&image);
+                anaf::LOG::warn("[GUI] Failed to decode application icon.");
+                return;
+            }
+
+            GLFWimage glfw_icon{
+                static_cast<int>(image.width),
+                static_cast<int>(image.height),
+                pixels.data()
+            };
+            glfwSetWindowIcon(window, 1, &glfw_icon);
+            png_image_free(&image);
+        }
+    }
 
     void bindAnalysisFlow(UIPanels panels) {
         panels.dock->on_select_analyze_structure = [panels](AnalyzeStructureType type) {
@@ -99,7 +178,11 @@ namespace anaf::GUI {
 #ifdef __APPLE__
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
-
+#ifdef __linux__
+    glfwWindowHintString(GLFW_WAYLAND_APP_ID, "anafinen");
+    glfwWindowHintString(GLFW_X11_CLASS_NAME, "anafinen");
+    glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "anafinen");
+#endif
         GLFWwindow* window = glfwCreateWindow(1600, 900, "Anafinen", nullptr, nullptr);
 
         if (!window) {
@@ -110,6 +193,7 @@ namespace anaf::GUI {
 
         glfwMakeContextCurrent(window);
         glfwSwapInterval(1);
+        setWindowIcon(window);
         gladLoadGL((GLADloadfunc)glfwGetProcAddress);
 
         //core system initialization

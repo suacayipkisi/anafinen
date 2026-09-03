@@ -44,6 +44,7 @@ namespace anaf::GUI {
         ImGui::Begin("Truss(1D) Analysis Set", &isOpen);
 
         ImGui::Text("Truss Parameters");
+        ImGui::Text("Toggle 'ctrl' to show nodes");
         ImGui::Separator();
 
         if (bridge.fixedDOFsByNode.empty() || bridge.appliedForces.empty()) {
@@ -73,13 +74,6 @@ namespace anaf::GUI {
         else if (ImGui::Button("Generate Preview")) {
             if (m_type == 0u) {
                 m_type = 1u;
-            }
-
-            if (bridge.fixedDOFsByNode.empty()) {
-                bridge.fixedDOFsByNode[0] = {true, true, true};
-            }
-            if (bridge.appliedForces.empty()) {
-                bridge.appliedForces.emplace_back(1u, std::array<double, 3>{1000.0, 0.0, 0.0});
             }
 
             bridge.m_isGeneratingPreview = true;

@@ -37,6 +37,7 @@ namespace anaf::GUI{
         float m_targetY {0.0f};
         float m_targetZ {0.0f};
         bool m_draggingView {false};
+        bool m_showNodes {false};
         ImVec2 m_lastMousePos {0.0f, 0.0f};
     public:
         ViewportPanel(std::shared_ptr<Framebuffer> fbo) : m_fbo_(fbo) {}

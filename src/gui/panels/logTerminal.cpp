@@ -105,7 +105,7 @@ namespace anaf::GUI {
                 switch (log.level) {
                     case anaf::LOG::Level::INFO: color = ImVec4(0.4f, 0.7f, 1.0f, 1.0f); break;
                     case anaf::LOG::Level::WARN: color = ImVec4(1.0f, 0.8f, 0.2f, 1.0f); break;
-                    case anaf::LOG::Level::ERROR: color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); break;
+                    case anaf::LOG::Level::ERR: color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); break;
                     case anaf::LOG::Level::SUCCESS: color = ImVec4(0.3f, 1.0f, 0.3f, 1.0f); break;
                     case anaf::LOG::Level::CORE: color = ImVec4(0.0f, 0.9f, 0.9f, 1.0f); break;
                 }

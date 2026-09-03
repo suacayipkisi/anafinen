@@ -54,6 +54,19 @@ endif()
 find_package(Eigen3 REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(PNG REQUIRED)
+
+find_program(ANAFINEN_IMAGE_CONVERTER NAMES magick convert REQUIRED)
+set(ANAFINEN_GENERATED_ASSETS_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-assets")
+file(MAKE_DIRECTORY "${ANAFINEN_GENERATED_ASSETS_DIR}/icons")
+execute_process(
+    COMMAND "${ANAFINEN_IMAGE_CONVERTER}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
+            -resize 128x128 "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+    RESULT_VARIABLE ANAFINEN_ICON_CONVERSION_RESULT
+)
+if(NOT ANAFINEN_ICON_CONVERSION_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to convert the application SVG icon to PNG")
+endif()
 
 # gmsh detection
 if(WIN32)
@@ -297,6 +310,7 @@ target_link_libraries(anafinen PRIVATE
     ${GLAD_TARGET}
     ${GLFW_TARGET}
     OpenGL::GL
+    PNG::PNG
     project_warnings_and_optimizations
 )
 
@@ -308,6 +322,9 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:anafinen>/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+        "$<TARGET_FILE_DIR:anafinen>/assets/icons/anafinen.png"
 )
 
 # Copy Gmsh DLL for local Windows runs.
@@ -331,12 +348,18 @@ if(WIN32)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
         DESTINATION "${CMAKE_INSTALL_BINDIR}/assets"
     )
+    install(FILES "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+        DESTINATION "${CMAKE_INSTALL_BINDIR}/assets/icons"
+    )
     install(FILES "${GMSH_DLL}"
         DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
 else()
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets"
+    )
+    install(FILES "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets/icons"
     )
 endif()
 
@@ -346,6 +369,9 @@ if(UNIX AND NOT APPLE)
     )
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
+    )
+    install(FILES "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/128x128/apps
     )
 endif()
 

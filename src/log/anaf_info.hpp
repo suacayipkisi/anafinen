@@ -30,7 +30,7 @@ namespace anaf::LOG {
     enum class Level {
         INFO,
         WARN,
-        ERROR,
+        ERR,
         SUCCESS,
         CORE
     };
@@ -88,7 +88,7 @@ namespace anaf::LOG {
 
     template <typename... Args>
     void error(std::format_string<Args...> fmt, Args&&... args) {
-        write(Level::ERROR, std::format(fmt, std::forward<Args>(args)...));
+        write(Level::ERR, std::format(fmt, std::forward<Args>(args)...));
     }
 
     template <typename... Args>

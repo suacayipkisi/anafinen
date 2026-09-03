@@ -1,4 +1,5 @@
 build/
+build-win/
 _CPack_Packages/
 .cache/
 .test_data/

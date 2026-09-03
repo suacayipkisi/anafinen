@@ -23,6 +23,6 @@ if ($VcpkgRoot -ne "") {
 
 cmake @cmakeArgs
 cmake --build $BuildDir --config Release
-cpack --config "$BuildDir/CPackConfig.cmake" -G ZIP
+cpack --config "$BuildDir/CPackConfig.cmake" -G ZIP -B $BuildDir
 
-Write-Host "ZIP created successfully."
+Write-Host "ZIP created successfully in $BuildDir/."
