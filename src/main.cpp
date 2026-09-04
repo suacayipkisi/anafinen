@@ -46,7 +46,7 @@ extern "C" {
 }
 #endif
 
-int main() {
+int main(int argc, char* argv[]) {
     anaf::BRIDGE::Gui_Calc_Bridge& GUI_CALC_BRIDGE = anaf::BRIDGE::buildBridge();
 
     anaf::LOG::setCallback(
