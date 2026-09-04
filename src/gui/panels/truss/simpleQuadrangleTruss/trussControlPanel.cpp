@@ -104,6 +104,7 @@ namespace anaf::GUI {
                             }
                             bridge.hasTrussPreview = true;
                             bridge.selectedNodeId = bridge.trussNodes.empty() ? std::numeric_limits<std::uint32_t>::max() : 0u;
+                            bridge.dataVersion.fetch_add(1, std::memory_order_relaxed);
                         }
                     } catch (const std::exception&) {
                         std::lock_guard lock(bridge.dataMutex);
@@ -354,6 +355,7 @@ namespace anaf::GUI {
                         
                         bridge.hasTrussPreview = true;
                         bridge.selectedNodeId = bridge.trussNodes.empty() ? std::numeric_limits<std::uint32_t>::max() : 0u;
+                        bridge.dataVersion.fetch_add(1, std::memory_order_relaxed);
                     }
 
                     bridge.m_progress = 1.0f;
@@ -386,12 +388,14 @@ namespace anaf::GUI {
             // reset bridge data
             {
                 std::lock_guard lock(bridge.dataMutex);
+
                 bridge.trussNodes.clear();
                 bridge.trussElements.clear();
                 bridge.appliedForces.clear();
                 bridge.fixedDOFsByNode.clear();
                 bridge.hasTrussPreview = false;
                 bridge.selectedNodeId = std::numeric_limits<std::uint32_t>::max();
+                bridge.dataVersion.fetch_add(1, std::memory_order_relaxed);
             }
         }
         

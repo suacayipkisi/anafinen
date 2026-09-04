@@ -35,6 +35,7 @@ namespace anaf::BRIDGE {
         std::atomic<bool> m_isRunning{false};
         std::atomic<bool> m_isGeneratingPreview{false};
         std::atomic<float> m_progress{0.0f};
+        std::atomic<uint64_t> dataVersion{0};
         std::mutex dataMutex;
         std::jthread workerThread;
 

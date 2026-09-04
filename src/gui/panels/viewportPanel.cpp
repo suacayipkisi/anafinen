@@ -110,6 +110,7 @@ namespace anaf::GUI {
 
     void ViewportPanel::buildSceneBatches() {
         m_renderer_->clearLines();
+        
 
         // coordinate axis x-y-z
         m_renderer_->addLine(glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f));
@@ -119,48 +120,89 @@ namespace anaf::GUI {
         auto& bridge = BRIDGE::buildBridge();
         std::lock_guard lock(bridge.dataMutex);
 
-        if (!bridge.hasTrussPreview || bridge.trussNodes.empty()) return;
+        if (bridge.hasTrussPreview && !bridge.trussNodes.empty()) {
+            m_renderer_->reserve(6 + bridge.trussElements.size() * 2);
 
-        double maxStress = 0.0;
-        for (const auto& element : bridge.trussElements) {
-            maxStress = std::max(maxStress, element.getEleStress());
-        }
+            double maxStress = 0.0;
+            for (const auto& element : bridge.trussElements) {
+                maxStress = std::max(maxStress, std::abs(element.getEleStress()));
+            }
 
-        auto stressColor = [&](double val) -> glm::vec4 {
-            const double t = (maxStress > 0.0) ? std::clamp(val / maxStress, 0.0, 1.0) : 0.0;
-            return glm::vec4(
-                static_cast<float>(t),
-                static_cast<float>(1.0 - std::abs(t - 0.5) * 2.0),
-                static_cast<float>(1.0 - t),
-                1.0f
-            );
-        };
+            double maxDisp = 0.0;
+            for (const auto& node : bridge.trussNodes) {
+                const auto disp = node.getDisplacmenet();
+                maxDisp = std::max(maxDisp, std::sqrt(disp[0]*disp[0] + disp[1]*disp[1] + disp[2]*disp[2]));
+            }
 
-        std::unordered_map<std::uint32_t, glm::vec3> nodePosMap;
-        nodePosMap.reserve(bridge.trussNodes.size());
-        for (const auto& node : bridge.trussNodes) {
-            const auto& loc = node.getLocation();
-            nodePosMap[node.getNodeID()] = glm::vec3(loc[0], loc[1], loc[2]);
-        }
+            const double deformScale = (maxDisp > 1e-12) ? 2000.0 : 0.0;
 
-        // truss elements lines
-        for (size_t i = 0; i < bridge.trussElements.size(); ++i) {
-            const auto& element = bridge.trussElements[i];
-            const auto& nodeIDs = element.getEleNodes();
-            
-            auto itA = nodePosMap.find(nodeIDs[0]);
-            auto itB = nodePosMap.find(nodeIDs[1]);
-            if (itA != nodePosMap.end() && itB != nodePosMap.end()) {
-                glm::vec4 color = stressColor(element.getEleStress());
-                m_renderer_->addLine(itA->second, itB->second, color);
+            auto stressColor = [&](double val) -> glm::vec4 {
+                if (maxStress <= 1e-9) {
+                    return glm::vec4(0.4f, 0.6f, 0.85f, 1.0f);
+                }
+
+                // Mutlak gerilme ve karekök skalası ile düşük gerilmeleri de görünür kıl
+                const float t = static_cast<float>(std::sqrt(std::clamp(std::abs(val) / maxStress, 0.0, 1.0)));
+
+                float r = std::clamp(1.5f - std::abs(4.0f * t - 3.0f), 0.0f, 1.0f);
+                float g = std::clamp(1.5f - std::abs(4.0f * t - 2.0f), 0.0f, 1.0f);
+                float b = std::clamp(1.5f - std::abs(4.0f * t - 1.0f), 0.0f, 1.0f);
+
+                return glm::vec4(r, g, b, 1.0f);
+            };
+
+            uint32_t maxNodeId = 0;
+            for (const auto& node : bridge.trussNodes) {
+                maxNodeId = std::max(maxNodeId, node.getNodeID());
+            }
+
+            std::vector<glm::vec3> nodeLookup(maxNodeId + 1, glm::vec3(0.0f));
+            for (const auto& node : bridge.trussNodes) {
+                const auto& loc = node.getLocation();
+                const auto disp = node.getDisplacmenet();
+
+                nodeLookup[node.getNodeID()] = glm::vec3(
+                    loc[0] + disp[0] * deformScale,
+                    loc[1] + disp[1] * deformScale,
+                    loc[2] + disp[2] * deformScale
+                );
+            }
+
+            // Çizgileri ekle
+            for (const auto& element : bridge.trussElements) {
+                const auto& nodeIDs = element.getEleNodes();
+                if (nodeIDs[0] <= maxNodeId && nodeIDs[1] <= maxNodeId) {
+                    glm::vec4 color = stressColor(element.getEleStress());
+                    m_renderer_->addLine(nodeLookup[nodeIDs[0]], nodeLookup[nodeIDs[1]], color);
+                }
             }
         }
+
+        m_renderer_->uploadCurrentBuffer();
     }
 
     void ViewportPanel::renderSceneOpenGL() {
         if (!m_fbo_) return;
 
-        buildSceneBatches();
+        auto& bridge = BRIDGE::buildBridge();
+        
+        // if data size changed or new calculation finished, load into gpu
+        bool needsUpload = false;
+        const uint64_t currentVersion = bridge.dataVersion.load(std::memory_order_relaxed);
+
+        //std::lock_guard lock(bridge.dataMutex);
+        if (m_meshNeedsUpdate || currentVersion != m_lastRenderedVersion || 
+        bridge.trussElements.size() != m_lastElementCount || bridge.trussNodes.size() != m_lastNodeCount) {
+            needsUpload = true;
+            m_meshNeedsUpdate = false;
+            m_lastRenderedVersion = currentVersion;
+            m_lastElementCount = bridge.trussElements.size();
+            m_lastNodeCount = bridge.trussNodes.size();
+        }
+
+        if (needsUpload) {
+            buildSceneBatches(); // run once when data changed
+        }
 
         m_fbo_->bind();
         glEnable(GL_DEPTH_TEST);
@@ -168,7 +210,7 @@ namespace anaf::GUI {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         const glm::mat4 mvp = getViewProjectionMatrix();
-        m_renderer_->flush(mvp);
+        m_renderer_->render(mvp); // renders data in GPU that currently exist
 
         m_fbo_->unbind();
     }
@@ -177,23 +219,20 @@ namespace anaf::GUI {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         auto& bridge = BRIDGE::buildBridge();
 
-        // change 3D coordinates to 2D screen cooordinates
+        // 3D world coordinates to 2D screen coordinates projection
         auto projectWorldToScreen = [&](const glm::vec3& worldPos) -> std::pair<ImVec2, bool> {
             glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
             if (clipPos.w <= 0.1f) {
-                return {ImVec2(0.0f, 0.0f), false}; // dont draw point behind camera
+                return {ImVec2(0.0f, 0.0f), false};
             }
 
-            // normalized device coordinates [-1, 1]
             glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
-
-            // screen pixels
             float screenX = origin.x + (ndc.x * 0.5f + 0.5f) * size.x;
-            float screenY = origin.y + (-ndc.y * 0.5f + 0.5f) * size.y; // Y ekseni dikeyde ters
+            float screenY = origin.y + (-ndc.y * 0.5f + 0.5f) * size.y;
             return {ImVec2(screenX, screenY), true};
         };
 
-        // axis names
+        // coordinate axis labels (X, Y, Z)
         auto [axisX, visX] = projectWorldToScreen(glm::vec3(2.1f, 0.0f, 0.0f));
         auto [axisY, visY] = projectWorldToScreen(glm::vec3(0.0f, 2.1f, 0.0f));
         auto [axisZ, visZ] = projectWorldToScreen(glm::vec3(0.0f, 0.0f, 2.1f));
@@ -202,94 +241,133 @@ namespace anaf::GUI {
         if (visY) drawList->AddText(axisY, IM_COL32(110, 255, 140, 255), "Y");
         if (visZ) drawList->AddText(axisZ, IM_COL32(110, 160, 255, 255), "Z");
 
-        std::lock_guard lock(bridge.dataMutex);
-        if (!bridge.hasTrussPreview || bridge.trussNodes.empty()) {
-            drawList->AddText(ImVec2(origin.x + 16.0f, origin.y + 16.0f), IM_COL32(180, 180, 180, 255), "No truss preview generated");
-            return;
-        }
+        constexpr size_t MAX_DRAWABLE_NODES = 5000;
 
-        // max displacement
-        double maxDisp = 0.0;
-        for (const auto& node : bridge.trussNodes) {
-            const auto disp = node.getDisplacmenet();
-            maxDisp = std::max(maxDisp, std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]));
-        }
-
-        auto displacementColor = [&](double magnitude) -> ImU32 {
-            const double t = (maxDisp > 0.0) ? std::clamp(magnitude / maxDisp, 0.0, 1.0) : 0.0;
-            const int r = static_cast<int>(255.0 * t);
-            const int g = static_cast<int>(180.0 * (1.0 - std::abs(t - 0.5) * 2.0));
-            const int b = static_cast<int>(255.0 * (1.0 - t));
-            return IM_COL32(std::clamp(r, 0, 255), std::clamp(g, 0, 255), std::clamp(b, 0, 255), 255);
-        };
-
-        struct ProjectedNodeCache {
-            ImVec2 screenPos;
-            bool visible;
-            ImU32 color;
-        };
-
-        std::unordered_map<std::uint32_t, ProjectedNodeCache> projectedNodes;
-        projectedNodes.reserve(bridge.trussNodes.size());
-
-        for (const auto& node : bridge.trussNodes) {
-            const auto& loc = node.getLocation();
-            const auto disp = node.getDisplacmenet();
-            const double mag = std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]);
-
-            auto [sPos, visible] = projectWorldToScreen(glm::vec3(loc[0], loc[1], loc[2]));
-            projectedNodes[node.getNodeID()] = {sPos, visible, displacementColor(mag)};
-        }
-
-        // draw nodes
+        // nodes, constraints, forces and picking layer
         if (m_showNodes) {
-            for (const auto& node : bridge.trussNodes) {
-                const uint32_t id = node.getNodeID();
-                const auto& proj = projectedNodes[id];
-                if (!proj.visible) continue;
+            std::lock_guard lock(bridge.dataMutex);
 
-                const bool isSelected = (bridge.selectedNodeId == id);
-                bool isFixed = false;
-                auto fixIt = bridge.fixedDOFsByNode.find(id);
-                if (fixIt != bridge.fixedDOFsByNode.end()) {
-                    isFixed = fixIt->second[0] || fixIt->second[1] || fixIt->second[2];
-                }
-
-                const ImVec2 center = proj.screenPos;
-                const float radius = 5.5f;
-
-                // circle
-                drawList->AddCircleFilled(center, radius, proj.color);
-                drawList->AddCircle(center, radius + 1.5f, IM_COL32(20, 20, 20, 255), 0, 1.5f);
-
-                // fixed nodes
-                if (isFixed) {
-                    drawList->AddRect(
-                        ImVec2(center.x - radius - 4.0f, center.y - radius - 4.0f),
-                        ImVec2(center.x + radius + 4.0f, center.y + radius + 4.0f),
-                        IM_COL32(255, 100, 100, 255),
-                        0.0f, 0, 2.0f
+            if (bridge.hasTrussPreview && !bridge.trussNodes.empty()) {
+                if (bridge.trussNodes.size() > MAX_DRAWABLE_NODES && m_cameraDistance > 35.0f) {
+                    drawList->AddText(
+                        ImVec2(origin.x + 16.0f, origin.y + 40.0f),
+                        IM_COL32(255, 120, 80, 255),
+                        "Dense mesh detected! Zoom in closer to view individual nodes."
                     );
-                }
+                } else {
+                    double maxDisp = 0.0;
+                    for (const auto& node : bridge.trussNodes) {
+                        const auto disp = node.getDisplacmenet();
+                        maxDisp = std::max(maxDisp, std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]));
+                    }
 
-                // choosen node
-                if (isSelected) {
-                    drawList->AddCircle(center, radius + 6.0f, IM_COL32(255, 180, 80, 255), 0, 2.0f);
-                }
+                    auto displacementColor = [&](double magnitude) -> ImU32 {
+                        const double t = (maxDisp > 0.0) ? std::clamp(magnitude / maxDisp, 0.0, 1.0) : 0.0;
+                        const int r = static_cast<int>(255.0 * t);
+                        const int g = static_cast<int>(180.0 * (1.0 - std::abs(t - 0.5) * 2.0));
+                        const int b = static_cast<int>(255.0 * (1.0 - t));
+                        return IM_COL32(std::clamp(r, 0, 255), std::clamp(g, 0, 255), std::clamp(b, 0, 255), 255);
+                    };
 
-                // node ID names
-                drawList->AddText(ImVec2(center.x + 8.0f, center.y - 8.0f), IM_COL32(230, 230, 230, 255), std::to_string(id).c_str());
+                    const double deformScale = (maxDisp > 1e-12) ? 2000.0 : 0.0;
+
+                    std::vector<std::pair<std::uint32_t, ImVec2>> candidateNodesForPicking;
+                    candidateNodesForPicking.reserve(std::min(bridge.trussNodes.size(), MAX_DRAWABLE_NODES));
+
+                    size_t renderedNodeCount = 0;
+
+                    for (const auto& node : bridge.trussNodes) {
+                        const auto& loc = node.getLocation();
+                        const auto disp = node.getDisplacmenet();
+                        const double mag = std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]);
+
+                        glm::vec3 deformedPos(
+                            loc[0] + disp[0] * deformScale,
+                            loc[1] + disp[1] * deformScale,
+                            loc[2] + disp[2] * deformScale
+                        );
+                        auto [sPos, visible] = projectWorldToScreen(deformedPos);
+                        if (!visible) continue;
+
+                        // screen-space Culling: Discard nodes outside the viewport boundaries
+                        if (sPos.x < origin.x - 10.0f || sPos.x > origin.x + size.x + 10.0f ||
+                            sPos.y < origin.y - 10.0f || sPos.y > origin.y + size.y + 10.0f) {
+                            continue;
+                        }
+
+                        const uint32_t id = node.getNodeID();
+                        const bool isSelected = (bridge.selectedNodeId == id);
+
+                        bool isFixed = false;
+                        auto fixIt = bridge.fixedDOFsByNode.find(id);
+                        if (fixIt != bridge.fixedDOFsByNode.end()) {
+                            isFixed = fixIt->second[0] || fixIt->second[1] || fixIt->second[2];
+                        }
+
+                        // Protect ImDrawList buffer overflow
+                        if (++renderedNodeCount > MAX_DRAWABLE_NODES && !isSelected && !isFixed) {
+                            continue;
+                        }
+
+                        candidateNodesForPicking.emplace_back(id, sPos);
+
+                        const float radius = 5.0f;
+
+                        drawList->AddCircleFilled(sPos, radius, displacementColor(mag));
+                        drawList->AddCircle(sPos, radius + 1.5f, IM_COL32(20, 20, 20, 255), 0, 1.5f);
+
+                        if (isFixed) {
+                            drawList->AddRect(
+                                ImVec2(sPos.x - radius - 3.0f, sPos.y - radius - 3.0f),
+                                ImVec2(sPos.x + radius + 3.0f, sPos.y + radius + 3.0f),
+                                IM_COL32(255, 100, 100, 255), 0.0f, 0, 2.0f
+                            );
+                        }
+
+                        if (isSelected) {
+                            drawList->AddCircle(sPos, radius + 5.0f, IM_COL32(255, 180, 80, 255), 0, 2.0f);
+                        }
+
+                        // Level of Detail: Draw text only when zoomed in close or selected
+                        if (m_cameraDistance < 15.0f || isSelected) {
+                            drawList->AddText(ImVec2(sPos.x + 7.0f, sPos.y - 7.0f), IM_COL32(230, 230, 230, 255), std::to_string(id).c_str());
+                        }
+                    }
+
+                    // Left click node picking
+                    if (m_viewportHovered_ && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                        const ImVec2 mousePos = ImGui::GetMousePos();
+                        std::uint32_t nearestNode = bridge.selectedNodeId;
+                        float nearestDistSq = 144.0f; // 12px tolerance squared
+
+                        for (const auto& [nodeId, sPos] : candidateNodesForPicking) {
+                            const float dx = mousePos.x - sPos.x;
+                            const float dy = mousePos.y - sPos.y;
+                            const float dSq = dx * dx + dy * dy;
+                            if (dSq < nearestDistSq) {
+                                nearestDistSq = dSq;
+                                nearestNode = nodeId;
+                            }
+                        }
+                        bridge.selectedNodeId = nearestNode;
+                    }
+                }
             }
         }
 
-        // applied forve arrow
+        // Applied Force Arrows
         constexpr double arrowWorldLength = 1.5;
         constexpr float arrowHeadSize = 8.0f;
         const ImU32 forceArrowColor = IM_COL32(255, 60, 60, 255);
 
         for (const auto& force : bridge.appliedForces) {
-            const auto nodeIt = projectedNodes.find(force.getApliedNode());
-            if (nodeIt == projectedNodes.end() || !nodeIt->second.visible) continue;
+            const uint32_t targetNodeId = force.getApliedNode();
+            
+            // Find the node corresponding to this applied force
+            const auto actualNodeIt = std::find_if(bridge.trussNodes.begin(), bridge.trussNodes.end(), [&](const auto& n) {
+                return n.getNodeID() == targetNodeId;
+            });
+            if (actualNodeIt == bridge.trussNodes.end()) continue;
 
             const auto forceVec = force.getForce();
             const double fMag = std::sqrt(forceVec[0] * forceVec[0] + forceVec[1] * forceVec[1] + forceVec[2] * forceVec[2]);
@@ -299,23 +377,30 @@ namespace anaf::GUI {
             const double dirY = forceVec[1] / fMag;
             const double dirZ = forceVec[2] / fMag;
 
-            const auto actualNodeIt = std::find_if(bridge.trussNodes.begin(), bridge.trussNodes.end(), [&](const auto& n) {
-                return n.getNodeID() == force.getApliedNode();
-            });
-            if (actualNodeIt == bridge.trussNodes.end()) continue;
-
             const auto& loc = actualNodeIt->getLocation();
-            const ImVec2 baseScreen = nodeIt->second.screenPos;
+            const auto disp = actualNodeIt->getDisplacmenet();
+            constexpr double deformScale = 2000.0;
+
+            const glm::vec3 deformedLoc(
+                loc[0] + disp[0] * deformScale,
+                loc[1] + disp[1] * deformScale,
+                loc[2] + disp[2] * deformScale
+            );
+
+            auto [baseScreen, baseVis] = projectWorldToScreen(deformedLoc);
             auto [tipScreen, tipVis] = projectWorldToScreen(glm::vec3(
-                loc[0] + dirX * arrowWorldLength,
-                loc[1] + dirY * arrowWorldLength,
-                loc[2] + dirZ * arrowWorldLength
+                deformedLoc.x + dirX * arrowWorldLength,
+                deformedLoc.y + dirY * arrowWorldLength,
+                deformedLoc.z + dirZ * arrowWorldLength
             ));
 
-            if (!tipVis) continue;
+            // Do not draw if both ends are behind the camera
+            if (!baseVis && !tipVis) continue;
 
+            // Arrow body
             drawList->AddLine(baseScreen, tipScreen, forceArrowColor, 3.0f);
 
+            // Arrow wings
             const float sDx = tipScreen.x - baseScreen.x;
             const float sDy = tipScreen.y - baseScreen.y;
             const float sLen = std::sqrt(sDx * sDx + sDy * sDy);
@@ -323,6 +408,7 @@ namespace anaf::GUI {
             if (sLen > 1.0f) {
                 const float uX = sDx / sLen;
                 const float uY = sDy / sLen;
+
                 const float perpX = -uY;
                 const float perpY = uX;
 
@@ -340,32 +426,141 @@ namespace anaf::GUI {
             }
         }
 
-        // picking node
-        if (m_viewportHovered_ && m_showNodes && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-            const ImVec2 mousePos = ImGui::GetMousePos();
-            std::uint32_t nearestNode = bridge.selectedNodeId;
-            float nearestDistanceSq = 144.0f; // 12 pixel choose tolerence (12^2)
-
-            for (const auto& [nodeId, projData] : projectedNodes) {
-                if (!projData.visible) continue;
-                const float dx = mousePos.x - projData.screenPos.x;
-                const float dy = mousePos.y - projData.screenPos.y;
-                const float distSq = dx * dx + dy * dy;
-
-                if (distSq < nearestDistanceSq) {
-                    nearestDistanceSq = distSq;
-                    nearestNode = nodeId;
-                }
-            }
-
-            bridge.selectedNodeId = nearestNode;
-        }
-
+        // Top-left Info Label
         drawList->AddText(
             ImVec2(origin.x + 16.0f, origin.y + 16.0f),
             IM_COL32(180, 180, 180, 255),
-            m_showNodes ? "Nodes: Visible \n(Press CTRL to hide)" : "Nodes: Hidden \n(Press CTRL to show)"
+            m_showNodes ? "Nodes: Visible (Press CTRL to hide)" : "Nodes: Hidden (Press CTRL to show)"
         );
+
+        // Top-right FPS and Frame Time Monitor
+        {
+            const float fps = ImGui::GetIO().Framerate;
+            const float ms = 1000.0f / (fps > 0.0f ? fps : 1.0f);
+
+            char fpsBuffer[64];
+            std::snprintf(fpsBuffer, sizeof(fpsBuffer), "%.1f FPS (%.2f ms)", fps, ms);
+
+            const ImVec2 textSize = ImGui::CalcTextSize(fpsBuffer);
+            const ImVec2 textPos(origin.x + size.x - textSize.x - 16.0f, origin.y + 16.0f);
+
+            const ImVec2 bgMin(textPos.x - 6.0f, textPos.y - 4.0f);
+            const ImVec2 bgMax(textPos.x + textSize.x + 6.0f, textPos.y + textSize.y + 4.0f);
+            drawList->AddRectFilled(bgMin, bgMax, IM_COL32(15, 17, 22, 220), 4.0f);
+
+            ImU32 fpsColor = IM_COL32(100, 255, 120, 255);
+            if (fps < 30.0f) {
+                fpsColor = IM_COL32(255, 90, 90, 255);
+            } else if (fps < 55.0f) {
+                fpsColor = IM_COL32(255, 210, 80, 255);
+            }
+
+            drawList->AddText(textPos, fpsColor, fpsBuffer);
+        }
+
+        // COLORBAR LEGENDS (Left: Element Stress, Right: Node Disp)
+        if (bridge.hasTrussPreview && !bridge.trussNodes.empty()) {
+            constexpr float barWidth = 14.0f;
+            constexpr float barHeight = 180.0f;
+            constexpr int colorSteps = 30;
+
+            // Lambda: Jet Colormap Color Generator
+            auto getJetColor = [](float t) -> ImU32 {
+                float r = std::clamp(1.5f - std::abs(4.0f * t - 3.0f), 0.0f, 1.0f);
+                float g = std::clamp(1.5f - std::abs(4.0f * t - 2.0f), 0.0f, 1.0f);
+                float b = std::clamp(1.5f - std::abs(4.0f * t - 1.0f), 0.0f, 1.0f);
+                return IM_COL32(static_cast<int>(r * 255.0f), static_cast<int>(g * 255.0f), static_cast<int>(b * 255.0f), 255);
+            };
+
+            // left legend: element stress
+            {
+                double maxStress = 0.0;
+                for (const auto& el : bridge.trussElements) {
+                    maxStress = std::max(maxStress, std::abs(el.getEleStress()));
+                }
+
+                const float startX = origin.x + 20.0f;
+                const float startY = origin.y + size.y - barHeight - 25.05f;
+
+                // background box
+                drawList->AddRectFilled(
+                    ImVec2(startX - 8.0f, startY - 24.0f),
+                    ImVec2(startX + barWidth + 80.0f, startY + barHeight + 14.0f),
+                    IM_COL32(15, 17, 22, 220), 4.0f
+                );
+
+                // title
+                drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "Stress (Pa)");
+
+                // vertical Degrade stick
+                const float stepHeight = barHeight / static_cast<float>(colorSteps);
+                for (int i = 0; i < colorSteps; ++i) {
+                    const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
+                    const float tBottom = 1.0f - static_cast<float>(i + 1) / static_cast<float>(colorSteps);
+
+                    const ImVec2 pMin(startX, startY + i * stepHeight);
+                    const ImVec2 pMax(startX + barWidth, startY + (i + 1) * stepHeight);
+
+                    drawList->AddRectFilledMultiColor(pMin, pMax, getJetColor(tTop), getJetColor(tTop), getJetColor(tBottom), getJetColor(tBottom));
+                }
+                drawList->AddRect(ImVec2(startX, startY), ImVec2(startX + barWidth, startY + barHeight), IM_COL32(200, 200, 200, 180));
+
+                // scale text (max, average, min)
+                char txtMax[32], txtMid[32], txtMin[32];
+                std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxStress);
+                std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxStress * 0.5);
+                std::snprintf(txtMin, sizeof(txtMin), "%.2e", 0.0);
+
+                drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY - 2.0f), IM_COL32(230, 230, 230, 255), txtMax);
+                drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY + barHeight * 0.5f - 6.0f), IM_COL32(200, 200, 200, 255), txtMid);
+                drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY + barHeight - 10.0f), IM_COL32(230, 230, 230, 255), txtMin);
+            }
+
+            // right legend: node displacement
+            if (m_showNodes) {
+                double maxDisp = 0.0;
+                for (const auto& node : bridge.trussNodes) {
+                    const auto d = node.getDisplacmenet();
+                    maxDisp = std::max(maxDisp, std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]));
+                }
+
+                const float startX = origin.x + size.x - barWidth - 85.0f;
+                const float startY = origin.y + size.y - barHeight - 25.0f;
+
+                // background box
+                drawList->AddRectFilled(
+                    ImVec2(startX - 8.0f, startY - 24.0f),
+                    ImVec2(startX + barWidth + 80.0f, startY + barHeight + 14.0f),
+                    IM_COL32(15, 17, 22, 220), 4.0f
+                );
+
+                // title
+                drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "Disp (m)");
+
+                // vertical Degrade stick
+                const float stepHeight = barHeight / static_cast<float>(colorSteps);
+                for (int i = 0; i < colorSteps; ++i) {
+                    const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
+                    const float tBottom = 1.0f - static_cast<float>(i + 1) / static_cast<float>(colorSteps);
+
+                    const ImVec2 pMin(startX, startY + i * stepHeight);
+                    const ImVec2 pMax(startX + barWidth, startY + (i + 1) * stepHeight);
+
+                    drawList->AddRectFilledMultiColor(pMin, pMax, getJetColor(tTop), getJetColor(tTop), getJetColor(tBottom), getJetColor(tBottom));
+                }
+                drawList->AddRect(ImVec2(startX, startY), ImVec2(startX + barWidth, startY + barHeight), IM_COL32(200, 200, 200, 180));
+
+                // scale text
+                char txtMax[32], txtMid[32], txtMin[32];
+                std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxDisp);
+                std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxDisp * 0.5);
+                std::snprintf(txtMin, sizeof(txtMin), "%.2e", 0.0);
+
+                drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY - 2.0f), IM_COL32(230, 230, 230, 255), txtMax);
+                drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY + barHeight * 0.5f - 6.0f), IM_COL32(200, 200, 200, 255), txtMid);
+                drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY + barHeight - 10.0f), IM_COL32(230, 230, 230, 255), txtMin);
+            }
+        }
     }
 
     void ViewportPanel::onImGuiRender() {

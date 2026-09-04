@@ -44,6 +44,8 @@ namespace anaf::GUI {
 
         std::vector<Vertex3D> m_lineBuffer;
 
+        GLsizei m_vertexCount {0};
+
         void compileShaders () {
             const char* vertexShaderSource = R"(
                 #version 460 core
@@ -154,6 +156,49 @@ namespace anaf::GUI {
 
             glBindVertexArray(0);
             glUseProgram(0);
+        }
+
+        void uploadMesh(const std::vector<Vertex3D>& vertices) {
+            m_vertexCount = static_cast<GLsizei>(vertices.size());
+            if (m_vertexCount == 0) return;
+
+            glBindVertexArray(m_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+            
+            // GL_STATIC_DRAW ile VRAM'e kalici yazilir, her kare RAM'den veri tasinmaz
+            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex3D), vertices.data(), GL_STATIC_DRAW);
+            
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
+        }
+
+        void render(const glm::mat4& mvp) {
+            if (m_vertexCount == 0) return;
+
+            glUseProgram(m_program);
+            glUniformMatrix4fv(m_mvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
+
+            glBindVertexArray(m_vao);
+            glLineWidth(1.5f);
+            glDrawArrays(GL_LINES, 0, m_vertexCount);
+
+            glBindVertexArray(0);
+            glUseProgram(0);
+        }
+
+        void uploadCurrentBuffer() {
+            m_vertexCount = static_cast<GLsizei>(m_lineBuffer.size());
+            if (m_vertexCount == 0) return;
+
+            glBindVertexArray(m_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+            glBufferData(GL_ARRAY_BUFFER, m_lineBuffer.size() * sizeof(Vertex3D), m_lineBuffer.data(), GL_STATIC_DRAW);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
+        }
+
+        void reserve(size_t vertexCount) {
+            m_lineBuffer.reserve(vertexCount);
         }
 
     };
