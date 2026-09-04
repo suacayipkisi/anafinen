@@ -102,7 +102,7 @@ namespace anaf::GUI {
 
             // 1. Split Left (Full height)
             ImGuiID dock_left_id = ImGui::DockBuilderSplitNode(
-                dock_main_id, ImGuiDir_Left, 0.22f, nullptr, &dock_main_id);
+                dock_main_id, ImGuiDir_Left, 0.18f, nullptr, &dock_main_id);
 
             // 2. Split Right (Full height)
             ImGuiID dock_right_id = ImGui::DockBuilderSplitNode(
