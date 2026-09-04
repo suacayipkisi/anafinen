@@ -490,7 +490,7 @@ namespace anaf::GUI {
                 );
 
                 // title
-                drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "Stress (Pa)");
+                drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "Stress (MPa)");
 
                 // vertical Degrade stick
                 const float stepHeight = barHeight / static_cast<float>(colorSteps);
@@ -507,8 +507,8 @@ namespace anaf::GUI {
 
                 // scale text (max, average, min)
                 char txtMax[32], txtMid[32], txtMin[32];
-                std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxStress);
-                std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxStress * 0.5);
+                std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxStress/1000.0);
+                std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxStress * 0.5 /1000.0);
                 std::snprintf(txtMin, sizeof(txtMin), "%.2e", 0.0);
 
                 drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY - 2.0f), IM_COL32(230, 230, 230, 255), txtMax);
@@ -535,7 +535,7 @@ namespace anaf::GUI {
                 );
 
                 // title
-                drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "Disp (m)");
+                drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "Disp (mm)");
 
                 // vertical Degrade stick
                 const float stepHeight = barHeight / static_cast<float>(colorSteps);
@@ -552,8 +552,8 @@ namespace anaf::GUI {
 
                 // scale text
                 char txtMax[32], txtMid[32], txtMin[32];
-                std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxDisp);
-                std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxDisp * 0.5);
+                std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxDisp * 1000);
+                std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxDisp * 0.5 * 1000);
                 std::snprintf(txtMin, sizeof(txtMin), "%.2e", 0.0);
 
                 drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY - 2.0f), IM_COL32(230, 230, 230, 255), txtMax);

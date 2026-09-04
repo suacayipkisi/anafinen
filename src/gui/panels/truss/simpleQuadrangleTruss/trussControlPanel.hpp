@@ -29,13 +29,13 @@ namespace anaf::GUI {
 
     class TrussControlPanel : public IPanel {
     private:
-        std::uint32_t m_cubeNumX {5};
+        std::uint32_t m_cubeNumX {10};
         std::uint32_t m_cubeNumY {1};
-        std::uint32_t m_cubeNumZ {1};
+        std::uint32_t m_cubeNumZ {10};
         std::uint32_t m_type{1};
         double m_cubeEdgeLength{1.0};
         double m_crossSectionalArea{80.0};
-        std::uint32_t m_forceNodeId{5};
+        std::uint32_t m_forceNodeId{126};
         std::array<double, 3> m_forceVector{0.0, 0.0, 0.0};
         std::vector<FEM::TRUSS::ForceApplied> m_appliedForces;
     public:

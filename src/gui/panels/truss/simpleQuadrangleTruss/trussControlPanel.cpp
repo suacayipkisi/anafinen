@@ -32,8 +32,11 @@ namespace anaf::GUI {
         void ensureDemoTrussCase(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t forceNodeId) {
             bridge.fixedDOFsByNode.clear();
             bridge.fixedDOFsByNode[0u] = {true, true, true};
+            bridge.fixedDOFsByNode[10u] = {true, true, true};
+            bridge.fixedDOFsByNode[220u] = {true, true, true};
+            bridge.fixedDOFsByNode[230u] = {true, true, true};
             bridge.appliedForces.clear();
-            bridge.appliedForces.emplace_back(forceNodeId, std::array<double, 3>{1000.0, 0.0, 0.0});
+            bridge.appliedForces.emplace_back(forceNodeId, std::array<double, 3>{0.0, 10000.0, 0.0});
             bridge.selectedNodeId = forceNodeId;
         }
     }
