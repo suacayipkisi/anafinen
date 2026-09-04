@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20...3.31)
-project(anafinen VERSION 0.1.0 LANGUAGES C CXX)
+project(anafinen VERSION 0.1.1 LANGUAGES C CXX)
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT IPO_SUPPORTED OUTPUT IPO_ERROR)

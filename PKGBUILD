@@ -1,6 +1,6 @@
 # Maintainer: Ufuk Deniz Konuk <konuki8523@gmail.com>
 pkgname=anafinen
-pkgver=0.1.0_alpha
+pkgver=0.1.1_alpha
 pkgrel=1
 pkgdesc="3D FEM Analysis Engine"
 arch=('x86_64')
