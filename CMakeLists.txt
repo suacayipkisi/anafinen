@@ -1,14 +1,8 @@
 cmake_minimum_required(VERSION 3.20...3.31)
 project(anafinen VERSION 0.1.1 LANGUAGES C CXX)
 
-include(CheckIPOSupported)
-check_ipo_supported(RESULT IPO_SUPPORTED OUTPUT IPO_ERROR)
-if(IPO_SUPPORTED)
-    message(STATUS "IPO / LTO enabled for Release builds.")
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
-else()
-    message(WARNING "IPO / LTO not supported: ${IPO_ERROR}")
-endif()
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE FALSE)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

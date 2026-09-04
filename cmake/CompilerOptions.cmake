@@ -25,7 +25,7 @@ else()
         $<$<CONFIG:Release>:-fno-finite-math-only> 
     )
     if(ANAFINEN_NATIVE_OPTIMIZATIONS)
-        target_compile_options(project_warnings_and_optimizations INTERFACE -march=native)
+        target_compile_options(project_warnings_and_optimizations INTERFACE -march=x86*64)
     endif()
     target_link_options(project_warnings_and_optimizations INTERFACE
         $<$<CONFIG:Release>:-O3>

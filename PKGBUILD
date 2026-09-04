@@ -8,18 +8,19 @@ url="https://github.com/suacayipkisi/anafinen"
 license=('GPL-3.0-or-later')
 depends=('glibc' 'gcc-libs' 'eigen' 'spectra' 'glfw' 'mesa' 'gmsh' 'openmp')
 makedepends=('cmake' 'ninja' 'git' 'eigen' 'spectra' 'glfw' 'mesa' 'glm' 'gmsh' 'openmp')
+options=('!lto')
 source=()
 
 build() {
-  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    git submodule update --init --recursive
-  fi
-  cmake -B build -S "$startdir" -G Ninja \
+  cd "$startdir"
+  cmake -B build-pkg -S . -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr
-  cmake --build build
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
+    -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=bfd -fno-lto"
+  cmake --build build-pkg
 }
 
 package() {
-  DESTDIR="$pkgdir" cmake --install build
+  DESTDIR="$pkgdir" cmake --install "$startdir/build-pkg"
 }
