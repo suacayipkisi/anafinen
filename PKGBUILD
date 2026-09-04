@@ -7,7 +7,7 @@ arch=('x86_64')
 url="https://github.com/suacayipkisi/anafinen"
 license=('GPL-3.0-or-later')
 depends=('glibc' 'gcc-libs' 'eigen' 'spectra' 'glfw' 'mesa' 'gmsh' 'openmp')
-makedepends=('cmake' 'ninja' 'git' 'eigen' 'spectra' 'glfw' 'mesa' 'gmsh' 'openmp')
+makedepends=('cmake' 'ninja' 'git' 'eigen' 'spectra' 'glfw' 'mesa' 'glm' 'gmsh' 'openmp')
 source=()
 
 build() {
