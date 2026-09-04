@@ -1,5 +1,6 @@
 build/
 build-win/
+build-win64/
 build-pkg/
 pkg/
 _CPack_Packages/

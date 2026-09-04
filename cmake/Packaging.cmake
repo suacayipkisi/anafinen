@@ -14,6 +14,16 @@ if(WIN32)
     install(FILES "${GMSH_DLL}"
         DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
+    
+    if(CMAKE_CROSSCOMPILING)
+        file(GLOB MINGW_EXTRA_DLLS
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libgomp-*.dll"
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libwinpthread-*.dll"
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libpng*.dll"
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/zlib*.dll"
+        )
+        install(FILES ${MINGW_EXTRA_DLLS} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
 else()
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets"

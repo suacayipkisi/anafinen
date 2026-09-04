@@ -25,7 +25,7 @@ else()
         $<$<CONFIG:Release>:-fno-finite-math-only> 
     )
     if(ANAFINEN_NATIVE_OPTIMIZATIONS)
-        target_compile_options(project_warnings_and_optimizations INTERFACE -march=x86*64)
+        target_compile_options(project_warnings_and_optimizations INTERFACE -march=x86-64)
     endif()
     target_link_options(project_warnings_and_optimizations INTERFACE
         $<$<CONFIG:Release>:-O3>
@@ -38,7 +38,7 @@ if(CCACHE_PROGRAM)
     set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
 
-if(UNIX AND NOT APPLE AND NOT MSVC)
+if(UNIX AND NOT APPLE AND NOT MSVC AND NOT WIN32) 
     find_program(MOLD_PATH mold)
     find_program(LLD_PATH ld.lld)
     if(MOLD_PATH)

@@ -19,8 +19,19 @@ if(EXISTS "${EXTERNAL_DIR}/glfw/CMakeLists.txt")
     set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
     add_subdirectory("${EXTERNAL_DIR}/glfw" EXCLUDE_FROM_ALL)
     set(GLFW_TARGET glfw)
+elseif(WIN32)
+    # MinGW GLFW in sysroot
+    find_library(MINGW_GLFW_LIB NAMES glfw3 glfw HINTS /usr/x86_64-w64-mingw32/sys-root/mingw/lib NO_DEFAULT_PATH)
+    find_path(MINGW_GLFW_INC NAMES "GLFW/glfw3.h" HINTS /usr/x86_64-w64-mingw32/sys-root/mingw/include NO_DEFAULT_PATH)
+    if(MINGW_GLFW_LIB AND MINGW_GLFW_INC)
+        add_library(glfw_mingw INTERFACE IMPORTED)
+        set_target_properties(glfw_mingw PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${MINGW_GLFW_INC}"
+            INTERFACE_LINK_LIBRARIES "${MINGW_GLFW_LIB};gdi32"
+        )
+        set(GLFW_TARGET glfw_mingw)
+    endif()
 else()
-    # try CMake Config mode
     find_package(glfw3 CONFIG QUIET)
     if(TARGET glfw)
         set(GLFW_TARGET glfw)
@@ -28,7 +39,6 @@ else()
         set(GLFW_TARGET glfw3::glfw3)
     endif()
 
-    # try PkgConfig mode
     if(NOT GLFW_TARGET)
         find_package(PkgConfig QUIET)
         if(PKG_CONFIG_FOUND)
@@ -38,28 +48,22 @@ else()
             endif()
         endif()
     endif()
-
-    # 3. fallback to fetchcontent if no local library or system package exists
-    if(NOT GLFW_TARGET)
-        message(STATUS "GLFW not found locally or via system package; fetching from GitHub...")
-        include(FetchContent)
-        set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-
-        FetchContent_Declare(
-            glfw
-            GIT_REPOSITORY https://github.com/glfw/glfw.git
-            GIT_TAG 3.4
-        )
-        FetchContent_MakeAvailable(glfw)
-        set(GLFW_TARGET glfw)
-    endif()
 endif()
 
 if(NOT GLFW_TARGET)
-    message(FATAL_ERROR "Failed to resolve GLFW target.")
+    include(FetchContent)
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG 3.4
+    )
+    FetchContent_MakeAvailable(glfw)
+    set(GLFW_TARGET glfw)
 endif()
 
 # ImGui 

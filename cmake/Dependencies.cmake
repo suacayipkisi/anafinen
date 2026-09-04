@@ -1,7 +1,34 @@
-find_package(Eigen3 REQUIRED)
-find_package(OpenMP REQUIRED)
-find_package(OpenGL REQUIRED)
-find_package(glm REQUIRED)
+if(WIN32)
+    # OpenMP for MinGW GCC
+    if(NOT TARGET OpenMP::OpenMP_CXX)
+        add_library(OpenMP::OpenMP_CXX INTERFACE IMPORTED)
+        set_target_properties(OpenMP::OpenMP_CXX PROPERTIES
+            INTERFACE_COMPILE_OPTIONS "-fopenmp"
+            INTERFACE_LINK_LIBRARIES "-lgomp"
+        )
+    endif()
+
+    # Eigen3 from MinGW sysroot directly
+    if(NOT TARGET Eigen3::Eigen)
+        add_library(Eigen3::Eigen INTERFACE IMPORTED)
+        set_target_properties(Eigen3::Eigen PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "/usr/x86_64-w64-mingw32/sys-root/mingw/include/eigen3"
+        )
+    endif()
+
+    set(OPENGL_LIBRARIES opengl32)
+    if(NOT TARGET OpenGL::GL)
+        add_library(OpenGL::GL INTERFACE IMPORTED)
+        set_target_properties(OpenGL::GL PROPERTIES
+            INTERFACE_LINK_LIBRARIES "opengl32"
+        )
+    endif()
+else()
+    find_package(Eigen3 REQUIRED)
+    find_package(OpenMP REQUIRED)
+    find_package(OpenGL REQUIRED)
+endif()
+
 find_package(PNG REQUIRED)
 
 # icon conversion
@@ -78,5 +105,18 @@ else()
         set(SPECTRA_TARGET spectra::spectra)
     elseif(TARGET spectra)
         set(SPECTRA_TARGET spectra)
+    endif()
+endif()
+
+find_package(glm CONFIG QUIET)
+if(NOT TARGET glm::glm)
+    find_path(GLM_INCLUDE_DIR "glm/glm.hpp")
+    if(GLM_INCLUDE_DIR)
+        add_library(glm::glm INTERFACE IMPORTED)
+        set_target_properties(glm::glm PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${GLM_INCLUDE_DIR}"
+        )
+    else()
+        message(FATAL_ERROR "GLM headers not found in MinGW sysroot!")
     endif()
 endif()
