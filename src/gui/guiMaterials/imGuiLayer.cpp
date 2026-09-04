@@ -117,6 +117,8 @@ namespace anaf::GUI {
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
+        io.IniFilename = nullptr;
+
         float xscale = 1.0f;
         float yscale = 1.0f;
         glfwGetWindowContentScale(window, &xscale, &yscale);

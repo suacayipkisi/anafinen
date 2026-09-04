@@ -22,27 +22,38 @@
 
 namespace anaf::GUI {
     void TrussSelector::onImGuiRender() {
-        ImGui::SetNextWindowSize(ImVec2(400.0f, 300.0f), ImGuiCond_FirstUseEver);
-        
-        ImGui::Begin("Truss Build Type Select");
+        if (!isOpen) return;
 
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImVec2 center = ImVec2(
+            viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+            viewport->WorkPos.y + viewport->WorkSize.y * 0.5f
+        );
+
+        // center on screen when appearing
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(400.0f, 220.0f), ImGuiCond_FirstUseEver);
         
-        if (ImGui::BeginCombo("Truss Type", m_types[static_cast<int>(m_trussType)].data())) {
-        for (int i = 0; i < static_cast<int>(m_types.size()); ++i) {
-            if (ImGui::Selectable(m_types[i].data(), m_trussType == static_cast<TrussTypes>(i))) {
-                m_trussType = static_cast<TrussTypes>(i);
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize;
+
+        if (ImGui::Begin("Select Truss Type")) {
+            if (ImGui::BeginCombo("Truss Type", m_types[static_cast<int>(m_trussType)].data())) {
+            for (int i = 0; i < static_cast<int>(m_types.size()); ++i) {
+                if (ImGui::Selectable(m_types[i].data(), m_trussType == static_cast<TrussTypes>(i))) {
+                    m_trussType = static_cast<TrussTypes>(i);
+                }
             }
+            ImGui::EndCombo();
         }
-        ImGui::EndCombo();
-    }
 
-        if(ImGui::Button("Select", ImVec2(-1, 32))) {
-            anaf::LOG::info("selected");
-            if (onSelected) {
-                onSelected(m_trussType);
+            if(ImGui::Button("Select", ImVec2(-1, 32))) {
+                anaf::LOG::info("selected");
+                if (onSelected) {
+                    onSelected(m_trussType);
+                }
+                isOpen = false;
+
             }
-            isOpen = false;
-
         }
 
         ImGui::End();

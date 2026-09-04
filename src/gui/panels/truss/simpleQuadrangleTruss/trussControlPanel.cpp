@@ -287,6 +287,9 @@ namespace anaf::GUI {
             }
             ImGui::EndChild();
         }
+    
+        ImGui::SetNextItemWidth(160.0f);
+        ImGui::InputDouble("Deformation Scale", &(bridge.deformScale), 0.0, 0.0, "%.3f");
 
         if (bridge.m_isRunning) {
             ImGui::ProgressBar(bridge.m_progress.load(), ImVec2(0.0f, 0.0f));

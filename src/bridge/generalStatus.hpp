@@ -46,6 +46,8 @@ namespace anaf::BRIDGE {
         std::unordered_map<std::uint32_t, std::array<bool, 3>> fixedDOFsByNode;
         std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};
         bool hasTrussPreview{false};
+
+        double deformScale{1.0};
     };
 
     Gui_Calc_Bridge& buildBridge();

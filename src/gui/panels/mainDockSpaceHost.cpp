@@ -15,13 +15,12 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-
-
 #include "mainDockSpaceHost.hpp"
 
 #include <GLFW/glfw3.h>
 
 #include "imgui.h"
+#include "imgui_internal.h"
 
 #include <functional>
 
@@ -34,13 +33,13 @@ namespace anaf::GUI {
         ImGui::SetNextWindowViewport(viewport->ID);
 
         ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | 
-                                    ImGuiWindowFlags_NoCollapse | 
-                                    ImGuiWindowFlags_NoResize | 
-                                    ImGuiWindowFlags_NoMove | 
-                                    ImGuiWindowFlags_NoBringToFrontOnFocus | 
-                                    ImGuiWindowFlags_NoNavFocus | 
-                                    ImGuiWindowFlags_NoBackground |
-                                    ImGuiWindowFlags_MenuBar;
+                                      ImGuiWindowFlags_NoCollapse | 
+                                      ImGuiWindowFlags_NoResize | 
+                                      ImGuiWindowFlags_NoMove | 
+                                      ImGuiWindowFlags_NoBringToFrontOnFocus | 
+                                      ImGuiWindowFlags_NoNavFocus | 
+                                      ImGuiWindowFlags_NoBackground |
+                                      ImGuiWindowFlags_MenuBar;
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -64,14 +63,14 @@ namespace anaf::GUI {
                 ImGui::EndMenu();
             }
 
-            if(ImGui::BeginMenu("Analyze")) {
+            if (ImGui::BeginMenu("Analyze")) {
                 if (ImGui::MenuItem("Truss (1D Element)")) {
-                    if(on_select_analyze_structure) {
+                    if (on_select_analyze_structure) {
                         on_select_analyze_structure(Truss_1D);
                     }
                 }
                 if (ImGui::MenuItem("Truss (3D Element)")) {
-                    if(on_select_analyze_structure) {
+                    if (on_select_analyze_structure) {
                         on_select_analyze_structure(Truss_3D);
                     }
                 }
@@ -89,6 +88,38 @@ namespace anaf::GUI {
 
         ImGuiID dockspace_id = ImGui::GetID("AppMainDockSpace");
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+        // Layout initialization: only run when dimensions are valid AND it hasn't run yet
+        static bool s_layout_built = false;
+        if (!s_layout_built && viewport->WorkSize.x > 100.0f && viewport->WorkSize.y > 100.0f) {
+            s_layout_built = true;
+
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+
+            ImGuiID dock_main_id = dockspace_id;
+
+            // 1. Split Left (Full height)
+            ImGuiID dock_left_id = ImGui::DockBuilderSplitNode(
+                dock_main_id, ImGuiDir_Left, 0.22f, nullptr, &dock_main_id);
+
+            // 2. Split Right (Full height)
+            ImGuiID dock_right_id = ImGui::DockBuilderSplitNode(
+                dock_main_id, ImGuiDir_Right, 0.24f, nullptr, &dock_main_id);
+
+            // 3. Split Bottom from remaining center
+            ImGuiID dock_bottom_id = ImGui::DockBuilderSplitNode(
+                dock_main_id, ImGuiDir_Down, 0.25f, nullptr, &dock_main_id);
+
+            // Dock windows into respective nodes
+            ImGui::DockBuilderDockWindow("Truss(1D) Analysis Set", dock_left_id);
+            ImGui::DockBuilderDockWindow("Model Tree", dock_right_id);
+            ImGui::DockBuilderDockWindow("Console", dock_bottom_id);
+            ImGui::DockBuilderDockWindow("3D Simulation Viewport", dock_main_id);
+
+            ImGui::DockBuilderFinish(dockspace_id);
+        }
 
         ImGui::End();
     }

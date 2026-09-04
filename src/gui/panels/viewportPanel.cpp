@@ -134,14 +134,13 @@ namespace anaf::GUI {
                 maxDisp = std::max(maxDisp, std::sqrt(disp[0]*disp[0] + disp[1]*disp[1] + disp[2]*disp[2]));
             }
 
-            const double deformScale = (maxDisp > 1e-12) ? 2000.0 : 0.0;
+            const double deformScale = bridge.deformScale;
 
             auto stressColor = [&](double val) -> glm::vec4 {
                 if (maxStress <= 1e-9) {
                     return glm::vec4(0.4f, 0.6f, 0.85f, 1.0f);
                 }
 
-                // Mutlak gerilme ve karekök skalası ile düşük gerilmeleri de görünür kıl
                 const float t = static_cast<float>(std::sqrt(std::clamp(std::abs(val) / maxStress, 0.0, 1.0)));
 
                 float r = std::clamp(1.5f - std::abs(4.0f * t - 3.0f), 0.0f, 1.0f);
@@ -168,7 +167,6 @@ namespace anaf::GUI {
                 );
             }
 
-            // Çizgileri ekle
             for (const auto& element : bridge.trussElements) {
                 const auto& nodeIDs = element.getEleNodes();
                 if (nodeIDs[0] <= maxNodeId && nodeIDs[1] <= maxNodeId) {
@@ -190,14 +188,14 @@ namespace anaf::GUI {
         bool needsUpload = false;
         const uint64_t currentVersion = bridge.dataVersion.load(std::memory_order_relaxed);
 
-        //std::lock_guard lock(bridge.dataMutex);
         if (m_meshNeedsUpdate || currentVersion != m_lastRenderedVersion || 
-        bridge.trussElements.size() != m_lastElementCount || bridge.trussNodes.size() != m_lastNodeCount) {
+        bridge.trussElements.size() != m_lastElementCount || bridge.trussNodes.size() != m_lastNodeCount || bridge.deformScale != m_lastDeformationScale) {
             needsUpload = true;
             m_meshNeedsUpdate = false;
             m_lastRenderedVersion = currentVersion;
             m_lastElementCount = bridge.trussElements.size();
             m_lastNodeCount = bridge.trussNodes.size();
+            m_lastDeformationScale = bridge.deformScale;
         }
 
         if (needsUpload) {
@@ -269,7 +267,7 @@ namespace anaf::GUI {
                         return IM_COL32(std::clamp(r, 0, 255), std::clamp(g, 0, 255), std::clamp(b, 0, 255), 255);
                     };
 
-                    const double deformScale = (maxDisp > 1e-12) ? 2000.0 : 0.0;
+                    const double deformScale = bridge.deformScale;
 
                     std::vector<std::pair<std::uint32_t, ImVec2>> candidateNodesForPicking;
                     candidateNodesForPicking.reserve(std::min(bridge.trussNodes.size(), MAX_DRAWABLE_NODES));
@@ -379,7 +377,8 @@ namespace anaf::GUI {
 
             const auto& loc = actualNodeIt->getLocation();
             const auto disp = actualNodeIt->getDisplacmenet();
-            constexpr double deformScale = 2000.0;
+
+            const double deformScale = bridge.deformScale;
 
             const glm::vec3 deformedLoc(
                 loc[0] + disp[0] * deformScale,

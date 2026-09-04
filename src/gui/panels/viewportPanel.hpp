@@ -50,7 +50,7 @@ namespace anaf::GUI{
         size_t m_lastElementCount{0};
         bool m_meshNeedsUpdate{true};
         uint64_t m_lastRenderedVersion{0};
-        float m_deformationScale{1.0f};
+        float m_lastDeformationScale{1.0f};
 
         void handleCameraInput();
         void buildSceneBatches();
