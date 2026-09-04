@@ -381,15 +381,16 @@ namespace anaf::GUI {
             bridge.m_progress = 0.0f;
 
             // reset panel variables
-            m_cubeNumX = 5;
+            m_cubeNumX = 10;
             m_cubeNumY = 1;
-            m_cubeNumZ = 1;
+            m_cubeNumZ = 10;
             m_type = 1;
             m_cubeEdgeLength = 1.0;
             m_crossSectionalArea = 80.0;
-            m_forceNodeId = 5;
+            m_forceNodeId = 126;
             m_forceVector = {0.0, 0.0, 0.0};
             m_appliedForces.clear();
+            ensureDemoTrussCase(bridge, m_forceNodeId);
 
             // reset bridge data
             {

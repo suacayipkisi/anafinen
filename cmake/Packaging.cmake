@@ -1,30 +1,36 @@
 include(GNUInstallDirs)
 
-install(TARGETS anafinen
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
 if(WIN32)
+    install(TARGETS anafinen
+        RUNTIME DESTINATION .
+    )
+
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
-        DESTINATION "${CMAKE_INSTALL_BINDIR}/assets"
+        DESTINATION "assets"
     )
     install(FILES "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
-        DESTINATION "${CMAKE_INSTALL_BINDIR}/assets/icons"
+        DESTINATION "assets/icons"
     )
     install(FILES "${GMSH_DLL}"
-        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        DESTINATION .
     )
-    
+
+    # use MinGW DLL if croscompile on linux
     if(CMAKE_CROSSCOMPILING)
-        file(GLOB MINGW_EXTRA_DLLS
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libgomp-*.dll"
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libwinpthread-*.dll"
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libpng*.dll"
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/zlib*.dll"
+        install(FILES
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libgomp-1.dll"
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libwinpthread-1.dll"
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libpng16-16.dll"
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/zlib1.dll"
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libgcc_s_seh-1.dll"
+            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libstdc++-6.dll"
+            DESTINATION .
         )
-        install(FILES ${MINGW_EXTRA_DLLS} DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()
 else()
+    install(TARGETS anafinen
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets"
     )
