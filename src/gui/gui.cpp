@@ -108,7 +108,7 @@ namespace anaf::GUI {
         };
     }
 
-    void openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo) {
+    std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo) {
         auto dock = panelManager.addPanel<MainDockSpaceHost>(window);
         auto viewport = panelManager.addPanel<ViewportPanel>(fbo);
         auto tree = panelManager.addPanel<ModelTree>();
@@ -131,7 +131,7 @@ namespace anaf::GUI {
 
         bindAnalysisFlow(panels);
 
-
+        return viewport;
     }
 
     int initgui(){
@@ -182,27 +182,22 @@ namespace anaf::GUI {
 
         // register UI panels
         PanelManager panelManager;
-        openPanels(panelManager, window, fbo);
+        auto viewport = openPanels(panelManager, window, fbo);
         
 
         // game loop
         while (!glfwWindowShouldClose(window)){
             glfwPollEvents();
 
-            // render 3d sim scene into custom fbo
-            fbo->bind();
-            glEnable(GL_DEPTH_TEST);
-            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-            //native 3d draw calls
-            fbo->unbind();
+            if (viewport && viewport->isOpen) {
+                viewport->renderSceneOpenGL();
+            }
 
             //clear default framebuffer and render imgui panels
             int w, h;
             glfwGetFramebufferSize(window, &w, &h);
             glViewport(0, 0, w, h);
-            glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+            glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
 
             imguiLayer.beginFrame();

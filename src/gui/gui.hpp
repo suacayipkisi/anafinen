@@ -41,7 +41,7 @@ namespace anaf::GUI{
     };
 
     void bindAnalysisFlow(UIPanels panels);
-    void openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo);
+    std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo);
 
     int initgui();
 

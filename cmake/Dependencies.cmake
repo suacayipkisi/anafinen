@@ -1,6 +1,7 @@
 find_package(Eigen3 REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(glm REQUIRED)
 find_package(PNG REQUIRED)
 
 # icon conversion

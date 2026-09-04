@@ -19,8 +19,12 @@
 
 #include "../guiMaterials/iPanel.hpp"
 #include "../guiMaterials/framebuffer.hpp"
+#include "viewportRenderer.hpp"
+
 #include "imgui.h"
 
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <memory>
 
 namespace anaf::GUI{
@@ -28,24 +32,35 @@ namespace anaf::GUI{
     class ViewportPanel : public IPanel {
     private:
         std::shared_ptr<Framebuffer> m_fbo_ ;
+        std::unique_ptr<ViewportRenderer> m_renderer_;
+
         bool m_viewportFocused_ {false};
         bool m_viewportHovered_ {false};
+
         float m_rotationYaw {0.9f};
         float m_rotationPitch {-0.7f};
         float m_cameraDistance {18.0f};
-        float m_targetX {0.0f};
-        float m_targetY {0.0f};
-        float m_targetZ {0.0f};
+        glm::vec3 m_target{0.0f, 0.0f, 0.0f};
+
         bool m_draggingView {false};
         bool m_showNodes {false};
-        ImVec2 m_lastMousePos {0.0f, 0.0f};
-    public:
-        ViewportPanel(std::shared_ptr<Framebuffer> fbo) : m_fbo_(fbo) {}
+        ImVec2 m_viewportSize{0.0f, 0.0f};
 
+        void handleCameraInput();
+        void buildSceneBatches();
+        void renderOverlay2D(const ImVec2& origin, const ImVec2& size, const glm::mat4& viewProj);
+
+    public:
+        explicit ViewportPanel(std::shared_ptr<Framebuffer> fbo);
+        ~ViewportPanel() override = default;
+
+        void renderSceneOpenGL();
         void onImGuiRender() override;
 
         bool isFocused() const { return m_viewportFocused_; }
         bool isHovered() const { return m_viewportHovered_; }
+        glm::mat4 getViewProjectionMatrix() const;
+
     };
 
 } // namespace anaf::GUI end

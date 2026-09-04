@@ -77,6 +77,7 @@ target_link_libraries(anafinen PRIVATE
     ${GLAD_TARGET}
     ${GLFW_TARGET}
     OpenGL::GL
+    glm::glm
     PNG::PNG
     project_warnings_and_optimizations
 )
