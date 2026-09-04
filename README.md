@@ -6,7 +6,7 @@
 
 ---
 
-## 📦 Downloads (v0.1.0-alpha)
+## 📦 Downloads (v0.1.1-alpha)
 
 Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases/tag/v0.1.0-alpha).
 
