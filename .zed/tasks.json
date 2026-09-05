@@ -1,9 +1,0 @@
-[
-  {
-    "label": "Build and Run",
-    "command": "cmake -B build -G Ninja && cmake --build build && ./build/app",
-    "use_new_terminal": false,
-    "allow_concurrent_runs": false,
-    "reveal": "always"
-  }
-]
