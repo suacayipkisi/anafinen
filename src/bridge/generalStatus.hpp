@@ -31,6 +31,16 @@
 
 namespace anaf::BRIDGE {
 
+    struct MeshData {
+
+        // truss (1_D element) deformation under constant applied force
+        std::vector<FEM::TRUSS::Node> trussNodes;
+        std::vector<FEM::TRUSS::TrussElement_1D> trussElements;
+        std::vector<FEM::TRUSS::ForceApplied> appliedForces;
+        double deformScale{1.0};
+        
+    };
+
     struct Gui_Calc_Bridge {
         std::atomic<bool> m_isRunning{false};
         std::atomic<bool> m_isGeneratingPreview{false};
@@ -39,18 +49,16 @@ namespace anaf::BRIDGE {
         std::mutex dataMutex;
         std::jthread workerThread;
 
+        std::shared_ptr<const MeshData> activeMesh{nullptr};
+
         // general access
         std::vector<anaf::MATERIAL::Material> allMaterials;
 
-        // truss (1_D element) deformation under constant applied force
-        std::vector<FEM::TRUSS::Node> trussNodes;
-        std::vector<FEM::TRUSS::TrussElement_1D> trussElements;
-        std::vector<FEM::TRUSS::ForceApplied> appliedForces;
         std::unordered_map<std::uint32_t, std::array<bool, 3>> fixedDOFsByNode;
         std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};
         bool hasTrussPreview{false};
 
-        double deformScale{1.0};
+        
     };
 
     Gui_Calc_Bridge& buildBridge();

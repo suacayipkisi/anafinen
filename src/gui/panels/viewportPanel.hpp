@@ -19,6 +19,7 @@
 
 #include <guiMaterials/iPanel.hpp>
 #include <guiMaterials/framebuffer.hpp>
+#include <bridge/generalStatus.hpp>
 #include "viewportRenderer.hpp"
 
 #include "imgui.h"
@@ -28,6 +29,18 @@
 #include <memory>
 
 namespace anaf::GUI{
+
+    struct Truss_1D_GUI_PROPERTIES {
+        //size_t m_lastNodeCount{0};
+        //size_t m_lastElementCount{0};
+        bool m_meshNeedsUpdate{true};
+        uint64_t m_lastRenderedVersion{0};
+        double m_lastDeformationScale{1.0};
+    };
+
+    struct Truss_3D_GUI_PROPERTIES {
+
+    };
 
     class ViewportPanel : public IPanel {
     private:
@@ -46,11 +59,9 @@ namespace anaf::GUI{
         bool m_showNodes {false};
         ImVec2 m_viewportSize{0.0f, 0.0f};
 
-        size_t m_lastNodeCount{0};
-        size_t m_lastElementCount{0};
-        bool m_meshNeedsUpdate{true};
-        uint64_t m_lastRenderedVersion{0};
-        float m_lastDeformationScale{1.0f};
+        Truss_1D_GUI_PROPERTIES truss_1d_gui_prop{};
+
+        std::shared_ptr<const anaf::BRIDGE::MeshData> m_currentMesh{nullptr};
 
         void handleCameraInput();
         void buildSceneBatches();
