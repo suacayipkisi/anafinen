@@ -60,12 +60,12 @@ set(ANAFINEN_SOURCES
 
 add_executable(anafinen ${ANAFINEN_SOURCES})
 
-target_compile_definitions(anafinen PRIVATE 
+target_compile_definitions(anafinen PRIVATE
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     GLFW_INCLUDE_NONE
 )
 
-target_link_libraries(anafinen PRIVATE 
+target_link_libraries(anafinen PRIVATE
     anaf_core
     ${GUI_DEPENDENCIES}
     ${GLAD_TARGET}
