@@ -39,6 +39,9 @@ namespace anaf::BRIDGE {
         std::mutex dataMutex;
         std::jthread workerThread;
 
+        // general access
+        std::vector<anaf::MATERIAL::Material> allMaterials;
+
         // truss (1_D element) deformation under constant applied force
         std::vector<FEM::TRUSS::Node> trussNodes;
         std::vector<FEM::TRUSS::TrussElement_1D> trussElements;

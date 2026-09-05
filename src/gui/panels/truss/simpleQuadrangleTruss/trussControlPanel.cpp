@@ -22,7 +22,6 @@
 #include <stop_token>
 #include <thread>
 
-#include "../../../../material/properties.hpp"
 #include "../../../../truss_1D/trussEngine/trussSolver.hpp"
 #include "../../../../bridge/generalStatus.hpp"
 
@@ -64,8 +63,8 @@ namespace anaf::GUI {
             ImGui::Text("Selected node: none");
         }
 
-        if (m_type == 0u) {
-            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.7f, 1.0f), "Material Type must be > 0.");
+        if (m_type >= bridge.allMaterials.size()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.7f, 1.0f), "Material Type is outside the available materials.");
         }
 
         if (bridge.m_isGeneratingPreview.load()) {
@@ -74,10 +73,6 @@ namespace anaf::GUI {
             ImGui::EndDisabled();
         }
         else if (ImGui::Button("Generate Preview")) {
-            if (m_type == 0u) {
-                m_type = 1u;
-            }
-
             anaf::LOG::core("Press 'ctrl' to toggle node visibility");
 
             bridge.m_isGeneratingPreview = true;
@@ -312,31 +307,7 @@ namespace anaf::GUI {
                  crossSectionalArea = m_crossSectionalArea,
                  type = m_type,
                  appliedForces](std::stop_token st) mutable {
-                    std::vector<anaf::MATERIAL::Material> allMaterials;
-                    allMaterials.push_back({
-                        "Structural Steel (AISI 4130)",
-                        205.0e9,
-                        78.0e9,
-                        160.0e9,
-                        435.0e6,
-                        670.0e6,
-                        205.0e9,
-                        0.29f,
-                        0.25f,
-                        1u
-                    });
-                    allMaterials.push_back({
-                        "Aluminum 6061-T6",
-                        68.9e9,
-                        26.0e9,
-                        67.5e9,
-                        276.0e9 / 1e3,
-                        310.0e6,
-                        68.9e9,
-                        0.33f,
-                        0.12f,
-                        2u
-                    });
+                    auto& allMaterials = bridge.allMaterials;
 
                     FEM::TRUSS::Truss_SQPT solver{
                         bridge,
@@ -348,6 +319,16 @@ namespace anaf::GUI {
                         crossSectionalArea,
                         type
                     };
+
+                    anaf::LOG::info(
+                        "Calculating:\n\tcube_x: {}\n\tcube_y: {}\n\tcube_z: {}\n\tele_length(m): {}\n\tarea(cm^2): {}\n\ttype: {} ",
+                        cubeNumX,
+                        cubeNumY,
+                        cubeNumZ,
+                        cubeEdgeLength,
+                        crossSectionalArea,
+                        allMaterials[type].getMaterialType()
+                    );
 
                     solver.trussCalculator_SQPT(bridge, st);
                     solver.trussSetForce_SQRT(bridge, st, appliedForces);

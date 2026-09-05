@@ -47,7 +47,6 @@ namespace anaf::GUI {
         }
 
             if(ImGui::Button("Select", ImVec2(-1, 32))) {
-                anaf::LOG::info("selected");
                 if (onSelected) {
                     onSelected(m_trussType);
                 }

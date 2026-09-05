@@ -79,7 +79,7 @@ namespace FEM::TRUSS{
         void calculate(
             anaf::BRIDGE::Gui_Calc_Bridge& bridge,
             std::stop_token st,
-            std::span<const anaf::MATERIAL::Material> materials
+            std::span<anaf::MATERIAL::Material> materials
         );
 
         const std::vector<Node>& getNodes() const { return m_truss.getNodes(); }

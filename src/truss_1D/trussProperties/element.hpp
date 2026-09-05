@@ -57,12 +57,7 @@ namespace FEM::TRUSS {
             m_crossSectionArea(area),
             m_nodes({node_1, node_2})
         {
-            // if type, area and nodes are not given, destroy element
-            if (!type) {
-                anaf::LOG::error("Destroying invalid element: material type is null, area{}, nodes[{}, {}]", 
-                        area, node_1, node_2);
-                throw std::invalid_argument("Element type cannot be undefined");
-            }
+            // if area and nodes are not given, destroy element
 
             if (area <= 0.0) {
                 anaf::LOG::error("Destroying invalid element: area must be positive (got {}), material{}, nodes[{}, {}]", 

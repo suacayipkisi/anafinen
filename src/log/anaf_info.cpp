@@ -71,17 +71,17 @@ namespace anaf::LOG {
         std::lock_guard<std::mutex> lock(ctx.mtx);
 
         // Terminal output
-        std::cout << std::format("[{}] {}{}{}{}\n{}\n", timeStr, COLOR_BOLD, tagColor, tag, COLOR_RESET, formattedMessage);
+        std::cout << std::format("[{}] {}{}{}{} {}\n", timeStr, COLOR_BOLD, tagColor, tag, COLOR_RESET, formattedMessage);
 
         // File output
         if (ctx.logFile.is_open()) {
-            ctx.logFile << std::format("[{}] {}\n{}\n", timeStr, tag, formattedMessage);
+            ctx.logFile << std::format("[{}] {} {}\n", timeStr, tag, formattedMessage);
             ctx.logFile.flush();
         }
 
         // UI callback dispatch
         if (ctx.callback) {
-            const std::string uiFormatted = std::format("[{}] {}\n{}", timeStr, tag, formattedMessage);
+            const std::string uiFormatted = std::format("[{}] {} {}", timeStr, tag, formattedMessage);
             ctx.callback(level, uiFormatted);
         }
     }

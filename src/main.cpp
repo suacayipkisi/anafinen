@@ -32,7 +32,6 @@
 
 #include "log/anaf_info.hpp"
 #include "gui/gui.hpp"
-#include "material/properties.hpp"
 #include "test/status.hpp"
 
 #include "gen/genNum.hpp"
@@ -68,7 +67,7 @@ int main(int argc, char* argv[]) {
     // not even phase 1 is finished
     // you are currently watching the born of an analysis program
     anafGen::IdGenerator materialIDs;
-    std::vector<anaf::MATERIAL::Material> allMaterials;
+    auto& allMaterials = GUI_CALC_BRIDGE.allMaterials;
     allMaterials.push_back({
         "Structural Steel (AISI 4130)",
         205.0e9,
@@ -79,7 +78,7 @@ int main(int argc, char* argv[]) {
         205.0e9,
         0.29f,
         0.25f,
-        materialIDs.next_u32()
+        0u
     });
     allMaterials.push_back({
         "Aluminum 6061-T6",
@@ -91,7 +90,7 @@ int main(int argc, char* argv[]) {
         68.9e9,
         0.33f,
         0.12f,
-        materialIDs.next_u32()
+        1u
     });
 
     anaf::GUI::initgui();

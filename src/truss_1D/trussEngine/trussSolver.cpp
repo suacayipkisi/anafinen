@@ -24,7 +24,9 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <format>
 #include <stop_token>
+#include <string>
 #include <vector>
 
 namespace FEM::TRUSS {
@@ -34,15 +36,6 @@ namespace FEM::TRUSS {
         std::stop_token st
         
     ) {
-        anaf::LOG::info(
-            "cube_num_X_Y_Z_(N): {}, {}, {} \nelement_length_(m): {} \nelement_crossSectional_area_(cm^2): {} \nmaterial_type: {}",
-            m_cubeNumX,
-            m_cubeNumY,
-            m_cubeNumZ,
-            m_elementLength,
-            m_area,
-            m_type
-        );
         m_truss.setTruss();
 
         auto& nodes = m_truss.getNodes();
@@ -56,9 +49,17 @@ namespace FEM::TRUSS {
             }
         }
 
+        std::vector<std::string> fixInfo;
         for (const auto& [nodeId, dofs] : bridge.fixedDOFsByNode) {
-            anaf::LOG::info("Support node {} fixed DOFs: [{}, {}, {}]", nodeId, dofs[0], dofs[1], dofs[2]);
+            std::string x, y, z;
+            std::string node =  std::format("{}", nodeId);
+            x = (dofs[0] == true ? "x" : "-");
+            y = (dofs[1] == true ? "y" : "-");
+            z = (dofs[2] == true ? "z" : "-");
+            fixInfo.push_back(node + " " + x + " " + y + " " + z + " / ");
+            //anaf::LOG::info("Support node {} fixed DOFs: [{}, {}, {}]", nodeId, dofs[0], dofs[1], dofs[2]);
         }
+        anaf::LOG::info("Fixed nodes {}", fixInfo);
         bridge.m_progress = 0.25f;
     }
 
@@ -100,7 +101,7 @@ namespace FEM::TRUSS {
     void Truss_SQPT::calculate(
         anaf::BRIDGE::Gui_Calc_Bridge& bridge,
         std::stop_token st,
-        std::span<const anaf::MATERIAL::Material> materials
+        std::span<anaf::MATERIAL::Material> materials
     ){
         const auto& elements = m_truss.getElements();
         m_container.assembleStiffness(
@@ -128,7 +129,7 @@ namespace FEM::TRUSS {
             maxStress = std::max(maxStress, element.getEleStress());
         }
 
-        anaf::LOG::info("Solver completed");
+        anaf::LOG::success("Solver completed");
         anaf::LOG::info("Max nodal displacement magnitude: {}", maxDisp);
         anaf::LOG::info("Max element stress: {}", maxStress);
     }
