@@ -9,6 +9,7 @@ _CPack_Packages/
 .deps_cache/
 .vscode/
 .zed/
+.zed/tasks.json
 
 .clangd
 *.log
