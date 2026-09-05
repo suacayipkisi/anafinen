@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include "../../log/anaf_info.hpp"
-#include "../guiMaterials/iPanel.hpp"
+#include <log/anaf_info.hpp>
+#include <guiMaterials/iPanel.hpp>
 
 #include <cstddef>
 #include <mutex>

@@ -17,8 +17,8 @@
 
 #include "logTerminal.hpp"
 
-#include "../../log/anaf_info.hpp"
-#include "../guiMaterials/imGuiLayer.hpp"
+#include <log/anaf_info.hpp>
+#include <guiMaterials/imGuiLayer.hpp>
 
 #include "imgui.h"
 #include <cstddef>

@@ -19,7 +19,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <array>
-#include "../../log/anaf_info.hpp"
+#include <log/anaf_info.hpp>
 
 namespace FEM::TRUSS {
 

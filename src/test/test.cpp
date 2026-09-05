@@ -21,7 +21,7 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
-#include "../log/anaf_info.hpp"
+#include <log/anaf_info.hpp>
 #include "test.hpp"
 
 namespace anaf::TEST {

@@ -18,7 +18,7 @@
 #include "imgui.h"
 
 #include "trussTypePanel.hpp"
-#include "../../../log/anaf_info.hpp"
+#include <log/anaf_info.hpp>
 
 namespace anaf::GUI {
     void TrussSelector::onImGuiRender() {

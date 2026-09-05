@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include "../../trussProperties/element.hpp"
-#include "../../trussProperties/node.hpp"
+#include <trussProperties/element.hpp>
+#include <trussProperties/node.hpp>
 
 #include <Eigen/SparseCore>
 #include <span>

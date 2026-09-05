@@ -22,8 +22,8 @@
 #include <stop_token>
 #include <thread>
 
-#include "../../../../truss_1D/trussEngine/trussSolver.hpp"
-#include "../../../../bridge/generalStatus.hpp"
+#include <truss_1D/trussEngine/trussSolver.hpp>
+#include <bridge/generalStatus.hpp>
 
 namespace anaf::GUI {
 

@@ -21,14 +21,14 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
-#include "../../directory/getExecutableDirectory.hpp"
+#include <directory/getExecutableDirectory.hpp>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
 #include "imGuiLayer.hpp"
-#include "../../log/anaf_info.hpp"
+#include <log/anaf_info.hpp>
 
 namespace anaf::GUI {
 

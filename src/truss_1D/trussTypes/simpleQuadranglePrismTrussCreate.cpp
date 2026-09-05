@@ -15,7 +15,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../../log/anaf_info.hpp"
+#include <log/anaf_info.hpp>
 #include "simpleQuadranglePrismTrussCreate.hpp"
 #include "../trussProperties/element.hpp"
 

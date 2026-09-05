@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include "../truss_1D/trussProperties/appliedForce.hpp"
-#include "../truss_1D/trussProperties/node.hpp"
-#include "../truss_1D/trussProperties/element.hpp"
+#include <truss_1D/trussProperties/appliedForce.hpp>
+#include <truss_1D/trussProperties/node.hpp>
+#include <truss_1D/trussProperties/element.hpp>
 
 #include <array>
 #include <atomic>

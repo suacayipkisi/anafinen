@@ -27,21 +27,21 @@
 #include <string>
 #include <vector>
 
+#include <log/anaf_info.hpp>
 
-
-#include "../log/anaf_info.hpp"
-
-#include "../directory/getExecutableDirectory.hpp"
+#include <directory/getExecutableDirectory.hpp>
 
 #include "guiMaterials/framebuffer.hpp"
 #include "guiMaterials/imGuiLayer.hpp"
 #include "guiMaterials/iPanel.hpp"
+
 #include "panels/logTerminal.hpp"
 #include "panels/mainDockSpaceHost.hpp"
 #include "panels/modelTree.hpp"
 #include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
 #include "panels/truss/trussTypePanel.hpp"
 #include "panels/viewportPanel.hpp"
+
 #include "linuxCursor.hpp"
 
 

@@ -21,9 +21,9 @@
 #include <span>
 #include <vector>
 
-#include "../../bridge/generalStatus.hpp"
-#include "../trussProperties/appliedForce.hpp"
-#include "../trussTypes/simpleQuadranglePrismTrussCreate.hpp"
+#include <bridge/generalStatus.hpp>
+#include <trussProperties/appliedForce.hpp>
+#include <trussTypes/simpleQuadranglePrismTrussCreate.hpp>
 #include "trussSolver/solveTrussStaticDeflection.hpp"
 
 namespace FEM::TRUSS{

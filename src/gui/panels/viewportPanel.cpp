@@ -16,7 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "viewportPanel.hpp"
-#include "../../bridge/generalStatus.hpp"
+#include <bridge/generalStatus.hpp>
 
 #include "imgui.h"
 #include "viewportRenderer.hpp"

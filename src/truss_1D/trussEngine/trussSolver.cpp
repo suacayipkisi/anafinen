@@ -16,10 +16,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "trussSolver.hpp"
-#include "../../log/anaf_info.hpp"
-#include "../../bridge/generalStatus.hpp"
-#include "../trussTypes/simpleQuadranglePrismTrussCreate.hpp"
-#include "../trussProperties/appliedForce.hpp"
+#include <log/anaf_info.hpp>
+#include <bridge/generalStatus.hpp>
+#include <trussTypes/simpleQuadranglePrismTrussCreate.hpp>
+#include <trussProperties/appliedForce.hpp>
 
 #include <algorithm>
 #include <array>

@@ -28,6 +28,8 @@ set(ANAF_CORE_SOURCES
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
 target_include_directories(anaf_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/truss_1D
 )
 
 if(SPECTRA_TARGET)
@@ -74,6 +76,18 @@ target_link_libraries(anafinen PRIVATE
     glm::glm
     PNG::PNG
     project_warnings_and_optimizations
+)
+
+target_include_directories(anafinen PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/bridge
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/directory
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gen
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/log
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/panels
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/guiMaterials
 )
 
 add_custom_command(

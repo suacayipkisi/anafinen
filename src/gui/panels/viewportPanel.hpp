@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include "../guiMaterials/iPanel.hpp"
-#include "../guiMaterials/framebuffer.hpp"
+#include <guiMaterials/iPanel.hpp>
+#include <guiMaterials/framebuffer.hpp>
 #include "viewportRenderer.hpp"
 
 #include "imgui.h"

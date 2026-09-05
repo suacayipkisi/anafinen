@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include "../../../guiMaterials/iPanel.hpp"
-#include "../../../../truss_1D/trussProperties/appliedForce.hpp"
+#include <guiMaterials/iPanel.hpp>
+#include <truss_1D/trussProperties/appliedForce.hpp>
 
 #include <array>
 #include <cstdint>
