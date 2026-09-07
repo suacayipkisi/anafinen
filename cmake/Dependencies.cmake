@@ -32,16 +32,33 @@ endif()
 find_package(PNG REQUIRED)
 
 # icon conversion
-find_program(ANAFINEN_IMAGE_CONVERTER NAMES magick convert REQUIRED)
+find_program(ANAFINEN_IMAGE_CONVERTER NAMES magick convert)
 set(ANAFINEN_GENERATED_ASSETS_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-assets")
 file(MAKE_DIRECTORY "${ANAFINEN_GENERATED_ASSETS_DIR}/icons")
-execute_process(
-    COMMAND "${ANAFINEN_IMAGE_CONVERTER}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
-            -resize 128x128 "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
-    RESULT_VARIABLE ANAFINEN_ICON_CONVERSION_RESULT
-)
-if(NOT ANAFINEN_ICON_CONVERSION_RESULT EQUAL 0)
-    message(FATAL_ERROR "Failed to convert the application SVG icon to PNG")
+
+set(CONVERSION_SUCCESS FALSE)
+
+if(ANAFINEN_IMAGE_CONVERTER)
+    execute_process(
+        COMMAND "${ANAFINEN_IMAGE_CONVERTER}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
+                -resize 128x128 "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+        RESULT_VARIABLE ANAFINEN_ICON_CONVERSION_RESULT
+    )
+    if(NOT ANAFINEN_ICON_CONVERSION_RESULT EQUAL 0)
+        set(CONVERSION_SUCCESS TRUE)
+    endif()
+endif()
+
+# icon creation fallback
+if(NOT CONVERSION_SUCCESS)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg")
+        file(COPY_FILE
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
+            "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+        )
+    else()
+        message(WARNING "Neither ImageMagic nor fallback anafinen.png was found")
+    endif()
 endif()
 
 # gmsh 

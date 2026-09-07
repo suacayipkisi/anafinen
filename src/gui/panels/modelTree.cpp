@@ -21,7 +21,6 @@
 
 namespace anaf::GUI {
 
-    
     void ModelTree::onImGuiRender() {
         ImGui::Begin("Model Tree");
         if (ImGui::TreeNode("Root Assembly")) {
@@ -38,6 +37,5 @@ namespace anaf::GUI {
         }
         ImGui::End();
     }
-
 
 } // namespace anaf::GUI end

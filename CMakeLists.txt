@@ -95,10 +95,17 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:anafinen>/assets
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
-        "$<TARGET_FILE_DIR:anafinen>/assets/icons/anafinen.png"
 )
+
+# copy icon if it exists
+if(EXISTS "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png")
+    add_custom_command(
+        TARGET anafinen POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+            "$<TARGET_FILE_DIR:anafinen>/assets/icons/anafinen.png"
+    )
+endif()
 
 if(WIN32)
     add_custom_command(
