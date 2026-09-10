@@ -237,27 +237,39 @@ namespace anaf::GUI {
             }
         }
 
-        bool fixedX = fixedDOFs[0];
-        bool fixedY = fixedDOFs[1];
-        bool fixedZ = fixedDOFs[2];
-        bool fixChanged = false;
-
-        if (ImGui::Checkbox("Fix X##fix_x", &fixedX)) fixChanged = true;
-        if (ImGui::Checkbox("Fix Y##fix_y", &fixedY)) fixChanged = true;
-        if (ImGui::Checkbox("Fix Z##fix_z", &fixedZ)) fixChanged = true;
-
-        if (fixChanged || ImGui::Button("Apply Fixity")) {
+        static std::uint32_t lastNodeID {0};
+        static bool fixedX;
+        static bool fixedY;
+        static bool fixedZ;
+        static bool fixChanged = false;
+        {    
             std::lock_guard lock(bridge.dataMutex);
-            bridge.fixedDOFsByNode[m_forceNodeId] = {fixedX, fixedY, fixedZ};
+            if (lastNodeID != currentSelectedNode) {
+                fixedX = fixedDOFs[0];
+                fixedY = fixedDOFs[1];
+                fixedZ = fixedDOFs[2];
+            }
+            
+            if (ImGui::Checkbox("Fix X##fix_x", &fixedX)) fixChanged = true;
+            if (ImGui::Checkbox("Fix Y##fix_y", &fixedY)) fixChanged = true;
+            if (ImGui::Checkbox("Fix Z##fix_z", &fixedZ)) fixChanged = true;
+
+            if (ImGui::Button("Apply Fixity")) {
+                if(fixChanged) {
+                    bridge.fixedDOFsByNode[m_forceNodeId] = {fixedX, fixedY, fixedZ};
+                }
+            }
+            lastNodeID = currentSelectedNode;
         }
 
         ImGui::Separator();
-        ImGui::Text("Fixity log");
+        ImGui::Text("Applied Fixity");
         {
             std::lock_guard lock(bridge.dataMutex);
             if (bridge.fixedDOFsByNode.empty()) {
                 ImGui::TextDisabled("No fixed DOFs yet.");
             } else {
+                ImGui::BeginChild("Applied Fixity List", ImVec2(0, 110), true);
                 for (const auto& [nodeId, dofs] : bridge.fixedDOFsByNode) {
                     ImGui::Text("Node %u: X=%s, Y=%s, Z=%s",
                         nodeId,
@@ -265,20 +277,27 @@ namespace anaf::GUI {
                         dofs[1] ? "fixed" : "free",
                         dofs[2] ? "fixed" : "free");
                 }
+                ImGui::EndChild();
             }
         }
 
-        if (!m_appliedForces.empty()) {
-            ImGui::BeginChild("AppliedForceList", ImVec2(0, 110), true);
-            for (const auto& force : m_appliedForces) {
-                ImGui::Text("Node %u: Fx=%.3f, Fy=%.3f, Fz=%.3f",
-                    force.getApliedNode(),
-                    force.getForce()[0],
-                    force.getForce()[1],
-                    force.getForce()[2]);
+        ImGui::Text("Applied Forces");
+        {
+            std::lock_guard lock(bridge.dataMutex);
+            if (m_appliedForces.empty()) {
+                ImGui::TextDisabled("No applied forces yet.");
+            } else {
+                ImGui::BeginChild("AppliedForceList", ImVec2(0, 110), true);
+                for (const auto& force : m_appliedForces) {
+                    ImGui::Text("Node %u: Fx=%.3f, Fy=%.3f, Fz=%.3f",
+                        force.getApliedNode(),
+                        force.getForce()[0],
+                        force.getForce()[1],
+                        force.getForce()[2]);
+                }
+                ImGui::EndChild();
             }
-            ImGui::EndChild();
-        }
+        }    
     
         ImGui::SetNextItemWidth(160.0f);
         double currentScale = 1.0;
