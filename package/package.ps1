@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 git submodule update --init --recursive
 
 $cmakeArgs = @(
-    "-S", ".",
+    "-S", "$PSScriptRoot/..",
     "-B", $BuildDir,
     "-G", "Ninja",
     "-A", "x64",

@@ -13,7 +13,7 @@ source=()
 
 build() {
   cd "$startdir"
-  cmake -B build-pkg -S . -G Ninja \
+  cmake -B build-pkg -S "$startdir/.." -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \

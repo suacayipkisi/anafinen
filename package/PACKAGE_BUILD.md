@@ -7,7 +7,7 @@ builds a Release binary, and selects RPM, pacman, or DEB according to the
 distribution.
 
 ```bash
-./package.sh
+./package/package.sh
 ```
 
 For Arch/CachyOS, `makepkg` uses [PKGBUILD](PKGBUILD). For Debian, the script
@@ -20,7 +20,7 @@ Run PowerShell from the repository root. The Gmsh SDK must contain `include`,
 `lib`, and `bin/gmsh.dll`.
 
 ```powershell
-.\package.ps1 -VcpkgRoot "C:/Users/<your username>/vcpkg" -GmshSdkDir "C:/libs/gmsh-sdk"
+.\package\package.ps1 -VcpkgRoot "C:/Users/<your username>/vcpkg" -GmshSdkDir "C:/libs/gmsh-sdk"
 ```
 
 The result is a ZIP containing the executable, `gmsh.dll`, and the required
@@ -54,7 +54,7 @@ sudo ln -sf /usr/include/glm /usr/x86_64-w64-mingw32/sys-root/mingw/include/glm
 ```bash
 rm -rf build-win64
 cmake -B build-win64 -S . -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=mingw64-toolchain.cmake \
+  -DCMAKE_TOOLCHAIN_FILE=package/mingw64-toolchain.cmake \
   -DCMAKE_BUILD_TYPE=Release \
   -DGMSH_SDK_DIR="$HOME/Projects/gmsh-sdk" \
   -DGMSH_INCLUDE_DIR="$HOME/Projects/gmsh-sdk/include" \
@@ -92,7 +92,7 @@ sudo ln -sf /usr/include/glm /usr/x86_64-w64-mingw32/include/glm
 ```bash
 rm -rf build-win64
 cmake -B build-win64 -S . -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=mingw64-toolchain.cmake \
+  -DCMAKE_TOOLCHAIN_FILE=package/mingw64-toolchain.cmake \
   -DCMAKE_BUILD_TYPE=Release \
   -DGMSH_SDK_DIR="$HOME/Projects/gmsh-sdk" \
   -DGMSH_INCLUDE_DIR="$HOME/Projects/gmsh-sdk/include" \
@@ -158,7 +158,7 @@ rm -rf /tmp/mingw_deps
 ```bash
 rm -rf build-win64
 cmake -B build-win64 -S . -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=mingw64-toolchain.cmake \
+  -DCMAKE_TOOLCHAIN_FILE=package/mingw64-toolchain.cmake \
   -DCMAKE_BUILD_TYPE=Release \
   -DGMSH_SDK_DIR="$HOME/Projects/gmsh-sdk" \
   -DGMSH_INCLUDE_DIR="$HOME/Projects/gmsh-sdk/include" \
