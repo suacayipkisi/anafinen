@@ -38,39 +38,25 @@ As you can understand I'm making this project for educational purposes
 
 ## Libraries
 - Calculation: Eigen, Spectra
-- Visualisation and GUI: OpenGL, GLAD, GLFW, ImGUI, ImGuizmo, ImPlot
+- Visualisation and GUI: OpenGL, GLAD, GLFW, ImGUI, ImGuizmo, ImPlot, glm
 - Multithreading: OpenMP
 
-# Build and package (Linux and Windows)
+# Build (Linux and Windows)
 
 I don't have money to buy a mac, sorry...  
 So, there is no build for macOS
 
-I tried to build in cachyOS but I couldn't installed gmsh lib from aur, some problems occoured.  
-If I would be succeed somehow, then I will add build instruction for arch too.  
+Currently I added for Fedora and Arch.
 
 Also I will try in debian and add build instruction for it too.
 
 If you are using another distro (not arch, fedora, debian or based on them) like gentoo, I'm sorry I will not try for them but somehow you did succeed, you can send me.
 
-## Fedora, Arch/CachyOS, and Debian
-
-After installing the libraries listed below for your distribution, run the
-same command from the repository root. The script initializes submodules,
-builds a Release binary, and selects RPM, pacman, or DEB according to the
-distribution.
-
-```bash
-./package.sh
-```
-
-For Arch/CachyOS, `makepkg` uses [PKGBUILD](PKGBUILD). For Debian, the script
-uses CPack's DEB generator and derives shared-library dependencies with
-`dpkg-shlibdeps`.
-
-## Fedora
+## Linux
 
 ### Libraries
+
+#### Libraries Fedora
 
 ```bash
 sudo dnf install -y \
@@ -82,7 +68,24 @@ sudo dnf install -y \
     mesa-libGL-devel \
     gmsh-devel \
     glfw-devel \
-    spectra-devel
+    spectra-devel \
+    libpng-devel \
+    glm-devel
+```
+
+#### Libraries Arch-CachyOS
+```bash
+sudo pacman -S glibc gcc-libs eigen spectra glfw mesa openmp cmake ninja git glm 
+
+# WARNING!!!!!! using paru means using AUR which is a place sometimes hackers might play around. be careful!!! 
+# If you dont want to install via AUR, you may look for installing it from their websites like what we install for windows.
+paru -S gmsh-bin
+```
+
+#### Libraries Debian-Ubuntu
+```bash
+sudo apt-get update
+sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev
 ```
 
 ### Clone This Repo
@@ -160,18 +163,6 @@ Mesh engine:
 - Pres ctrl+shift+b to start build.
 - After build press f5 to open debug mode or ctrl+f5 to open normally.
 - DONE!
-
-### Package from Windows
-
-Run PowerShell from the repository root. The Gmsh SDK must contain `include`,
-`lib`, and `bin/gmsh.dll`.
-
-```powershell
-.\package.ps1 -VcpkgRoot "C:/Users/<your username>/vcpkg" -GmshSdkDir "C:/libs/gmsh-sdk"
-```
-
-The result is a ZIP containing the executable, `gmsh.dll`, and the required
-assets beside the executable.
 
 
 ## Licensing & Third Party Library and Font Licenses
