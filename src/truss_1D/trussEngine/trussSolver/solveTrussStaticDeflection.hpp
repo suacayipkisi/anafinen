@@ -29,13 +29,17 @@ namespace FEM::TRUSS {
 
     class Truss_1D_Container{
     private:
+        bool m_isCalculationValid;
+        double m_energyDiff;
+        double m_workDone_external;
+        double m_elasticDeformationEnergy_internal;
+
         std::span<const double> m_forceVec;
         std::span<Node> m_allNodes;
         std::span<TrussElement_1D> m_allElements;
 
         std::vector<Eigen::Triplet<double>> m_globalStiffnessMatrix;
         std::vector<std::array<double, 3>> m_resultDisplacements;
-        std::vector<std::array<double, 3>> m_resultForces;
     public:
         Truss_1D_Container() = default;
         Truss_1D_Container(
@@ -65,6 +69,13 @@ namespace FEM::TRUSS {
 
         void calculateDisplacements();
         void calculateElementForcesAndStress(const std::span<const anaf::MATERIAL::Material> allMaterials);
+
+        void runValidator(const std::span<const anaf::MATERIAL::Material> allMaterials);
+
+        inline const bool getIsCalculationValid() const {return m_isCalculationValid;}
+        inline const double getEnergyDiff() const {return m_energyDiff;}
+        inline const double getWorkDone_External() const {return m_workDone_external;}
+        inline const double getElasticDeformationEnergy_Internal() const {return m_elasticDeformationEnergy_internal;}
     };
 
 } // namespace FEM::TRUSS end

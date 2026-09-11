@@ -37,7 +37,41 @@ namespace anaf::BRIDGE {
         std::vector<FEM::TRUSS::Node> trussNodes;
         std::vector<FEM::TRUSS::TrussElement_1D> trussElements;
         std::vector<FEM::TRUSS::ForceApplied> appliedForces;
-        double deformScale{1.0};
+        std::atomic<double> deformScale{1.0};
+
+        MeshData() = default;
+
+        MeshData(const MeshData& other)
+            : trussNodes(other.trussNodes),
+              trussElements(other.trussElements),
+              appliedForces(other.appliedForces),
+              deformScale(other.deformScale.load()) {}
+
+        MeshData& operator=(const MeshData& other) {
+            if (this != &other) {
+                trussNodes = other.trussNodes;
+                trussElements = other.trussElements;
+                appliedForces = other.appliedForces;
+                deformScale.store(other.deformScale.load());
+            }
+            return *this;
+        }
+
+        MeshData(MeshData&& other) noexcept
+            : trussNodes(std::move(other.trussNodes)),
+              trussElements(std::move(other.trussElements)),
+              appliedForces(std::move(other.appliedForces)),
+              deformScale(other.deformScale.load()) {}
+
+        MeshData& operator=(MeshData&& other) noexcept {
+            if (this != &other) {
+                trussNodes = std::move(other.trussNodes);
+                trussElements = std::move(other.trussElements);
+                appliedForces = std::move(other.appliedForces);
+                deformScale.store(other.deformScale.load());
+            }
+            return *this;
+        }
         
     };
 
@@ -50,6 +84,8 @@ namespace anaf::BRIDGE {
         std::jthread workerThread;
 
         std::shared_ptr<const MeshData> activeMesh{nullptr};
+        std::atomic<bool> m_isValid{false};
+        std::atomic<double> m_energyDiff;
 
         // general access
         std::vector<anaf::MATERIAL::Material> allMaterials;

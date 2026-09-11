@@ -125,7 +125,9 @@ namespace anaf::GUI {
                                 node.setMovable(movable);
                             }
                             if (bridge.activeMesh) {
-                                newMesh->deformScale = bridge.activeMesh->deformScale;
+                                newMesh->deformScale.store(
+                                    bridge.activeMesh->deformScale.load(std::memory_order_relaxed),
+                                    std::memory_order_relaxed);
                             }
                             bridge.activeMesh = std::move(newMesh);
                             bridge.hasTrussPreview = true;

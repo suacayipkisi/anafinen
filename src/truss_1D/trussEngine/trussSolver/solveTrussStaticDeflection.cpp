@@ -212,4 +212,45 @@ namespace FEM::TRUSS {
         }
     }
 
+    void Truss_1D_Container::runValidator(const std::span<const anaf::MATERIAL::Material> allMaterials) {
+        std::vector<double> ele_elasticDeformationEnergy_internal;
+
+        std::uint32_t elementNum {static_cast<uint32_t>(m_allElements.size())};
+
+        ele_elasticDeformationEnergy_internal.resize(elementNum);
+
+        m_elasticDeformationEnergy_internal = 0.0;
+
+        #pragma omp parallel for schedule(static)
+        for (long long elementIndex = 0; elementIndex < static_cast<long long>(elementNum); ++elementIndex) {
+            const auto& element = m_allElements[elementIndex];
+            ele_elasticDeformationEnergy_internal[elementIndex] =
+                (element.getEleAxialForces() * element.getEleAxialForces() * element.getEleLength()) /
+                (2 * element.getEleCrossSection() * allMaterials[element.getEleProperties()].getElasticityModulues()
+            );
+        }
+
+        for (double val : ele_elasticDeformationEnergy_internal) {
+            m_elasticDeformationEnergy_internal += val;
+        }
+
+        double workDoneExternal = 0.0;
+        #pragma omp parallel for schedule(static) reduction(+:workDoneExternal)
+        for (long long i = 0; i < m_resultDisplacements.size(); ++i) {
+            workDoneExternal += (m_forceVec[3 * i] * m_resultDisplacements[i][0]);
+            workDoneExternal += (m_forceVec[3 * i + 1] * m_resultDisplacements[i][1]);
+            workDoneExternal += (m_forceVec[3 * i + 2] * m_resultDisplacements[i][2]);
+        }
+
+        m_workDone_external = workDoneExternal;
+        m_energyDiff = std::abs(
+            m_elasticDeformationEnergy_internal - (m_workDone_external / 2.0)
+        );
+        if(m_energyDiff > 1e-7) {
+            m_isCalculationValid = false;
+        } else {
+            m_isCalculationValid = true;
+        }
+    }
+
 } // namespace FEM::TRUSS end

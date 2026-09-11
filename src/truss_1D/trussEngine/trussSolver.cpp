@@ -129,9 +129,26 @@ namespace FEM::TRUSS {
             maxStress = std::max(maxStress, element.getEleStress());
         }
 
-        anaf::LOG::success("Solver completed");
-        anaf::LOG::info("Max nodal displacement magnitude: {}", maxDisp);
-        anaf::LOG::info("Max element stress: {}", maxStress);
+        m_container.runValidator(materials);
+        {
+            std::lock_guard lock(bridge.dataMutex);
+            bridge.m_isValid = m_container.getIsCalculationValid();
+            bridge.m_energyDiff = m_container.getEnergyDiff();
+
+            if (m_container.getIsCalculationValid()) {
+                anaf::LOG::success("Solver completed");
+                anaf::LOG::success("Calculation is VALID! (validation: 1e-7) Energy diff: {}", m_container.getEnergyDiff());
+                anaf::LOG::info("Max nodal displacement magnitude: {}", maxDisp);
+                anaf::LOG::info("Max element stress: {}", maxStress);
+                anaf::LOG::info("Work done by external forces: {}", m_container.getWorkDone_External());
+                anaf::LOG::info("Stored elastic deformation energy: {}", m_container.getElasticDeformationEnergy_Internal());
+            } else {
+                anaf::LOG::success("Solver completed");
+                anaf::LOG::error("Calculation is INVALID! Energy diff:{}", m_container.getEnergyDiff());
+                anaf::LOG::info("Work done by external forces: {}", m_container.getWorkDone_External());
+                anaf::LOG::info("Stored elastic deformation energy: {}", m_container.getElasticDeformationEnergy_Internal());
+            }
+        }
     }
     
 } // namespace FEM::TRUSS end
