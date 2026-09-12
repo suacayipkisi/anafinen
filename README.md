@@ -136,6 +136,13 @@ SuiteSparse is optional at configure time. When its headers and libraries are
 found, the build uses Eigen's CHOLMOD backend; otherwise it uses Eigen's
 built-in sparse LDLT solver.
 
+For native Windows builds, install SuiteSparse through vcpkg. The Linux-to-
+Windows MinGW cross-build does not include CHOLMOD because Fedora does not ship
+the required MinGW SuiteSparse development package; it uses the fallback solver
+unless a real MinGW SuiteSparse installation is passed through `CHOLMOD_ROOT`.
+The value `/path/to/suitesparse` is only an example and must not be passed
+literally.
+
 Gui and visualization:
 ```cmd
 .\vcpkg install glfw3:x64-windows

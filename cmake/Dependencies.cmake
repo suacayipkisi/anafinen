@@ -1,103 +1,46 @@
-if(WIN32)
-    # OpenMP for MinGW GCC
-    if(NOT TARGET OpenMP::OpenMP_CXX)
-        add_library(OpenMP::OpenMP_CXX INTERFACE IMPORTED)
-        set_target_properties(OpenMP::OpenMP_CXX PROPERTIES
-            INTERFACE_COMPILE_OPTIONS "-fopenmp"
-            INTERFACE_LINK_LIBRARIES "-lgomp"
-        )
-    endif()
+find_package(Eigen3 CONFIG REQUIRED)
+find_package(OpenMP REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(PNG REQUIRED)
+# SuiteSparse & CHOLMOD detection
+find_package(SuiteSparse CONFIG QUIET)
 
-    # Eigen3 from MinGW sysroot directly
-    if(NOT TARGET Eigen3::Eigen)
-        add_library(Eigen3::Eigen INTERFACE IMPORTED)
-        set_target_properties(Eigen3::Eigen PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "/usr/x86_64-w64-mingw32/sys-root/mingw/include/eigen3"
-        )
-    endif()
-
-    set(CHOLMOD_ROOT "" CACHE PATH "SuiteSparse installation root")
-    find_path(CHOLMOD_INCLUDE_DIR
-        NAMES cholmod.h
-        HINTS
-            "${CHOLMOD_ROOT}/include"
-            "${CHOLMOD_ROOT}/include/suitesparse"
-            "${CHOLMOD_ROOT}/include/SuiteSparse"
-    )
-    find_library(CHOLMOD_LIBRARY NAMES cholmod
-        HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64"
-    )
-    find_library(AMD_LIBRARY NAMES amd HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64")
-    find_library(CAMD_LIBRARY NAMES camd HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64")
-    find_library(CCOLAMD_LIBRARY NAMES ccolamd HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64")
-    find_library(COLAMD_LIBRARY NAMES colamd HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64")
-    find_library(SUITESPARSE_CONFIG_LIBRARY NAMES suitesparseconfig
-        HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64"
-    )
-
-    if(CHOLMOD_INCLUDE_DIR AND CHOLMOD_LIBRARY)
-        set(ANAFINEN_HAS_CHOLMOD TRUE)
-        set(CHOLMOD_LIBRARIES
-            ${CHOLMOD_LIBRARY}
-            ${AMD_LIBRARY}
-            ${CAMD_LIBRARY}
-            ${CCOLAMD_LIBRARY}
-            ${COLAMD_LIBRARY}
-            ${SUITESPARSE_CONFIG_LIBRARY}
-        )
-        find_file(CHOLMOD_DLL NAMES cholmod.dll
-            HINTS "${CHOLMOD_ROOT}/bin" "${CHOLMOD_ROOT}/lib"
-        )
-        set(CHOLMOD_DLLS ${CHOLMOD_DLL})
-        message(STATUS "CHOLMOD support enabled: ${CHOLMOD_LIBRARY}")
-    else()
-        set(ANAFINEN_HAS_CHOLMOD FALSE)
-        message(STATUS "CHOLMOD development files not found; using Eigen SimplicialLDLT")
-    endif()
-
-    set(OPENGL_LIBRARIES opengl32)
-    if(NOT TARGET OpenGL::GL)
-        add_library(OpenGL::GL INTERFACE IMPORTED)
-        set_target_properties(OpenGL::GL PROPERTIES
-            INTERFACE_LINK_LIBRARIES "opengl32"
-        )
-    endif()
+if(TARGET SuiteSparse::CHOLMOD)
+    set(ANAFINEN_HAS_CHOLMOD ON)
+    set(CHOLMOD_LIBRARIES SuiteSparse::CHOLMOD)
+    message(STATUS "CHOLMOD found via CMake Config: SuiteSparse::CHOLMOD")
 else()
-    find_package(Eigen3 REQUIRED)
-    find_package(OpenMP REQUIRED)
-    find_package(OpenGL REQUIRED)
-
-    find_path(CHOLMOD_INCLUDE_DIR
-        NAMES cholmod.h
-        PATH_SUFFIXES suitesparse SuiteSparse
+    find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h 
+        PATHS "C:/vcpkg/installed/x64-windows/include" 
+        PATH_SUFFIXES suitesparse
     )
-    find_library(CHOLMOD_LIBRARY NAMES cholmod)
-    find_library(AMD_LIBRARY NAMES amd)
-    find_library(CAMD_LIBRARY NAMES camd)
-    find_library(CCOLAMD_LIBRARY NAMES ccolamd)
-    find_library(COLAMD_LIBRARY NAMES colamd)
-    find_library(SUITESPARSE_CONFIG_LIBRARY NAMES suitesparseconfig)
+    find_library(CHOLMOD_LIB NAMES cholmod 
+        PATHS "C:/vcpkg/installed/x64-windows/lib"
+    )
+    find_library(SUITESPARSE_CONFIG_LIB NAMES suitesparseconfig 
+        PATHS "C:/vcpkg/installed/x64-windows/lib"
+    )
 
-    if(CHOLMOD_INCLUDE_DIR AND CHOLMOD_LIBRARY)
-        set(ANAFINEN_HAS_CHOLMOD TRUE)
-        set(CHOLMOD_LIBRARIES
-            ${CHOLMOD_LIBRARY}
-            ${AMD_LIBRARY}
-            ${CAMD_LIBRARY}
-            ${CCOLAMD_LIBRARY}
-            ${COLAMD_LIBRARY}
-            ${SUITESPARSE_CONFIG_LIBRARY}
-        )
-        message(STATUS "CHOLMOD support enabled: ${CHOLMOD_LIBRARY}")
+    if(CHOLMOD_INCLUDE_DIR AND CHOLMOD_LIB)
+        set(ANAFINEN_HAS_CHOLMOD ON)
+        set(CHOLMOD_LIBRARIES ${CHOLMOD_LIB} ${SUITESPARSE_CONFIG_LIB})
+        message(STATUS "CHOLMOD found: ${CHOLMOD_LIBRARIES}")
     else()
-        set(ANAFINEN_HAS_CHOLMOD FALSE)
-        message(STATUS "CHOLMOD development files not found; using Eigen SimplicialLDLT")
+        set(ANAFINEN_HAS_CHOLMOD OFF)
+        message(STATUS "CHOLMOD not found, falling back to built-in Eigen solvers")
     endif()
 endif()
 
-find_package(PNG REQUIRED)
+# Win32 OpenGL target check
+if(WIN32 AND NOT TARGET OpenGL::GL)
+    add_library(OpenGL::GL INTERFACE IMPORTED)
+    set_target_properties(OpenGL::GL PROPERTIES
+        INTERFACE_LINK_LIBRARIES "opengl32"
+    )
+endif()
 
-# icon conversion
+# Icon conversion
 find_program(ANAFINEN_IMAGE_CONVERTER NAMES magick convert)
 set(ANAFINEN_GENERATED_ASSETS_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-assets")
 file(MAKE_DIRECTORY "${ANAFINEN_GENERATED_ASSETS_DIR}/icons")
@@ -110,12 +53,12 @@ if(ANAFINEN_IMAGE_CONVERTER)
                 -resize 128x128 "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
         RESULT_VARIABLE ANAFINEN_ICON_CONVERSION_RESULT
     )
-    if(NOT ANAFINEN_ICON_CONVERSION_RESULT EQUAL 0)
+    if(ANAFINEN_ICON_CONVERSION_RESULT EQUAL 0)
         set(CONVERSION_SUCCESS TRUE)
     endif()
 endif()
 
-# icon creation fallback
+# Icon creation fallback
 if(NOT CONVERSION_SUCCESS)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg")
         file(COPY_FILE
@@ -123,11 +66,11 @@ if(NOT CONVERSION_SUCCESS)
             "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
         )
     else()
-        message(WARNING "Neither ImageMagic nor fallback anafinen.png was found")
+        message(WARNING "Neither ImageMagick nor fallback anafinen.png was found")
     endif()
 endif()
 
-# gmsh 
+# Gmsh SDK integration
 if(WIN32)
     set(GMSH_SDK_DIR "C:/libs/gmsh-sdk" CACHE PATH "Path to Gmsh SDK on Windows")
     find_path(GMSH_INCLUDE_DIR NAMES "gmsh.h" HINTS "${GMSH_SDK_DIR}/include" NO_DEFAULT_PATH)
@@ -172,7 +115,7 @@ else()
     )
 endif()
 
-# spectra
+# Spectra
 set(SPECTRA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/spectra")
 set(SPECTRA_TARGET "")
 if(EXISTS "${SPECTRA_DIR}/include/Spectra/SymEigsSolver.h")
@@ -191,6 +134,7 @@ else()
     endif()
 endif()
 
+# GLM
 find_package(glm CONFIG QUIET)
 if(NOT TARGET glm::glm)
     find_path(GLM_INCLUDE_DIR "glm/glm.hpp")
@@ -200,6 +144,25 @@ if(NOT TARGET glm::glm)
             INTERFACE_INCLUDE_DIRECTORIES "${GLM_INCLUDE_DIR}"
         )
     else()
-        message(FATAL_ERROR "GLM headers not found in MinGW sysroot!")
+        message(FATAL_ERROR "GLM headers not found!")
+    endif()
+endif()
+
+# CHOLMOD / SuiteSparse detection
+find_package(SuiteSparse QUIET)
+
+if(SuiteSparse_FOUND OR TARGET SuiteSparse::CHOLMOD)
+    set(ANAFINEN_HAS_CHOLMOD ON)
+    if(TARGET SuiteSparse::CHOLMOD)
+        set(CHOLMOD_LIBRARIES SuiteSparse::CHOLMOD)
+    endif()
+else()
+    # Fallback to manual find if Config mode is not used
+    find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h)
+    find_library(CHOLMOD_LIBRARIES NAMES cholmod)
+    if(CHOLMOD_INCLUDE_DIR AND CHOLMOD_LIBRARIES)
+        set(ANAFINEN_HAS_CHOLMOD ON)
+    else()
+        set(ANAFINEN_HAS_CHOLMOD OFF)
     endif()
 endif()

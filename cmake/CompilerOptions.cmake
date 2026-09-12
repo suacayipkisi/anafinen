@@ -12,7 +12,6 @@ if(MSVC)
     )
     target_compile_options(project_warnings_and_optimizations INTERFACE
         $<$<CONFIG:Release>:/O2>
-        /openmp:llvm
     )
     if(ANAFINEN_NATIVE_OPTIMIZATIONS)
         target_compile_options(project_warnings_and_optimizations INTERFACE /arch:AVX2)

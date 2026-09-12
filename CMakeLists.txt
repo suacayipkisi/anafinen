@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.20...3.31)
+
+if(POLICY CMP0207)
+    cmake_policy(SET CMP0207 NEW)
+endif()
+
 project(anafinen VERSION 0.1.1 LANGUAGES C CXX)
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
@@ -44,7 +49,6 @@ endif()
 
 target_link_libraries(anaf_core PUBLIC
     Eigen3::Eigen
-    OpenMP::OpenMP_CXX
     Gmsh::Gmsh
     project_warnings_and_optimizations
 )
@@ -72,6 +76,13 @@ target_compile_definitions(anafinen PRIVATE
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     GLFW_INCLUDE_NONE
 )
+
+if(MSVC)
+    target_compile_options(anaf_core PUBLIC /openmp:llvm)
+    target_compile_options(anafinen PUBLIC /openmp:llvm)
+else()
+    target_link_libraries(anaf_core PUBLIC OpenMP::OpenMP_CXX)
+endif()
 
 target_link_libraries(anafinen PRIVATE
     anaf_core
@@ -113,6 +124,7 @@ if(EXISTS "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png")
     )
 endif()
 
+# Runtime DLL copy for local build execution
 if(WIN32)
     add_custom_command(
         TARGET anafinen POST_BUILD
@@ -120,6 +132,29 @@ if(WIN32)
             "${GMSH_DLL}"
             $<TARGET_FILE_DIR:anafinen>
     )
+endif()
+
+# Installation rules for executable and assets
+install(TARGETS anafinen DESTINATION .)
+install(DIRECTORY assets/ DESTINATION ./assets)
+
+# Install runtime DLL dependencies into the package root
+if(WIN32)
+    install(TARGETS anafinen
+        RUNTIME_DEPENDENCIES
+            DIRECTORIES 
+                "C:/vcpkg/installed/x64-windows/bin"
+            PRE_EXCLUDE_REGEXES
+                "api-ms-win-.*"
+                "ext-ms-win-.*"
+            POST_EXCLUDE_REGEXES
+                ".*[Ss][Yy][Ss][Tt][Ee][Mm]32.*"
+                ".*[Ww][Ii][Nn][Dd][Oo][Ww][Ss].*"
+        DESTINATION .
+    )
+    if(EXISTS "${GMSH_DLL}")
+        install(FILES "${GMSH_DLL}" DESTINATION .)
+    endif()
 endif()
 
 include(Packaging)
