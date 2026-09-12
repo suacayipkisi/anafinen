@@ -37,18 +37,19 @@ As you can understand I'm making this project for educational purposes
 - Mechanical Vibrations 5th edition Rao
 
 ## Libraries
-- Calculation: Eigen, Spectra
+- Calculation: Eigen, Spectra, SuiteSparse CHOLMOD
 - Visualisation and GUI: OpenGL, GLAD, GLFW, ImGUI, ImGuizmo, ImPlot, glm
-- Multithreading: OpenMP
+- Multithreading: OpenMP and threaded SuiteSparse/BLAS backends
 
 # Build (Linux and Windows)
 
 I don't have money to buy a mac, sorry...  
 So, there is no build for macOS
 
-Currently I added for Fedora and Arch.
-
-Also I will try in debian and add build instruction for it too.
+Build instructions are provided for Fedora, Arch/CachyOS, and Debian/Ubuntu.
+When SuiteSparse development files are available, CMake automatically enables
+Eigen's CHOLMOD backend; otherwise it falls back to Eigen's built-in sparse
+LDLT solver.
 
 If you are using another distro (not arch, fedora, debian or based on them) like gentoo, I'm sorry I will not try for them but somehow you did succeed, you can send me.
 
@@ -65,6 +66,7 @@ sudo dnf install -y \
     ninja-build \
     git \
     eigen3-devel \
+    suitesparse-devel \
     mesa-libGL-devel \
     gmsh-devel \
     glfw-devel \
@@ -75,7 +77,7 @@ sudo dnf install -y \
 
 #### Libraries Arch-CachyOS
 ```bash
-sudo pacman -S glibc gcc-libs eigen spectra glfw mesa openmp cmake ninja git glm 
+sudo pacman -S glibc gcc-libs eigen suitesparse spectra glfw mesa openmp cmake ninja git glm
 
 # WARNING!!!!!! using paru means using AUR which is a place sometimes hackers might play around. be careful!!! 
 # If you dont want to install via AUR, you may look for installing it from their websites like what we install for windows.
@@ -85,7 +87,7 @@ paru -S gmsh-bin
 #### Libraries Debian-Ubuntu
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev
+sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev
 ```
 
 ### Clone This Repo
@@ -127,7 +129,12 @@ Calculation libs:
 ```cmd
 .\vcpkg install eigen3:x64-windows
 .\vcpkg install spectra:x64-windows
+.\vcpkg install suitesparse:x64-windows
 ```
+
+SuiteSparse is optional at configure time. When its headers and libraries are
+found, the build uses Eigen's CHOLMOD backend; otherwise it uses Eigen's
+built-in sparse LDLT solver.
 
 Gui and visualization:
 ```cmd

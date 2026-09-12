@@ -14,6 +14,11 @@ if(WIN32)
     install(FILES "${GMSH_DLL}"
         DESTINATION .
     )
+    if(CHOLMOD_DLLS)
+        install(FILES ${CHOLMOD_DLLS}
+            DESTINATION .
+        )
+    endif()
 
     # use MinGW DLL if croscompile on linux
     if(CMAKE_CROSSCOMPILING)
@@ -68,6 +73,9 @@ elseif(UNIX AND NOT APPLE)
     set(CPACK_RPM_PACKAGE_RELEASE "1.alpha")
     set(CPACK_RPM_PACKAGE_LICENSE "GPLv3+")
     set(CPACK_RPM_PACKAGE_GROUP "Applications/Engineering")
+    if(ANAFINEN_HAS_CHOLMOD)
+        set(CPACK_RPM_PACKAGE_REQUIRES "suitesparse")
+    endif()
     set(CPACK_DEBIAN_PACKAGE_VERSION "${PROJECT_VERSION}~alpha1")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 endif()

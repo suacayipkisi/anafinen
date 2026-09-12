@@ -16,6 +16,45 @@ if(WIN32)
         )
     endif()
 
+    set(CHOLMOD_ROOT "" CACHE PATH "SuiteSparse installation root")
+    find_path(CHOLMOD_INCLUDE_DIR
+        NAMES cholmod.h
+        HINTS
+            "${CHOLMOD_ROOT}/include"
+            "${CHOLMOD_ROOT}/include/suitesparse"
+            "${CHOLMOD_ROOT}/include/SuiteSparse"
+    )
+    find_library(CHOLMOD_LIBRARY NAMES cholmod
+        HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64"
+    )
+    find_library(AMD_LIBRARY NAMES amd HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64")
+    find_library(CAMD_LIBRARY NAMES camd HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64")
+    find_library(CCOLAMD_LIBRARY NAMES ccolamd HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64")
+    find_library(COLAMD_LIBRARY NAMES colamd HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64")
+    find_library(SUITESPARSE_CONFIG_LIBRARY NAMES suitesparseconfig
+        HINTS "${CHOLMOD_ROOT}/lib" "${CHOLMOD_ROOT}/lib64"
+    )
+
+    if(CHOLMOD_INCLUDE_DIR AND CHOLMOD_LIBRARY)
+        set(ANAFINEN_HAS_CHOLMOD TRUE)
+        set(CHOLMOD_LIBRARIES
+            ${CHOLMOD_LIBRARY}
+            ${AMD_LIBRARY}
+            ${CAMD_LIBRARY}
+            ${CCOLAMD_LIBRARY}
+            ${COLAMD_LIBRARY}
+            ${SUITESPARSE_CONFIG_LIBRARY}
+        )
+        find_file(CHOLMOD_DLL NAMES cholmod.dll
+            HINTS "${CHOLMOD_ROOT}/bin" "${CHOLMOD_ROOT}/lib"
+        )
+        set(CHOLMOD_DLLS ${CHOLMOD_DLL})
+        message(STATUS "CHOLMOD support enabled: ${CHOLMOD_LIBRARY}")
+    else()
+        set(ANAFINEN_HAS_CHOLMOD FALSE)
+        message(STATUS "CHOLMOD development files not found; using Eigen SimplicialLDLT")
+    endif()
+
     set(OPENGL_LIBRARIES opengl32)
     if(NOT TARGET OpenGL::GL)
         add_library(OpenGL::GL INTERFACE IMPORTED)
@@ -27,6 +66,33 @@ else()
     find_package(Eigen3 REQUIRED)
     find_package(OpenMP REQUIRED)
     find_package(OpenGL REQUIRED)
+
+    find_path(CHOLMOD_INCLUDE_DIR
+        NAMES cholmod.h
+        PATH_SUFFIXES suitesparse SuiteSparse
+    )
+    find_library(CHOLMOD_LIBRARY NAMES cholmod)
+    find_library(AMD_LIBRARY NAMES amd)
+    find_library(CAMD_LIBRARY NAMES camd)
+    find_library(CCOLAMD_LIBRARY NAMES ccolamd)
+    find_library(COLAMD_LIBRARY NAMES colamd)
+    find_library(SUITESPARSE_CONFIG_LIBRARY NAMES suitesparseconfig)
+
+    if(CHOLMOD_INCLUDE_DIR AND CHOLMOD_LIBRARY)
+        set(ANAFINEN_HAS_CHOLMOD TRUE)
+        set(CHOLMOD_LIBRARIES
+            ${CHOLMOD_LIBRARY}
+            ${AMD_LIBRARY}
+            ${CAMD_LIBRARY}
+            ${CCOLAMD_LIBRARY}
+            ${COLAMD_LIBRARY}
+            ${SUITESPARSE_CONFIG_LIBRARY}
+        )
+        message(STATUS "CHOLMOD support enabled: ${CHOLMOD_LIBRARY}")
+    else()
+        set(ANAFINEN_HAS_CHOLMOD FALSE)
+        message(STATUS "CHOLMOD development files not found; using Eigen SimplicialLDLT")
+    endif()
 endif()
 
 find_package(PNG REQUIRED)

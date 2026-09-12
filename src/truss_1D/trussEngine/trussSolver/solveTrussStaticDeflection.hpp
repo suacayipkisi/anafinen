@@ -31,6 +31,7 @@ namespace FEM::TRUSS {
     private:
         bool m_isCalculationValid;
         double m_energyDiff;
+        double m_energyRelativeDiff;
         double m_workDone_external;
         double m_elasticDeformationEnergy_internal;
 
@@ -74,6 +75,7 @@ namespace FEM::TRUSS {
 
         inline const bool getIsCalculationValid() const {return m_isCalculationValid;}
         inline const double getEnergyDiff() const {return m_energyDiff;}
+        inline const double getEnergyRelativeDiff() const {return m_energyRelativeDiff;}
         inline const double getWorkDone_External() const {return m_workDone_external;}
         inline const double getElasticDeformationEnergy_Internal() const {return m_elasticDeformationEnergy_internal;}
     };

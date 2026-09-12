@@ -1,6 +1,13 @@
 
 ## Packaging for Linux (Fedora, Arch/CachyOS, and Debian)
 
+CHOLMOD is used automatically when SuiteSparse development files are
+available. The native packaging script installs them during the build:
+
+- Fedora: `suitesparse-devel` (runtime package: `suitesparse`)
+- Arch/CachyOS: `suitesparse`
+- Debian/Ubuntu: `libsuitesparse-dev`
+
 After installing the libraries listed below for your distribution, run the
 same command from the repository root. The script initializes submodules,
 builds a Release binary, and selects RPM, pacman, or DEB according to the
@@ -21,6 +28,13 @@ Run PowerShell from the repository root. The Gmsh SDK must contain `include`,
 
 ```powershell
 .\package\package.ps1 -VcpkgRoot "C:/Users/<your username>/vcpkg" -GmshSdkDir "C:/libs/gmsh-sdk"
+```
+
+When using vcpkg, the script installs `suitesparse:x64-windows` and enables
+CHOLMOD automatically. For a manual SuiteSparse installation, pass its root:
+
+```powershell
+.\package\package.ps1 -CholmodRoot "C:/libs/SuiteSparse" -GmshSdkDir "C:/libs/gmsh-sdk"
 ```
 
 The result is a ZIP containing the executable, `gmsh.dll`, and the required

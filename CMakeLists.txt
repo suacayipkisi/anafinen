@@ -32,6 +32,12 @@ target_include_directories(anaf_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/truss_1D
 )
 
+if(ANAFINEN_HAS_CHOLMOD)
+    target_compile_definitions(anaf_core PRIVATE ANAFINEN_HAS_CHOLMOD)
+    target_include_directories(anaf_core PRIVATE ${CHOLMOD_INCLUDE_DIR})
+    target_link_libraries(anaf_core PRIVATE ${CHOLMOD_LIBRARIES})
+endif()
+
 if(SPECTRA_TARGET)
     target_link_libraries(anaf_core PUBLIC ${SPECTRA_TARGET})
 endif()

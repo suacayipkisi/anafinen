@@ -6,8 +6,8 @@ pkgdesc="3D FEM Analysis Engine"
 arch=('x86_64')
 url="https://github.com/suacayipkisi/anafinen"
 license=('GPL-3.0-or-later')
-depends=('glibc' 'gcc-libs' 'eigen' 'spectra' 'glfw' 'mesa' 'gmsh' 'openmp')
-makedepends=('cmake' 'ninja' 'git' 'eigen' 'spectra' 'glfw' 'mesa' 'glm' 'gmsh' 'openmp')
+depends=('glibc' 'gcc-libs' 'eigen' 'spectra' 'glfw' 'mesa' 'gmsh' 'openmp' 'suitesparse')
+makedepends=('cmake' 'ninja' 'git' 'eigen' 'spectra' 'glfw' 'mesa' 'glm' 'gmsh' 'openmp' 'suitesparse')
 options=('!lto')
 source=()
 

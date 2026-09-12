@@ -1,6 +1,7 @@
 param(
     [string]$VcpkgRoot = "",
     [string]$GmshSdkDir = "C:/libs/gmsh-sdk",
+    [string]$CholmodRoot = "",
     [string]$BuildDir = "build"
 )
 
@@ -19,6 +20,11 @@ $cmakeArgs = @(
 
 if ($VcpkgRoot -ne "") {
     $cmakeArgs += "-DCMAKE_TOOLCHAIN_FILE=$VcpkgRoot/scripts/buildsystems/vcpkg.cmake"
+    & "$VcpkgRoot/vcpkg.exe" install eigen3:x64-windows suitesparse:x64-windows
+}
+
+if ($CholmodRoot -ne "") {
+    $cmakeArgs += "-DCHOLMOD_ROOT=$CholmodRoot"
 }
 
 cmake @cmakeArgs

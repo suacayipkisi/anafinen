@@ -23,9 +23,14 @@
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
 #include <Eigen/SparseCore>
+#ifdef ANAFINEN_HAS_CHOLMOD
+#include <Eigen/CholmodSupport>
+#endif
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
+#include <cmath>
 #include <span>
 #include <vector>
 #include <omp.h>
@@ -180,7 +185,11 @@ namespace FEM::TRUSS {
             }
         }
 
+    #ifdef ANAFINEN_HAS_CHOLMOD
+        Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<double>> solver;
+    #else
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
+    #endif
         solver.compute(reducedStiffnessMatrix);
         Eigen::VectorXd reducedDisplacements = solver.solve(reducedForceVec);
 
@@ -280,14 +289,21 @@ namespace FEM::TRUSS {
         }
 
         m_workDone_external = workDoneExternal;
-        m_energyDiff = std::abs(
-            m_elasticDeformationEnergy_internal - (m_workDone_external / 2.0)
-        );
-        if(m_energyDiff > 1e-7) {
-            m_isCalculationValid = false;
-        } else {
-            m_isCalculationValid = true;
-        }
+        const double externalEnergy = m_workDone_external / 2.0;
+        m_energyDiff = std::abs(m_elasticDeformationEnergy_internal - externalEnergy);
+
+        const double energyScale = std::max({
+            std::abs(m_elasticDeformationEnergy_internal),
+            std::abs(externalEnergy),
+            1.0
+        });
+        m_energyRelativeDiff = m_energyDiff / energyScale;
+
+        constexpr double absoluteTolerance = 1e-12;
+        constexpr double relativeTolerance = 1e-7;
+        m_isCalculationValid =
+            m_energyDiff <= absoluteTolerance ||
+            m_energyRelativeDiff <= relativeTolerance;
     }
 
 } // namespace FEM::TRUSS end
