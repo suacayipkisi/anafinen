@@ -4,7 +4,6 @@ target_compile_definitions(project_warnings_and_optimizations INTERFACE
     $<$<CONFIG:Release>:NDEBUG>
     $<$<CONFIG:Release>:EIGEN_NO_DEBUG>
 
-    EIGEN_DONT_PARALLELIZE
 )
 
 if(MSVC)

@@ -84,6 +84,17 @@ namespace FEM::TRUSS {
     }
 
     void Truss_1D_Container::calculateDisplacements() {
+        #pragma omp parallel
+        {
+            #pragma omp single
+            {
+                anaf::LOG::info(
+                    "OpenMP team: {}, max threads: {}",
+                    omp_get_num_threads(),
+                    omp_get_max_threads()
+                );
+            }
+        }
         const std::uint32_t totalNodes = static_cast<std::uint32_t>(m_allNodes.size());
         m_resultDisplacements.resize(totalNodes);
         const std::uint32_t totalDofs = totalNodes * 3;
@@ -106,31 +117,55 @@ namespace FEM::TRUSS {
             }
         }
 
-        // parallel filtering of triplets via private vector merge
-        std::vector<Eigen::Triplet<double>> reducedTriplets;
-        
+        // Count valid triplets first so the parallel fill can write directly.
+        const int threadCount = omp_get_max_threads();
+        std::vector<std::size_t> tripletCounts(threadCount, 0);
+
         #pragma omp parallel
         {
-            std::vector<Eigen::Triplet<double>> localReducedTriplets;
-            localReducedTriplets.reserve(m_globalStiffnessMatrix.size() / omp_get_num_threads());
+            const int threadIndex = omp_get_thread_num();
+            std::size_t validTripletCount = 0;
 
-            #pragma omp for schedule(static) nowait
+            #pragma omp for schedule(static)
             for (long long i = 0; i < m_globalStiffnessMatrix.size(); ++i) {
                 const auto& triplet = m_globalStiffnessMatrix[i];
                 auto r = static_cast<std::uint32_t>(triplet.row());
                 auto c = static_cast<std::uint32_t>(triplet.col());
 
                 if (!isFixed[r] && !isFixed[c]) {
-                    localReducedTriplets.emplace_back(
+                    ++validTripletCount;
+                }
+            }
+
+            tripletCounts[threadIndex] = validTripletCount;
+        }
+
+        std::vector<std::size_t> tripletOffsets(threadCount + 1, 0);
+        for (int i = 0; i < threadCount; ++i) {
+            tripletOffsets[i + 1] = tripletOffsets[i] + tripletCounts[i];
+        }
+
+        std::vector<Eigen::Triplet<double>> reducedTriplets(tripletOffsets.back());
+
+        #pragma omp parallel
+        {
+            const int threadIndex = omp_get_thread_num();
+            std::size_t outputIndex = tripletOffsets[threadIndex];
+
+            #pragma omp for schedule(static)
+            for (long long i = 0; i < m_globalStiffnessMatrix.size(); ++i) {
+                const auto& triplet = m_globalStiffnessMatrix[i];
+                auto r = static_cast<std::uint32_t>(triplet.row());
+                auto c = static_cast<std::uint32_t>(triplet.col());
+
+                if (!isFixed[r] && !isFixed[c]) {
+                    reducedTriplets[outputIndex++] = Eigen::Triplet<double>(
                         remapTable[r],
                         remapTable[c],
                         triplet.value()
                     );
                 }
             }
-
-            #pragma omp critical
-            reducedTriplets.insert(reducedTriplets.end(), localReducedTriplets.begin(), localReducedTriplets.end());
         }
 
         Eigen::SparseMatrix<double> reducedStiffnessMatrix(activeDofCount, activeDofCount);
@@ -138,7 +173,8 @@ namespace FEM::TRUSS {
         reducedStiffnessMatrix.makeCompressed();
 
         Eigen::VectorXd reducedForceVec(activeDofCount);
-        for (std::size_t i = 0; i < totalDofs; ++i) {
+        #pragma omp parallel for schedule(static)
+        for (long long i = 0; i < totalDofs; ++i) {
             if (!isFixed[i]) {
                 reducedForceVec[remapTable[i]] = m_forceVec[i];
             }
@@ -230,8 +266,9 @@ namespace FEM::TRUSS {
             );
         }
 
-        for (double val : ele_elasticDeformationEnergy_internal) {
-            m_elasticDeformationEnergy_internal += val;
+        #pragma omp parallel for schedule(static) reduction(+:m_elasticDeformationEnergy_internal)
+        for (long long i = 0; i < static_cast<long long>(elementNum); ++i) {
+            m_elasticDeformationEnergy_internal += ele_elasticDeformationEnergy_internal[i];
         }
 
         double workDoneExternal = 0.0;

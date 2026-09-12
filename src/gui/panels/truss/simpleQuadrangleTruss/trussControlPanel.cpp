@@ -19,9 +19,11 @@
 
 #include "imgui.h"
 
+#include <Eigen/Core>
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <omp.h>
 #include <stop_token>
 #include <thread>
 
@@ -31,6 +33,14 @@
 namespace anaf::GUI {
 
     namespace {
+        void configureOpenMPForWorker() {
+            const int availableThreads = omp_get_num_procs();
+            const int threadCount = availableThreads > 4 ? availableThreads - 2 : availableThreads;
+            omp_set_dynamic(0);
+            omp_set_num_threads(threadCount);
+            Eigen::setNbThreads(threadCount);
+        }
+
         void ensureDemoTrussCase(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t forceNodeId) {
             bridge.fixedDOFsByNode.clear();
             bridge.fixedDOFsByNode[0u] = {true, true, true};
@@ -106,6 +116,7 @@ namespace anaf::GUI {
                  type = m_type,
                  appliedForces = m_appliedForces](std::stop_token st) mutable {
                     try {
+                        configureOpenMPForWorker();
                         FEM::TRUSS::SimpleTruss preview{{cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea, type};
                         preview.setTruss();
 
@@ -350,6 +361,7 @@ namespace anaf::GUI {
                  appliedForces = m_appliedForces,
                  deformScale = currentScale, forcesToApply](std::stop_token st) mutable {
                     try {
+                        configureOpenMPForWorker();
                         auto& allMaterials = bridge.allMaterials;
 
                         FEM::TRUSS::Truss_SQPT solver{

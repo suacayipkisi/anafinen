@@ -28,6 +28,7 @@
 #include <Spectra/SymGEigsShiftSolver.h>
 
 #include <gmsh.h>
+#include <omp.h>
 #include <vector>
 
 #include "log/anaf_info.hpp"
@@ -59,6 +60,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     anaf::LOG::core("Initializing ANAFINEN Workspace (C++23)...");
+
+    const int availableThreads = omp_get_num_procs();
+    const int threadCount = availableThreads > 4 ? availableThreads - 2 : availableThreads;
+    omp_set_dynamic(0);
+    omp_set_num_threads(threadCount);
+    Eigen::setNbThreads(threadCount);
+    anaf::LOG::info("OpenMP thread limit set to {} of {} available threads", threadCount, availableThreads);
 
     anaf::TEST::AllStatus mainStatus{};
 
