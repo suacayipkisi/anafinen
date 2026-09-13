@@ -38,13 +38,13 @@ namespace anaf::GUI {
 
         if (ImGui::Begin("Select Truss Type")) {
             if (ImGui::BeginCombo("Truss Type", m_types[static_cast<int>(m_trussType)].data())) {
-            for (int i = 0; i < static_cast<int>(m_types.size()); ++i) {
-                if (ImGui::Selectable(m_types[i].data(), m_trussType == static_cast<TrussTypes>(i))) {
-                    m_trussType = static_cast<TrussTypes>(i);
+                for (int i = 0; i < static_cast<int>(m_types.size()); ++i) {
+                    if (ImGui::Selectable(m_types[i].data(), m_trussType == static_cast<TrussTypes>(i))) {
+                        m_trussType = static_cast<TrussTypes>(i);
+                    }
                 }
+                ImGui::EndCombo();
             }
-            ImGui::EndCombo();
-        }
 
             if(ImGui::Button("Select", ImVec2(-1, 32))) {
                 if (onSelected) {

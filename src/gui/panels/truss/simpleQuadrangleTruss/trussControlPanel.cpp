@@ -18,9 +18,12 @@
 #include "trussControlPanel.hpp"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 
 #include <Eigen/Core>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <omp.h>
@@ -66,43 +69,133 @@ namespace anaf::GUI {
         ImGui::Text("Truss Parameters");
         ImGui::Separator();
 
-        {
-            std::lock_guard lock(bridge.dataMutex);
-            if (bridge.fixedDOFsByNode.empty()) {
-                ensureDemoTrussCase(bridge, m_forceNodeId);
-            }
-            if (bridge.selectedNodeId == std::numeric_limits<std::uint32_t>::max()) {
-                bridge.selectedNodeId = m_forceNodeId;
-            }
-        }
-
-        // if there is no force, push one force example
-        if (m_appliedForces.empty()) {
-            m_appliedForces.emplace_back(m_forceNodeId, std::array<double, 3>{0.0, 10000.0, 0.0});
-        }
-
         std::uint32_t currentSelectedNode = std::numeric_limits<std::uint32_t>::max();
         {
             std::lock_guard lock(bridge.dataMutex);
             currentSelectedNode = bridge.selectedNodeId;
         }
 
-        if (currentSelectedNode != std::numeric_limits<std::uint32_t>::max()) {
-            ImGui::Text("Selected node: %u", currentSelectedNode);
-        } else {
-            ImGui::Text("Selected node: none");
+        if (ImGui::BeginTable("TrussParamsTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.6f);
+            ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch, 0.3f);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Cube Number X (N)");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputScalar("##cube_x", ImGuiDataType_U32, &m_cubeNumX);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Cube Number Y (N)");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputScalar("##cube_y", ImGuiDataType_U32, &m_cubeNumY);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Cube Number Z (N)");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputScalar("##cube_z", ImGuiDataType_U32, &m_cubeNumZ);
+
+            ImGui::EndTable();
         }
 
-        if (m_type >= bridge.allMaterials.size()) {
-            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.7f, 1.0f), "Material Type is outside the available materials.");
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
+
+        if (ImGui::BeginTable("Material Type Table", 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.3f);
+            ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch, 0.6f);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Material Type");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            {
+                std::lock_guard lock(bridge.dataMutex);
+                if(ImGui::BeginCombo("##Material TypeCombo", bridge.allMaterials[static_cast<int>(m_type)].getMaterialType().data())) {
+                    for (std::size_t i = 0; i < bridge.allMaterials.size(); ++i) {
+                        if (ImGui::Selectable(bridge.allMaterials[i].getMaterialType().data(), m_type == static_cast<std::uint32_t>(i))) {
+                            m_type = static_cast<std::uint32_t>(i);
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
+
+        if (ImGui::BeginTable("Material Table", 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.6f);
+            ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch, 0.3f);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Element Length (m)");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputDouble("##edge_length", &m_cubeEdgeLength, 0.0, 0.0, "%.2f");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Cross-Sectional Area");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputDouble("##cross_area", &m_crossSectionalArea, 0.0, 0.0, "%.3f");
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Load Demo")) {
+            if (bridge.workerThread.joinable()) {
+                bridge.workerThread.request_stop();
+            }
+
+            bridge.m_isRunning = false;
+            bridge.m_isGeneratingPreview = false;
+            bridge.m_progress = 0.0f;
+
+            m_cubeNumX = 10;
+            m_cubeNumY = 1;
+            m_cubeNumZ = 10;
+            m_type = 1;
+            m_cubeEdgeLength = 1.0;
+            m_crossSectionalArea = 80.0;
+            m_forceNodeId = 126;
+            m_forceVector = {0.0, 0.0, 0.0};
+            m_appliedForces.clear();
+
+            {
+                std::lock_guard lock(bridge.dataMutex);
+                bridge.activeMesh = nullptr;
+                bridge.fixedDOFsByNode.clear();
+                bridge.hasTrussPreview = false;
+                bridge.selectedNodeId = std::numeric_limits<std::uint32_t>::max();
+                ensureDemoTrussCase(bridge, m_forceNodeId);
+            }
+            bridge.dataVersion.fetch_add(1, std::memory_order_release);
         }
 
         if (bridge.m_isGeneratingPreview.load()) {
             ImGui::BeginDisabled();
-            ImGui::Button("Generating Preview...");
+            ImGui::Button("Generating Preview...", ImVec2(-1, 32));
             ImGui::EndDisabled();
         }
-        else if (ImGui::Button("Generate Preview")) {
+        else if (ImGui::Button("Generate Preview", ImVec2(-1, 32))) {
             anaf::LOG::core("Press 'ctrl' to toggle node visibility");
 
             bridge.m_isGeneratingPreview = true;
@@ -154,61 +247,6 @@ namespace anaf::GUI {
 
                     bridge.m_isGeneratingPreview = false;
             });
-        }
-
-        if (ImGui::BeginTable("TrussParamsTable", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerH)) {
-            ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.6f);
-            ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch, 0.4f);
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Cube Number X (N)");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            ImGui::InputScalar("##cube_x", ImGuiDataType_U32, &m_cubeNumX);
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Cube Number Y (N)");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            ImGui::InputScalar("##cube_y", ImGuiDataType_U32, &m_cubeNumY);
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Cube Number Z (N)");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            ImGui::InputScalar("##cube_z", ImGuiDataType_U32, &m_cubeNumZ);
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Material Type");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            ImGui::InputScalar("##mat_type", ImGuiDataType_U32, &m_type);
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Element Length (m)");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            ImGui::InputDouble("##edge_length", &m_cubeEdgeLength, 0.0, 0.0, "%.2f");
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Cross-Sectional Area");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            ImGui::InputDouble("##cross_area", &m_crossSectionalArea, 0.0, 0.0, "%.2f");
-
-            ImGui::EndTable();
         }
 
         ImGui::Separator();
@@ -343,11 +381,6 @@ namespace anaf::GUI {
             bridge.m_isRunning = true;
             bridge.m_progress = 0.0f;
 
-            if (m_appliedForces.empty()) {
-                m_appliedForces.emplace_back(m_forceNodeId, m_forceVector);
-            }
-
-            std::vector<FEM::TRUSS::ForceApplied> forcesToApply = m_appliedForces;
             double deformScale = currentScale;
 
             bridge.workerThread = std::jthread(
@@ -358,8 +391,9 @@ namespace anaf::GUI {
                  cubeEdgeLength = m_cubeEdgeLength,
                  crossSectionalArea = m_crossSectionalArea,
                  type = m_type,
-                 appliedForces = m_appliedForces,
-                 deformScale = currentScale, forcesToApply](std::stop_token st) mutable {
+                 deformScale = currentScale,
+                 forcesToApply = m_appliedForces
+                ](std::stop_token st) mutable {
                     try {
                         configureOpenMPForWorker();
                         auto& allMaterials = bridge.allMaterials;
@@ -408,8 +442,8 @@ namespace anaf::GUI {
                         // send signal to gui to draw scene
                         bridge.dataVersion.fetch_add(1, std::memory_order_release);
 
-                    } catch (const std::exception& e) {
-                        anaf::LOG::error("Solver failed: {}", e.what());
+                    } catch (const std::exception& exception) {
+                        anaf::LOG::error("Solver failed: {}", exception.what());
                     }
 
                     bridge.m_progress = 1.0f;
@@ -426,13 +460,13 @@ namespace anaf::GUI {
             bridge.m_isGeneratingPreview = false;
             bridge.m_progress = 0.0f;
 
-            m_cubeNumX = 10;
+            m_cubeNumX = 1;
             m_cubeNumY = 1;
-            m_cubeNumZ = 10;
-            m_type = 1;
+            m_cubeNumZ = 1;
+            m_type = 0;
             m_cubeEdgeLength = 1.0;
             m_crossSectionalArea = 80.0;
-            m_forceNodeId = 126;
+            m_forceNodeId = 0;
             m_forceVector = {0.0, 0.0, 0.0};
             m_appliedForces.clear();
 
@@ -442,7 +476,6 @@ namespace anaf::GUI {
                 bridge.fixedDOFsByNode.clear();
                 bridge.hasTrussPreview = false;
                 bridge.selectedNodeId = std::numeric_limits<std::uint32_t>::max();
-                ensureDemoTrussCase(bridge, m_forceNodeId);
             }
             bridge.dataVersion.fetch_add(1, std::memory_order_release);
         }
