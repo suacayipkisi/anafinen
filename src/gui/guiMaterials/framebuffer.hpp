@@ -28,6 +28,7 @@ namespace anaf::GUI {
     private:
         std::uint32_t m_fbo_id_ {};
         std::uint32_t m_texture_id_ {};
+        std::uint32_t m_entity_tex_id_ {};
         std::uint32_t m_rbo_id_ {};
         std::uint32_t m_width_ {};
         std::uint32_t m_height_ {};
@@ -39,6 +40,7 @@ namespace anaf::GUI {
                 glDeleteRenderbuffers(1, &m_rbo_id_);
                 m_fbo_id_ = 0;
                 m_texture_id_ = 0;
+                m_entity_tex_id_ = 0;
                 m_rbo_id_ = 0;
             }
         }
@@ -61,6 +63,8 @@ namespace anaf::GUI {
         }
 
         void resize(std::uint32_t width, std::uint32_t height);
+
+        int readPixel(std::uint32_t attachmentIndex, int x, int y) const;
 
         std::uint32_t getTextureID() const { return m_texture_id_;}
         std::uint32_t getWidth() const { return m_width_;}

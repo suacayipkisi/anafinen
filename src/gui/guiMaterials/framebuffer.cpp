@@ -38,35 +38,34 @@ namespace anaf::GUI {
         glGenFramebuffers(1, &m_fbo_id_);
         glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_id_);
 
+        // color texture attachment
         glGenTextures(1, &m_texture_id_);
         glBindTexture(GL_TEXTURE_2D, m_texture_id_);
-        glTexImage2D(
-            GL_TEXTURE_2D, 
-            0, 
-            GL_RGB, 
-            m_width_, 
-            m_height_, 
-            0, 
-            GL_RGB, 
-            GL_UNSIGNED_BYTE, 
-            nullptr
-        );
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_width_, m_height_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glFramebufferTexture2D(
-            GL_FRAMEBUFFER, 
-            GL_COLOR_ATTACHMENT0, 
-            GL_TEXTURE_2D, 
-            m_texture_id_, 
-            0
-        );
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture_id_, 0);
 
+        // etity ID texture attachment (GL_R32I)
+        glGenTextures(1, &m_entity_tex_id_);
+        glBindTexture(GL_TEXTURE_2D, m_entity_tex_id_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32I, m_width_, m_height_, 0, GL_RED_INTEGER, GL_INT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, m_entity_tex_id_, 0);
+
+        // depth and stencil attachment
         glGenRenderbuffers(1, &m_rbo_id_);
         glBindRenderbuffer(GL_RENDERBUFFER, m_rbo_id_);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, m_width_, m_height_);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_rbo_id_);
+
+
+        // specify both attachments as draw targets
+        const GLenum drawBuffers[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+        glDrawBuffers(2, drawBuffers);
 
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
             anaf::LOG::error("ERROR: Framebuffer is not complete!");
@@ -74,6 +73,19 @@ namespace anaf::GUI {
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    int Framebuffer::readPixel(std::uint32_t attachmentIndex, int x, int y) const {
+        if (x < 0 || y < 0 || static_cast<uint32_t>(x) >= m_width_ || static_cast<std::uint32_t>(y) >= m_height_) {
+            return -1;
+        }
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, m_fbo_id_);
+        glReadBuffer(GL_COLOR_ATTACHMENT0 + attachmentIndex);
+        int pixelData = -1;
+        glReadPixels(x, y, 1, 1, GL_RED_INTEGER, GL_INT, &pixelData);
+        glReadBuffer(GL_NONE);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        return pixelData;
     }
 
 } // namespace anaf::GUI end
