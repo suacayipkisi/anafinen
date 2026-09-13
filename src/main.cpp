@@ -84,6 +84,7 @@ int main(int argc, char* argv[]) {
         435.0e6,
         670.0e6,
         205.0e9,
+        7850.0,
         0.29f,
         0.25f,
         0u
@@ -96,6 +97,7 @@ int main(int argc, char* argv[]) {
         276.0e9 / 1e3,
         310.0e6,
         68.9e9,
+        2700.0,
         0.33f,
         0.12f,
         1u

@@ -35,7 +35,7 @@ namespace FEM::TRUSS {
         double m_workDone_external;
         double m_elasticDeformationEnergy_internal;
 
-        std::span<const double> m_forceVec;
+        std::span<double> m_forceVec;
         std::span<Node> m_allNodes;
         std::span<TrussElement_1D> m_allElements;
 
@@ -44,7 +44,7 @@ namespace FEM::TRUSS {
     public:
         Truss_1D_Container() = default;
         Truss_1D_Container(
-            std::span<const double> forceVec,
+            std::span<double> forceVec,
             std::span<Node> allNodes,
             std::span<TrussElement_1D> allElements
         ): 
@@ -54,7 +54,7 @@ namespace FEM::TRUSS {
         {}
 
         void set(
-            std::span<const double> forceVec,
+            std::span<double> forceVec,
             std::span<Node> allNodes,
             std::span<TrussElement_1D> allElements
         ) {
@@ -68,8 +68,16 @@ namespace FEM::TRUSS {
             std::span<const anaf::MATERIAL::Material> allMaterials
         );
 
+        void considerWeight(
+            const std::vector<TrussElement_1D>& elements,
+            std::span<const anaf::MATERIAL::Material> allMaterials
+        );
+
         void calculateDisplacements();
-        void calculateElementForcesAndStress(const std::span<const anaf::MATERIAL::Material> allMaterials);
+        void calculateElementForcesAndStress(
+            const std::span<const anaf::MATERIAL::Material> allMaterials, 
+            const Eigen::Vector3d gravityVector = {0, -9,80665, 0}
+        );
 
         void runValidator(const std::span<const anaf::MATERIAL::Material> allMaterials);
 

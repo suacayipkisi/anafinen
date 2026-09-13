@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "deformationUnderConstForce.hpp"
+#include <cstdlib>
 #include <trussProperties/element.hpp>
 #include <log/anaf_info.hpp>
 
@@ -86,6 +87,20 @@ namespace FEM::TRUSS {
         
         anaf::LOG::info("Global Stiffness Matrix Created, size: {}x{}", (nodeNum * 3), (nodeNum * 3));
         m_globalStiffnessMatrix = std::move(globalStiffnessMatrix);
+    }
+
+    void Truss_1D_Container::considerWeight(const std::vector<TrussElement_1D>& elements, std::span<const anaf::MATERIAL::Material> allMaterial) {
+        constexpr double gravityConst {-9.80665};
+        #pragma omp parallel for schedule(static)
+        for (long long eleNum = 0; eleNum < elements.size(); ++eleNum) {
+            auto& element = elements[eleNum];
+            double weight = allMaterial[element.getEleProperties()].getDensity() * element.getEleCrossSection() * element.getEleLength() * gravityConst;
+            const auto& nodes = element.getEleNodes();
+            std::uint32_t dofNum1 = 3 * nodes[0] + 1;
+            std::uint32_t dofNum2 = 3 * nodes[1] + 1;
+            m_forceVec[dofNum1] += weight / 2;
+            m_forceVec[dofNum2] += weight / 2;
+        }
     }
 
     void Truss_1D_Container::calculateDisplacements() {
@@ -214,7 +229,10 @@ namespace FEM::TRUSS {
         }
     }
 
-    void Truss_1D_Container::calculateElementForcesAndStress(const std::span<const anaf::MATERIAL::Material> allMaterials) {
+    void Truss_1D_Container::calculateElementForcesAndStress(
+        const std::span<const anaf::MATERIAL::Material> allMaterials, 
+        const Eigen::Vector3d gravityVector
+    ) {
         const std::size_t totalElements = m_allElements.size();
 
         #pragma omp parallel for schedule(static)
@@ -227,71 +245,88 @@ namespace FEM::TRUSS {
 
             Eigen::Vector<double, 6> elementGlobalDispVec;
             for (std::uint8_t i = 0; i < 3; ++i) {
-                elementGlobalDispVec[i]     = m_resultDisplacements[nodeID_1][i];
+                elementGlobalDispVec[i] = m_resultDisplacements[nodeID_1][i];
                 elementGlobalDispVec[i + 3] = m_resultDisplacements[nodeID_2][i];
             }
 
             // fetch precomputed cosines directly from element
             const auto& eleCosinuses = element.getEleCosinuses();
 
+            const Eigen::Vector3d axialDir(
+                static_cast<double>(eleCosinuses[0]),
+                static_cast<double>(eleCosinuses[1]),
+                static_cast<double>(eleCosinuses[2])
+            );
+
             Eigen::Vector<double, 6> elementTransformationVec;
-            elementTransformationVec << -static_cast<double>(eleCosinuses[0]), 
-                                        -static_cast<double>(eleCosinuses[1]), 
-                                        -static_cast<double>(eleCosinuses[2]),
-                                        static_cast<double>(eleCosinuses[0]),  
-                                        static_cast<double>(eleCosinuses[1]), 
-                                        static_cast<double>(eleCosinuses[2]);
+            elementTransformationVec << -axialDir[0], -axialDir[1], -axialDir[2],
+                                        axialDir[0], axialDir[1], axialDir[2];
 
             const double elongation = elementTransformationVec.dot(elementGlobalDispVec);
             element.setEleElongation(elongation);
 
             const double eleCrossSection = element.getEleCrossSection();
             const double eleLength = element.getEleLength();
-            const double elasticity = allMaterials[element.getEleProperties()].getElasticityModulues();
 
-            double eleForce = (elongation / eleLength) * elasticity * eleCrossSection;
-            const double eleStress = eleForce / eleCrossSection;
+            const auto& material = allMaterials[element.getEleProperties()];
+            const double elasticity = material.getElasticityModulues();
+            const double density = material.getDensity();
+
+            double baseEleForce = (elongation / eleLength) * elasticity * eleCrossSection;
+            const double baseEleStress = baseEleForce / eleCrossSection;
+
+            const double axialGravity = gravityVector.dot(axialDir);
+            const double deltaStress = 0.5 * density * eleLength * std::abs(axialGravity);
+            const double deltaForce = deltaStress * eleCrossSection;
+
+            const double maxStressMagnitude = std::abs(baseEleStress) + deltaStress;
+            const double maxForceMagnitude = std::abs(baseEleForce) + deltaForce;
                             
-            element.setEleAxialForce(eleForce);
-            element.setEleStress(eleForce / element.getEleCrossSection());
+            element.setEleAxialForce(maxForceMagnitude);
+            element.setEleStress(maxStressMagnitude);
         }
     }
 
     void Truss_1D_Container::runValidator(const std::span<const anaf::MATERIAL::Material> allMaterials) {
-        std::vector<double> ele_elasticDeformationEnergy_internal;
+        const std::size_t totalElements = m_allElements.size();
+        const std::size_t totalNodes = m_resultDisplacements.size();
 
-        std::uint32_t elementNum {static_cast<uint32_t>(m_allElements.size())};
+        // internal strain energy (U = 0.5 * k * delta_L^2)
+        // uses element elongation directly to avoid peak-force corruption from self-weight post-processing
+        double totalInternalEnergy = 0.0;
 
-        ele_elasticDeformationEnergy_internal.resize(elementNum);
+        #pragma omp parallel for schedule(static) reduction(+:totalInternalEnergy)
+        for (long long eleIndex = 0; eleIndex < static_cast<long long>(totalElements); ++eleIndex) {
+            const auto& element = m_allElements[eleIndex];
+            const double deltaL = element.getEleElongation();
+            const double length = element.getEleLength();
+            const double area = element.getEleCrossSection();
+            const double elasticity = allMaterials[element.getEleProperties()].getElasticityModulues();
 
-        m_elasticDeformationEnergy_internal = 0.0;
+            // k = (E * A) / L -> U = 0.5 * k * deltaL^2
+            const double elementStiffness = (elasticity * area) / length;
+            totalInternalEnergy += 0.5 * elementStiffness * deltaL * deltaL;
+        }
+        m_elasticDeformationEnergy_internal = totalInternalEnergy;
 
-        #pragma omp parallel for schedule(static)
-        for (long long elementIndex = 0; elementIndex < static_cast<long long>(elementNum); ++elementIndex) {
-            const auto& element = m_allElements[elementIndex];
-            ele_elasticDeformationEnergy_internal[elementIndex] =
-                (element.getEleAxialForces() * element.getEleAxialForces() * element.getEleLength()) /
-                (2 * element.getEleCrossSection() * allMaterials[element.getEleProperties()].getElasticityModulues()
-            );
+        // external work (w_ext = 0.5 * F . d)
+        // m_forceVec already contains both external loads and assembled self-weight nodal loads
+        double totalExternalWork = 0.0;
+
+        #pragma omp parallel for schedule(static) reduction(+:totalExternalWork)
+        for (long long nodeIndex = 0; nodeIndex < static_cast<long long>(totalNodes); ++nodeIndex) {
+            const auto& u = m_resultDisplacements[nodeIndex];
+            const std::size_t baseIdx = 3 * nodeIndex;
+
+            totalExternalWork += m_forceVec[baseIdx] * u[0]
+                                +  m_forceVec[baseIdx + 1] * u[1]
+                                +  m_forceVec[baseIdx + 2] * u[2];
         }
 
-        double energy_ref = 0.0;
-        #pragma omp parallel for schedule(static) reduction(+:energy_ref)
-        for (long long i = 0; i < static_cast<long long>(elementNum); ++i) {
-            energy_ref += ele_elasticDeformationEnergy_internal[i];
-        }
-        m_elasticDeformationEnergy_internal = energy_ref;
+        m_workDone_external = totalExternalWork;
+        const double externalEnergy = 0.5 * m_workDone_external;
 
-        double workDoneExternal = 0.0;
-        #pragma omp parallel for schedule(static) reduction(+:workDoneExternal)
-        for (long long i = 0; i < m_resultDisplacements.size(); ++i) {
-            workDoneExternal += (m_forceVec[3 * i] * m_resultDisplacements[i][0]);
-            workDoneExternal += (m_forceVec[3 * i + 1] * m_resultDisplacements[i][1]);
-            workDoneExternal += (m_forceVec[3 * i + 2] * m_resultDisplacements[i][2]);
-        }
-
-        m_workDone_external = workDoneExternal;
-        const double externalEnergy = m_workDone_external / 2.0;
+        // validation
         m_energyDiff = std::abs(m_elasticDeformationEnergy_internal - externalEnergy);
 
         const double energyScale = std::max({
@@ -303,9 +338,7 @@ namespace FEM::TRUSS {
 
         constexpr double absoluteTolerance = 1e-12;
         constexpr double relativeTolerance = 1e-7;
-        m_isCalculationValid =
-            m_energyDiff <= absoluteTolerance ||
-            m_energyRelativeDiff <= relativeTolerance;
+        m_isCalculationValid = (m_energyDiff <= absoluteTolerance) || (m_energyRelativeDiff <= relativeTolerance);
     }
 
 } // namespace FEM::TRUSS end

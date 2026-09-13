@@ -26,7 +26,7 @@ include(ExternalGui)
 set(ANAF_CORE_SOURCES
     src/truss_1D/trussProperties/element.cpp
     src/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
-    src/truss_1D/trussEngine/trussSolver/solveTrussStaticDeflection.cpp
+    src/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp
     src/truss_1D/trussEngine/trussSolver.cpp
 )
 

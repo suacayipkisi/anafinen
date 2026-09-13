@@ -104,10 +104,8 @@ namespace FEM::TRUSS {
         std::span<anaf::MATERIAL::Material> materials
     ){
         const auto& elements = m_truss.getElements();
-        m_container.assembleStiffness(
-            elements,
-            materials
-        );
+        m_container.assembleStiffness(elements, materials);
+        m_container.considerWeight(elements, materials);
         m_container.calculateDisplacements();
 
         double maxDisp = 0.0;
@@ -122,7 +120,7 @@ namespace FEM::TRUSS {
             node.setLocation(loc);
         }
 
-        m_container.calculateElementForcesAndStress(materials);
+        m_container.calculateElementForcesAndStress(materials, {0, -9.80665, 0});
 
         double maxStress = 0.0;
         for (auto& element : elements) {

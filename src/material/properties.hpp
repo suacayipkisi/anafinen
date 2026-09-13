@@ -29,6 +29,8 @@ namespace anaf::MATERIAL {
 
         float m_ductility{}; // elongation at break / %
         float m_poissonsRatio{}; // uniteless
+
+        double m_density{}; // kg/m^3
         double m_youngModulus{}; // GPa (only axial)
         double m_ultimateTensileStrength{}; // GPa
         double m_yieldTensileStrength{}; // GPa
@@ -47,6 +49,7 @@ namespace anaf::MATERIAL {
             const double yieldTensileStrength,
             const double ultimateTensileStrength,
             const double youngModulus,
+            const double density,
             const float poissonsRatio,
             const float ductility,
             const std::uint32_t materialID
@@ -58,6 +61,7 @@ namespace anaf::MATERIAL {
             m_yieldTensileStrength(yieldTensileStrength),
             m_ultimateTensileStrength(ultimateTensileStrength),
             m_youngModulus(youngModulus),
+            m_density(density),
             m_poissonsRatio(poissonsRatio),
             m_ductility(ductility),
             m_materialID(materialID)
@@ -69,6 +73,9 @@ namespace anaf::MATERIAL {
         }
         inline void setPoisson(const float poissons) {
             if(m_poissonsRatio == 0) m_poissonsRatio = poissons;
+        }
+        inline void setDensity(const double density) {
+            if(m_density == 0) m_density = density;
         }
         inline void setYoungModulus(const double youngModulus) {
             if(m_youngModulus == 0) m_youngModulus = youngModulus;
@@ -95,6 +102,7 @@ namespace anaf::MATERIAL {
         inline const std::uint32_t getMaterialID() const {return m_materialID;}
         inline const float getDuctility() const {return m_ductility;}
         inline const float getPoisson() const {return m_poissonsRatio;}
+        inline const double getDensity() const {return m_density;}
         inline const double getYoungModulus() const {return m_youngModulus;}
         inline const double getUltTensile() const {return m_ultimateTensileStrength;}
         inline const double getYieldTensile() const {return m_yieldTensileStrength;}
