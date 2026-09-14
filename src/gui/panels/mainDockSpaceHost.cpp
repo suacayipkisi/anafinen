@@ -50,10 +50,10 @@ namespace anaf::GUI {
 
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Import Mesh (.vtk / .obj)...")) {
+                if (ImGui::MenuItem("(coming soon)Import Mesh (.vtk / .obj)...")) {
                     if (on_import_mesh) on_import_mesh();
                 }
-                if (ImGui::MenuItem("Export Results (.vtk)...")) {
+                if (ImGui::MenuItem("(coming soon)Export Results (.vtk)...")) {
                     if (on_export_results) on_export_results();
                 }
                 ImGui::Separator();
@@ -69,7 +69,7 @@ namespace anaf::GUI {
                         on_select_analyze_structure(Truss_1D);
                     }
                 }
-                if (ImGui::MenuItem("Truss (3D Element)")) {
+                if (ImGui::MenuItem("(coming soon)Truss (3D Element)")) {
                     if (on_select_analyze_structure) {
                         on_select_analyze_structure(Truss_3D);
                     }
@@ -77,12 +77,12 @@ namespace anaf::GUI {
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Solver")) {
-                if (ImGui::MenuItem("Run Modal Analysis (Spectra)...")) {
-                    if (on_run_solver) on_run_solver();
-                }
-                ImGui::EndMenu();
-            }
+            // if (ImGui::BeginMenu("Solver")) {
+            //     if (ImGui::MenuItem("Run Modal Analysis (Spectra)...")) {
+            //         if (on_run_solver) on_run_solver();
+            //     }
+            //     ImGui::EndMenu();
+            //}
             ImGui::EndMenuBar();
         }
 

@@ -18,7 +18,6 @@
 #include "trussControlPanel.hpp"
 
 #include "imgui.h"
-#include "imgui_internal.h"
 
 #include <Eigen/Core>
 #include <atomic>
@@ -409,7 +408,7 @@ namespace anaf::GUI {
                             type
                         };
                         
-                        solver.trussCalculator_SQPT(bridge, st);
+                        solver.trussSetAndSetFix_SQPT(bridge, st);
                         solver.trussSetForce_SQRT(bridge, st, forcesToApply);
                         solver.setContainer(bridge, st);
                         

@@ -21,7 +21,11 @@ Pre-compiled binary releases for Windows and Linux are available under [GitHub R
 
 **Finite Element Analysis Engine** -*under construction*- 
 
-Currently project is at phase 1
+Look `information/` foler for documentation, project progress and so on.  
+
+Currently project is at phase 1 and 2 together. (0.1.1-alpha)  
+Next version release date: approximately first week of the october 2026
+Next version feature aim: phase 1 and 2 finished.
 - Displacement Under Applied Force (phase-1)
 - Modal Analysis (phase-2)
 - Heat Tranfer (phase-3)

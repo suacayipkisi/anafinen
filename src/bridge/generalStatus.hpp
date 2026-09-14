@@ -30,6 +30,10 @@
 #include <vector>
 
 namespace anaf::BRIDGE {
+    enum ObjectType {
+        truss_SQPT,
+        truss_imported_or_entered
+    };
 
     struct MeshData {
 
@@ -83,6 +87,7 @@ namespace anaf::BRIDGE {
         std::mutex dataMutex;
         std::jthread workerThread;
 
+        std::atomic<ObjectType> m_objectType;
         std::shared_ptr<const MeshData> activeMesh{nullptr};
         std::atomic<bool> m_isValid{false};
         std::atomic<double> m_energyDiff;

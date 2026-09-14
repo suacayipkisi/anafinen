@@ -12,7 +12,10 @@
 #### Phase 1 Steps
 - [Done] Creating displacement result of the applied force on nodes on 1D Truss in 3D space.
 - [Done] Visualize the calculation results in a GUI.
-- [Processing] Add various and self build truss types and add import option and implement model tree.
-- [Processing] Calculate and visualize dynamic load (longitudional vibration),
+- [Done] Implement calculation validator(energy method).
+- [Processing] Add beam calculations
+- [Processing] Add import-export to files (.vtk, .msh)
 
 ## Phase 2: 
+- [Processing] Add various and self build truss types and add import option and implement model tree.
+- [Processing] Calculate and visualize dynamic load (longitudional vibration),

@@ -35,7 +35,6 @@ namespace anaf::GUI{
         //size_t m_lastElementCount{0};
         bool m_meshNeedsUpdate{true};
         uint64_t m_lastRenderedVersion{0};
-        double m_lastDeformationScale{1.0};
     };
 
     struct Truss_3D_GUI_PROPERTIES {

@@ -15,6 +15,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "generalStatus.hpp"
 #include "imgui.h"
 
 #include "trussTypePanel.hpp"
@@ -23,6 +24,7 @@
 namespace anaf::GUI {
     void TrussSelector::onImGuiRender() {
         if (!isOpen) return;
+        BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
 
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImVec2 center = ImVec2(
@@ -49,6 +51,14 @@ namespace anaf::GUI {
             if(ImGui::Button("Select", ImVec2(-1, 32))) {
                 if (onSelected) {
                     onSelected(m_trussType);
+                }
+                switch (m_trussType) {
+                    case simpleQuadranglePrism:
+                        bridge.m_objectType = anaf::BRIDGE::ObjectType::truss_SQPT;
+                        break;
+                    case nodeEntered:
+                        bridge.m_objectType = anaf::BRIDGE::ObjectType::truss_imported_or_entered;
+                        break;
                 }
                 isOpen = false;
 

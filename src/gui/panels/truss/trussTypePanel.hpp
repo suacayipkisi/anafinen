@@ -33,7 +33,7 @@ namespace anaf::GUI {
     class TrussSelector : public IPanel {
     private:
         TrussTypes m_trussType;
-        const std::vector<std::string_view> m_types {"Simple Quadrangle", "Self Build (element and nodes)"};
+        const std::vector<std::string_view> m_types {"Simple Quadrangle", "(coming soon) Imported-Self_Build"};
     public:
         std::function<void(TrussTypes)> onSelected;
         

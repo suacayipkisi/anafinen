@@ -24,17 +24,21 @@ include(Dependencies)
 include(ExternalGui)
 
 set(ANAF_CORE_SOURCES
-    src/truss_1D/trussProperties/element.cpp
-    src/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
-    src/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp
-    src/truss_1D/trussEngine/trussSolver.cpp
+    src/objectCalcs/truss_1D/trussProperties/element.cpp
+    src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
+    src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp
+    src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
 target_include_directories(anaf_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/truss_1D
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D/trussEngine
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D/trussProperties
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D/trussTypes
 )
 
 if(ANAFINEN_HAS_CHOLMOD)

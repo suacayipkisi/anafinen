@@ -31,7 +31,7 @@
 
 namespace FEM::TRUSS {
 
-    void Truss_SQPT::trussCalculator_SQPT(
+    void Truss_SQPT::trussSetAndSetFix_SQPT(
         anaf::BRIDGE::Gui_Calc_Bridge& bridge,
         std::stop_token st
         
@@ -39,6 +39,7 @@ namespace FEM::TRUSS {
         m_truss.setTruss();
 
         auto& nodes = m_truss.getNodes();
+        #pragma omp parallel for schedule(static)
         for (auto& node : nodes) {
             const auto it = bridge.fixedDOFsByNode.find(node.getNodeID());
             if (it != bridge.fixedDOFsByNode.end()) {
@@ -57,10 +58,9 @@ namespace FEM::TRUSS {
             y = (dofs[1] == true ? "y" : "-");
             z = (dofs[2] == true ? "z" : "-");
             fixInfo.push_back(node + " " + x + " " + y + " " + z + " / ");
-            //anaf::LOG::info("Support node {} fixed DOFs: [{}, {}, {}]", nodeId, dofs[0], dofs[1], dofs[2]);
         }
         anaf::LOG::info("Fixed nodes {}", fixInfo);
-        bridge.m_progress = 0.25f;
+        bridge.m_progress = 0.20f;
     }
 
     void Truss_SQPT::trussSetForce_SQRT(
@@ -83,6 +83,7 @@ namespace FEM::TRUSS {
                 m_forceVec[3U * nodeId + axis] = currentNodeForce[axis];
             }
         }
+        bridge.m_progress = 0.25f;
     }
 
     void Truss_SQPT::setContainer(
@@ -96,6 +97,7 @@ namespace FEM::TRUSS {
             std::span<Node>{nodes.data(), nodes.size()},
             std::span<TrussElement_1D>{elements.data(), elements.size()}
         );
+        bridge.m_progress = 0.30f;
     }
 
     void Truss_SQPT::calculate(
@@ -105,8 +107,11 @@ namespace FEM::TRUSS {
     ){
         const auto& elements = m_truss.getElements();
         m_container.assembleStiffness(elements, materials);
+        bridge.m_progress = 0.50f;
         m_container.considerWeight(elements, materials);
+        bridge.m_progress = 0.550f;
         m_container.calculateDisplacements();
+        bridge.m_progress = 0.85f;
 
         double maxDisp = 0.0;
         auto& nodes = m_truss.getNodes();
@@ -121,6 +126,7 @@ namespace FEM::TRUSS {
         }
 
         m_container.calculateElementForcesAndStress(materials, {0, -9.80665, 0});
+        bridge.m_progress = 0.90f;
 
         double maxStress = 0.0;
         for (auto& element : elements) {
@@ -128,6 +134,7 @@ namespace FEM::TRUSS {
         }
 
         m_container.runValidator(materials);
+        bridge.m_progress = 0.95f;
         {
             std::lock_guard lock(bridge.dataMutex);
             bridge.m_isValid = m_container.getIsCalculationValid();
