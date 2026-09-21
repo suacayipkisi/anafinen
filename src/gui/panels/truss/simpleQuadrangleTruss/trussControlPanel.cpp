@@ -159,7 +159,7 @@ namespace anaf::GUI {
 
         ImGui::Separator();
 
-        if (ImGui::Button("Load Demo")) {
+        if (ImGui::Button("Load Demo (10x1x10 self weight)")) {
             if (bridge.workerThread.joinable()) {
                 bridge.workerThread.request_stop();
             }

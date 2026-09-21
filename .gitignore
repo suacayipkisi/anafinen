@@ -2,6 +2,7 @@ build/
 build-win/
 build-win64/
 build-pkg/
+assembly_outputs/
 pkg/
 _CPack_Packages/
 .cache/

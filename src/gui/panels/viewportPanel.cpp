@@ -277,6 +277,8 @@ namespace anaf::GUI {
     }
 
     void ViewportPanel::renderOverlay2D(const ImVec2& origin, const ImVec2& size, const glm::mat4& viewProj) {
+        //auto& bridge = BRIDGE::buildBridge();
+
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         const auto currentMesh = m_currentMesh;
 
@@ -354,7 +356,7 @@ namespace anaf::GUI {
         // Colorbars
         if (currentMesh && !currentMesh->trussNodes.empty()) {
             const auto& mesh = *currentMesh;
-            constexpr float barWidth = 14.0f;
+            constexpr float barWidth = 10.0f;
             constexpr float barHeight = 180.0f;
             constexpr int colorSteps = 30;
 
@@ -367,12 +369,27 @@ namespace anaf::GUI {
 
             // Stress Bar
             double maxStress = 0.0;
-            for (const auto& el : mesh.trussElements) maxStress = std::max(maxStress, std::abs(el.getEleStress()));
+            double maxDisp = 0.0;
+            for (const auto& el : mesh.trussElements) {
+                maxStress = std::max(maxStress, std::abs(el.getEleStress()));
+            }
+            for (const auto& nod : mesh.trussNodes) {
+                const auto& disp = nod.getDisplacmenet();
+                const double dispLength = std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]);
+                maxDisp = std::max(maxDisp, dispLength);
+            }
 
             const float startX = origin.x + 20.0f;
             const float startY = origin.y + size.y - barHeight - 25.0f;
+            const float startYDisp = startY - 220.0f;
 
-            drawList->AddRectFilled(ImVec2(startX - 8.0f, startY - 24.0f), ImVec2(startX + barWidth + 80.0f, startY + barHeight + 14.0f), IM_COL32(15, 17, 22, 220), 4.0f);
+            // draw stress legend
+            drawList->AddRectFilled(
+                ImVec2(startX - 8.0f, startY - 24.0f), 
+                ImVec2(startX + barWidth + 80.0f, startY + barHeight + 14.0f), 
+                IM_COL32(15, 17, 22, 220), 
+                4.0f
+            );
             drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "Stress (MPa)");
 
             const float stepHeight = barHeight / static_cast<float>(colorSteps);
@@ -395,7 +412,40 @@ namespace anaf::GUI {
             drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY - 2.0f), IM_COL32(230, 230, 230, 255), txtMax);
             drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY + barHeight * 0.5f - 6.0f), IM_COL32(200, 200, 200, 255), txtMid);
             drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY + barHeight - 10.0f), IM_COL32(230, 230, 230, 255), txtMin);
+
+            // draw disp legend
+            if(m_showNodes) {
+                    drawList->AddRectFilled(
+                    ImVec2(startX - 8.0f, startYDisp - 24.0f), 
+                    ImVec2(startX + barWidth + 80.0f, startYDisp + barHeight + 14.0f), 
+                    IM_COL32(15, 17, 22, 220),
+                    4.0f
+                );
+                drawList->AddText(ImVec2(startX, startYDisp - 20.0f), IM_COL32(230, 230, 230, 255), "Disp (mm)");
+
+                const float stepHeightDisp = barHeight / static_cast<float>(colorSteps);
+                for (int i = 0; i < colorSteps; ++i) {
+                    const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
+                    const float tBottom = 1.0f - static_cast<float>(i + 1) / static_cast<float>(colorSteps);
+                    drawList->AddRectFilledMultiColor(
+                        ImVec2(startX, startYDisp + i * stepHeightDisp),
+                        ImVec2(startX + barWidth, startYDisp + (i + 1) * stepHeightDisp),
+                        getJetColor(tTop), getJetColor(tTop), getJetColor(tBottom), getJetColor(tBottom)
+                    );
+                }
+                drawList->AddRect(ImVec2(startX, startYDisp), ImVec2(startX + barWidth, startYDisp + barHeight), IM_COL32(200, 200, 200, 180));
+
+                char txtMaxDisp[32], txtMidDisp[32], txtMinDisp[32];
+                std::snprintf(txtMaxDisp, sizeof(txtMaxDisp), "%.2e", maxDisp * 1000.0);
+                std::snprintf(txtMidDisp, sizeof(txtMidDisp), "%.2e", maxDisp * 0.5 * 1000.0);
+                std::snprintf(txtMinDisp, sizeof(txtMinDisp), "%.2e", 0.0);
+
+                drawList->AddText(ImVec2(startX + barWidth + 6.0f, startYDisp - 2.0f), IM_COL32(230, 230, 230, 255), txtMaxDisp);
+                drawList->AddText(ImVec2(startX + barWidth + 6.0f, startYDisp + barHeight * 0.5f - 6.0f), IM_COL32(200, 200, 200, 255), txtMidDisp);
+                drawList->AddText(ImVec2(startX + barWidth + 6.0f, startYDisp + barHeight - 10.0f), IM_COL32(230, 230, 230, 255), txtMinDisp);
+            }
         }
+
     }
 
     void ViewportPanel::onImGuiRender() {
