@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <format>
 #include <fstream>
 #include <functional>
@@ -24,6 +25,8 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 
 namespace anaf::LOG {
 
@@ -34,6 +37,55 @@ namespace anaf::LOG {
         SUCCESS,
         CORE
     };
+
+    // Global decimal digit count applied to every floating-point value logged via {}.
+    inline std::atomic<int> g_floatPrecision{3};
+
+    inline void setFloatPrecision(int digits) noexcept {
+        g_floatPrecision.store(digits, std::memory_order_relaxed);
+    }
+
+    inline int getFloatPrecision() noexcept {
+        return g_floatPrecision.load(std::memory_order_relaxed);
+    }
+
+    namespace detail {
+
+        // Wraps floating-point args so std::format renders them with g_floatPrecision decimals.
+        template <typename T>
+        struct FloatArg {
+            T value;
+        };
+
+        template <typename T>
+        using WrapT = std::conditional_t<std::is_floating_point_v<std::remove_cvref_t<T>>,
+                                          FloatArg<std::remove_cvref_t<T>>, std::remove_cvref_t<T>>;
+
+        template <typename T>
+        constexpr WrapT<T> wrapArg(T&& value) {
+            if constexpr (std::is_floating_point_v<std::remove_cvref_t<T>>) {
+                return FloatArg<std::remove_cvref_t<T>>{value};
+            } else {
+                return std::forward<T>(value);
+            }
+        }
+
+    } // namespace detail
+
+} // namespace anaf::LOG
+
+template <typename T>
+struct std::formatter<anaf::LOG::detail::FloatArg<T>> {
+    static constexpr auto parse(std::format_parse_context& ctx) {
+        return ctx.begin();
+    }
+
+    static auto format(const anaf::LOG::detail::FloatArg<T>& wrapped, std::format_context& ctx) {
+        return std::format_to(ctx.out(), "{:.{}f}", wrapped.value, anaf::LOG::getFloatPrecision());
+    }
+};
+
+namespace anaf::LOG {
 
     inline constexpr std::string_view COLOR_RESET  = "\033[0m";
     inline constexpr std::string_view COLOR_BOLD   = "\033[1m";
@@ -77,28 +129,28 @@ namespace anaf::LOG {
     }
 
     template <typename... Args>
-    void info(std::format_string<Args...> fmt, Args&&... args) {
-        write(Level::INFO, std::format(fmt, std::forward<Args>(args)...));
+    void info(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+        write(Level::INFO, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
     }
 
     template <typename... Args>
-    void warn(std::format_string<Args...> fmt, Args&&... args) {
-        write(Level::WARN, std::format(fmt, std::forward<Args>(args)...));
+    void warn(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+        write(Level::WARN, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
     }
 
     template <typename... Args>
-    void error(std::format_string<Args...> fmt, Args&&... args) {
-        write(Level::ERR, std::format(fmt, std::forward<Args>(args)...));
+    void error(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+        write(Level::ERR, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
     }
 
     template <typename... Args>
-    void success(std::format_string<Args...> fmt, Args&&... args) {
-        write(Level::SUCCESS, std::format(fmt, std::forward<Args>(args)...));
+    void success(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+        write(Level::SUCCESS, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
     }
 
     template <typename... Args>
-    void core(std::format_string<Args...> fmt, Args&&... args) {
-        write(Level::CORE, std::format(fmt, std::forward<Args>(args)...));
+    void core(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+        write(Level::CORE, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
     }
 
 } // namespace anaf::LOG end

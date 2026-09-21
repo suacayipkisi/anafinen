@@ -142,11 +142,13 @@ namespace FEM::TRUSS {
 
             if (m_container.getIsCalculationValid()) {
                 anaf::LOG::success("Solver completed");
+                anaf::LOG::setFloatPrecision(10);
                 anaf::LOG::success(
                     "Calculation is VALID! Energy diff: {}, relative diff: {}",
                     m_container.getEnergyDiff(),
                     m_container.getEnergyRelativeDiff()
                 );
+                anaf::LOG::setFloatPrecision(6);
                 anaf::LOG::info("Max nodal displacement magnitude: {}", maxDisp);
                 anaf::LOG::info("Max element stress: {}", maxStress);
                 anaf::LOG::info("Work done by external forces: {}", m_container.getWorkDone_External());

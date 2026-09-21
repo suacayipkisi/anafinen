@@ -59,6 +59,7 @@ int main(int argc, char* argv[]) {
         anaf::LOG::error("Failed to open log file!");
         return 1;
     }
+    anaf::LOG::setFloatPrecision(6); // decimal digits shown for all logged floating-point values
     anaf::LOG::core("Initializing ANAFINEN Workspace (C++23)...");
 
     const int availableThreads = omp_get_num_procs();
