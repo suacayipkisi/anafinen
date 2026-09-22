@@ -87,6 +87,67 @@ namespace anaf::GUI {
     m_mvpLoc = glGetUniformLocation(m_program, "u_MVP");
   }
 
+  void ViewportRenderer::compileGridShader() {
+    const char* vertexShaderSource = R"(
+      #version 460 core
+      layout (location = 0) in vec3 aPos;
+
+      uniform mat4 u_MVP;
+
+      out vec3 vWorldPosition;
+
+      void main() {
+        vWorldPosition = aPos;
+        gl_Position = u_MVP * vec4(aPos, 1.0);
+      }
+    )";
+
+    const char* fragmentShaderSource = R"(
+      #version 460 core
+      layout (location = 0) out vec4 FragColor;
+      layout (location = 1) out int EntityID;
+
+      in vec3 vWorldPosition;
+
+      uniform float u_GridSpacing;
+      uniform float u_AxisGap;
+
+      void main() {
+        if (abs(vWorldPosition.x) < u_AxisGap || abs(vWorldPosition.z) < u_AxisGap) discard;
+
+        vec2 gridPosition = vWorldPosition.xz / u_GridSpacing;
+        vec2 distanceToLine = abs(fract(gridPosition - 0.5) - 0.5);
+        vec2 lineWidth = max(fwidth(gridPosition), vec2(0.001));
+        float lineDistance = min(distanceToLine.x / lineWidth.x, distanceToLine.y / lineWidth.y);
+        float lineAlpha = 1.0 - smoothstep(0.0, 1.0, lineDistance);
+
+        if (lineAlpha <= 0.0) discard;
+        FragColor = vec4(0.62, 0.70, 0.78, lineAlpha * 0.11);
+        EntityID = -1;
+      }
+    )";
+
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vs, 1, &vertexShaderSource, nullptr);
+    glCompileShader(vs);
+
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fs, 1, &fragmentShaderSource, nullptr);
+    glCompileShader(fs);
+
+    m_gridProgram = glCreateProgram();
+    glAttachShader(m_gridProgram, vs);
+    glAttachShader(m_gridProgram, fs);
+    glLinkProgram(m_gridProgram);
+
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    m_gridMvpLoc = glGetUniformLocation(m_gridProgram, "u_MVP");
+    m_gridSpacingLoc = glGetUniformLocation(m_gridProgram, "u_GridSpacing");
+    m_gridAxisGapLoc = glGetUniformLocation(m_gridProgram, "u_AxisGap");
+  }
+
   void ViewportRenderer::compileTextShader() {
     const char* vertexShaderSource = R"(
       #version 460 core
@@ -143,7 +204,24 @@ namespace anaf::GUI {
 
   ViewportRenderer::ViewportRenderer() {
     compileShaders();
+    compileGridShader();
     compileTextShader();
+
+    constexpr float gridReach = 8000.0f;
+    const glm::vec3 gridVertices[] = {
+      {-gridReach, 0.001f, -gridReach},
+      { gridReach, 0.001f, -gridReach},
+      { gridReach, 0.001f,  gridReach},
+      {-gridReach, 0.001f,  gridReach}
+    };
+
+    glGenVertexArrays(1, &m_gridVao);
+    glGenBuffers(1, &m_gridVbo);
+    glBindVertexArray(m_gridVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_gridVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(gridVertices), gridVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
 
     // Line Buffers
     glGenVertexArrays(1, &m_lineVao);
@@ -324,6 +402,25 @@ namespace anaf::GUI {
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+  }
+
+  void ViewportRenderer::renderGrid(const glm::mat4& mvp, float spacing) {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+
+    glUseProgram(m_gridProgram);
+    glUniformMatrix4fv(m_gridMvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
+    glUniform1f(m_gridSpacingLoc, spacing);
+    glUniform1f(m_gridAxisGapLoc, spacing * 0.16f);
+
+    glBindVertexArray(m_gridVao);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glBindVertexArray(0);
+
+    glUseProgram(0);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
   }
 
   void ViewportRenderer::render(const glm::mat4& mvp) {

@@ -206,7 +206,24 @@ namespace FEM::TRUSS {
     Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
   #endif
     solver.compute(reducedStiffnessMatrix);
+    if (solver.info() != Eigen::Success) {
+      anaf::LOG::error("Stiffness matrix factorization failed; the truss may be under-constrained");
+      m_resultDisplacements.assign(totalNodes, {0.0, 0.0, 0.0});
+      for (auto& node : m_allNodes) {
+        node.setDisplacements({0.0, 0.0, 0.0});
+      }
+      return;
+    }
+
     Eigen::VectorXd reducedDisplacements = solver.solve(reducedForceVec);
+    if (solver.info() != Eigen::Success || !reducedDisplacements.allFinite()) {
+      anaf::LOG::error("Stiffness solve produced non-finite displacements; the truss may be under-constrained");
+      m_resultDisplacements.assign(totalNodes, {0.0, 0.0, 0.0});
+      for (auto& node : m_allNodes) {
+        node.setDisplacements({0.0, 0.0, 0.0});
+      }
+      return;
+    }
 
     Eigen::VectorXd d_full = Eigen::VectorXd::Zero(totalDofs);
     #pragma omp parallel for schedule(static)

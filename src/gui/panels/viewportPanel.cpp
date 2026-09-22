@@ -39,8 +39,40 @@ namespace anaf::GUI {
     m_renderer_(std::make_unique<ViewportRenderer>())
   {}
 
+  void ViewportPanel::resetCamera() {
+    m_rotationYaw = 0.9f;
+    m_rotationPitch = -0.7f;
+    m_cameraDistance = 18.0f;
+    m_target = glm::vec3(0.0f);
+    m_draggingView = false;
+
+    if (!m_currentMesh || m_currentMesh->trussNodes.empty()) return;
+
+    glm::vec3 boundsMin(std::numeric_limits<float>::max());
+    glm::vec3 boundsMax(std::numeric_limits<float>::lowest());
+    for (const auto& node : m_currentMesh->trussNodes) {
+      const auto& location = node.getLocation();
+      const glm::vec3 position(
+        static_cast<float>(location[0]),
+        static_cast<float>(location[1]),
+        static_cast<float>(location[2])
+      );
+      boundsMin = glm::min(boundsMin, position);
+      boundsMax = glm::max(boundsMax, position);
+    }
+
+    m_target = (boundsMin + boundsMax) * 0.5f;
+    const glm::vec3 extent = boundsMax - boundsMin;
+    const float modelRadius = 0.5f * glm::length(extent);
+    m_cameraDistance = std::clamp(modelRadius * 2.2f, 2.0f, 500.0f);
+  }
+
   void ViewportPanel::handleCameraInput() {
     ImGuiIO& io = ImGui::GetIO();
+
+    if (m_viewportHovered_ && ImGui::IsKeyPressed(ImGuiKey_R)) {
+      resetCamera();
+    }
 
     if (ImGui::IsKeyPressed(ImGuiKey_LeftCtrl) || ImGui::IsKeyPressed(ImGuiKey_RightCtrl)) {
       m_showNodes = !m_showNodes;
@@ -278,6 +310,9 @@ namespace anaf::GUI {
     glClearBufferiv(GL_COLOR, 1, &clearEntityID);
 
     const glm::mat4 mvp = getViewProjectionMatrix();
+    const float gridScale = std::max(0.25f, m_cameraDistance / 12.0f);
+    const float gridSpacing = std::pow(10.0f, std::floor(std::log10(gridScale)));
+    m_renderer_->renderGrid(mvp, gridSpacing);
     m_renderer_->render(mvp);
 
     // Node number labels, rendered as OpenGL glyph quads (ImGui font atlas) instead of an ImGui 2D overlay.
@@ -375,7 +410,7 @@ namespace anaf::GUI {
 
     // Status Text
     drawList->AddText(
-      ImVec2(origin.x + 16.0f, origin.y + 16.0f),
+      ImVec2(origin.x + 4.0f, origin.y + 4.0f),
       IM_COL32(180, 180, 180, 255),
       m_showNodes ? "Nodes: Visible (Press CTRL to hide)" : "Nodes: Hidden (Press CTRL to show)"
     );
@@ -518,6 +553,12 @@ namespace anaf::GUI {
     ImGui::Image(texId, availSize, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
 
     m_viewportHovered_ = ImGui::IsItemHovered();
+
+    // Keep the camera reset accessible without requiring keyboard focus.
+    ImGui::SetCursorScreenPos(ImVec2(origin.x + 4.0f, origin.y + 30.0f));
+    if (ImGui::Button("Reset Camera")) {
+      resetCamera();
+    }
 
     // GPU Pixel Picking Interaction
     if (m_viewportHovered_ && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {

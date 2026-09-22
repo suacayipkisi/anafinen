@@ -62,6 +62,7 @@ namespace anaf::GUI{
 
     std::shared_ptr<const anaf::BRIDGE::MeshData> m_currentMesh{nullptr};
 
+    void resetCamera();
     void handleCameraInput();
     void buildSceneBatches();
     void renderOverlay2D(const ImVec2& origin, const ImVec2& size, const glm::mat4& viewProj);

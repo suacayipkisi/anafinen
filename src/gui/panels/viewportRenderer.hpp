@@ -54,6 +54,12 @@ namespace anaf::GUI {
     GLuint m_pointVao{0}, m_pointVbo{0};
     GLint m_mvpLoc{-1};
 
+    GLuint m_gridProgram{0};
+    GLuint m_gridVao{0}, m_gridVbo{0};
+    GLint m_gridMvpLoc{-1};
+    GLint m_gridSpacingLoc{-1};
+    GLint m_gridAxisGapLoc{-1};
+
     GLuint m_textProgram{0};
     GLuint m_textVao{0}, m_textVbo{0};
     GLint m_textSamplerLoc{-1};
@@ -70,6 +76,8 @@ namespace anaf::GUI {
 
     void compileShaders();
 
+    void compileGridShader();
+
     void compileTextShader();
 
   public:
@@ -82,9 +90,12 @@ namespace anaf::GUI {
       if (m_glowLineVbo) glDeleteBuffers(1, &m_glowLineVbo);
       if (m_pointVao) glDeleteVertexArrays(1, &m_pointVao);
       if (m_pointVbo) glDeleteBuffers(1, &m_pointVbo);
+      if (m_gridVao) glDeleteVertexArrays(1, &m_gridVao);
+      if (m_gridVbo) glDeleteBuffers(1, &m_gridVbo);
       if (m_textVao) glDeleteVertexArrays(1, &m_textVao);
       if (m_textVbo) glDeleteBuffers(1, &m_textVbo);
       if (m_program) glDeleteProgram(m_program);
+      if (m_gridProgram) glDeleteProgram(m_gridProgram);
       if (m_textProgram) glDeleteProgram(m_textProgram);
     }
 
@@ -115,6 +126,8 @@ namespace anaf::GUI {
     void uploadTextBuffer();
 
     void render(const glm::mat4& mvp);
+
+    void renderGrid(const glm::mat4& mvp, float spacing);
 
     void renderText();
   };
