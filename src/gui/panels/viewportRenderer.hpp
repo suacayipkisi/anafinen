@@ -17,16 +17,11 @@
 
 #pragma once
 
-
 #include <glad/gl.h>
-#include <glm/ext/vector_float3.hpp>
-#include <glm/ext/vector_float4.hpp>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <string>
 #include <vector>
-#include <cstddef>
 
 namespace anaf::GUI {
 
@@ -43,182 +38,85 @@ namespace anaf::GUI {
         float size {10.0f};
     };
 
+    // Screen-space glyph quad vertex; position is already in NDC (-1..1).
+    struct TextVertex {
+        glm::vec2 position;
+        glm::vec2 uv;
+        glm::vec4 color;
+    };
+
+
     class ViewportRenderer {
     private:
         GLuint m_program{0};
         GLuint m_lineVao{0}, m_lineVbo{0};
+        GLuint m_glowLineVao{0}, m_glowLineVbo{0};
         GLuint m_pointVao{0}, m_pointVbo{0};
         GLint m_mvpLoc{-1};
 
+        GLuint m_textProgram{0};
+        GLuint m_textVao{0}, m_textVbo{0};
+        GLint m_textSamplerLoc{-1};
+
         std::vector<Vertex3D> m_lineBuffer;
+        std::vector<Vertex3D> m_glowLineBuffer;
         std::vector<Point3D> m_pointBuffer;
+        std::vector<TextVertex> m_textBuffer;
 
         GLsizei m_lineVertexCount{0};
+        GLsizei m_glowLineVertexCount{0};
         GLsizei m_pointVertexCount{0};
+        GLsizei m_textVertexCount{0};
 
-        void compileShaders() {
-            const char* vertexShaderSource = R"(
-                #version 460 core
-                layout (location = 0) in vec3 aPos;
-                layout (location = 1) in vec4 aColor;
-                layout (location = 2) in int aEntityID;
-                layout (location = 3) in float aPointSize;
+        void compileShaders();
 
-                uniform mat4 u_MVP;
-
-                out vec4 vColor;
-                flat out int vEntityID;
-
-                void main() {
-                    vColor = aColor;
-                    vEntityID = aEntityID;
-                    gl_PointSize = (aPointSize > 0.0) ? aPointSize : 1.0;
-                    gl_Position = u_MVP * vec4(aPos, 1.0);
-                }
-            )";
-
-            const char* fragmentShaderSource = R"(
-                #version 460 core
-                layout (location = 0) out vec4 FragColor;
-                layout (location = 1) out int EntityID;
-
-                in vec4 vColor;
-                flat in int vEntityID;
-
-                void main() {
-                    FragColor = vColor;
-                    EntityID = vEntityID;
-                }
-            )";
-
-            GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-            glShaderSource(vs, 1, &vertexShaderSource, nullptr);
-            glCompileShader(vs);
-
-            GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-            glShaderSource(fs, 1, &fragmentShaderSource, nullptr);
-            glCompileShader(fs);
-
-            m_program = glCreateProgram();
-            glAttachShader(m_program, vs);
-            glAttachShader(m_program, fs);
-            glLinkProgram(m_program);
-
-            glDeleteShader(vs);
-            glDeleteShader(fs);
-
-            m_mvpLoc = glGetUniformLocation(m_program, "u_MVP");
-        }
+        void compileTextShader();
 
     public:
-        ViewportRenderer() {
-            compileShaders();
-
-            // Line Buffers
-            glGenVertexArrays(1, &m_lineVao);
-            glGenBuffers(1, &m_lineVbo);
-
-            glBindVertexArray(m_lineVao);
-            glBindBuffer(GL_ARRAY_BUFFER, m_lineVbo);
-
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, position));
-
-            glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, color));
-
-            glEnableVertexAttribArray(2);
-            glVertexAttribIPointer(2, 1, GL_INT, sizeof(Vertex3D), (void*)offsetof(Vertex3D, entityID));
-
-            // Point Buffers
-            glGenVertexArrays(1, &m_pointVao);
-            glGenBuffers(1, &m_pointVbo);
-
-            glBindVertexArray(m_pointVao);
-            glBindBuffer(GL_ARRAY_BUFFER, m_pointVbo);
-
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Point3D), (void*)offsetof(Point3D, position));
-
-            glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Point3D), (void*)offsetof(Point3D, color));
-
-            glEnableVertexAttribArray(2);
-            glVertexAttribIPointer(2, 1, GL_INT, sizeof(Point3D), (void*)offsetof(Point3D, entityID));
-
-            glEnableVertexAttribArray(3);
-            glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Point3D), (void*)offsetof(Point3D, size));
-
-            glBindVertexArray(0);
-        }
+        ViewportRenderer();
 
         ~ViewportRenderer() {
             if (m_lineVao) glDeleteVertexArrays(1, &m_lineVao);
             if (m_lineVbo) glDeleteBuffers(1, &m_lineVbo);
+            if (m_glowLineVao) glDeleteVertexArrays(1, &m_glowLineVao);
+            if (m_glowLineVbo) glDeleteBuffers(1, &m_glowLineVbo);
             if (m_pointVao) glDeleteVertexArrays(1, &m_pointVao);
             if (m_pointVbo) glDeleteBuffers(1, &m_pointVbo);
+            if (m_textVao) glDeleteVertexArrays(1, &m_textVao);
+            if (m_textVbo) glDeleteBuffers(1, &m_textVbo);
             if (m_program) glDeleteProgram(m_program);
+            if (m_textProgram) glDeleteProgram(m_textProgram);
         }
 
-        void addLine(const glm::vec3& p1, const glm::vec3& p2, const glm::vec4& color, int entityID = -1) {
-            m_lineBuffer.push_back({p1, color, entityID});
-            m_lineBuffer.push_back({p2, color, entityID});
-        }
+        void addLine(const glm::vec3& p1, const glm::vec3& p2, const glm::vec4& color, int entityID = -1);
 
-        void addPoint(const glm::vec3& p, const glm::vec4& color, int entityID, float size = 12.0f) {
-            m_pointBuffer.push_back({p, color, entityID, size});
-        }
+        // Adds a line to a separate additive-blended pass, drawn thicker and translucent to fake a glow/bloom halo.
+        void addGlowLine(const glm::vec3& p1, const glm::vec3& p2, const glm::vec4& color);
 
-        void clearBuffers() {
-            m_lineBuffer.clear();
-            m_pointBuffer.clear();
-        }
+        void addPoint(const glm::vec3& p, const glm::vec4& color, int entityID, float size = 12.0f);
 
-        void reserve(size_t lineCount, size_t pointCount) {
-            m_lineBuffer.reserve(lineCount * 2);
-            m_pointBuffer.reserve(pointCount);
-        }
+        // Builds a screen-space glyph quad batch using ImGui's already-loaded font atlas as texture.
+        // screenPosPixels/fbWidth/fbHeight are in FBO pixel space with origin top-left.
+        void addText(
+            const glm::vec2& screenPosPixels, 
+            const std::string& text, 
+            const glm::vec4& color,
+            float fbWidth, 
+            float fbHeight, 
+            float pixelScale = 1.0f
+        );
 
-        void uploadCurrentBuffer() {
-            m_lineVertexCount = static_cast<GLsizei>(m_lineBuffer.size());
-            if (m_lineVertexCount > 0) {
-                glBindVertexArray(m_lineVao);
-                glBindBuffer(GL_ARRAY_BUFFER, m_lineVbo);
-                glBufferData(GL_ARRAY_BUFFER, m_lineBuffer.size() * sizeof(Vertex3D), m_lineBuffer.data(), GL_DYNAMIC_DRAW);
-            }
+        void clearBuffers();
+        void clearTextBuffer();
 
-            m_pointVertexCount = static_cast<GLsizei>(m_pointBuffer.size());
-            if (m_pointVertexCount > 0) {
-                glBindVertexArray(m_pointVao);
-                glBindBuffer(GL_ARRAY_BUFFER, m_pointVbo);
-                glBufferData(GL_ARRAY_BUFFER, m_pointBuffer.size() * sizeof(Point3D), m_pointBuffer.data(), GL_DYNAMIC_DRAW);
-            }
+        void reserve(size_t lineCount, size_t pointCount);
 
-            glBindBuffer(GL_ARRAY_BUFFER, 0);
-            glBindVertexArray(0);
-        }
+        void uploadCurrentBuffer();
+        void uploadTextBuffer();
 
-        void render(const glm::mat4& mvp) {
-            glUseProgram(m_program);
-            glUniformMatrix4fv(m_mvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
+        void render(const glm::mat4& mvp);
 
-            if (m_lineVertexCount > 0) {
-                glBindVertexArray(m_lineVao);
-                glLineWidth(1.5f);
-                glDrawArrays(GL_LINES, 0, m_lineVertexCount);
-            }
-
-            if (m_pointVertexCount > 0) {
-                glEnable(GL_PROGRAM_POINT_SIZE);
-                glBindVertexArray(m_pointVao);
-                glDrawArrays(GL_POINTS, 0, m_pointVertexCount);
-            }
-
-            glBindVertexArray(0);
-            glUseProgram(0);
-        }
+        void renderText();
     };
 
 } // namespace anaf::GUI end
-
-

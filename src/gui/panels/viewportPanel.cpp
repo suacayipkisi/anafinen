@@ -99,7 +99,7 @@ namespace anaf::GUI {
 
         const glm::mat4 view = glm::lookAt(eye, m_target, glm::vec3(0.0f, 1.0f, 0.0f));
         const float aspect = (m_viewportSize.y > 0.0f) ? (m_viewportSize.x / m_viewportSize.y) : 16.0f / 9.0f;
-        const glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 1000.0f);
+        const glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10000.0f);
 
         return projection * view;
     }
@@ -107,10 +107,11 @@ namespace anaf::GUI {
     void ViewportPanel::buildSceneBatches() {
         m_renderer_->clearBuffers();
 
-        // Coordinate axes X, Y, Z (EntityID = -1)
-        m_renderer_->addLine(glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f), -1);
-        m_renderer_->addLine(glm::vec3(0.0f), glm::vec3(0.0f, 2.0f, 0.0f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f), -1);
-        m_renderer_->addLine(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 2.0f), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
+        // Coordinate axes X, Y, Z, extended far past the camera's far clip plane so they appear infinite (EntityID = -1)
+        constexpr float kAxisReach = 8000.0f;
+        m_renderer_->addLine(glm::vec3(-kAxisReach, 0.0f, 0.0f), glm::vec3(kAxisReach, 0.0f, 0.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f), -1);
+        m_renderer_->addLine(glm::vec3(0.0f, -kAxisReach, 0.0f), glm::vec3(0.0f, kAxisReach, 0.0f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f), -1);
+        m_renderer_->addLine(glm::vec3(0.0f, 0.0f, -kAxisReach), glm::vec3(0.0f, 0.0f, kAxisReach), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
 
         if (!m_currentMesh || m_currentMesh->trussNodes.empty()) {
             m_renderer_->uploadCurrentBuffer();
@@ -209,10 +210,11 @@ namespace anaf::GUI {
         }
 
         // Force Arrows (Lines in FBO)
-        constexpr float arrowWorldLength = 1.5f;
-        constexpr float headLength = 0.35f;
-        constexpr float headRadius = 0.15f;
+        constexpr float arrowWorldLength = 3.0f;
+        constexpr float headLength = 0.1f;
+        constexpr float headRadius = 0.05f;
         const glm::vec4 forceArrowColor(1.0f, 0.25f, 0.25f, 1.0f);
+        const glm::vec4 forceGlowColor(1.0f, 0.3f, 0.3f, 0.35f);
 
         for (const auto& force : mesh.appliedForces) {
             const uint32_t targetId = force.getApliedNode();
@@ -227,6 +229,7 @@ namespace anaf::GUI {
             const glm::vec3 tipPos = basePos + dir * arrowWorldLength;
 
             m_renderer_->addLine(basePos, tipPos, forceArrowColor, -1);
+            m_renderer_->addGlowLine(basePos, tipPos, forceGlowColor);
 
             glm::vec3 arbitraryUp = (std::abs(dir.y) > 0.9f) ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
             glm::vec3 side1 = glm::normalize(glm::cross(dir, arbitraryUp)) * headRadius;
@@ -237,6 +240,10 @@ namespace anaf::GUI {
             m_renderer_->addLine(tipPos, headBase - side1, forceArrowColor, -1);
             m_renderer_->addLine(tipPos, headBase + side2, forceArrowColor, -1);
             m_renderer_->addLine(tipPos, headBase - side2, forceArrowColor, -1);
+            m_renderer_->addGlowLine(tipPos, headBase + side1, forceGlowColor);
+            m_renderer_->addGlowLine(tipPos, headBase - side1, forceGlowColor);
+            m_renderer_->addGlowLine(tipPos, headBase + side2, forceGlowColor);
+            m_renderer_->addGlowLine(tipPos, headBase - side2, forceGlowColor);
         }
 
         m_renderer_->uploadCurrentBuffer();
@@ -273,63 +280,98 @@ namespace anaf::GUI {
         const glm::mat4 mvp = getViewProjectionMatrix();
         m_renderer_->render(mvp);
 
-        m_fbo_->unbind();
-    }
-
-    void ViewportPanel::renderOverlay2D(const ImVec2& origin, const ImVec2& size, const glm::mat4& viewProj) {
-        //auto& bridge = BRIDGE::buildBridge();
-
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        const auto currentMesh = m_currentMesh;
-
-        auto projectWorldToScreen = [&](const glm::vec3& worldPos) -> std::pair<ImVec2, bool> {
-            glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
-            if (clipPos.w <= 0.1f) return {ImVec2(0.0f, 0.0f), false};
-
-            glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
-            float screenX = origin.x + (ndc.x * 0.5f + 0.5f) * size.x;
-            float screenY = origin.y + (-ndc.y * 0.5f + 0.5f) * size.y;
-            return {ImVec2(screenX, screenY), true};
-        };
-
-        // Coordinate Labels
-        auto [axisX, visX] = projectWorldToScreen(glm::vec3(2.1f, 0.0f, 0.0f));
-        auto [axisY, visY] = projectWorldToScreen(glm::vec3(0.0f, 2.1f, 0.0f));
-        auto [axisZ, visZ] = projectWorldToScreen(glm::vec3(0.0f, 0.0f, 2.1f));
-
-        if (visX) drawList->AddText(axisX, IM_COL32(255, 110, 110, 255), "X");
-        if (visY) drawList->AddText(axisY, IM_COL32(110, 255, 140, 255), "Y");
-        if (visZ) drawList->AddText(axisZ, IM_COL32(110, 160, 255, 255), "Z");
-
-        // Node ID Text Rendering (Only when zoomed in or selected)
-        if (m_showNodes && currentMesh && !currentMesh->trussNodes.empty()) {
-            auto& bridge = BRIDGE::buildBridge();
+        // Node number labels, rendered as OpenGL glyph quads (ImGui font atlas) instead of an ImGui 2D overlay.
+        m_renderer_->clearTextBuffer();
+        if (m_showNodes && m_currentMesh && !m_currentMesh->trussNodes.empty()) {
             std::uint32_t selectedId = std::numeric_limits<std::uint32_t>::max();
             {
                 std::lock_guard<std::mutex> lock(bridge.dataMutex);
                 selectedId = bridge.selectedNodeId;
             }
 
-            const double deformScale = currentMesh->deformScale;
-            for (const auto& node : currentMesh->trussNodes) {
+            const float fbWidth = static_cast<float>(m_fbo_->getWidth());
+            const float fbHeight = static_cast<float>(m_fbo_->getHeight());
+            const double deformScale = m_currentMesh->deformScale;
+
+            for (const auto& node : m_currentMesh->trussNodes) {
                 const uint32_t id = node.getNodeID();
                 const bool isSelected = (selectedId == id);
+                if (m_cameraDistance >= 15.0f && !isSelected) continue;
 
-                if (m_cameraDistance < 15.0f || isSelected) {
-                    const auto& loc = node.getLocation();
-                    const auto disp = node.getDisplacmenet();
-                    glm::vec3 deformedPos(
-                        loc[0] + disp[0] * deformScale,
-                        loc[1] + disp[1] * deformScale,
-                        loc[2] + disp[2] * deformScale
-                    );
-                    auto [sPos, visible] = projectWorldToScreen(deformedPos);
-                    if (visible) {
-                        drawList->AddText(ImVec2(sPos.x + 8.0f, sPos.y - 8.0f), IM_COL32(230, 230, 230, 255), std::to_string(id).c_str());
-                    }
-                }
+                const auto& loc = node.getLocation();
+                const auto disp = node.getDisplacmenet();
+                const glm::vec3 worldPos(
+                    loc[0] + disp[0] * deformScale,
+                    loc[1] + disp[1] * deformScale,
+                    loc[2] + disp[2] * deformScale
+                );
+
+                const glm::vec4 clipPos = mvp * glm::vec4(worldPos, 1.0f);
+                if (clipPos.w <= 0.1f) continue;
+
+                const glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+                const float screenX = (ndc.x * 0.5f + 0.5f) * fbWidth + 8.0f;
+                const float screenY = (-ndc.y * 0.5f + 0.5f) * fbHeight - 8.0f;
+
+                m_renderer_->addText(glm::vec2(screenX, screenY), std::to_string(id),
+                                      glm::vec4(0.9f, 0.9f, 0.9f, 1.0f), fbWidth, fbHeight);
             }
         }
+        m_renderer_->uploadTextBuffer();
+        m_renderer_->renderText();
+
+        m_fbo_->unbind();
+    }
+
+    void ViewportPanel::renderOverlay2D(const ImVec2& origin, const ImVec2& size, const glm::mat4& viewProj) {
+        //auto& bridge = BRIDGE::buildBridge();
+        (void)viewProj;
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const auto currentMesh = m_currentMesh;
+
+        // View orientation gizmo (top-right corner): 3 axes crossing at a point, rotating in sync with the camera.
+        {
+            constexpr float margin = 16.0f;
+            constexpr float topOffset = 48.0f; // sits below the FPS monitor box
+            constexpr float gizmoRadius = 40.0f;
+            constexpr float gizmoBoxSize = gizmoRadius * 2.0f + 16.0f;
+
+            const ImVec2 gizmoCenter(
+                origin.x + size.x - gizmoBoxSize * 0.5f - margin,
+                origin.y + topOffset + gizmoBoxSize * 0.5f
+            );
+
+            drawList->AddCircleFilled(gizmoCenter, gizmoBoxSize * 0.5f, IM_COL32(20, 22, 27, 150));
+
+            // Rotation-only camera basis; same lookAt formula as getViewProjectionMatrix, so pitch/yaw stay in sync.
+            const glm::mat3 camRot(glm::lookAt(
+                glm::vec3(
+                    std::sin(m_rotationYaw) * std::cos(m_rotationPitch),
+                    -std::sin(m_rotationPitch),
+                    std::cos(m_rotationYaw) * std::cos(m_rotationPitch)
+                ),
+                glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)
+            ));
+
+            struct AxisLine { glm::vec3 dir; ImU32 color; const char* label; };
+            const AxisLine axes[3] = {
+                {glm::vec3(1.0f, 0.0f, 0.0f), IM_COL32(255, 110, 110, 255), "X"},
+                {glm::vec3(0.0f, 1.0f, 0.0f), IM_COL32(110, 255, 140, 255), "Y"},
+                {glm::vec3(0.0f, 0.0f, 1.0f), IM_COL32(110, 160, 255, 255), "Z"},
+            };
+
+            for (const auto& axis : axes) {
+                const glm::vec3 viewDir = camRot * axis.dir;
+                const ImVec2 tip(gizmoCenter.x + viewDir.x * gizmoRadius, gizmoCenter.y - viewDir.y * gizmoRadius);
+                const ImVec2 tail(gizmoCenter.x - viewDir.x * gizmoRadius, gizmoCenter.y + viewDir.y * gizmoRadius);
+                drawList->AddLine(tail, tip, axis.color, 2.0f);
+                drawList->AddCircleFilled(tip, 3.5f, axis.color);
+                drawList->AddText(ImVec2(tip.x + 6.0f, tip.y - 7.0f), axis.color, axis.label);
+            }
+        }
+
+        // Node ID labels are rendered directly in the OpenGL scene pass (see renderSceneOpenGL), not here.
 
         // Status Text
         drawList->AddText(
