@@ -330,6 +330,12 @@ namespace anaf::GUI {
         glUseProgram(m_program);
         glUniformMatrix4fv(m_mvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
 
+        // Coverage-based AA on top of MSAA, so thin lines don't fall back to hard, blocky edges.
+        glEnable(GL_LINE_SMOOTH);
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
         if (m_lineVertexCount > 0) {
             glBindVertexArray(m_lineVao);
             glLineWidth(1.5f);
@@ -339,17 +345,18 @@ namespace anaf::GUI {
         // Additive-blended halo pass: thicker, translucent copies of the force arrows fake a glow/bloom.
         if (m_glowLineVertexCount > 0) {
             glDepthMask(GL_FALSE);
-            glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
             glBindVertexArray(m_glowLineVao);
             glLineWidth(6.0f);
             glDrawArrays(GL_LINES, 0, m_glowLineVertexCount);
 
-            glDisable(GL_BLEND);
             glDepthMask(GL_TRUE);
             glLineWidth(1.5f);
         }
+
+        glDisable(GL_BLEND);
+        glDisable(GL_LINE_SMOOTH);
 
         if (m_pointVertexCount > 0) {
             glEnable(GL_PROGRAM_POINT_SIZE);

@@ -26,10 +26,18 @@ namespace anaf::GUI {
 
     class Framebuffer {
     private:
+        // Resolve targets: single-sample, used for ImGui display and entity-ID picking.
         std::uint32_t m_fbo_id_ {};
         std::uint32_t m_texture_id_ {};
         std::uint32_t m_entity_tex_id_ {};
-        std::uint32_t m_rbo_id_ {};
+
+        // MSAA targets: actual render destination, resolved into the above after each frame.
+        std::uint32_t m_msaa_fbo_id_ {};
+        std::uint32_t m_msaa_color_rbo_ {};
+        std::uint32_t m_msaa_entity_rbo_ {};
+        std::uint32_t m_msaa_depth_rbo_ {};
+        int m_samples_ {4};
+
         std::uint32_t m_width_ {};
         std::uint32_t m_height_ {};
 
@@ -37,11 +45,20 @@ namespace anaf::GUI {
             if (m_fbo_id_) {    
                 glDeleteFramebuffers(1, &m_fbo_id_);
                 glDeleteTextures(1, &m_texture_id_);
-                glDeleteRenderbuffers(1, &m_rbo_id_);
+                glDeleteTextures(1, &m_entity_tex_id_);
                 m_fbo_id_ = 0;
                 m_texture_id_ = 0;
                 m_entity_tex_id_ = 0;
-                m_rbo_id_ = 0;
+            }
+            if (m_msaa_fbo_id_) {
+                glDeleteFramebuffers(1, &m_msaa_fbo_id_);
+                glDeleteRenderbuffers(1, &m_msaa_color_rbo_);
+                glDeleteRenderbuffers(1, &m_msaa_entity_rbo_);
+                glDeleteRenderbuffers(1, &m_msaa_depth_rbo_);
+                m_msaa_fbo_id_ = 0;
+                m_msaa_color_rbo_ = 0;
+                m_msaa_entity_rbo_ = 0;
+                m_msaa_depth_rbo_ = 0;
             }
         }
     public: 
@@ -53,14 +70,18 @@ namespace anaf::GUI {
             cleanup();
         }
 
+        // Rendering happens into the MSAA framebuffer; resolve() (called from unbind) blits it down.
         void bind() const {
-            glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_id_);
+            glBindFramebuffer(GL_FRAMEBUFFER, m_msaa_fbo_id_);
             glViewport(0, 0, m_width_, m_height_);
         }
 
         void unbind() const {
+            resolve();
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
+
+        void resolve() const;
 
         void resize(std::uint32_t width, std::uint32_t height);
 

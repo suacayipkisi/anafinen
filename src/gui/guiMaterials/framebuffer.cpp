@@ -15,6 +15,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <algorithm>
 #include <cstdint>
 
 #include <glad/gl.h>
@@ -35,10 +36,14 @@ namespace anaf::GUI {
 
         cleanup();
 
+        GLint maxSamples = 4;
+        glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+        m_samples_ = std::min(4, maxSamples);
+
+        // Resolve FBO: single-sample textures, sampled by ImGui::Image and by readPixel().
         glGenFramebuffers(1, &m_fbo_id_);
         glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_id_);
 
-        // color texture attachment
         glGenTextures(1, &m_texture_id_);
         glBindTexture(GL_TEXTURE_2D, m_texture_id_);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_width_, m_height_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -48,7 +53,6 @@ namespace anaf::GUI {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture_id_, 0);
 
-        // etity ID texture attachment (GL_R32I)
         glGenTextures(1, &m_entity_tex_id_);
         glBindTexture(GL_TEXTURE_2D, m_entity_tex_id_);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_R32I, m_width_, m_height_, 0, GL_RED_INTEGER, GL_INT, nullptr);
@@ -56,23 +60,62 @@ namespace anaf::GUI {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, m_entity_tex_id_, 0);
 
-        // depth and stencil attachment
-        glGenRenderbuffers(1, &m_rbo_id_);
-        glBindRenderbuffer(GL_RENDERBUFFER, m_rbo_id_);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, m_width_, m_height_);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_rbo_id_);
-
-
-        // specify both attachments as draw targets
-        const GLenum drawBuffers[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-        glDrawBuffers(2, drawBuffers);
+        const GLenum resolveDrawBuffers[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+        glDrawBuffers(2, resolveDrawBuffers);
 
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-            anaf::LOG::error("ERROR: Framebuffer is not complete!");
+            anaf::LOG::error("ERROR: Resolve framebuffer is not complete!");
+        }
+
+        // MSAA FBO: actual render target, smooths line/edge aliasing via multisampling.
+        glGenFramebuffers(1, &m_msaa_fbo_id_);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_msaa_fbo_id_);
+
+        glGenRenderbuffers(1, &m_msaa_color_rbo_);
+        glBindRenderbuffer(GL_RENDERBUFFER, m_msaa_color_rbo_);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, m_samples_, GL_RGBA8, m_width_, m_height_);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, m_msaa_color_rbo_);
+
+        // Entity ID stays multisampled too (all attachments in one FBO must share the sample count);
+        // it is resolved with a NEAREST blit below so IDs are never blended/averaged.
+        glGenRenderbuffers(1, &m_msaa_entity_rbo_);
+        glBindRenderbuffer(GL_RENDERBUFFER, m_msaa_entity_rbo_);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, m_samples_, GL_R32I, m_width_, m_height_);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_RENDERBUFFER, m_msaa_entity_rbo_);
+
+        glGenRenderbuffers(1, &m_msaa_depth_rbo_);
+        glBindRenderbuffer(GL_RENDERBUFFER, m_msaa_depth_rbo_);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, m_samples_, GL_DEPTH24_STENCIL8, m_width_, m_height_);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_msaa_depth_rbo_);
+
+        const GLenum msaaDrawBuffers[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+        glDrawBuffers(2, msaaDrawBuffers);
+
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            anaf::LOG::error("ERROR: MSAA framebuffer is not complete!");
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    void Framebuffer::resolve() const {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, m_msaa_fbo_id_);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_fbo_id_);
+
+        // Color: box-filtered by the multisample resolve itself; NEAREST is fine since sizes match.
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        glBlitFramebuffer(0, 0, m_width_, m_height_, 0, 0, m_width_, m_height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+        // Entity ID: integer format forbids anything but NEAREST, which also avoids blending IDs.
+        glReadBuffer(GL_COLOR_ATTACHMENT1);
+        glDrawBuffer(GL_COLOR_ATTACHMENT1);
+        glBlitFramebuffer(0, 0, m_width_, m_height_, 0, 0, m_width_, m_height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     }
 
     int Framebuffer::readPixel(std::uint32_t attachmentIndex, int x, int y) const {
