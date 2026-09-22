@@ -25,19 +25,19 @@
 
 namespace anaf::GUI {
 
-    enum TrussTypes {
-        simpleQuadranglePrism,
-        nodeEntered
-    };
+  enum TrussTypes {
+    simpleQuadranglePrism,
+    nodeEntered
+  };
 
-    class TrussSelector : public IPanel {
-    private:
-        TrussTypes m_trussType;
-        const std::vector<std::string_view> m_types {"Simple Quadrangle", "(coming soon) Imported-Self_Build"};
-    public:
-        std::function<void(TrussTypes)> onSelected;
-        
-        void onImGuiRender() override;
-    };
+  class TrussSelector : public IPanel {
+  private:
+    TrussTypes m_trussType;
+    const std::vector<std::string_view> m_types {"Simple Quadrangle", "(coming soon) Imported-Self_Build"};
+  public:
+    std::function<void(TrussTypes)> onSelected;
+    
+    void onImGuiRender() override;
+  };
 } // namespace anaf::GUI end
 

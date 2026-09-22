@@ -30,22 +30,22 @@
 
 namespace anaf::DIRECTORY {
 
-    std::filesystem::path getExecutableDirectory(){
+  std::filesystem::path getExecutableDirectory(){
 #ifdef __linux__
-            char result[PATH_MAX];
-            const ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
-            if (count != -1) {
-                return std::filesystem::path(std::string(result, count)).parent_path();
-            }
+      char result[PATH_MAX];
+      const ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+      if (count != -1) {
+        return std::filesystem::path(std::string(result, count)).parent_path();
+      }
 #elif defined(_WIN32)
-            char result[MAX_PATH];
-            const DWORD count = GetModuleFileNameA(nullptr, result, MAX_PATH);
-            if (count != 0) {
-                return std::filesystem::path(std::string(result, count)).parent_path();
-            }
+      char result[MAX_PATH];
+      const DWORD count = GetModuleFileNameA(nullptr, result, MAX_PATH);
+      if (count != 0) {
+        return std::filesystem::path(std::string(result, count)).parent_path();
+      }
 #endif
-            return std::filesystem::current_path();
-    }
+      return std::filesystem::current_path();
+  }
 
 } // namespace anaf::DIRECTORY end
 

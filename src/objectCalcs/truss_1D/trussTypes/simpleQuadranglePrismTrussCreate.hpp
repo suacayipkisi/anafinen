@@ -26,37 +26,37 @@
 
 namespace FEM::TRUSS {
 
-    class SimpleTruss{
-    private:
-        std::array<std::uint32_t, 3> m_cubeNum{1, 1, 1}; // x y z added unit truss cube, cannot be zero none of them
-        std::vector<Node> m_allNodes;
-        std::vector<TrussElement_1D> m_allElements;
-        std::uint32_t m_type;
-        double m_cubeEdgeLength{};
-        double m_area{};
-    public:
-        //SimpleTruss() = default;
-        SimpleTruss(
-            std::array<std::uint32_t, 3> cubeNum,
-            double cubeEdgeLength,
-            double area,
-            std::uint32_t type
-        ): 
-            m_cubeNum(cubeNum),
-            m_cubeEdgeLength(cubeEdgeLength),
-            m_area(area),
-            m_type(type)
-        {}
+  class SimpleTruss{
+  private:
+    std::array<std::uint32_t, 3> m_cubeNum{1, 1, 1}; // x y z added unit truss cube, cannot be zero none of them
+    std::vector<Node> m_allNodes;
+    std::vector<TrussElement_1D> m_allElements;
+    std::uint32_t m_type;
+    double m_cubeEdgeLength{};
+    double m_area{};
+  public:
+    //SimpleTruss() = default;
+    SimpleTruss(
+      std::array<std::uint32_t, 3> cubeNum,
+      double cubeEdgeLength,
+      double area,
+      std::uint32_t type
+    ): 
+      m_cubeNum(cubeNum),
+      m_cubeEdgeLength(cubeEdgeLength),
+      m_area(area),
+      m_type(type)
+    {}
 
-        void setTruss();
+    void setTruss();
 
-        std::vector<Node>& getNodes() { return m_allNodes; }
-        const std::vector<Node>& getNodes() const { return m_allNodes; }
+    std::vector<Node>& getNodes() { return m_allNodes; }
+    const std::vector<Node>& getNodes() const { return m_allNodes; }
 
-        std::vector<TrussElement_1D>& getElements() { return m_allElements; }
-        const std::vector<TrussElement_1D>& getElements() const { return m_allElements; }
+    std::vector<TrussElement_1D>& getElements() { return m_allElements; }
+    const std::vector<TrussElement_1D>& getElements() const { return m_allElements; }
 
-        std::uint32_t getNodeNum() const {return m_allNodes.size();}
-    };
+    std::uint32_t getNodeNum() const {return m_allNodes.size();}
+  };
 
 } // namespace FEM::TRUSS end

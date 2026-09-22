@@ -22,51 +22,51 @@
 #include <log/anaf_info.hpp>
 
 namespace anaf::GUI {
-    void TrussSelector::onImGuiRender() {
-        if (!isOpen) return;
-        BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
+  void TrussSelector::onImGuiRender() {
+    if (!isOpen) return;
+    BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
 
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImVec2 center = ImVec2(
-            viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
-            viewport->WorkPos.y + viewport->WorkSize.y * 0.5f
-        );
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImVec2 center = ImVec2(
+      viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+      viewport->WorkPos.y + viewport->WorkSize.y * 0.5f
+    );
 
-        // center on screen when appearing
-        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(400.0f, 220.0f), ImGuiCond_FirstUseEver);
-        
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize;
+    // center on screen when appearing
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(400.0f, 220.0f), ImGuiCond_FirstUseEver);
+    
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize;
 
-        if (ImGui::Begin("Select Truss Type")) {
-            if (ImGui::BeginCombo("Truss Type", m_types[static_cast<int>(m_trussType)].data())) {
-                for (int i = 0; i < static_cast<int>(m_types.size()); ++i) {
-                    if (ImGui::Selectable(m_types[i].data(), m_trussType == static_cast<TrussTypes>(i))) {
-                        m_trussType = static_cast<TrussTypes>(i);
-                    }
-                }
-                ImGui::EndCombo();
-            }
-
-            if(ImGui::Button("Select", ImVec2(-1, 32))) {
-                if (onSelected) {
-                    onSelected(m_trussType);
-                }
-                switch (m_trussType) {
-                    case simpleQuadranglePrism:
-                        bridge.m_objectType = anaf::BRIDGE::ObjectType::truss_SQPT;
-                        break;
-                    case nodeEntered:
-                        bridge.m_objectType = anaf::BRIDGE::ObjectType::truss_imported_or_entered;
-                        break;
-                }
-                isOpen = false;
-
-            }
+    if (ImGui::Begin("Select Truss Type")) {
+      if (ImGui::BeginCombo("Truss Type", m_types[static_cast<int>(m_trussType)].data())) {
+        for (int i = 0; i < static_cast<int>(m_types.size()); ++i) {
+          if (ImGui::Selectable(m_types[i].data(), m_trussType == static_cast<TrussTypes>(i))) {
+            m_trussType = static_cast<TrussTypes>(i);
+          }
         }
+        ImGui::EndCombo();
+      }
 
-        ImGui::End();
+      if(ImGui::Button("Select", ImVec2(-1, 32))) {
+        if (onSelected) {
+          onSelected(m_trussType);
+        }
+        switch (m_trussType) {
+          case simpleQuadranglePrism:
+            bridge.m_objectType = anaf::BRIDGE::ObjectType::truss_SQPT;
+            break;
+          case nodeEntered:
+            bridge.m_objectType = anaf::BRIDGE::ObjectType::truss_imported_or_entered;
+            break;
+        }
+        isOpen = false;
+
+      }
     }
+
+    ImGui::End();
+  }
 } // namespace anaf::GUI end
 
 

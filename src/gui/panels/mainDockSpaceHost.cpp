@@ -26,102 +26,102 @@
 
 namespace anaf::GUI {
 
-    void MainDockSpaceHost::onImGuiRender() {
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
-        ImGui::SetNextWindowViewport(viewport->ID);
+  void MainDockSpaceHost::onImGuiRender() {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
 
-        ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | 
-                                      ImGuiWindowFlags_NoCollapse | 
-                                      ImGuiWindowFlags_NoResize | 
-                                      ImGuiWindowFlags_NoMove | 
-                                      ImGuiWindowFlags_NoBringToFrontOnFocus | 
-                                      ImGuiWindowFlags_NoNavFocus | 
-                                      ImGuiWindowFlags_NoBackground |
-                                      ImGuiWindowFlags_MenuBar;
+    ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | 
+                   ImGuiWindowFlags_NoCollapse | 
+                   ImGuiWindowFlags_NoResize | 
+                   ImGuiWindowFlags_NoMove | 
+                   ImGuiWindowFlags_NoBringToFrontOnFocus | 
+                   ImGuiWindowFlags_NoNavFocus | 
+                   ImGuiWindowFlags_NoBackground |
+                   ImGuiWindowFlags_MenuBar;
 
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-        ImGui::Begin("MainDockSpaceHostWindow", nullptr, host_flags);
-        ImGui::PopStyleVar(3);
+    ImGui::Begin("MainDockSpaceHostWindow", nullptr, host_flags);
+    ImGui::PopStyleVar(3);
 
-        if (ImGui::BeginMenuBar()) {
-            if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("(coming soon)Import Mesh (.vtk / .obj)...")) {
-                    if (on_import_mesh) on_import_mesh();
-                }
-                if (ImGui::MenuItem("(coming soon)Export Results (.vtk)...")) {
-                    if (on_export_results) on_export_results();
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Exit", "Alt+F4")) {
-                    glfwSetWindowShouldClose(m_window_, GLFW_TRUE);
-                }
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::BeginMenu("Analyze")) {
-                if (ImGui::MenuItem("Truss (1D Element)")) {
-                    if (on_select_analyze_structure) {
-                        on_select_analyze_structure(Truss_1D);
-                    }
-                }
-                if (ImGui::MenuItem("(coming soon)Truss (3D Element)")) {
-                    if (on_select_analyze_structure) {
-                        on_select_analyze_structure(Truss_3D);
-                    }
-                }
-                ImGui::EndMenu();
-            }
-
-            // if (ImGui::BeginMenu("Solver")) {
-            //     if (ImGui::MenuItem("Run Modal Analysis (Spectra)...")) {
-            //         if (on_run_solver) on_run_solver();
-            //     }
-            //     ImGui::EndMenu();
-            //}
-            ImGui::EndMenuBar();
+    if (ImGui::BeginMenuBar()) {
+      if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("(coming soon)Import Mesh (.vtk / .obj)...")) {
+          if (on_import_mesh) on_import_mesh();
         }
-
-        ImGuiID dockspace_id = ImGui::GetID("AppMainDockSpace");
-        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-
-        // Layout initialization: only run when dimensions are valid AND it hasn't run yet
-        static bool s_layout_built = false;
-        if (!s_layout_built && viewport->WorkSize.x > 100.0f && viewport->WorkSize.y > 100.0f) {
-            s_layout_built = true;
-
-            ImGui::DockBuilderRemoveNode(dockspace_id);
-            ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
-
-            ImGuiID dock_main_id = dockspace_id;
-
-            // 1. Split Left (Full height)
-            ImGuiID dock_left_id = ImGui::DockBuilderSplitNode(
-                dock_main_id, ImGuiDir_Left, 0.18f, nullptr, &dock_main_id);
-
-            // 2. Split Right (Full height)
-            ImGuiID dock_right_id = ImGui::DockBuilderSplitNode(
-                dock_main_id, ImGuiDir_Right, 0.24f, nullptr, &dock_main_id);
-
-            // 3. Split Bottom from remaining center
-            ImGuiID dock_bottom_id = ImGui::DockBuilderSplitNode(
-                dock_main_id, ImGuiDir_Down, 0.25f, nullptr, &dock_main_id);
-
-            // Dock windows into respective nodes
-            ImGui::DockBuilderDockWindow("Truss(1D) Analysis Set", dock_left_id);
-            ImGui::DockBuilderDockWindow("Model Tree", dock_right_id);
-            ImGui::DockBuilderDockWindow("Console", dock_bottom_id);
-            ImGui::DockBuilderDockWindow("3D Simulation Viewport", dock_main_id);
-
-            ImGui::DockBuilderFinish(dockspace_id);
+        if (ImGui::MenuItem("(coming soon)Export Results (.vtk)...")) {
+          if (on_export_results) on_export_results();
         }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Exit", "Alt+F4")) {
+          glfwSetWindowShouldClose(m_window_, GLFW_TRUE);
+        }
+        ImGui::EndMenu();
+      }
 
-        ImGui::End();
+      if (ImGui::BeginMenu("Analyze")) {
+        if (ImGui::MenuItem("Truss (1D Element)")) {
+          if (on_select_analyze_structure) {
+            on_select_analyze_structure(Truss_1D);
+          }
+        }
+        if (ImGui::MenuItem("(coming soon)Truss (3D Element)")) {
+          if (on_select_analyze_structure) {
+            on_select_analyze_structure(Truss_3D);
+          }
+        }
+        ImGui::EndMenu();
+      }
+
+      // if (ImGui::BeginMenu("Solver")) {
+      //     if (ImGui::MenuItem("Run Modal Analysis (Spectra)...")) {
+      //         if (on_run_solver) on_run_solver();
+      //     }
+      //     ImGui::EndMenu();
+      //}
+      ImGui::EndMenuBar();
     }
+
+    ImGuiID dockspace_id = ImGui::GetID("AppMainDockSpace");
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+    // Layout initialization: only run when dimensions are valid AND it hasn't run yet
+    static bool s_layout_built = false;
+    if (!s_layout_built && viewport->WorkSize.x > 100.0f && viewport->WorkSize.y > 100.0f) {
+      s_layout_built = true;
+
+      ImGui::DockBuilderRemoveNode(dockspace_id);
+      ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+      ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+
+      ImGuiID dock_main_id = dockspace_id;
+
+      // 1. Split Left (Full height)
+      ImGuiID dock_left_id = ImGui::DockBuilderSplitNode(
+        dock_main_id, ImGuiDir_Left, 0.18f, nullptr, &dock_main_id);
+
+      // 2. Split Right (Full height)
+      ImGuiID dock_right_id = ImGui::DockBuilderSplitNode(
+        dock_main_id, ImGuiDir_Right, 0.24f, nullptr, &dock_main_id);
+
+      // 3. Split Bottom from remaining center
+      ImGuiID dock_bottom_id = ImGui::DockBuilderSplitNode(
+        dock_main_id, ImGuiDir_Down, 0.25f, nullptr, &dock_main_id);
+
+      // Dock windows into respective nodes
+      ImGui::DockBuilderDockWindow("Truss(1D) Analysis Set", dock_left_id);
+      ImGui::DockBuilderDockWindow("Model Tree", dock_right_id);
+      ImGui::DockBuilderDockWindow("Console", dock_bottom_id);
+      ImGui::DockBuilderDockWindow("3D Simulation Viewport", dock_main_id);
+
+      ImGui::DockBuilderFinish(dockspace_id);
+    }
+
+    ImGui::End();
+  }
 
 } // namespace anaf::GUI end

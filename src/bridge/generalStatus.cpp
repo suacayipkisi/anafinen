@@ -19,10 +19,10 @@
 
 namespace anaf::BRIDGE {
 
-    Gui_Calc_Bridge& buildBridge() {
-        static Gui_Calc_Bridge bridge{};
-        Gui_Calc_Bridge& ref = bridge;
-        return ref;
-    }
-    
+  Gui_Calc_Bridge& buildBridge() {
+    static Gui_Calc_Bridge bridge{};
+    Gui_Calc_Bridge& ref = bridge;
+    return ref;
+  }
+  
 } // namespace anaf::BRIDGE end

@@ -27,28 +27,28 @@
 
 namespace anaf::GUI {
 
-    struct LogEntry {
-        anaf::LOG::Level level;
-        std::string text;
-    };
+  struct LogEntry {
+    anaf::LOG::Level level;
+    std::string text;
+  };
 
-    inline std::vector<LogEntry> g_ui_logs;
-    inline size_t g_ui_log_max_num{10000};
-    inline std::mutex g_log_mutex;
+  inline std::vector<LogEntry> g_ui_logs;
+  inline size_t g_ui_log_max_num{10000};
+  inline std::mutex g_log_mutex;
 
-    inline void anafUILogSink(anaf::LOG::Level level, const char* message) {
-        std::lock_guard<std::mutex> lock(g_log_mutex);
-        g_ui_logs.push_back({level, std::string(message)});
-    }
+  inline void anafUILogSink(anaf::LOG::Level level, const char* message) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    g_ui_logs.push_back({level, std::string(message)});
+  }
 
-    class LogTerminal : public IPanel {
-    private:
-        bool m_autoScroll {true};
-    public:
-        LogTerminal();
+  class LogTerminal : public IPanel {
+  private:
+    bool m_autoScroll {true};
+  public:
+    LogTerminal();
 
-        void onImGuiRender() override;
-        
-    };
+    void onImGuiRender() override;
+    
+  };
 
 } //namespace anaf::GUI end

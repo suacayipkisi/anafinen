@@ -42,72 +42,72 @@
 
 #ifdef _WIN32
 extern "C" {
-    __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
-    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+  __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
+  __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 #endif
 
 int main(int argc, char* argv[]) {
-    anaf::BRIDGE::Gui_Calc_Bridge& GUI_CALC_BRIDGE = anaf::BRIDGE::buildBridge();
+  anaf::BRIDGE::Gui_Calc_Bridge& GUI_CALC_BRIDGE = anaf::BRIDGE::buildBridge();
 
-    anaf::LOG::setCallback(
-        [](anaf::LOG::Level level, std::string_view message) {
-            anaf::GUI::anafUILogSink(level, std::string(message).c_str());
-        }
-    );
-    if (!anaf::LOG::init("anafinen_run.log")) {
-        anaf::LOG::error("Failed to open log file!");
-        return 1;
+  anaf::LOG::setCallback(
+    [](anaf::LOG::Level level, std::string_view message) {
+      anaf::GUI::anafUILogSink(level, std::string(message).c_str());
     }
-    anaf::LOG::setFloatPrecision(6); // decimal digits shown for all logged floating-point values
-    anaf::LOG::core("Initializing ANAFINEN Workspace (C++23)...");
+  );
+  if (!anaf::LOG::init("anafinen_run.log")) {
+    anaf::LOG::error("Failed to open log file!");
+    return 1;
+  }
+  anaf::LOG::setFloatPrecision(6); // decimal digits shown for all logged floating-point values
+  anaf::LOG::core("Initializing ANAFINEN Workspace (C++23)...");
 
-    const int availableThreads = omp_get_num_procs();
-    const int threadCount = availableThreads > 4 ? availableThreads - 2 : availableThreads;
-    omp_set_dynamic(0);
-    omp_set_num_threads(threadCount);
-    Eigen::setNbThreads(threadCount);
-    anaf::LOG::info("OpenMP thread limit set to {} of {} available threads", threadCount, availableThreads);
+  const int availableThreads = omp_get_num_procs();
+  const int threadCount = availableThreads > 4 ? availableThreads - 2 : availableThreads;
+  omp_set_dynamic(0);
+  omp_set_num_threads(threadCount);
+  Eigen::setNbThreads(threadCount);
+  anaf::LOG::info("OpenMP thread limit set to {} of {} available threads", threadCount, availableThreads);
 
-    anaf::TEST::AllStatus mainStatus{};
+  anaf::TEST::AllStatus mainStatus{};
 
-    // add two material for experimental reasons
-    // if you see that code block below that means
-    // not even phase 1 is finished
-    // you are currently watching the born of an analysis program
-    anafGen::IdGenerator materialIDs;
-    auto& allMaterials = GUI_CALC_BRIDGE.allMaterials;
-    allMaterials.push_back({
-        "Structural Steel (AISI 4130)",
-        205.0e9,
-        78.0e9,
-        160.0e9,
-        435.0e6,
-        670.0e6,
-        205.0e9,
-        7850.0,
-        0.29f,
-        0.25f,
-        0u
-    });
-    allMaterials.push_back({
-        "Aluminum 6061-T6",
-        68.9e9,
-        26.0e9,
-        67.5e9,
-        276.0e9 / 1e3,
-        310.0e6,
-        68.9e9,
-        2700.0,
-        0.33f,
-        0.12f,
-        1u
-    });
+  // add two material for experimental reasons
+  // if you see that code block below that means
+  // not even phase 1 is finished
+  // you are currently watching the born of an analysis program
+  anafGen::IdGenerator materialIDs;
+  auto& allMaterials = GUI_CALC_BRIDGE.allMaterials;
+  allMaterials.push_back({
+    "Structural Steel (AISI 4130)",
+    205.0e9,
+    78.0e9,
+    160.0e9,
+    435.0e6,
+    670.0e6,
+    205.0e9,
+    7850.0,
+    0.29f,
+    0.25f,
+    0u
+  });
+  allMaterials.push_back({
+    "Aluminum 6061-T6",
+    68.9e9,
+    26.0e9,
+    67.5e9,
+    276.0e9 / 1e3,
+    310.0e6,
+    68.9e9,
+    2700.0,
+    0.33f,
+    0.12f,
+    1u
+  });
 
-    anaf::GUI::initgui();
+  anaf::GUI::initgui();
 
-    anaf::LOG::core("Anafinen is closing.");
-    anaf::LOG::close();
-    anaf::LOG::core("Anafinen is closed.");
-    return 0;
+  anaf::LOG::core("Anafinen is closing.");
+  anaf::LOG::close();
+  anaf::LOG::core("Anafinen is closed.");
+  return 0;
 }

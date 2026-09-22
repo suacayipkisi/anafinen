@@ -28,54 +28,54 @@
 
 namespace FEM::TRUSS{
 
-    // simple quadrangle prism truss
-    class Truss_SQPT {
-    private:
-        std::uint32_t m_cubeNumX;
-        std::uint32_t m_cubeNumY;
-        std::uint32_t m_cubeNumZ;
-        double m_elementLength;
-        double m_area;
-        std::uint32_t m_type;
-        std::vector<ForceApplied> m_force;
-        std::vector<double> m_forceVec;
-        SimpleTruss m_truss;
-        Truss_1D_Container m_container;
-    public:
-        Truss_SQPT(
-            anaf::BRIDGE::Gui_Calc_Bridge& bridge,
-            std::stop_token st,
-            std::uint32_t cubeNumX,
-            std::uint32_t cubeNumY,
-            std::uint32_t cubeNumZ,
-            double elementLength,
-            double area,
-            std::uint32_t type
-        ) :
-            m_cubeNumX(cubeNumX),
-            m_cubeNumY(cubeNumY),
-            m_cubeNumZ(cubeNumZ),
-            m_elementLength(elementLength),
-            m_area(area * 1e-4),
-            m_type(type),
-            m_truss({{cubeNumX, cubeNumY, cubeNumZ}, elementLength, area * 1e-4, type})
-        {}
+  // simple quadrangle prism truss
+  class Truss_SQPT {
+  private:
+    std::uint32_t m_cubeNumX;
+    std::uint32_t m_cubeNumY;
+    std::uint32_t m_cubeNumZ;
+    double m_elementLength;
+    double m_area;
+    std::uint32_t m_type;
+    std::vector<ForceApplied> m_force;
+    std::vector<double> m_forceVec;
+    SimpleTruss m_truss;
+    Truss_1D_Container m_container;
+  public:
+    Truss_SQPT(
+      anaf::BRIDGE::Gui_Calc_Bridge& bridge,
+      std::stop_token st,
+      std::uint32_t cubeNumX,
+      std::uint32_t cubeNumY,
+      std::uint32_t cubeNumZ,
+      double elementLength,
+      double area,
+      std::uint32_t type
+    ) :
+      m_cubeNumX(cubeNumX),
+      m_cubeNumY(cubeNumY),
+      m_cubeNumZ(cubeNumZ),
+      m_elementLength(elementLength),
+      m_area(area * 1e-4),
+      m_type(type),
+      m_truss({{cubeNumX, cubeNumY, cubeNumZ}, elementLength, area * 1e-4, type})
+    {}
 
-        void trussSetAndSetFix_SQPT(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st);
+    void trussSetAndSetFix_SQPT(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st);
 
-        void trussSetForce_SQRT(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st, std::vector<ForceApplied> force);
+    void trussSetForce_SQRT(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st, std::vector<ForceApplied> force);
 
-        void setContainer(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st);
+    void setContainer(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st);
 
-        void calculate(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st, std::span<anaf::MATERIAL::Material> materials);
+    void calculate(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st, std::span<anaf::MATERIAL::Material> materials);
 
-        const std::vector<Node>& getNodes() const { return m_truss.getNodes(); }
-        const std::vector<TrussElement_1D>& getElements() const { return m_truss.getElements(); }
+    const std::vector<Node>& getNodes() const { return m_truss.getNodes(); }
+    const std::vector<TrussElement_1D>& getElements() const { return m_truss.getElements(); }
 
-    };
+  };
 
-    class Truss_Imported_or_Entered {
-        // // //
-    };
-    
+  class Truss_Imported_or_Entered {
+    // // //
+  };
+  
 } // namespace FEM::TRUSS end

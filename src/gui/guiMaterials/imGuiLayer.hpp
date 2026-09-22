@@ -26,30 +26,30 @@
 
 namespace anaf::GUI {
 
-    void setupSpecialTheme();
+  void setupSpecialTheme();
 
-    class ImGuiLayer {
-    private:
-        bool m_notCloseWindow{true};
-    public:
-        static inline ImFont* font_ui = nullptr;
-        static inline ImFont* font_console = nullptr;
+  class ImGuiLayer {
+  private:
+    bool m_notCloseWindow{true};
+  public:
+    static inline ImFont* font_ui = nullptr;
+    static inline ImFont* font_console = nullptr;
 
-        void init(GLFWwindow* window);
+    void init(GLFWwindow* window);
 
-        void beginFrame();
+    void beginFrame();
 
-        void endFrame() {
-            ImGui::Render();
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        }
+    void endFrame() {
+      ImGui::Render();
+      ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
 
-        void shutdown() {
-            ImGui_ImplOpenGL3_Shutdown();
-            ImGui_ImplGlfw_Shutdown();
-            ImGui::DestroyContext();
-        }
+    void shutdown() {
+      ImGui_ImplOpenGL3_Shutdown();
+      ImGui_ImplGlfw_Shutdown();
+      ImGui::DestroyContext();
+    }
 
-    };
+  };
 
 } // namespace anaf::GUI end

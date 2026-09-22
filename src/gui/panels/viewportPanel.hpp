@@ -30,53 +30,53 @@
 
 namespace anaf::GUI{
 
-    struct Truss_1D_GUI_PROPERTIES {
-        //size_t m_lastNodeCount{0};
-        //size_t m_lastElementCount{0};
-        bool m_meshNeedsUpdate{true};
-        uint64_t m_lastRenderedVersion{0};
-    };
+  struct Truss_1D_GUI_PROPERTIES {
+    //size_t m_lastNodeCount{0};
+    //size_t m_lastElementCount{0};
+    bool m_meshNeedsUpdate{true};
+    uint64_t m_lastRenderedVersion{0};
+  };
 
-    struct Truss_3D_GUI_PROPERTIES {
+  struct Truss_3D_GUI_PROPERTIES {
 
-    };
+  };
 
-    class ViewportPanel : public IPanel {
-    private:
-        std::shared_ptr<Framebuffer> m_fbo_ ;
-        std::unique_ptr<ViewportRenderer> m_renderer_;
+  class ViewportPanel : public IPanel {
+  private:
+    std::shared_ptr<Framebuffer> m_fbo_ ;
+    std::unique_ptr<ViewportRenderer> m_renderer_;
 
-        bool m_viewportFocused_ {false};
-        bool m_viewportHovered_ {false};
+    bool m_viewportFocused_ {false};
+    bool m_viewportHovered_ {false};
 
-        float m_rotationYaw {0.9f};
-        float m_rotationPitch {-0.7f};
-        float m_cameraDistance {18.0f};
-        glm::vec3 m_target{0.0f, 0.0f, 0.0f};
+    float m_rotationYaw {0.9f};
+    float m_rotationPitch {-0.7f};
+    float m_cameraDistance {18.0f};
+    glm::vec3 m_target{0.0f, 0.0f, 0.0f};
 
-        bool m_draggingView {false};
-        bool m_showNodes {false};
-        ImVec2 m_viewportSize{0.0f, 0.0f};
+    bool m_draggingView {false};
+    bool m_showNodes {false};
+    ImVec2 m_viewportSize{0.0f, 0.0f};
 
-        Truss_1D_GUI_PROPERTIES truss_1d_gui_prop{};
+    Truss_1D_GUI_PROPERTIES truss_1d_gui_prop{};
 
-        std::shared_ptr<const anaf::BRIDGE::MeshData> m_currentMesh{nullptr};
+    std::shared_ptr<const anaf::BRIDGE::MeshData> m_currentMesh{nullptr};
 
-        void handleCameraInput();
-        void buildSceneBatches();
-        void renderOverlay2D(const ImVec2& origin, const ImVec2& size, const glm::mat4& viewProj);
+    void handleCameraInput();
+    void buildSceneBatches();
+    void renderOverlay2D(const ImVec2& origin, const ImVec2& size, const glm::mat4& viewProj);
 
-    public:
-        explicit ViewportPanel(std::shared_ptr<Framebuffer> fbo);
-        ~ViewportPanel() override = default;
+  public:
+    explicit ViewportPanel(std::shared_ptr<Framebuffer> fbo);
+    ~ViewportPanel() override = default;
 
-        void renderSceneOpenGL();
-        void onImGuiRender() override;
+    void renderSceneOpenGL();
+    void onImGuiRender() override;
 
-        bool isFocused() const { return m_viewportFocused_; }
-        bool isHovered() const { return m_viewportHovered_; }
-        glm::mat4 getViewProjectionMatrix() const;
+    bool isFocused() const { return m_viewportFocused_; }
+    bool isHovered() const { return m_viewportHovered_; }
+    glm::mat4 getViewProjectionMatrix() const;
 
-    };
+  };
 
 } // namespace anaf::GUI end

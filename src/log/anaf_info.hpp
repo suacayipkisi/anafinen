@@ -30,127 +30,127 @@
 
 namespace anaf::LOG {
 
-    enum class Level {
-        INFO,
-        WARN,
-        ERR,
-        SUCCESS,
-        CORE
+  enum class Level {
+    INFO,
+    WARN,
+    ERR,
+    SUCCESS,
+    CORE
+  };
+
+  // Global decimal digit count applied to every floating-point value logged via {}.
+  inline std::atomic<int> g_floatPrecision{3};
+
+  inline void setFloatPrecision(int digits) noexcept {
+    g_floatPrecision.store(digits, std::memory_order_relaxed);
+  }
+
+  inline int getFloatPrecision() noexcept {
+    return g_floatPrecision.load(std::memory_order_relaxed);
+  }
+
+  namespace detail {
+
+    // Wraps floating-point args so std::format renders them with g_floatPrecision decimals.
+    template <typename T>
+    struct FloatArg {
+      T value;
     };
 
-    // Global decimal digit count applied to every floating-point value logged via {}.
-    inline std::atomic<int> g_floatPrecision{3};
+    template <typename T>
+    using WrapT = std::conditional_t<std::is_floating_point_v<std::remove_cvref_t<T>>,
+                     FloatArg<std::remove_cvref_t<T>>, std::remove_cvref_t<T>>;
 
-    inline void setFloatPrecision(int digits) noexcept {
-        g_floatPrecision.store(digits, std::memory_order_relaxed);
+    template <typename T>
+    constexpr WrapT<T> wrapArg(T&& value) {
+      if constexpr (std::is_floating_point_v<std::remove_cvref_t<T>>) {
+        return FloatArg<std::remove_cvref_t<T>>{value};
+      } else {
+        return std::forward<T>(value);
+      }
     }
 
-    inline int getFloatPrecision() noexcept {
-        return g_floatPrecision.load(std::memory_order_relaxed);
-    }
-
-    namespace detail {
-
-        // Wraps floating-point args so std::format renders them with g_floatPrecision decimals.
-        template <typename T>
-        struct FloatArg {
-            T value;
-        };
-
-        template <typename T>
-        using WrapT = std::conditional_t<std::is_floating_point_v<std::remove_cvref_t<T>>,
-                                          FloatArg<std::remove_cvref_t<T>>, std::remove_cvref_t<T>>;
-
-        template <typename T>
-        constexpr WrapT<T> wrapArg(T&& value) {
-            if constexpr (std::is_floating_point_v<std::remove_cvref_t<T>>) {
-                return FloatArg<std::remove_cvref_t<T>>{value};
-            } else {
-                return std::forward<T>(value);
-            }
-        }
-
-    } // namespace detail
+  } // namespace detail
 
 } // namespace anaf::LOG
 
 template <typename T>
 struct std::formatter<anaf::LOG::detail::FloatArg<T>> {
-    static constexpr auto parse(std::format_parse_context& ctx) {
-        return ctx.begin();
-    }
+  static constexpr auto parse(std::format_parse_context& ctx) {
+    return ctx.begin();
+  }
 
-    static auto format(const anaf::LOG::detail::FloatArg<T>& wrapped, std::format_context& ctx) {
-        return std::format_to(ctx.out(), "{:.{}f}", wrapped.value, anaf::LOG::getFloatPrecision());
-    }
+  static auto format(const anaf::LOG::detail::FloatArg<T>& wrapped, std::format_context& ctx) {
+    return std::format_to(ctx.out(), "{:.{}f}", wrapped.value, anaf::LOG::getFloatPrecision());
+  }
 };
 
 namespace anaf::LOG {
 
-    inline constexpr std::string_view COLOR_RESET  = "\033[0m";
-    inline constexpr std::string_view COLOR_BOLD   = "\033[1m";
-    inline constexpr std::string_view COLOR_RED    = "\033[31m";
-    inline constexpr std::string_view COLOR_GREEN  = "\033[32m";
-    inline constexpr std::string_view COLOR_YELLOW = "\033[33m";
-    inline constexpr std::string_view COLOR_BLUE   = "\033[34m";
-    inline constexpr std::string_view COLOR_CYAN   = "\033[36m";
+  inline constexpr std::string_view COLOR_RESET  = "\033[0m";
+  inline constexpr std::string_view COLOR_BOLD   = "\033[1m";
+  inline constexpr std::string_view COLOR_RED    = "\033[31m";
+  inline constexpr std::string_view COLOR_GREEN  = "\033[32m";
+  inline constexpr std::string_view COLOR_YELLOW = "\033[33m";
+  inline constexpr std::string_view COLOR_BLUE   = "\033[34m";
+  inline constexpr std::string_view COLOR_CYAN   = "\033[36m";
 
-    struct LoggerContext {
-        std::mutex mtx;
-        std::ofstream logFile;
-        std::function<void(Level, std::string_view)> callback = nullptr;
-    };
+  struct LoggerContext {
+    std::mutex mtx;
+    std::ofstream logFile;
+    std::function<void(Level, std::string_view)> callback = nullptr;
+  };
 
-    inline LoggerContext& getContext() noexcept {
-        static LoggerContext instance;
-        return instance;
+  inline LoggerContext& getContext() noexcept {
+    static LoggerContext instance;
+    return instance;
+  }
+
+  void write(Level level, std::string_view formattedMessage);
+
+  inline void setCallback(std::function<void(Level, std::string_view)> cb) {
+    std::lock_guard<std::mutex> lock(getContext().mtx);
+    getContext().callback = std::move(cb);
+  }
+
+  inline bool init(const std::string& filepath) {
+    auto& ctx = getContext();
+    std::lock_guard<std::mutex> lock(ctx.mtx);
+    ctx.logFile.open(filepath, std::ios::out | std::ios::trunc);
+    return ctx.logFile.is_open();
+  }
+
+  inline void close() {
+    auto& ctx = getContext();
+    std::lock_guard<std::mutex> lock(ctx.mtx);
+    if (ctx.logFile.is_open()) {
+      ctx.logFile.close();
     }
+  }
 
-    void write(Level level, std::string_view formattedMessage);
+  template <typename... Args>
+  void info(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+    write(Level::INFO, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
+  }
 
-    inline void setCallback(std::function<void(Level, std::string_view)> cb) {
-        std::lock_guard<std::mutex> lock(getContext().mtx);
-        getContext().callback = std::move(cb);
-    }
+  template <typename... Args>
+  void warn(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+    write(Level::WARN, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
+  }
 
-    inline bool init(const std::string& filepath) {
-        auto& ctx = getContext();
-        std::lock_guard<std::mutex> lock(ctx.mtx);
-        ctx.logFile.open(filepath, std::ios::out | std::ios::trunc);
-        return ctx.logFile.is_open();
-    }
+  template <typename... Args>
+  void error(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+    write(Level::ERR, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
+  }
 
-    inline void close() {
-        auto& ctx = getContext();
-        std::lock_guard<std::mutex> lock(ctx.mtx);
-        if (ctx.logFile.is_open()) {
-            ctx.logFile.close();
-        }
-    }
+  template <typename... Args>
+  void success(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+    write(Level::SUCCESS, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
+  }
 
-    template <typename... Args>
-    void info(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
-        write(Level::INFO, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
-    }
-
-    template <typename... Args>
-    void warn(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
-        write(Level::WARN, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
-    }
-
-    template <typename... Args>
-    void error(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
-        write(Level::ERR, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
-    }
-
-    template <typename... Args>
-    void success(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
-        write(Level::SUCCESS, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
-    }
-
-    template <typename... Args>
-    void core(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
-        write(Level::CORE, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
-    }
+  template <typename... Args>
+  void core(std::format_string<detail::WrapT<Args>...> fmt, Args&&... args) {
+    write(Level::CORE, std::format(fmt, detail::wrapArg(std::forward<Args>(args))...));
+  }
 
 } // namespace anaf::LOG end

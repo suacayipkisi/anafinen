@@ -21,11 +21,11 @@
 
 namespace anaf::GUI {
 
-    class ModelTree : public IPanel {
-    private:
+  class ModelTree : public IPanel {
+  private:
 
-    public:
-        void onImGuiRender() override;
-    };
+  public:
+    void onImGuiRender() override;
+  };
 
 } // namespace anaf::GUI end

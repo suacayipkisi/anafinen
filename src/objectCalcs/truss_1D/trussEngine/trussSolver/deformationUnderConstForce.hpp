@@ -27,65 +27,65 @@
 
 namespace FEM::TRUSS {
 
-    class Truss_1D_Container{
-    private:
-        bool m_isCalculationValid;
-        double m_energyDiff;
-        double m_energyRelativeDiff;
-        double m_workDone_external;
-        double m_elasticDeformationEnergy_internal;
+  class Truss_1D_Container{
+  private:
+    bool m_isCalculationValid;
+    double m_energyDiff;
+    double m_energyRelativeDiff;
+    double m_workDone_external;
+    double m_elasticDeformationEnergy_internal;
 
-        std::span<double> m_forceVec;
-        std::span<Node> m_allNodes;
-        std::span<TrussElement_1D> m_allElements;
+    std::span<double> m_forceVec;
+    std::span<Node> m_allNodes;
+    std::span<TrussElement_1D> m_allElements;
 
-        std::vector<Eigen::Triplet<double>> m_globalStiffnessMatrix;
-        std::vector<std::array<double, 3>> m_resultDisplacements;
-    public:
-        Truss_1D_Container() = default;
-        Truss_1D_Container(
-            std::span<double> forceVec,
-            std::span<Node> allNodes,
-            std::span<TrussElement_1D> allElements
-        ): 
-            m_forceVec(forceVec),
-            m_allNodes(allNodes),
-            m_allElements(allElements)
-        {}
+    std::vector<Eigen::Triplet<double>> m_globalStiffnessMatrix;
+    std::vector<std::array<double, 3>> m_resultDisplacements;
+  public:
+    Truss_1D_Container() = default;
+    Truss_1D_Container(
+      std::span<double> forceVec,
+      std::span<Node> allNodes,
+      std::span<TrussElement_1D> allElements
+    ): 
+      m_forceVec(forceVec),
+      m_allNodes(allNodes),
+      m_allElements(allElements)
+    {}
 
-        void set(
-            std::span<double> forceVec,
-            std::span<Node> allNodes,
-            std::span<TrussElement_1D> allElements
-        ) {
-            m_forceVec = forceVec;
-            m_allNodes = allNodes;
-            m_allElements = allElements;
-        }
+    void set(
+      std::span<double> forceVec,
+      std::span<Node> allNodes,
+      std::span<TrussElement_1D> allElements
+    ) {
+      m_forceVec = forceVec;
+      m_allNodes = allNodes;
+      m_allElements = allElements;
+    }
 
-        void assembleStiffness(
-            const std::vector<TrussElement_1D>& elements,
-            std::span<const anaf::MATERIAL::Material> allMaterials
-        );
+    void assembleStiffness(
+      const std::vector<TrussElement_1D>& elements,
+      std::span<const anaf::MATERIAL::Material> allMaterials
+    );
 
-        void considerWeight(
-            const std::vector<TrussElement_1D>& elements,
-            std::span<const anaf::MATERIAL::Material> allMaterials
-        );
+    void considerWeight(
+      const std::vector<TrussElement_1D>& elements,
+      std::span<const anaf::MATERIAL::Material> allMaterials
+    );
 
-        void calculateDisplacements();
-        void calculateElementForcesAndStress(
-            const std::span<const anaf::MATERIAL::Material> allMaterials, 
-            const Eigen::Vector3d gravityVector = {0, -9,80665, 0}
-        );
+    void calculateDisplacements();
+    void calculateElementForcesAndStress(
+      const std::span<const anaf::MATERIAL::Material> allMaterials, 
+      const Eigen::Vector3d gravityVector = {0, -9,80665, 0}
+    );
 
-        void runValidator(const std::span<const anaf::MATERIAL::Material> allMaterials);
+    void runValidator(const std::span<const anaf::MATERIAL::Material> allMaterials);
 
-        inline const bool getIsCalculationValid() const {return m_isCalculationValid;}
-        inline const double getEnergyDiff() const {return m_energyDiff;}
-        inline const double getEnergyRelativeDiff() const {return m_energyRelativeDiff;}
-        inline const double getWorkDone_External() const {return m_workDone_external;}
-        inline const double getElasticDeformationEnergy_Internal() const {return m_elasticDeformationEnergy_internal;}
-    };
+    inline const bool getIsCalculationValid() const {return m_isCalculationValid;}
+    inline const double getEnergyDiff() const {return m_energyDiff;}
+    inline const double getEnergyRelativeDiff() const {return m_energyRelativeDiff;}
+    inline const double getWorkDone_External() const {return m_workDone_external;}
+    inline const double getElasticDeformationEnergy_Internal() const {return m_elasticDeformationEnergy_internal;}
+  };
 
 } // namespace FEM::TRUSS end

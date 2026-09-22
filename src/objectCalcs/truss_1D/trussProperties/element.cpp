@@ -23,27 +23,27 @@
 
 namespace FEM::TRUSS {
 
-    //unnecesary if you want to reach global stiffness matrix
-    void TrussElement_1D::determineEleStiffnessMatrix(const std::span<const anaf::MATERIAL::Material> allMaterials){
+  //unnecesary if you want to reach global stiffness matrix
+  void TrussElement_1D::determineEleStiffnessMatrix(const std::span<const anaf::MATERIAL::Material> allMaterials){
 
-        if(allMaterials[m_type].getElasticityModulues() == 0){
-            anaf::LOG::warn("No Elasticity modulus defined for this type of material!");
-            m_stiffnessMatrix = Eigen::Matrix<double, 6, 6>::Zero();
-            return;
-        }
-
-        double AE_L = (m_crossSectionArea * allMaterials[m_type].getElasticityModulues()) / m_length;
-
-        Eigen::Matrix3d lambda;
-        std::array<float, 3>& cos {m_cosinuses};
-
-        // lambda is symmetrix
-        lambda << (cos[0] * cos[0] * AE_L), (cos[0] * cos[1] * AE_L), (cos[0] * cos[2] * AE_L),
-                (cos[0] * cos[1] * AE_L), (cos[1] * cos[1] * AE_L), (cos[1] * cos[2] * AE_L),
-                (cos[0] * cos[2] * AE_L), (cos[1] * cos[2] * AE_L), (cos[2] * cos[2] * AE_L);
-        
-        m_stiffnessMatrix << lambda, -lambda,
-                                -lambda, lambda;
+    if(allMaterials[m_type].getElasticityModulues() == 0){
+      anaf::LOG::warn("No Elasticity modulus defined for this type of material!");
+      m_stiffnessMatrix = Eigen::Matrix<double, 6, 6>::Zero();
+      return;
     }
+
+    double AE_L = (m_crossSectionArea * allMaterials[m_type].getElasticityModulues()) / m_length;
+
+    Eigen::Matrix3d lambda;
+    std::array<float, 3>& cos {m_cosinuses};
+
+    // lambda is symmetrix
+    lambda << (cos[0] * cos[0] * AE_L), (cos[0] * cos[1] * AE_L), (cos[0] * cos[2] * AE_L),
+        (cos[0] * cos[1] * AE_L), (cos[1] * cos[1] * AE_L), (cos[1] * cos[2] * AE_L),
+        (cos[0] * cos[2] * AE_L), (cos[1] * cos[2] * AE_L), (cos[2] * cos[2] * AE_L);
+    
+    m_stiffnessMatrix << lambda, -lambda,
+                -lambda, lambda;
+  }
 
 } // namespace FEM::TRUSS end

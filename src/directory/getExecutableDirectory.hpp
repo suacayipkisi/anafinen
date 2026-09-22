@@ -21,7 +21,7 @@
 
 namespace anaf::DIRECTORY {
 
-    std::filesystem::path getExecutableDirectory();
+  std::filesystem::path getExecutableDirectory();
 
 } // namespace anaf::DIRECTORY end
 

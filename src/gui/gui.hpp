@@ -31,20 +31,20 @@
 
 namespace anaf::GUI{
 
-    struct UIPanels {
-        MainDockSpaceHost* dock = nullptr;
-        ViewportPanel* viewport = nullptr;
-        TrussSelector* selector = nullptr;
-        TrussControlPanel* control = nullptr;
-        ModelTree* tree = nullptr;
-        LogTerminal* log = nullptr;
-    };
+  struct UIPanels {
+    MainDockSpaceHost* dock = nullptr;
+    ViewportPanel* viewport = nullptr;
+    TrussSelector* selector = nullptr;
+    TrussControlPanel* control = nullptr;
+    ModelTree* tree = nullptr;
+    LogTerminal* log = nullptr;
+  };
 
-    void bindAnalysisFlow(UIPanels panels);
-    std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo);
+  void bindAnalysisFlow(UIPanels panels);
+  std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo);
 
-    int initgui();
+  int initgui();
 
-    
+  
 
 } // namespace anaf::GUI end

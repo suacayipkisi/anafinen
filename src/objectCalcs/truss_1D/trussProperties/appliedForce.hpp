@@ -22,18 +22,18 @@
 
 namespace FEM::TRUSS {
 
-    class ForceApplied{
-    private:
-        std::uint32_t m_nodeID;
-        std::array<double, 3> m_force;
-    public:
-        ForceApplied(std::uint32_t nodeID, std::array<double, 3> force):
-            m_nodeID(nodeID), m_force(force)
-        {}
+  class ForceApplied{
+  private:
+    std::uint32_t m_nodeID;
+    std::array<double, 3> m_force;
+  public:
+    ForceApplied(std::uint32_t nodeID, std::array<double, 3> force):
+      m_nodeID(nodeID), m_force(force)
+    {}
 
-        inline void updateForce(std::array<double, 3> force){m_force = force;}
-        inline std::uint32_t getApliedNode() const {return m_nodeID;}
-        inline const std::array<double, 3>& getForce() const {return m_force;}
-    };
+    inline void updateForce(std::array<double, 3> force){m_force = force;}
+    inline std::uint32_t getApliedNode() const {return m_nodeID;}
+    inline const std::array<double, 3>& getForce() const {return m_force;}
+  };
 
 } // namespace FEM::TRUSS end

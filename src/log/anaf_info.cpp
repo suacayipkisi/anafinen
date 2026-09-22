@@ -24,66 +24,66 @@
 #include <string>
 
 namespace {
-    inline void portableLocalTime(const std::time_t* timer, std::tm* buf) {
+  inline void portableLocalTime(const std::time_t* timer, std::tm* buf) {
 #if defined(_WIN32) || defined(_MSC_VER)
-        localtime_s(buf, timer);
+    localtime_s(buf, timer);
 #else
-        localtime_r(timer, buf);
+    localtime_r(timer, buf);
 #endif
-    }
+  }
 } // namespace
 
 namespace anaf::LOG {
 
-    void write(Level level, std::string_view formattedMessage) {
-        std::string_view tag;
-        std::string_view tagColor;
+  void write(Level level, std::string_view formattedMessage) {
+    std::string_view tag;
+    std::string_view tagColor;
 
-        switch (level) {
-            case Level::INFO:
-                tag = "[INFO]";
-                tagColor = COLOR_BLUE;
-                break;
-            case Level::WARN:
-                tag = "[WARN]";
-                tagColor = COLOR_YELLOW;
-                break;
-            case Level::ERR:
-                tag = "[ERROR]";
-                tagColor = COLOR_RED;
-                break;
-            case Level::SUCCESS:
-                tag = "[SUCCESS]";
-                tagColor = COLOR_GREEN;
-                break;
-            case Level::CORE:
-                tag = "[ANAFINEN]";
-                tagColor = COLOR_CYAN;
-                break;
-        }
-
-        const auto raw_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-        std::tm tm_buf{};
-        portableLocalTime(&raw_time, &tm_buf);
-
-        const std::string timeStr = std::format("{:02d}:{:02d}:{:02d}", tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec);
-        auto& ctx = getContext();
-        std::lock_guard<std::mutex> lock(ctx.mtx);
-
-        // Terminal output
-        std::cout << std::format("[{}] {}{}{}{} {}\n", timeStr, COLOR_BOLD, tagColor, tag, COLOR_RESET, formattedMessage);
-
-        // File output
-        if (ctx.logFile.is_open()) {
-            ctx.logFile << std::format("[{}] {} {}\n", timeStr, tag, formattedMessage);
-            ctx.logFile.flush();
-        }
-
-        // UI callback dispatch
-        if (ctx.callback) {
-            const std::string uiFormatted = std::format("[{}] {} {}", timeStr, tag, formattedMessage);
-            ctx.callback(level, uiFormatted);
-        }
+    switch (level) {
+      case Level::INFO:
+        tag = "[INFO]";
+        tagColor = COLOR_BLUE;
+        break;
+      case Level::WARN:
+        tag = "[WARN]";
+        tagColor = COLOR_YELLOW;
+        break;
+      case Level::ERR:
+        tag = "[ERROR]";
+        tagColor = COLOR_RED;
+        break;
+      case Level::SUCCESS:
+        tag = "[SUCCESS]";
+        tagColor = COLOR_GREEN;
+        break;
+      case Level::CORE:
+        tag = "[ANAFINEN]";
+        tagColor = COLOR_CYAN;
+        break;
     }
+
+    const auto raw_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm tm_buf{};
+    portableLocalTime(&raw_time, &tm_buf);
+
+    const std::string timeStr = std::format("{:02d}:{:02d}:{:02d}", tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec);
+    auto& ctx = getContext();
+    std::lock_guard<std::mutex> lock(ctx.mtx);
+
+    // Terminal output
+    std::cout << std::format("[{}] {}{}{}{} {}\n", timeStr, COLOR_BOLD, tagColor, tag, COLOR_RESET, formattedMessage);
+
+    // File output
+    if (ctx.logFile.is_open()) {
+      ctx.logFile << std::format("[{}] {} {}\n", timeStr, tag, formattedMessage);
+      ctx.logFile.flush();
+    }
+
+    // UI callback dispatch
+    if (ctx.callback) {
+      const std::string uiFormatted = std::format("[{}] {} {}", timeStr, tag, formattedMessage);
+      ctx.callback(level, uiFormatted);
+    }
+  }
 
 } // namespace anaf::LOG::detail

@@ -25,24 +25,24 @@
 
 namespace anaf::GUI {
 
-    enum AnalyzeStructureType {
-        Truss_1D,
-        Truss_3D
-    };
+  enum AnalyzeStructureType {
+    Truss_1D,
+    Truss_3D
+  };
 
-    class MainDockSpaceHost : public IPanel {
-    private:
-        GLFWwindow* m_window_;
+  class MainDockSpaceHost : public IPanel {
+  private:
+    GLFWwindow* m_window_;
 
-    public:
-        std::function<void(AnalyzeStructureType)> on_select_analyze_structure;
-        std::function<void()> on_import_mesh;
-        std::function<void()> on_export_results;
-        std::function<void()> on_run_solver;
+  public:
+    std::function<void(AnalyzeStructureType)> on_select_analyze_structure;
+    std::function<void()> on_import_mesh;
+    std::function<void()> on_export_results;
+    std::function<void()> on_run_solver;
 
-        MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
+    MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
 
-        void onImGuiRender() override;
-    };
+    void onImGuiRender() override;
+  };
 
 } // namespace anaf:GUI end

@@ -19,8 +19,8 @@
 
 namespace FEM::TRUSS{
 
-    class Truss{
+  class Truss{
 
-    };
+  };
 
 } // namespace FEM::TRUSS end

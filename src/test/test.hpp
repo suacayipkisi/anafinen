@@ -19,6 +19,6 @@
 
 namespace anaf::TEST {
 
-    int testEigen();
+  int testEigen();
 
 } // namespace anaf::TEST end
