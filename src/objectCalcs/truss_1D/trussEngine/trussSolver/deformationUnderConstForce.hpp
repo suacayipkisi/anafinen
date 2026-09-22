@@ -22,6 +22,7 @@
 
 #include <Eigen/SparseCore>
 #include <span>
+#include <stop_token>
 #include <vector>
 #include <array>
 
@@ -73,7 +74,7 @@ namespace FEM::TRUSS {
       std::span<const anaf::MATERIAL::Material> allMaterials
     );
 
-    void calculateDisplacements();
+    void calculateDisplacements(std::stop_token stopToken = {});
     void calculateElementForcesAndStress(
       const std::span<const anaf::MATERIAL::Material> allMaterials, 
       const Eigen::Vector3d gravityVector = {0, -9,80665, 0}

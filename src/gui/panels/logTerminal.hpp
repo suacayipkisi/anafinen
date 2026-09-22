@@ -21,6 +21,7 @@
 #include <guiMaterials/iPanel.hpp>
 
 #include <cstddef>
+#include <chrono>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -44,6 +45,15 @@ namespace anaf::GUI {
   class LogTerminal : public IPanel {
   private:
     bool m_autoScroll {true};
+    std::chrono::steady_clock::time_point m_lastUsageSample{};
+    unsigned long long m_lastProcessTicks{0};
+    unsigned long long m_lastSystemTicks{0};
+    float m_processCpuPercent{0.0f};
+    float m_processRamMiB{0.0f};
+    float m_systemRamPercent{0.0f};
+
+    void updateUsage();
+    void renderUsage();
   public:
     LogTerminal();
 

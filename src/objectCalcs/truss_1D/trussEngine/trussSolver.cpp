@@ -36,6 +36,7 @@ namespace FEM::TRUSS {
     std::stop_token st
     
   ) {
+    if (st.stop_requested()) return;
     m_truss.setTruss();
 
     auto& nodes = m_truss.getNodes();
@@ -68,6 +69,7 @@ namespace FEM::TRUSS {
     std::stop_token st,
     std::vector<ForceApplied> force
   ) {
+    if (st.stop_requested()) return;
     m_forceVec.assign(m_truss.getNodeNum() * 3, 0.0);
 
     for (std::size_t i = 0; i < force.size(); ++i) {
@@ -90,6 +92,7 @@ namespace FEM::TRUSS {
     anaf::BRIDGE::Gui_Calc_Bridge& bridge,
     std::stop_token st
   ) {
+    if (st.stop_requested()) return;
     auto& nodes = m_truss.getNodes();
     auto& elements = m_truss.getElements();
     m_container.set(
@@ -105,12 +108,16 @@ namespace FEM::TRUSS {
     std::stop_token st,
     std::span<anaf::MATERIAL::Material> materials
   ){
+    if (st.stop_requested()) return;
     const auto& elements = m_truss.getElements();
     m_container.assembleStiffness(elements, materials);
+    if (st.stop_requested()) return;
     bridge.m_progress = 0.50f;
     m_container.considerWeight(elements, materials);
+    if (st.stop_requested()) return;
     bridge.m_progress = 0.550f;
-    m_container.calculateDisplacements();
+    m_container.calculateDisplacements(st);
+    if (st.stop_requested()) return;
     bridge.m_progress = 0.85f;
 
     double maxDisp = 0.0;

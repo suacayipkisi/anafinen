@@ -74,10 +74,10 @@ namespace anaf::GUI {
       resetCamera();
     }
 
-    if (ImGui::IsKeyPressed(ImGuiKey_LeftCtrl) || ImGui::IsKeyPressed(ImGuiKey_RightCtrl)) {
-      m_showNodes = !m_showNodes;
-      truss_1d_gui_prop.m_meshNeedsUpdate = true;
-    }
+    // if (ImGui::IsKeyPressed(ImGuiKey_LeftCtrl) || ImGui::IsKeyPressed(ImGuiKey_RightCtrl)) {
+    //   m_showNodes = !m_showNodes;
+    //   truss_1d_gui_prop.m_meshNeedsUpdate = true;
+    // }
 
     if (m_viewportHovered_ && io.MouseWheel != 0.0f) {
       m_cameraDistance = std::clamp(m_cameraDistance * (1.0f - io.MouseWheel * 0.15f), 0.5f, 500.0f);
@@ -146,6 +146,8 @@ namespace anaf::GUI {
     m_renderer_->addLine(glm::vec3(0.0f, 0.0f, -kAxisReach), glm::vec3(0.0f, 0.0f, kAxisReach), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
 
     if (!m_currentMesh || m_currentMesh->trussNodes.empty()) {
+      m_cachedMaxStress = 0.0;
+      m_cachedMaxDisp = 0.0;
       m_renderer_->uploadCurrentBuffer();
       return;
     }
@@ -165,8 +167,9 @@ namespace anaf::GUI {
 
     double maxStress = 0.0;
     for (const auto& element : mesh.trussElements) {
-      maxStress = std::max(maxStress, std::abs(element.getEleStress()));
+      maxStress = std::max(maxStress, std::abs(static_cast<double>(element.stress)));
     }
+    m_cachedMaxStress = maxStress;
 
     const double deformScale = mesh.deformScale;
 
@@ -188,6 +191,7 @@ namespace anaf::GUI {
       const auto disp = node.getDisplacmenet();
       maxDisp = std::max(maxDisp, std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]));
     }
+    m_cachedMaxDisp = maxDisp;
 
     std::vector<glm::vec3> nodeLookup(maxNodeId + 1, glm::vec3(0.0f));
     for (const auto& node : mesh.trussNodes) {
@@ -203,10 +207,9 @@ namespace anaf::GUI {
 
     // Truss Elements (Lines)
     for (const auto& element : mesh.trussElements) {
-      const auto& nodeIDs = element.getEleNodes();
-      if (nodeIDs[0] <= maxNodeId && nodeIDs[1] <= maxNodeId) {
-        glm::vec4 color = stressColor(element.getEleStress());
-        m_renderer_->addLine(nodeLookup[nodeIDs[0]], nodeLookup[nodeIDs[1]], color, -1);
+      if (element.node1 <= maxNodeId && element.node2 <= maxNodeId) {
+        glm::vec4 color = stressColor(element.stress);
+        m_renderer_->addLine(nodeLookup[element.node1], nodeLookup[element.node2], color, -1);
       }
     }
 
@@ -408,12 +411,17 @@ namespace anaf::GUI {
 
     // Node ID labels are rendered directly in the OpenGL scene pass (see renderSceneOpenGL), not here.
 
-    // Status Text
-    drawList->AddText(
-      ImVec2(origin.x + 4.0f, origin.y + 4.0f),
-      IM_COL32(180, 180, 180, 255),
-      m_showNodes ? "Nodes: Visible (Press CTRL to hide)" : "Nodes: Hidden (Press CTRL to show)"
-    );
+    // show-hide nodes
+    ImGui::SetCursorScreenPos(ImVec2(origin.x + 4.0f, origin.y + 36.0f));
+    if (ImGui::Button(m_showNodes ? "Nodes: Visible" : "Nodes: Hidden")) {
+      m_showNodes = !m_showNodes;
+      truss_1d_gui_prop.m_meshNeedsUpdate = true;
+    }
+    // drawList->AddText(
+    //   ImVec2(origin.x + 4.0f, origin.y + 4.0f),
+    //   IM_COL32(180, 180, 180, 255),
+    //   m_showNodes ? "Nodes: Visible (Press CTRL to hide)" : "Nodes: Hidden (Press CTRL to show)"
+    // );
 
     // FPS Monitor
     {
@@ -445,16 +453,8 @@ namespace anaf::GUI {
       };
 
       // Stress Bar
-      double maxStress = 0.0;
-      double maxDisp = 0.0;
-      for (const auto& el : mesh.trussElements) {
-        maxStress = std::max(maxStress, std::abs(el.getEleStress()));
-      }
-      for (const auto& nod : mesh.trussNodes) {
-        const auto& disp = nod.getDisplacmenet();
-        const double dispLength = std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]);
-        maxDisp = std::max(maxDisp, dispLength);
-      }
+      const double maxStress = m_cachedMaxStress;
+      const double maxDisp = m_cachedMaxDisp;
 
       const float startX = origin.x + 20.0f;
       const float startY = origin.y + size.y - barHeight - 25.0f;
@@ -555,7 +555,7 @@ namespace anaf::GUI {
     m_viewportHovered_ = ImGui::IsItemHovered();
 
     // Keep the camera reset accessible without requiring keyboard focus.
-    ImGui::SetCursorScreenPos(ImVec2(origin.x + 4.0f, origin.y + 30.0f));
+    ImGui::SetCursorScreenPos(ImVec2(origin.x + 4.0f, origin.y + 4.0f));
     if (ImGui::Button("Reset Camera")) {
       resetCamera();
     }

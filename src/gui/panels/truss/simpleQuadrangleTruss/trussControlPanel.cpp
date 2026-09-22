@@ -211,10 +211,18 @@ namespace anaf::GUI {
             configureOpenMPForWorker();
             FEM::TRUSS::SimpleTruss preview{{cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea, type};
             preview.setTruss();
+            if (st.stop_requested()) {
+              bridge.m_isGeneratingPreview = false;
+              return;
+            }
 
             auto newMesh = std::make_shared<BRIDGE::MeshData>();
             newMesh->trussNodes.assign(preview.getNodes().begin(), preview.getNodes().end());
-            newMesh->trussElements.assign(preview.getElements().begin(), preview.getElements().end());
+            newMesh->trussElements.reserve(preview.getElements().size());
+            for (const auto& element : preview.getElements()) {
+              const auto& nodes = element.getEleNodes();
+              newMesh->trussElements.push_back({nodes[0], nodes[1], 0.0f});
+            }
             newMesh->appliedForces = appliedForces;
 
             {
@@ -413,11 +421,20 @@ namespace anaf::GUI {
             solver.setContainer(bridge, st);
             
             solver.calculate(bridge, st, allMaterials);
+            if (st.stop_requested()) {
+              bridge.m_progress = 0.0f;
+              bridge.m_isRunning = false;
+              return;
+            }
 
             // send solved nodes and elements into new snapshot
             auto newMesh = std::make_shared<BRIDGE::MeshData>();
             newMesh->trussNodes.assign(solver.getNodes().begin(), solver.getNodes().end());
-            newMesh->trussElements.assign(solver.getElements().begin(), solver.getElements().end());
+            newMesh->trussElements.reserve(solver.getElements().size());
+            for (const auto& element : solver.getElements()) {
+              const auto& nodes = element.getEleNodes();
+              newMesh->trussElements.push_back({nodes[0], nodes[1], static_cast<float>(element.getEleStress())});
+            }
             newMesh->appliedForces = forcesToApply;
             newMesh->deformScale = deformScale;
 

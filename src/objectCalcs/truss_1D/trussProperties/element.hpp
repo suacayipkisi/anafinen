@@ -21,10 +21,10 @@
 #include "node.hpp"
 #include <log/anaf_info.hpp>
 
-#include <Eigen/Core>
 #include <cstddef>
 #include <cstdint>
 #include <array>
+#include <cmath>
 #include <span>
 #include <stdexcept>
 
@@ -42,7 +42,6 @@ namespace FEM::TRUSS {
     double m_stress{};
     std::array<float, 3> m_cosinuses;
     std::array<std::uint32_t, 2> m_nodes{};
-    Eigen::Matrix<double, 6, 6> m_stiffnessMatrix;
   protected:
   public:
     TrussElement_1D() = default;
@@ -103,9 +102,6 @@ namespace FEM::TRUSS {
     inline const std::uint32_t getEleProperties() const {return m_type;}
     inline const std::array<float, 3>& getEleCosinuses() const {return m_cosinuses;}
     inline const std::array<std::uint32_t, 2>& getEleNodes() const {return m_nodes;}
-
-    void determineEleStiffnessMatrix(const std::span<const anaf::MATERIAL::Material> allMaterials);
-    inline const Eigen::Matrix<double, 6, 6>& getEleStiffness() const {return m_stiffnessMatrix;}
 
   };
 

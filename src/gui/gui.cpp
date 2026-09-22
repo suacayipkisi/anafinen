@@ -28,6 +28,7 @@
 #include <vector>
 
 #include <log/anaf_info.hpp>
+#include <bridge/generalStatus.hpp>
 
 #include <directory/getExecutableDirectory.hpp>
 
@@ -210,6 +211,10 @@ namespace anaf::GUI {
       glfwSwapBuffers(window);
 
     }
+
+    auto& calculationBridge = anaf::BRIDGE::buildBridge();
+    calculationBridge.workerThread.request_stop();
+    calculationBridge.workerThread = std::jthread{};
 
     imguiLayer.shutdown();
     glfwDestroyWindow(window);

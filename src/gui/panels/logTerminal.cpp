@@ -21,11 +21,16 @@
 #include <guiMaterials/imGuiLayer.hpp>
 
 #include "imgui.h"
+#include <algorithm>
 #include <cstddef>
+#include <fstream>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <string_view>
+
+#include <bridge/generalStatus.hpp>
 
 namespace anaf::GUI {
 
@@ -38,6 +43,100 @@ namespace anaf::GUI {
         g_ui_logs.erase(g_ui_logs.begin());
       }
     });
+  }
+
+  void LogTerminal::updateUsage() {
+    const auto now = std::chrono::steady_clock::now();
+    if (m_lastUsageSample.time_since_epoch().count() != 0
+        && now - m_lastUsageSample < std::chrono::milliseconds(500)) {
+      return;
+    }
+
+    std::ifstream processStat("/proc/self/stat");
+    std::string statLine;
+    if (std::getline(processStat, statLine)) {
+      const std::size_t commandEnd = statLine.rfind(") ");
+      if (commandEnd != std::string::npos) {
+        std::istringstream fields(statLine.substr(commandEnd + 2));
+        std::string field;
+        std::vector<unsigned long long> values;
+        while (fields >> field) {
+          try {
+            values.push_back(std::stoull(field));
+          }
+          catch (const std::exception&) {
+            values.push_back(0);
+          }
+        }
+
+        if (values.size() > 12) {
+          const unsigned long long processTicks = values[11] + values[12];
+          std::ifstream systemStat("/proc/stat");
+          std::string cpuLine;
+          std::getline(systemStat, cpuLine);
+          std::istringstream cpuFields(cpuLine);
+          cpuFields >> field;
+          unsigned long long systemTicks = 0;
+          unsigned long long tick = 0;
+          while (cpuFields >> tick) systemTicks += tick;
+
+          if (m_lastSystemTicks != 0 && systemTicks > m_lastSystemTicks) {
+            const double processDelta = static_cast<double>(processTicks - m_lastProcessTicks);
+            const double systemDelta = static_cast<double>(systemTicks - m_lastSystemTicks);
+            m_processCpuPercent = static_cast<float>(
+              std::clamp(100.0 * processDelta / systemDelta, 0.0, 100.0)
+            );
+          }
+          m_lastProcessTicks = processTicks;
+          m_lastSystemTicks = systemTicks;
+        }
+      }
+    }
+
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    while (std::getline(status, line)) {
+      if (line.starts_with("VmRSS:")) {
+        std::istringstream fields(line.substr(6));
+        float kib = 0.0f;
+        fields >> kib;
+        m_processRamMiB = kib / 1024.0f;
+        break;
+      }
+    }
+
+    std::ifstream memory("/proc/meminfo");
+    unsigned long long totalKiB = 0;
+    unsigned long long availableKiB = 0;
+    while (std::getline(memory, line)) {
+      std::istringstream fields(line);
+      std::string key;
+      unsigned long long value = 0;
+      fields >> key >> value;
+      if (key == "MemTotal:") totalKiB = value;
+      if (key == "MemAvailable:") availableKiB = value;
+    }
+    if (totalKiB != 0) {
+      m_systemRamPercent = static_cast<float>(
+        std::clamp(100.0 * (totalKiB - availableKiB) / totalKiB, 0.0, 100.0)
+      );
+    }
+    m_lastUsageSample = now;
+  }
+
+  void LogTerminal::renderUsage() {
+    updateUsage();
+    const auto& bridge = anaf::BRIDGE::buildBridge();
+    const bool busy = bridge.m_isRunning.load() || bridge.m_isGeneratingPreview.load();
+    const ImVec4 accent = busy
+      ? ImVec4(0.95f, 0.75f, 0.25f, 1.0f)
+      : ImVec4(0.45f, 0.85f, 0.55f, 1.0f);
+
+    const char* state = busy ? "WORKING" : "IDLE";
+    ImGui::PushStyleColor(ImGuiCol_Text, accent);
+    ImGui::Text("%s  CPU %.0f%%  RAM %.0f MiB  |  System %.0f%%  |  GPU N/A", state,
+      m_processCpuPercent, m_processRamMiB, m_systemRamPercent);
+    ImGui::PopStyleColor();
   }
 
   void LogTerminal::onImGuiRender() {
@@ -68,15 +167,23 @@ namespace anaf::GUI {
       }
     }
 
-    ImGui::SameLine();
-
     const float input_width = 80.0f;
     const char* label_text = "Max Output";
     const float text_width = ImGui::CalcTextSize(label_text).x;
     const float style_spacing = ImGui::GetStyle().ItemSpacing.x;
     const float total_width = text_width + style_spacing + input_width;
+    const float usage_width = 520.0f;
+    const float content_right = ImGui::GetWindowContentRegionMax().x;
+    const float usage_cursor_x = content_right - total_width - style_spacing - usage_width;
 
-    float right_cursor_x = ImGui::GetWindowContentRegionMax().x - total_width;
+    if (usage_cursor_x > ImGui::GetCursorPosX()) {
+      ImGui::SameLine(usage_cursor_x);
+    } else {
+      ImGui::SameLine();
+    }
+    renderUsage();
+
+    float right_cursor_x = content_right - total_width;
 
     if (right_cursor_x > ImGui::GetCursorPosX()) {
       ImGui::SameLine(right_cursor_x);

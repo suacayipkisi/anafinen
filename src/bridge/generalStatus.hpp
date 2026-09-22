@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <memory>
 #include <truss_1D/trussProperties/appliedForce.hpp>
 #include <truss_1D/trussProperties/node.hpp>
 #include <truss_1D/trussProperties/element.hpp>
@@ -35,11 +36,17 @@ namespace anaf::BRIDGE {
     truss_imported_or_entered
   };
 
+  struct RenderElement {
+    std::uint32_t node1{};
+    std::uint32_t node2{};
+    float stress{};
+  };
+
   struct MeshData {
 
     // truss (1_D element) deformation under constant applied force
     std::vector<FEM::TRUSS::Node> trussNodes;
-    std::vector<FEM::TRUSS::TrussElement_1D> trussElements;
+    std::vector<RenderElement> trussElements;
     std::vector<FEM::TRUSS::ForceApplied> appliedForces;
     std::atomic<double> deformScale{1.0};
 
