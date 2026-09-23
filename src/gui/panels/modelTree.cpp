@@ -74,7 +74,7 @@ namespace anaf::GUI {
 
     if (ImGui::TreeNode("Truss Elements")) {
 
-      ImGui::Text("NodeNum / stress");
+      ImGui::Text("ElementNum / stress");
       {
         std::lock_guard lock(bridge.dataMutex);
         if (!meshData || meshData->trussElements.empty()) {
@@ -87,10 +87,11 @@ namespace anaf::GUI {
             // is stress is bigger than elasticity modulus, render it as red colored
             if (elemenet.isStressExceeded) {
               ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-            }
-            ImGui::Text("%u: %.3f", eleNum, elemenet.stress);
-            if (elemenet.isStressExceeded) {
+              ImGui::Text("%u: %.3f", eleNum, elemenet.stress);
               ImGui::PopStyleColor();
+            }
+            else {
+              ImGui::Text("%u: %.3f", eleNum, elemenet.stress);
             }
             eleNum ++;
           }

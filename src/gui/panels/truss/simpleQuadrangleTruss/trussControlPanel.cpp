@@ -21,6 +21,7 @@
 
 #include <Eigen/Core>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -396,10 +397,15 @@ namespace anaf::GUI {
             newMesh->trussElements.reserve(solver.getElements().size());
             for (const auto& element : solver.getElements()) {
               const auto& nodes = element.getEleNodes();
-              bool isMaxEleStressExceeded = (
-                element.getEleStress() > bridge.allMaterials[element.getEleProperties()].getElasticityModulues()
-                  ? true : false );
-              newMesh->trussElements.push_back({nodes[0], nodes[1], static_cast<float>(element.getEleStress()), isMaxEleStressExceeded});
+              const auto& material = bridge.allMaterials[element.getEleProperties()];
+              const bool isStressExceeded =
+                std::abs(element.getEleStress()) > material.getYieldTensile();
+              newMesh->trussElements.push_back({
+                nodes[0],
+                nodes[1],
+                static_cast<float>(element.getEleStress()),
+                isStressExceeded
+              });
             }
             newMesh->appliedForces = forcesToApply;
             newMesh->deformScale = deformScale;
