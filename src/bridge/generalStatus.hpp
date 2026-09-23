@@ -18,6 +18,7 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 #include <truss_1D/trussProperties/appliedForce.hpp>
 #include <truss_1D/trussProperties/node.hpp>
 #include <truss_1D/trussProperties/element.hpp>
@@ -33,13 +34,17 @@
 namespace anaf::BRIDGE {
   enum ObjectType {
     truss_SQPT,
-    truss_imported_or_entered
+    truss_imported_or_entered,
+    no_type
   };
+
+  std::string_view getObjectTypeName(ObjectType obj);
 
   struct RenderElement {
     std::uint32_t node1{};
     std::uint32_t node2{};
     float stress{};
+    bool isStressExceeded{false};
   };
 
   struct MeshData {

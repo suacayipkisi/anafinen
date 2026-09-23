@@ -319,43 +319,6 @@ namespace anaf::GUI {
       }
       lastNodeID = currentSelectedNode;
     }
-
-    ImGui::Separator();
-    ImGui::Text("Applied Fixity");
-    {
-      std::lock_guard lock(bridge.dataMutex);
-      if (bridge.fixedDOFsByNode.empty()) {
-        ImGui::TextDisabled("No fixed DOFs yet.");
-      } else {
-        ImGui::BeginChild("Applied Fixity List", ImVec2(0, 110), true);
-        for (const auto& [nodeId, dofs] : bridge.fixedDOFsByNode) {
-          ImGui::Text("Node %u: X=%s, Y=%s, Z=%s",
-            nodeId,
-            dofs[0] ? "fixed" : "free",
-            dofs[1] ? "fixed" : "free",
-            dofs[2] ? "fixed" : "free");
-        }
-        ImGui::EndChild();
-      }
-    }
-
-    ImGui::Text("Applied Forces");
-    {
-      std::lock_guard lock(bridge.dataMutex);
-      if (m_appliedForces.empty()) {
-        ImGui::TextDisabled("No applied forces yet.");
-      } else {
-        ImGui::BeginChild("AppliedForceList", ImVec2(0, 110), true);
-        for (const auto& force : m_appliedForces) {
-          ImGui::Text("Node %u: Fx=%.3f, Fy=%.3f, Fz=%.3f",
-            force.getApliedNode(),
-            force.getForce()[0],
-            force.getForce()[1],
-            force.getForce()[2]);
-        }
-        ImGui::EndChild();
-      }
-    }    
   
     ImGui::SetNextItemWidth(160.0f);
     double currentScale = 1.0;
@@ -433,7 +396,10 @@ namespace anaf::GUI {
             newMesh->trussElements.reserve(solver.getElements().size());
             for (const auto& element : solver.getElements()) {
               const auto& nodes = element.getEleNodes();
-              newMesh->trussElements.push_back({nodes[0], nodes[1], static_cast<float>(element.getEleStress())});
+              bool isMaxEleStressExceeded = (
+                element.getEleStress() > bridge.allMaterials[element.getEleProperties()].getElasticityModulues()
+                  ? true : false );
+              newMesh->trussElements.push_back({nodes[0], nodes[1], static_cast<float>(element.getEleStress()), isMaxEleStressExceeded});
             }
             newMesh->appliedForces = forcesToApply;
             newMesh->deformScale = deformScale;

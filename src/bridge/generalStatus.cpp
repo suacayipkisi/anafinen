@@ -16,8 +16,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generalStatus.hpp"
+#include <string_view>
 
 namespace anaf::BRIDGE {
+
+  std::string_view getObjectTypeName(ObjectType obj) {
+    switch (obj) {
+      case truss_SQPT:
+        return "truss_SQPT";
+      case truss_imported_or_entered:
+        return "truss_imported_or_entered";
+      default:
+        return "no_type";
+    }
+  }
 
   Gui_Calc_Bridge& buildBridge() {
     static Gui_Calc_Bridge bridge{};
