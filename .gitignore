@@ -14,9 +14,3 @@ _CPack_Packages/
 
 .clangd
 *.log
-*.rpm
-*.deb
-*.pkg.tar.zst
-*.pkg.tar.xz
-*.zip
-*.tar.gz
