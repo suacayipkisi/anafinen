@@ -23,6 +23,7 @@
 #include "guiMaterials/iPanel.hpp"
 #include "panels/logTerminal.hpp"
 #include "panels/mainDockSpaceHost.hpp"
+#include "panels/materialHandler.hpp"
 #include "panels/modelTree.hpp"
 #include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
 #include "panels/viewportPanel.hpp"
@@ -38,6 +39,7 @@ namespace anaf::GUI{
     TrussControlPanel* control = nullptr;
     ModelTree* tree = nullptr;
     LogTerminal* log = nullptr;
+    MaterialHandler* matWindow = nullptr;
   };
 
   void bindAnalysisFlow(UIPanels panels);

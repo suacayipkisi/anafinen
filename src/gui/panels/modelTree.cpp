@@ -124,12 +124,10 @@ namespace anaf::GUI {
     }
 
     if (ImGui::TreeNode(a_tempName.c_str())) {
-      if(latest_type == anaf::BRIDGE::ObjectType::truss_SQPT) {
-        if(!createModelTree_truss_SQPT(bridge)) {
-          anaf::LOG::warn("Model tree for truss_SQPT couldn't created succesfully");
-          if(ImGui::TreeNode("Tree is not created")) {
-            ImGui::TreePop();
-          }
+      if(latest_type == anaf::BRIDGE::ObjectType::truss_SQPT && !createModelTree_truss_SQPT(bridge)) {
+        anaf::LOG::warn("Model tree for truss_SQPT couldn't created succesfully");
+        if(ImGui::TreeNode("Tree is not created")) {
+          ImGui::TreePop();
         }
       }
       ImGui::TreePop();

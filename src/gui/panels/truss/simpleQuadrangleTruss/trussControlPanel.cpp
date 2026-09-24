@@ -120,17 +120,31 @@ namespace anaf::GUI {
       ImGui::SetNextItemWidth(-FLT_MIN);
       {
         std::lock_guard lock(bridge.dataMutex);
-        if(ImGui::BeginCombo("##Material TypeCombo", bridge.allMaterials[static_cast<int>(m_type)].getMaterialType().data())) {
-          for (std::size_t i = 0; i < bridge.allMaterials.size(); ++i) {
-            if (ImGui::Selectable(bridge.allMaterials[i].getMaterialType().data(), m_type == static_cast<std::uint32_t>(i))) {
-              m_type = static_cast<std::uint32_t>(i);
-            }
+        if (bridge.allMaterials.empty()) {
+          ImGui::TextDisabled("No materials available");
+        }
+        else {
+          if (m_type >= bridge.allMaterials.size()) {
+            m_type = 0;
           }
-          ImGui::EndCombo();
+
+          if (ImGui::BeginCombo("##Material TypeCombo", bridge.allMaterials[m_type].getMaterialType().data())) {
+            for (std::size_t i = 0; i < bridge.allMaterials.size(); ++i) {
+              if (ImGui::Selectable(bridge.allMaterials[i].getMaterialType().data(), m_type == static_cast<std::uint32_t>(i))) {
+                m_type = static_cast<std::uint32_t>(i);
+              }
+            }
+            ImGui::EndCombo();
+          }
         }
       }
 
       ImGui::EndTable();
+    }
+    
+    // add materialHandler window
+    if (ImGui::Button("Open Material Handler", ImVec2(-1.0f, 0.0f)) && onOpenMaterialHandler) {
+      onOpenMaterialHandler();
     }
 
     ImGui::Dummy(ImVec2(0.0f, 0.0f));
@@ -172,7 +186,10 @@ namespace anaf::GUI {
       m_cubeNumX = 10;
       m_cubeNumY = 1;
       m_cubeNumZ = 10;
-      m_type = 1;
+      {
+        std::lock_guard lock(bridge.dataMutex);
+        m_type = bridge.allMaterials.size() > 1 ? 1u : 0u;
+      }
       m_cubeEdgeLength = 1.0;
       m_crossSectionalArea = 80.0;
       m_forceNodeId = 126;

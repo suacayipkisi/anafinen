@@ -25,6 +25,8 @@ namespace anaf::MATERIAL {
 
   class Material{
   private:
+    bool m_isBuiltin{false};
+    
     std::uint32_t m_materialID;
 
     float m_ductility{}; // elongation at break / %
@@ -42,6 +44,7 @@ namespace anaf::MATERIAL {
     std::string m_materialType{};
   public:
     Material(
+      bool isBuiltin,
       std::string name,
       const double elasticityModulusE,
       const double shearModulusG,
@@ -54,6 +57,7 @@ namespace anaf::MATERIAL {
       const float ductility,
       const std::uint32_t materialID
     ):
+      m_isBuiltin(isBuiltin),
       m_materialType(name),
       m_elasticityModulus(elasticityModulusE),
       m_shearModulus(shearModulusG),
@@ -99,6 +103,7 @@ namespace anaf::MATERIAL {
       if(m_materialType.empty()) m_materialType = type;
     }
 
+    inline const bool getIsBuiltin() const {return m_isBuiltin;}
     inline const std::uint32_t getMaterialID() const {return m_materialID;}
     inline const float getDuctility() const {return m_ductility;}
     inline const float getPoisson() const {return m_poissonsRatio;}

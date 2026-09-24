@@ -17,17 +17,13 @@
 
 #pragma once
 
-#include "generalStatus.hpp"
-#include <guiMaterials/iPanel.hpp>
-
+#include "iPanel.hpp"
+#include <functional>
 namespace anaf::GUI {
-
-  class ModelTree : public IPanel {
+  class MaterialHandler : public IPanel {
   private:
-    bool createModelTree_truss_SQPT(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
-    bool createModelTree_truss_imported_or_entered(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
   public:
+    std::function<void()> onSelected;
     void onImGuiRender() override;
   };
-
 } // namespace anaf::GUI end

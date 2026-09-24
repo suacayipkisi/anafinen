@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "material/properties.hpp"
 #include <memory>
 #include <string_view>
 #include <truss_1D/trussProperties/appliedForce.hpp>
@@ -32,6 +33,11 @@
 #include <vector>
 
 namespace anaf::BRIDGE {
+  enum AddRemove {
+    ADD,
+    REMOVE
+  };
+  
   enum ObjectType {
     truss_SQPT,
     truss_imported_or_entered,
@@ -106,12 +112,15 @@ namespace anaf::BRIDGE {
 
     // general access
     std::vector<anaf::MATERIAL::Material> allMaterials;
+    std::vector<anaf::MATERIAL::Material> createdMaterials;
 
     std::unordered_map<std::uint32_t, std::array<bool, 3>> fixedDOFsByNode;
     std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};
     bool hasTrussPreview{false};
 
-    
+    // built in material properties etc.
+    void setStaticInfo();
+    void setDynamicMaterialInfo(anaf::MATERIAL::Material material, AddRemove operation);
   };
 
   Gui_Calc_Bridge& buildBridge();

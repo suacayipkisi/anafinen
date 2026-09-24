@@ -36,6 +36,7 @@
 #include "guiMaterials/imGuiLayer.hpp"
 #include "guiMaterials/iPanel.hpp"
 
+#include "materialHandler.hpp"
 #include "panels/logTerminal.hpp"
 #include "panels/mainDockSpaceHost.hpp"
 #include "panels/modelTree.hpp"
@@ -107,6 +108,10 @@ namespace anaf::GUI {
       panels.control->isOpen = (type == simpleQuadranglePrism);
       panels.tree->isOpen = (type == simpleQuadranglePrism);
     };
+
+    panels.control->onOpenMaterialHandler = [panels] {
+      panels.matWindow->isOpen = true;
+    };
   }
 
   std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo) {
@@ -116,6 +121,7 @@ namespace anaf::GUI {
     auto trussSelector = panelManager.addPanel<TrussSelector>();
     auto trussControl = panelManager.addPanel<TrussControlPanel>();
     auto log = panelManager.addPanel<LogTerminal>();
+    auto matWindow = panelManager.addPanel<MaterialHandler>();
 
     UIPanels panels{
       dock.get(),
@@ -123,12 +129,14 @@ namespace anaf::GUI {
       trussSelector.get(),
       trussControl.get(),
       tree.get(),
-      log.get()
+      log.get(),
+      matWindow.get()
     };
 
     trussSelector->isOpen = false;
     trussControl->isOpen = false;
     tree->isOpen = false;
+    matWindow->isOpen = false;
 
     bindAnalysisFlow(panels);
 

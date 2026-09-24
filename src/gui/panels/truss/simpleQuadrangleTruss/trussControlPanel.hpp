@@ -41,6 +41,7 @@ namespace anaf::GUI {
   public:
     ~TrussControlPanel() override = default;
     std::function<void()> onCalculated;
+    std::function<void()> onOpenMaterialHandler;
     void onImGuiRender() override;
     
   };

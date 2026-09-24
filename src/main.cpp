@@ -29,13 +29,11 @@
 
 #include <gmsh.h>
 #include <omp.h>
-#include <vector>
 
 #include "log/anaf_info.hpp"
 #include "gui/gui.hpp"
 #include "test/status.hpp"
 
-#include "gen/genNum.hpp"
 #include "gui/panels/logTerminal.hpp"
 
 #include "bridge/generalStatus.hpp"
@@ -49,6 +47,7 @@ extern "C" {
 
 int main(int argc, char* argv[]) {
   anaf::BRIDGE::Gui_Calc_Bridge& GUI_CALC_BRIDGE = anaf::BRIDGE::buildBridge();
+  GUI_CALC_BRIDGE.setStaticInfo();
 
   anaf::LOG::setCallback(
     [](anaf::LOG::Level level, std::string_view message) {
@@ -70,39 +69,6 @@ int main(int argc, char* argv[]) {
   anaf::LOG::info("OpenMP thread limit set to {} of {} available threads", threadCount, availableThreads);
 
   anaf::TEST::AllStatus mainStatus{};
-
-  // add two material for experimental reasons
-  // if you see that code block below that means
-  // not even phase 1 is finished
-  // you are currently watching the born of an analysis program
-  anafGen::IdGenerator materialIDs;
-  auto& allMaterials = GUI_CALC_BRIDGE.allMaterials;
-  allMaterials.push_back({
-    "Structural Steel (AISI 4130)",
-    205.0e9,
-    78.0e9,
-    160.0e9,
-    435.0e6,
-    670.0e6,
-    205.0e9,
-    7850.0,
-    0.29f,
-    0.25f,
-    0u
-  });
-  allMaterials.push_back({
-    "Aluminum 6061-T6",
-    68.9e9,
-    26.0e9,
-    67.5e9,
-    276.0e9 / 1e3,
-    310.0e6,
-    68.9e9,
-    2700.0,
-    0.33f,
-    0.12f,
-    1u
-  });
 
   anaf::GUI::initgui();
 

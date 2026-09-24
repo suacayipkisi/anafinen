@@ -70,6 +70,7 @@ set(ANAFINEN_SOURCES
     src/gui/guiMaterials/framebuffer.cpp
     src/gui/panels/logTerminal.cpp
     src/gui/panels/mainDockSpaceHost.cpp
+    src/gui/panels/materialHandler.cpp
     src/gui/panels/modelTree.cpp
     src/gui/panels/truss/trussTypePanel.cpp
     src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp

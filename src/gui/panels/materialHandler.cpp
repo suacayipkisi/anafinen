@@ -15,19 +15,37 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#pragma once
+#include "materialHandler.hpp"
 
 #include "generalStatus.hpp"
-#include <guiMaterials/iPanel.hpp>
+#include "imgui.h"
 
 namespace anaf::GUI {
 
-  class ModelTree : public IPanel {
-  private:
-    bool createModelTree_truss_SQPT(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
-    bool createModelTree_truss_imported_or_entered(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
-  public:
-    void onImGuiRender() override;
-  };
+  void MaterialHandler::onImGuiRender() {
+    if (!isOpen) return;
+    BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
+
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImVec2 center = ImVec2(
+      viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+      viewport->WorkPos.y + viewport->WorkSize.y * 0.5f
+    );
+
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(400.0f, 220.0f), ImGuiCond_FirstUseEver);
+    
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize;
+
+    ImGui::Begin("Material Handler");
+
+    ImGui::Text("Coming Soon");
+
+    if (ImGui::Button("Close")) {
+      isOpen = false;
+    }
+    
+    ImGui::End();
+  }
 
 } // namespace anaf::GUI end
