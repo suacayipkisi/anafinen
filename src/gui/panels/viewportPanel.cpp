@@ -188,7 +188,7 @@ namespace anaf::GUI {
     double maxDisp = 0.0;
     for (const auto& node : mesh.trussNodes) {
       maxNodeId = std::max(maxNodeId, node.getNodeID());
-      const auto disp = node.getDisplacmenet();
+      const auto disp = node.getDisplacement();
       maxDisp = std::max(maxDisp, std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]));
     }
     m_cachedMaxDisp = maxDisp;
@@ -196,7 +196,7 @@ namespace anaf::GUI {
     std::vector<glm::vec3> nodeLookup(maxNodeId + 1, glm::vec3(0.0f));
     for (const auto& node : mesh.trussNodes) {
       const auto& loc = node.getLocation();
-      const auto disp = node.getDisplacmenet();
+      const auto disp = node.getDisplacement();
 
       nodeLookup[node.getNodeID()] = glm::vec3(
         loc[0] + disp[0] * deformScale,
@@ -227,7 +227,7 @@ namespace anaf::GUI {
         const uint32_t id = node.getNodeID();
         const glm::vec3& pos = nodeLookup[id];
 
-        const auto disp = node.getDisplacmenet();
+        const auto disp = node.getDisplacement();
         const double mag = std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]);
 
         glm::vec4 pColor = displacementColor(mag);
@@ -337,7 +337,7 @@ namespace anaf::GUI {
         if (m_cameraDistance >= 15.0f && !isSelected) continue;
 
         const auto& loc = node.getLocation();
-        const auto disp = node.getDisplacmenet();
+        const auto disp = node.getDisplacement();
         const glm::vec3 worldPos(
           loc[0] + disp[0] * deformScale,
           loc[1] + disp[1] * deformScale,

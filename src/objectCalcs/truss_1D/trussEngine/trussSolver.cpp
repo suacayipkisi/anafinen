@@ -124,7 +124,7 @@ namespace FEM::TRUSS {
     auto& nodes = m_truss.getNodes();
     for (auto& node : nodes) {
       auto loc = node.getLocation();
-      const auto disp = node.getDisplacmenet();
+      const auto disp = node.getDisplacement();
       for (std::size_t axis = 0; axis < 3; ++axis) {
         loc[axis] += disp[axis];
         maxDisp = std::max(maxDisp, std::abs(disp[axis]));

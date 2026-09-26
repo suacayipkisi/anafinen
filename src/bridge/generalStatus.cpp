@@ -35,34 +35,38 @@ namespace anaf::BRIDGE {
   }
 
   void Gui_Calc_Bridge::setStaticInfo() {
-    allMaterials.push_back({
-      true,
-      "Structural Steel (AISI 4130)",
-      205.0e9,
-      78.0e9,
-      160.0e9,
-      435.0e6,
-      670.0e6,
-      205.0e9,
-      7850.0,
-      0.29f,
-      0.25f,
-      0u
-    });
-    allMaterials.push_back({
-      true,
-      "Aluminum 6061-T6",
-      68.9e9,
-      26.0e9,
-      67.5e9,
-      276.0e9 / 1e3,
-      310.0e6,
-      68.9e9,
-      2700.0,
-      0.33f,
-      0.12f,
-      1u
-    });
+    allMaterials.push_back(
+      {
+        true,
+        "Structural Steel (AISI 4130)",
+        205.0e9,
+        78.0e9,
+        160.0e9,
+        435.0e6,
+        670.0e6,
+        205.0e9,
+        7850.0,
+        0.29f,
+        0.25f,
+        0u
+      }
+    );
+    allMaterials.push_back(
+      {
+        true,
+        "Aluminum 6061-T6",
+        68.9e9,
+        26.0e9,
+        67.5e9,
+        276.0e9 / 1e3,
+        310.0e6,
+        68.9e9,
+        2700.0,
+        0.33f,
+        0.12f,
+        1u
+      }
+    );
   }
 
   void Gui_Calc_Bridge::setDynamicMaterialInfo(anaf::MATERIAL::Material material, AddRemove operation) {

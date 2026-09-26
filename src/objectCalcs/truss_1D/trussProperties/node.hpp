@@ -69,7 +69,7 @@ namespace FEM::TRUSS {
     const double getLocY() const {return m_Location[1];}
     const double getLocZ() const {return m_Location[2];}
 
-    const std::array<double, 3>& getDisplacmenet() const {return m_displacement;}
+    const std::array<double, 3>& getDisplacement() const {return m_displacement;}
     const std::array<bool, 3>& getMovable() const {return m_isMovable;}
   };
 

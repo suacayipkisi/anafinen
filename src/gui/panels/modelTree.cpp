@@ -20,6 +20,8 @@
 #include "anaf_info.hpp"
 #include "generalStatus.hpp"
 #include "imgui.h"
+#include <array>
+#include <cmath>
 #include <memory>
 
 namespace anaf::GUI {
@@ -43,7 +45,8 @@ namespace anaf::GUI {
               nodeId,
               dofs[0] ? "fixed" : "free",
               dofs[1] ? "fixed" : "free",
-              dofs[2] ? "fixed" : "free");
+              dofs[2] ? "fixed" : "free"
+            );
           }
           ImGui::EndChild();
         }
@@ -83,21 +86,46 @@ namespace anaf::GUI {
         else {
           ImGui::BeginChild("ElemetList", ImVec2(0, 200), true);
           std::uint32_t eleNum = 0;
+          std::uint32_t exceedStressEleNum = 0;
           for (const auto& elemenet : meshData->trussElements) {
             // is stress is bigger than elasticity modulus, render it as red colored
             if (elemenet.isStressExceeded) {
+              exceedStressEleNum ++;
               ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-              ImGui::Text("%u: %.3f", eleNum, elemenet.stress);
+              ImGui::Text("%u: %.3f(MPa)", eleNum, elemenet.stress/1e6);
               ImGui::PopStyleColor();
             }
-            else {
-              ImGui::Text("%u: %.3f", eleNum, elemenet.stress);
-            }
             eleNum ++;
+          }
+          if(exceedStressEleNum == 0) {
+            ImGui::TextDisabled("No elements exceeded max stress");
           }
           ImGui::EndChild();
         }
       }
+
+      ImGui::Text("NodeNum / disp");
+      {
+        std::lock_guard lock(bridge.dataMutex);
+        if(!meshData || meshData->trussNodes.empty()) {
+          ImGui::TextDisabled("No nodes yet...");
+        }
+        else {
+          ImGui::BeginChild("NodeList", ImVec2(0, 200), true);
+          std::uint32_t nodeNum = 0;
+          for (const auto& node : meshData->trussNodes) {
+            const auto& nodeDisp3D = node.getDisplacement();
+            double nodeDisp{0};
+            for(int i = 0; i < 3; ++i) {
+              nodeDisp += nodeDisp3D[i] * nodeDisp3D[i];
+            }
+            nodeDisp = sqrt(nodeDisp);
+            ImGui::Text("%u: %.3f(mm)", nodeNum, nodeDisp * 1e3);
+          } 
+          ImGui::EndChild();
+        }
+      }
+
 
       ImGui::TreePop();
     }

@@ -24,6 +24,10 @@ include(Dependencies)
 include(ExternalGui)
 
 set(ANAF_CORE_SOURCES
+    src/fileOperations/gmshRuntime.cpp
+    src/fileOperations/fileVTK.cpp
+    src/fileOperations/fileSTEP.cpp
+    src/fileOperations/fileMSH.cpp
     src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_cholmod.cpp
@@ -37,6 +41,8 @@ add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
 target_include_directories(anaf_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/fileOperations
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/fileOperations/objectFileOperations
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D/trussEngine
