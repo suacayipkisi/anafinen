@@ -369,10 +369,20 @@ namespace anaf::GUI {
       bridge.m_isRunning = true;
       bridge.m_progress = 0.0f;
 
-      double deformScale = currentScale;
+      // The worker gets its own copies: the GUI thread keeps editing the bridge
+      // (Apply Fixity, materials) while the solve runs.
+      BRIDGE::FixedDOFMap fixedDOFsSnapshot;
+      std::vector<anaf::MATERIAL::Material> materialsSnapshot;
+      {
+        std::lock_guard lock(bridge.dataMutex);
+        fixedDOFsSnapshot = bridge.fixedDOFsByNode;
+        materialsSnapshot = bridge.allMaterials;
+      }
 
       bridge.workerThread = std::jthread(
         [&bridge,
+         fixedDOFs = std::move(fixedDOFsSnapshot),
+         allMaterials = std::move(materialsSnapshot),
          cubeNumX = m_cubeNumX,
          cubeNumY = m_cubeNumY,
          cubeNumZ = m_cubeNumZ,
@@ -384,7 +394,6 @@ namespace anaf::GUI {
         ](std::stop_token st) mutable {
           try {
             configureOpenMPForWorker();
-            auto& allMaterials = bridge.allMaterials;
 
             FEM::TRUSS::Truss_SQPT solver{
               bridge,
@@ -397,7 +406,7 @@ namespace anaf::GUI {
               type
             };
             
-            solver.trussSetAndSetFix_SQPT(bridge, st);
+            solver.trussSetAndSetFix_SQPT(bridge, st, fixedDOFs);
             solver.trussSetForce_SQRT(bridge, st, forcesToApply);
             solver.setContainer(bridge, st);
             
@@ -414,7 +423,7 @@ namespace anaf::GUI {
             newMesh->trussElements.reserve(solver.getElements().size());
             for (const auto& element : solver.getElements()) {
               const auto& nodes = element.getEleNodes();
-              const auto& material = bridge.allMaterials[element.getEleProperties()];
+              const auto& material = allMaterials[element.getEleProperties()];
               const bool isStressExceeded =
                 std::abs(element.getEleStress()) > material.getYieldTensile();
               newMesh->trussElements.push_back({
@@ -427,19 +436,18 @@ namespace anaf::GUI {
             newMesh->appliedForces = forcesToApply;
             newMesh->deformScale = deformScale;
 
+            // apply the boundary conditions this solve used into nodes for overlay draw
+            for (auto& node : newMesh->trussNodes) {
+              std::array<bool, 3> movable{true, true, true};
+              const auto it = fixedDOFs.find(node.getNodeID());
+              if (it != fixedDOFs.end()) {
+                movable = { !it->second[0], !it->second[1], !it->second[2] };
+              }
+              node.setMovable(movable);
+            }
+
             {
               std::lock_guard lock(bridge.dataMutex);
-
-              // apply boundary conditions into nodes again for overlay draw
-              for (auto& node : newMesh->trussNodes) {
-                std::array<bool, 3> movable{true, true, true};
-                const auto it = bridge.fixedDOFsByNode.find(node.getNodeID());
-                if (it != bridge.fixedDOFsByNode.end()) {
-                  movable = { !it->second[0], !it->second[1], !it->second[2] };
-                }
-                node.setMovable(movable);
-              }
-
               bridge.activeMesh = std::move(newMesh);
               bridge.hasTrussPreview = true;
             }

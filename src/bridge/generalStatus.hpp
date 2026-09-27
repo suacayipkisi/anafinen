@@ -46,6 +46,9 @@ namespace anaf::BRIDGE {
 
   std::string_view getObjectTypeName(ObjectType obj);
 
+  // nodeId -> {fixedX, fixedY, fixedZ}
+  using FixedDOFMap = std::unordered_map<std::uint32_t, std::array<bool, 3>>;
+
   struct RenderElement {
     std::uint32_t node1{};
     std::uint32_t node2{};
@@ -114,7 +117,7 @@ namespace anaf::BRIDGE {
     std::vector<anaf::MATERIAL::Material> allMaterials;
     std::vector<anaf::MATERIAL::Material> createdMaterials;
 
-    std::unordered_map<std::uint32_t, std::array<bool, 3>> fixedDOFsByNode;
+    FixedDOFMap fixedDOFsByNode;
     std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};
     bool hasTrussPreview{false};
 

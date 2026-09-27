@@ -108,7 +108,7 @@ namespace anaf::FILE {
       const auto& elements = data.getElements();
       file << "ELEMENTS " << elements.size() << "\n";
       for (const auto& element : elements) {
-        // Eleman merkezini referans alarak eşleştir
+        // match elements by their midpoint
         const auto& n1 = nodes[element.node1];
         const auto& n2 = nodes[element.node2];
         const double mx = 0.5 * (n1.getLocX() + n2.getLocX());
@@ -136,7 +136,7 @@ namespace anaf::FILE {
           for (std::size_t i{0}; i < count; ++i) {
             double x{}, y{}, z{}, dx{}, dy{}, dz{};
             file >> x >> y >> z >> dx >> dy >> dz;
-            // Mesh'ten gelen en yakın düğümü bularak ata
+            // assign to the mesh node at the same position
             for (auto& node : nodes) {
               if (std::hypot(node.getLocX() - x, node.getLocY() - y, node.getLocZ() - z) < 1e-5) {
                 node.setDisplacements({dx, dy, dz});

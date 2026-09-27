@@ -33,8 +33,8 @@ namespace FEM::TRUSS {
 
   void Truss_SQPT::trussSetAndSetFix_SQPT(
     anaf::BRIDGE::Gui_Calc_Bridge& bridge,
-    std::stop_token st
-    
+    std::stop_token st,
+    const anaf::BRIDGE::FixedDOFMap& fixedDOFsByNode
   ) {
     if (st.stop_requested()) return;
     m_truss.setTruss();
@@ -42,8 +42,8 @@ namespace FEM::TRUSS {
     auto& nodes = m_truss.getNodes();
     #pragma omp parallel for schedule(static)
     for (auto& node : nodes) {
-      const auto it = bridge.fixedDOFsByNode.find(node.getNodeID());
-      if (it != bridge.fixedDOFsByNode.end()) {
+      const auto it = fixedDOFsByNode.find(node.getNodeID());
+      if (it != fixedDOFsByNode.end()) {
         node.setMovable({ !it->second[0], !it->second[1], !it->second[2] });
       }
       else {
@@ -52,7 +52,7 @@ namespace FEM::TRUSS {
     }
 
     std::vector<std::string> fixInfo;
-    for (const auto& [nodeId, dofs] : bridge.fixedDOFsByNode) {
+    for (const auto& [nodeId, dofs] : fixedDOFsByNode) {
       std::string x, y, z;
       std::string node =  std::format("{}", nodeId);
       x = (dofs[0] == true ? "x" : "-");
@@ -120,16 +120,13 @@ namespace FEM::TRUSS {
     if (st.stop_requested()) return;
     bridge.m_progress = 0.85f;
 
+    // Node locations stay undeformed: consumers draw location + displacement * deformScale,
+    // so moving the nodes here would apply the displacement twice.
     double maxDisp = 0.0;
-    auto& nodes = m_truss.getNodes();
-    for (auto& node : nodes) {
-      auto loc = node.getLocation();
-      const auto disp = node.getDisplacement();
-      for (std::size_t axis = 0; axis < 3; ++axis) {
-        loc[axis] += disp[axis];
-        maxDisp = std::max(maxDisp, std::abs(disp[axis]));
+    for (const auto& node : m_truss.getNodes()) {
+      for (const double component : node.getDisplacement()) {
+        maxDisp = std::max(maxDisp, std::abs(component));
       }
-      node.setLocation(loc);
     }
 
     m_container.calculateElementForcesAndStress(materials, {0, -9.80665, 0});

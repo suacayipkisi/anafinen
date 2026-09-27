@@ -2,6 +2,10 @@
 
 This document describes how mesh data for the Simple Quadrangle Prism Truss is created, stored, passed through the solver, and finally displayed in the viewport.
 
+> **Document status**
+> Verified against: `v0.1.2-alpha` + working tree, 2026-09-27.
+> Part of the documentation set indexed in [ARCHITECTURE.md](ARCHITECTURE.md). Module details: [CALCULATIONS.md](CALCULATIONS.md), [BRIDGE.md](BRIDGE.md), [GUI.md](GUI.md).
+
 ## 1. Overall flow
 
 The following diagram uses a terminal-style layout to show the main data path:
@@ -129,13 +133,13 @@ The following diagram uses a terminal-style layout to show the main data path:
 1. The panel collects geometry and material parameters from its local GUI state.
 2. `Truss_SQPT` calls `SimpleTruss::setTruss()`.
 3. `setTruss()` creates grid nodes and X/Y/Z edge elements plus XY/XZ/YZ diagonal elements.
-4. `fixedDOFsByNode` is converted into `movable = !fixed` for each node.
+4. A copy of `fixedDOFsByNode` (taken under `dataMutex` before the worker starts) is converted into `movable = !fixed` for each node.
 5. `ForceApplied` records are written to `m_forceVec[3 * nodeId + axis]`.
 6. `setContainer()` binds the container to the `m_truss` vectors through `std::span`. The container does not own the nodes or elements.
 7. `assembleStiffness()` creates global stiffness-matrix triplets from the elements.
 8. `considerWeight()` adds element weights to the global force vector.
 9. `calculateDisplacements()` removes fixed DOFs, solves the sparse system, and writes displacements to the nodes.
-10. Node positions are updated with displacement; element elongation, axial force, and stress are calculated.
+10. Node locations stay undeformed; the displacement lives only in `Node::m_displacement`. Element elongation, axial force, and stress are calculated.
 11. `runValidator()` performs the energy check and writes status values to the bridge.
 12. Nodes and elements are copied into a new `MeshData` snapshot and published through `bridge.activeMesh`.
 13. `dataVersion` is incremented. The viewport reads the new snapshot and draws elements, nodes, and force arrows.

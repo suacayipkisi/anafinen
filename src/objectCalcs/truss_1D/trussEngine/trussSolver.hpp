@@ -63,7 +63,13 @@ namespace FEM::TRUSS{
       m_truss({{cubeNumX, cubeNumY, cubeNumZ}, elementLength, area * 1e-4, type})
     {}
 
-    void trussSetAndSetFix_SQPT(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st);
+    // fixedDOFsByNode must be a copy owned by the worker, not bridge.fixedDOFsByNode:
+    // the GUI thread may modify the bridge map while the solve runs.
+    void trussSetAndSetFix_SQPT(
+      anaf::BRIDGE::Gui_Calc_Bridge& bridge,
+      std::stop_token st,
+      const anaf::BRIDGE::FixedDOFMap& fixedDOFsByNode
+    );
 
     void trussSetForce_SQRT(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st, std::vector<ForceApplied> force);
 
