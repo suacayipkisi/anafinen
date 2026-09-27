@@ -32,7 +32,7 @@ Every importer returns `std::shared_ptr<MeshImportData>` and never throws. On fa
 | `LineElement` | `node1`, `node2` | 0-based indices into the node vector |
 | | `materialID` | Index into the material catalog (`bridge.allMaterials`) |
 | | `crossSectionArea` | m² |
-| | `stress` | Axial stress result in Pa, 0 for an un-analyzed mesh |
+| | `stress` | Axial stress result in Pa (tension > 0, compression < 0), 0 for an un-analyzed mesh |
 | `MeshImportData` | `m_nodes` | `vector<FEM::TRUSS::Node>`: location, displacement, fixity, allowed motion basis |
 | | `m_elements` | `vector<LineElement>` |
 | | `m_sourcePath`, `m_success`, `m_errorMessage` | Import status |

@@ -38,8 +38,8 @@ namespace FEM::TRUSS {
     double m_length{};
     double m_crossSectionArea{};
     double m_elongation{};
-    double m_axialForce{};
-    double m_stress{};
+    double m_axialForce{}; // N, tension > 0, compression < 0
+    double m_stress{}; // Pa, tension > 0, compression < 0
     std::array<float, 3> m_cosinuses;
     std::array<std::uint32_t, 2> m_nodes{};
   protected:

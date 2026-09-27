@@ -134,7 +134,7 @@ namespace FEM::TRUSS {
 
     double maxStress = 0.0;
     for (auto& element : elements) {
-      maxStress = std::max(maxStress, element.getEleStress());
+      maxStress = std::max(maxStress, std::abs(element.getEleStress()));
     }
 
     m_container.runValidator(materials);
@@ -154,7 +154,7 @@ namespace FEM::TRUSS {
         );
         anaf::LOG::setFloatPrecision(6);
         anaf::LOG::info("Max nodal displacement magnitude: {}", maxDisp);
-        anaf::LOG::info("Max element stress: {}", maxStress);
+        anaf::LOG::info("Max element stress magnitude [Pa]: {}", maxStress);
         anaf::LOG::info("Work done by external forces: {}", m_container.getWorkDone_External());
         anaf::LOG::info("Stored elastic deformation energy: {}", m_container.getElasticDeformationEnergy_Internal());
       } else {

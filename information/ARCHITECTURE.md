@@ -129,9 +129,7 @@ Update the documents when any of the following happens:
 |---|---|---|---|
 | 1 | Stream output uses the default 6 significant digits. | `fileVTK.cpp`, `fileSTEP.cpp` (sidecar) | A VTK or sidecar round trip rounds coordinates and results. |
 | 2 | `exportMSH()` writes the file twice. | `fileMSH.cpp` | Redundant I/O. |
-| 3 | Element stress is stored as an absolute value. | `calculateElementForcesAndStress` | Tension and compression cannot be told apart. |
-| 4 | Material field comments say GPa, but values are stored in Pa. | `material/properties.hpp` | Misleading only; the solver treats values as SI. |
-| 5 | Stub types are declared but not implemented: `Truss`, `TrussBuild`, `Truss_Imported_or_Entered::setImportedData`. | `truss.hpp`, `selectTrussType.hpp`, `trussSolver.hpp` | Placeholders for imported/self-built trusses. |
+| 3 | Stub types are declared but not implemented: `Truss`, `TrussBuild`, `Truss_Imported_or_Entered::setImportedData`. | `truss.hpp`, `selectTrussType.hpp`, `trussSolver.hpp` | Placeholders for imported/self-built trusses. |
 
 ### 8.1 Deferred by design
 
@@ -145,3 +143,6 @@ Update the documents when any of the following happens:
 | Worker read `fixedDOFsByNode` / `allMaterials` without `dataMutex` | 2026-09-27 | The GUI thread copies both under the lock and moves the copies into the worker. The solver takes the fixity map as an argument. |
 | Default gravity `{0, -9,80665, 0}` | 2026-09-27 | Now `{0.0, -9.80665, 0.0}`. The old value was a latent compile error: Eigen's static assert fires as soon as the default is used. |
 | Turkish comments in `fileSTEP.cpp` | 2026-09-27 | Translated. |
+| Element stress stored as an absolute value | 2026-09-27 | Stress and axial force are signed (tension > 0, compression < 0). Magnitudes are unchanged. |
+| Material comments said GPa for values stored in Pa | 2026-09-27 | Comments corrected to Pa. The aluminum yield literal `276.0e9 / 1e3` was simplified to `276.0e6` (same value). |
+| Stress colorbar labelled MPa but divided by 1e3 (showed kPa numbers) | 2026-09-27 | Divides by 1e6; label is now `\|Stress\| (MPa)`. |

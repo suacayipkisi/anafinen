@@ -88,7 +88,7 @@ namespace anaf::GUI {
           std::uint32_t eleNum = 0;
           std::uint32_t exceedStressEleNum = 0;
           for (const auto& elemenet : meshData->trussElements) {
-            // is stress is bigger than elasticity modulus, render it as red colored
+            // |stress| above the material's yield strength: render in red (sign: tension > 0)
             if (elemenet.isStressExceeded) {
               exceedStressEleNum ++;
               ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));

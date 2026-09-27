@@ -65,7 +65,7 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `appliedForces` | `vector<FEM::TRUSS::ForceApplied>` | Loads to draw as arrows |
 | `deformScale` | `atomic<double>` | Render-only displacement multiplier |
 
-`RenderElement` is a slim copy of `TrussElement_1D`. Only what the viewport and model tree need is kept, which reduces snapshot size and copy time. `isStressExceeded` is `|stress| > material.yieldTensileStrength`.
+`RenderElement` is a slim copy of `TrussElement_1D`. Only what the viewport and model tree need is kept, which reduces snapshot size and copy time. `stress` is signed (tension > 0, compression < 0). `isStressExceeded` is `|stress| > material.yieldTensileStrength`.
 
 `MeshData` has hand-written copy/move operations because `std::atomic<double>` is neither copyable nor movable.
 

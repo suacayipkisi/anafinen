@@ -48,7 +48,7 @@ Truss_SQPT (trussSolver_SQPT.cpp)                       progress
 | `Truss_1D_Container` | `trussEngine/trussSolver/deformationUnderConstForce.hpp` | Non-owning spans over force vector, nodes, elements; triplets; results; energy values |
 | `Truss_SQPT` | `trussEngine/trussSolver.hpp` | Orchestrates one solve for the simple quadrangle prism truss |
 
-Units are SI throughout: m, m², N, Pa, kg/m³. The GUI enters the cross-section in cm², and `Truss_SQPT` multiplies by `1e-4`. The comments in `properties.hpp` say "GPa", but the stored values are Pa.
+Units are SI throughout: m, m², N, Pa, kg/m³. The GUI enters the cross-section in cm², and `Truss_SQPT` multiplies by `1e-4`. `Material` has both `m_elasticityModulus` and `m_youngModulus`; the solver uses `m_elasticityModulus`.
 
 The element constructor rejects invalid input by throwing `std::invalid_argument` / `std::out_of_range`:
 - area ≤ 0
@@ -154,10 +154,12 @@ elongation  δ = [-c, c] · [u_i, u_j]
 force       N = (δ / L) E A
 stress      σ = N / A
 gravity add σ_g = 0.5 ρ L |g · c|          (self-weight contribution along the bar axis)
-stored:     axialForce = |N| + σ_g A,  stress = |σ| + σ_g
+stored:     axialForce = N + sign(N) σ_g A,  stress = σ + sign(σ) σ_g      (sign = std::copysign)
 ```
 
-The stored stress is an absolute value, so tension and compression are not distinguished. `σ_g` is an engineering approximation added on top of the FE result.
+Sign convention: **tension > 0, compression < 0** for both stress and axial force. `σ_g` is an engineering approximation that raises the magnitude in the direction of the FE result, so `|stress|` is the peak-magnitude envelope. Consumers that need a magnitude use `std::abs`: yield check, viewport color, log maximum.
+
+Verified with a single-cube test: a downward load on a top node gives compression in the vertical bar below it, and an upward load gives tension.
 
 `isStressExceeded = |stress| > yieldTensileStrength` is evaluated when the snapshot is built.
 
@@ -188,7 +190,7 @@ The result is written to `bridge.m_isValid` and `bridge.m_energyDiff` and logged
 
 ## 11. Known issues
 
-- Stress sign is lost; reaction forces are not computed.
+- Reaction forces are not computed.
 - Allowed-motion directions (inclined supports) are stored but not applied in the solve.
 
 ## 12. Planned (not in code yet)

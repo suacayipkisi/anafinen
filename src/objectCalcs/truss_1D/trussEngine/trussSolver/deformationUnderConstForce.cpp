@@ -249,8 +249,10 @@ namespace FEM::TRUSS {
       const double stress = force / area;
       const double gravityStress = 0.5 * material.getDensity() * length
         * std::abs(gravityVector.dot(axis));
-      element.setEleAxialForce(std::abs(force) + gravityStress * area);
-      element.setEleStress(std::abs(stress) + gravityStress);
+      // Sign convention: tension > 0, compression < 0. The self-weight term raises the
+      // magnitude in the direction of the FE result, so |stress| is the same envelope as before.
+      element.setEleAxialForce(force + std::copysign(gravityStress * area, force));
+      element.setEleStress(stress + std::copysign(gravityStress, stress));
     }
   }
 

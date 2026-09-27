@@ -462,7 +462,7 @@ namespace anaf::GUI {
         IM_COL32(15, 17, 22, 220), 
         4.0f
       );
-      drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "Stress (MPa)");
+      drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "|Stress| (MPa)");
 
       const float stepHeight = barHeight / static_cast<float>(colorSteps);
       for (int i = 0; i < colorSteps; ++i) {
@@ -477,8 +477,8 @@ namespace anaf::GUI {
       drawList->AddRect(ImVec2(startX, startY), ImVec2(startX + barWidth, startY + barHeight), IM_COL32(200, 200, 200, 180));
 
       char txtMax[32], txtMid[32], txtMin[32];
-      std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxStress / 1000.0);
-      std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxStress * 0.5 / 1000.0);
+      std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxStress / 1.0e6);
+      std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxStress * 0.5 / 1.0e6);
       std::snprintf(txtMin, sizeof(txtMin), "%.2e", 0.0);
 
       drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY - 2.0f), IM_COL32(230, 230, 230, 255), txtMax);

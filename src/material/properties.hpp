@@ -29,17 +29,17 @@ namespace anaf::MATERIAL {
     
     std::uint32_t m_materialID;
 
-    float m_ductility{}; // elongation at break / %
-    float m_poissonsRatio{}; // uniteless
+    float m_ductility{}; // elongation at break, fraction (0.25 = 25 %)
+    float m_poissonsRatio{}; // unitless
 
     double m_density{}; // kg/m^3
-    double m_youngModulus{}; // GPa (only axial)
-    double m_ultimateTensileStrength{}; // GPa
-    double m_yieldTensileStrength{}; // GPa
-    double m_bulkModulus{}; // GPa (all side force)
-    double m_shearModulus{}; // GPa
+    double m_youngModulus{}; // Pa (only axial)
+    double m_ultimateTensileStrength{}; // Pa
+    double m_yieldTensileStrength{}; // Pa
+    double m_bulkModulus{}; // Pa (all side force)
+    double m_shearModulus{}; // Pa
 
-    double m_elasticityModulus{}; // GPa
+    double m_elasticityModulus{}; // Pa, used by the solver
 
     std::string m_materialType{};
   public:

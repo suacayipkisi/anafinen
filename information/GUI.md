@@ -105,7 +105,7 @@ Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (
 ### 3.4 Draw order inside `renderSceneOpenGL()`
 
 1. If `dataVersion` changed or `m_meshNeedsUpdate` is set: copy `activeMesh` under `dataMutex`, then `buildSceneBatches()`:
-   - Elements become lines colored by `sqrt(|σ| / σ_max)` on a blue → green → red ramp.
+   - Elements become lines colored by `sqrt(|σ| / |σ|_max)` on a blue → green → red ramp. Color shows magnitude only; the sign is visible in the model tree.
    - Nodes (if visible) become points colored by displacement magnitude. The selected node is orange and larger; fixed nodes are red.
    - Applied forces become arrows with a fixed world length of 3 m: a shaft plus a 4-line head, each duplicated as a glow line.
    - Draw position = `location + displacement * deformScale`.
@@ -150,7 +150,7 @@ Drawn by `renderOverlay2D()` on top of the image:
 - axis gizmo (camera rotation only)
 - "Nodes: Visible/Hidden" toggle
 - FPS counter, red below 30 FPS
-- stress and displacement colorbars
+- stress colorbar (`|Stress| (MPa)`, 0 … max magnitude) and displacement colorbar (`Disp (mm)`)
 
 ## 4. Window and platform details
 
