@@ -18,12 +18,14 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <vector>
 
 #include <bridge/generalStatus.hpp>
 #include <trussProperties/appliedForce.hpp>
 #include <trussTypes/simpleQuadranglePrismTrussCreate.hpp>
+#include "trussFileOperations/truss1D.hpp"
 #include "trussSolver/deformationUnderConstForce.hpp"
 
 namespace FEM::TRUSS{
@@ -75,7 +77,12 @@ namespace FEM::TRUSS{
   };
 
   class Truss_Imported_or_Entered {
-    // // //
+  private:
+    std::shared_ptr<anaf::FILE::MeshImportData> m_importedData;
+  public:
+    Truss_Imported_or_Entered() = default;
+    
+    void setImportedData();
   };
   
 } // namespace FEM::TRUSS end

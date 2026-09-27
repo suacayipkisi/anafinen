@@ -34,7 +34,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_simplicial.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_iterative.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_referee.cpp
-    src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp
+    src/objectCalcs/truss_1D/trussEngine/trussSolver_SQPT.cpp
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
@@ -88,6 +88,7 @@ set(ANAFINEN_SOURCES
 add_executable(anafinen ${ANAFINEN_SOURCES})
 
 target_compile_definitions(anafinen PRIVATE
+    ANAF_GUI
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     GLFW_INCLUDE_NONE
 )
