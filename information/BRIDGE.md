@@ -3,7 +3,7 @@
 This document describes `anaf::BRIDGE`, the shared state between the GUI thread and the calculation worker. It covers what the bridge stores, who reads and writes each field, and which synchronization rule protects it.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-27.
+> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
 
 ## 1. Overall flow
 
@@ -61,9 +61,10 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | Field | Type | Meaning |
 |---|---|---|
 | `trussNodes` | `vector<FEM::TRUSS::Node>` | ID, location, displacement, movable flags, allowed motion basis |
-| `trussElements` | `vector<RenderElement>` | `node1`, `node2`, `stress` (float), `isStressExceeded` |
+| `trussElements` | `vector<RenderElement>` | `node1`, `node2`, `stress` (float, Pa), `isStressExceeded`, `materialID`, `crossSectionArea` (m²) |
 | `appliedForces` | `vector<FEM::TRUSS::ForceApplied>` | Loads to draw as arrows |
 | `deformScale` | `atomic<double>` | Render-only displacement multiplier |
+| `hasResults` | `bool` | Displacements / stresses come from a solve or a result file (controls what export writes) |
 
 `RenderElement` is a slim copy of `TrussElement_1D`. Only what the viewport and model tree need is kept, which reduces snapshot size and copy time. `stress` is signed (tension > 0, compression < 0). `isStressExceeded` is `|stress| > material.yieldTensileStrength`.
 
@@ -101,6 +102,8 @@ Consequences:
 | Run Solver for Truss | `m_isRunning = true`, `m_progress = 0`. `fixedDOFsByNode` and `allMaterials` are copied under `dataMutex` and moved into the worker. The worker runs the full pipeline ([CALCULATIONS.md](CALCULATIONS.md)) with those copies, overlays the fixity it actually used onto the snapshot nodes, and publishes it. `m_progress = 1`, `m_isRunning = false`. |
 | Load Demo | Stops the running worker. Sets fixed nodes 0, 10, 220, 230 and a demo load. |
 | Clear All | `request_stop()`, resets flags, clears `activeMesh`, fixity, and selection, bumps `dataVersion`. |
+| File > Import (FileIoPanel) | Refused while `m_isRunning` / `m_isGeneratingPreview`. The I/O thread builds the snapshot. The GUI thread then sets `activeMesh`, `fixedDOFsByNode`, `hasTrussPreview`, clears the selection and sets `m_objectType = truss_imported_or_entered` under `dataMutex`, then bumps `dataVersion`. |
+| File > Export (FileIoPanel) | Copies the `activeMesh` pointer and `fixedDOFsByNode` under `dataMutex`; conversion and writing run on the I/O thread. |
 | Window close | `initgui()` calls `request_stop()`, then joins by assigning an empty `std::jthread`. |
 
 Assigning a new `std::jthread` to `workerThread` destroys the old one. `std::jthread`'s destructor calls `request_stop()` and joins, so two workers never run at the same time. Long loops in the solver check `stop_token` between steps.
@@ -116,5 +119,6 @@ Assigning a new `std::jthread` to `workerThread` destroys the old one. `std::jth
 
 - Bridge and `MeshData`: [src/bridge/generalStatus.hpp](../src/bridge/generalStatus.hpp), [src/bridge/generalStatus.cpp](../src/bridge/generalStatus.cpp)
 - Worker creation and publishing: [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp)
-- Snapshot consumer: [src/gui/panels/viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [src/gui/panels/modelTree.cpp](../src/gui/panels/modelTree.cpp)
+- Snapshot consumer: [src/gui/panels/viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [src/gui/panels/modelTree.cpp](../src/gui/panels/modelTree.cpp) (copies the pointer under the lock; no deep copy per frame)
+- Import / export publisher: [src/gui/panels/fileIoPanel.cpp](../src/gui/panels/fileIoPanel.cpp)
 - Built-in materials: [src/material/properties.hpp](../src/material/properties.hpp)

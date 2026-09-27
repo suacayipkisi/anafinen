@@ -15,6 +15,12 @@ if(WIN32)
         DESTINATION .
     )
 
+    # GPLv3 sections 4-6: every copy ships the license text and the third-party notices
+    # (the ZIP also redistributes GPL components such as the Gmsh DLL).
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_LICENSES.md"
+        DESTINATION .
+    )
+
     # use MinGW DLL if croscompile on linux
     if(CMAKE_CROSSCOMPILING)
         install(FILES
@@ -40,6 +46,10 @@ else()
 endif()
 
 if(UNIX AND NOT APPLE)
+    # GPLv3 sections 4-6: license text and third-party notices in /usr/share/doc/anafinen.
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_LICENSES.md"
+        DESTINATION ${CMAKE_INSTALL_DOCDIR}
+    )
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/anafinen.desktop"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
     )
@@ -52,11 +62,13 @@ if(UNIX AND NOT APPLE)
 endif()
 
 set(CPACK_PACKAGE_NAME "anafinen")
-set(CPACK_PACKAGE_VENDOR "Ufuk Deniz Konuk")
+set(CPACK_PACKAGE_VENDOR "Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_RELEASE "1")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "3D FEM Dynamic and Modal Analysis Engine")
 set(CPACK_PACKAGE_LICENSE "GPL-3.0-or-later")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_CONTACT "Abdurrahman Konuk (Ufuk Deniz Konuk) <konuki8523@gmail.com>") # required by the DEB generator
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-alpha")
 
 if(WIN32)
@@ -73,6 +85,9 @@ elseif(UNIX AND NOT APPLE)
     endif()
     set(CPACK_DEBIAN_PACKAGE_VERSION "${PROJECT_VERSION}~alpha1")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    # File > Import / Export needs a native dialog helper at run time.
+    set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "zenity | kdialog")
+    set(CPACK_RPM_PACKAGE_SUGGESTS "zenity")
 endif()
 
 include(CPack)

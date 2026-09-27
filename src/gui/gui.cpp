@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -112,6 +112,14 @@ namespace anaf::GUI {
     panels.control->onOpenMaterialHandler = [panels] {
       panels.matWindow->isOpen = true;
     };
+
+    panels.dock->on_show_about = [panels] { panels.about->isOpen = true; };
+    panels.dock->on_import_mesh = [panels] { panels.fileIo->requestImport(); };
+    panels.dock->on_export_results = [panels] { panels.fileIo->requestExport(); };
+    panels.fileIo->onImported = [panels] {
+      panels.tree->isOpen = true;
+      panels.viewport->requestFit();
+    };
   }
 
   std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo) {
@@ -122,6 +130,8 @@ namespace anaf::GUI {
     auto trussControl = panelManager.addPanel<TrussControlPanel>();
     auto log = panelManager.addPanel<LogTerminal>();
     auto matWindow = panelManager.addPanel<MaterialHandler>();
+    auto fileIo = panelManager.addPanel<FileIoPanel>();
+    auto about = panelManager.addPanel<AboutPanel>();
 
     UIPanels panels{
       dock.get(),
@@ -130,7 +140,9 @@ namespace anaf::GUI {
       trussControl.get(),
       tree.get(),
       log.get(),
-      matWindow.get()
+      matWindow.get(),
+      fileIo.get(),
+      about.get()
     };
 
     trussSelector->isOpen = false;

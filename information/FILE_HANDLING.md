@@ -1,141 +1,264 @@
-# File Handling: Mesh Import and Export
+# File Handling: the anaf_io Library
 
-This document describes how `anaf::FILE` reads and writes truss meshes and results in STEP, Gmsh MSH, and legacy VTK formats, and how the Gmsh API session is managed.
+This document describes `anaf_io`, the mesh import/export library:
+- its format-neutral data model
+- every supported format and version
+- the asynchronous service
+- how the GUI (and a future CLI) use it
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-27.
-> The module is implemented and builds into `anaf_core`, but it is **not connected to the GUI yet**: the File menu entries are "(coming soon)".
+> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
+> Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
 
 ```text
-                       import                                        export
-  file on disk  ----------------------->  MeshImportData  ----------------------->  file on disk
-                                           (shared_ptr)
- .step/.stp/.iges/.brep --importSTEP-->  +-----------------+  --exportSTEP--> .step + .step.anafFields
- .msh                   --importMSH--->  | nodes           |  --exportMSH---> .msh (4.1, with views)
- .vtk                   --importVTK--->  | line elements   |  --exportVTK---> .vtk (legacy ASCII)
-                                         | source path     |
-                                         | success / error |
-                                         +--------+--------+
-                                                  |
-                                                  v   (planned)
-                                   Truss_Imported_or_Entered -> solver -> MeshData
+                                   anaf_io (static library, no solver / GUI dependency)
+                 +-----------------------------------------------------------------------------+
+  file on disk   |  meshIo.hpp: readMesh / writeMesh  (synchronous, any thread)                |
+  .msh .vtk .vtu |     |                                                                       |
+  .step .stp     |     +-- detectFormat (extension, then content sniffing)                     |
+  .iges .igs     |     +-- formats/mshFormat.cpp        native MSH 1 / 2.x / 4.0 / 4.1         |
+  .brep          |     +-- formats/vtkLegacyFormat.cpp  native legacy VTK 2.0 ... 5.1          |
+       <-------->|     +-- formats/vtuFormat.cpp        native VTK XML (.vtu), zlib            |
+                 |     +-- formats/cadFormat.cpp        STEP / IGES / BREP via Gmsh + OCC      |
+                 |                  |                                                          |
+                 |                  v                                                          |
+                 |          model/meshModel.hpp: MeshModel (nodes, element blocks, sets,       |
+                 |          fields with time steps, constraints, loads, element attributes)    |
+                 |                                                                             |
+                 |  service/ioService.hpp: IoService (one I/O thread, IoTask polling, cancel)  |
+                 +-----------------------------------------------------------------------------+
+                            ^                                   ^
+                            |                                   |
+      anaf_core: truss_1D/trussIO/trussMeshAdapter      GUI: panels/fileIoPanel + native dialog
+      MeshModel <-> BRIDGE::MeshData                    (future CLI: readMesh / writeMesh directly)
 ```
 
-Every importer returns `std::shared_ptr<MeshImportData>` and never throws. On failure, `isSuccess() == false`, `getErrorMessage()` holds the exception text, and an error is logged. Every exporter returns `bool` and logs its own result.
+## 2. Target and dependency rules
 
-## 2. Common data model (`trussFileOperations/truss1D.hpp`)
-
-| Type | Field | Meaning |
-|---|---|---|
-| `LineElement` | `node1`, `node2` | 0-based indices into the node vector |
-| | `materialID` | Index into the material catalog (`bridge.allMaterials`) |
-| | `crossSectionArea` | m² |
-| | `stress` | Axial stress result in Pa (tension > 0, compression < 0), 0 for an un-analyzed mesh |
-| `MeshImportData` | `m_nodes` | `vector<FEM::TRUSS::Node>`: location, displacement, fixity, allowed motion basis |
-| | `m_elements` | `vector<LineElement>` |
-| | `m_sourcePath`, `m_success`, `m_errorMessage` | Import status |
-
-Node indices are always compact and 0-based inside `MeshImportData`. Format-specific tags (Gmsh tags are 1-based and may be sparse) are remapped on import and regenerated on export.
-
-## 3. Gmsh session (`gmshRuntime.cpp`)
-
-Gmsh keeps one global, non-thread-safe API state per process.
-
-| Function | Behavior |
+| Rule | Why |
 |---|---|
-| `resetGmshSession()` | First call: `gmsh::initialize()`, terminal output off, and registers a static guard that finalizes at exit. Every call: `gmsh::clear()` (empty model). |
-| `finalizeGmshSession()` | Explicit `gmsh::finalize()` if initialized |
+| `anaf_io` depends only on Gmsh (CAD formats) and zlib (VTU compression), both PRIVATE | GUI, CLI and tests link the same library without pulling in solver or GUI code |
+| Public headers: `io/meshIo.hpp`, `io/service/ioService.hpp`, `io/model/*.hpp`, `io/core/ioTypes.hpp` | `io/detail/*` and `io/formats/*` are internal |
+| Solver-specific conversions live outside `anaf_io` (`trussMeshAdapter` in `anaf_core`) | New object types (beams, shells, solids) add their own adapter; formats do not change |
+| No GUI macros (`ANAF_GUI`) in shared headers | Libraries are compiled once and linked into several executables; a macro that changes a type would break the ODR |
 
-Rules:
-- Every STEP/MSH import or export starts with `resetGmshSession()`, so callers never see leftover models.
-- Only one thread may use Gmsh at a time. The module has no lock of its own. Call it from a single worker, never from two workers in parallel.
-- VTK does not use Gmsh.
+## 3. The data model (`io/model/meshModel.hpp`)
 
-## 4. Format details
+`MeshModel` follows the concepts used by general FEM codes (Gmsh, Exodus, MED, Abaqus input): nodes, typed element blocks, named sets, and fields per time step.
 
-### 4.1 STEP (`fileSTEP.cpp`)
-
-**Import:**
-1. `Mesh.MeshSizeMin/Max = 1e22` forces exactly one line element per CAD curve.
-2. `occ::importShapes()` accepts any OCC-supported CAD file: STEP, IGES, BREP.
-3. `occ::removeAllDuplicates()` merges coincident vertices and edges, so curves that only touch become connected nodes.
-4. `occ::synchronize()`, then `mesh::generate(1)` meshes curves only.
-5. Nodes are extracted with `includeBoundary = false` to avoid listing curve endpoints twice. Only 2-node line elements (Gmsh type 1) are kept.
-6. The sidecar `<file>.anafFields` is merged if it exists.
-
-**Export:**
-1. Each node becomes an OCC point, and each element becomes an OCC line between its two points.
-2. `gmsh::write()` produces the STEP file.
-3. Material, area, stress, and displacement are written to the sidecar.
-
-**Sidecar `.anafFields` (plain text, this application only):**
-```text
-# anafinen auxiliary FEA data (Coordinate-Mapped)
-NODES <n>
-x y z dx dy dz
-...
-ELEMENTS <m>
-mx my mz materialID area stress        (mx,my,mz = element midpoint)
-```
-STEP cannot carry physical groups or names through Gmsh's writer (verified by a round trip), so the extra data is matched back by **position**:
-- nodes within 1e-5 m
-- element midpoints within 1e-4 m
-
-Fixity is not stored in STEP or its sidecar.
-
-### 4.2 Gmsh MSH (`fileMSH.cpp`)
-
-**Import:** `gmsh::open()`. All nodes and all type-1 line elements are read. Then the post-processing views written by `exportMSH` are applied:
-
-| View name | Kind | Target |
+| Member | Type | Meaning |
 |---|---|---|
-| `Displacement` | `NodeData`, 3 components | `Node::setDisplacements` |
-| `Stress` | `ElementData`, 1 component | `LineElement::stress` |
-| `MaterialID` | `ElementData` | `LineElement::materialID` |
-| `CrossSectionArea` | `ElementData` | `LineElement::crossSectionArea` |
+| `nodes` | `vector<Node{tag, position}>` | `tag` is the id from the file; everything else uses the 0-based index |
+| `blocks` | `vector<ElementBlock>` | One block per element type: `tags`, `connectivity` (node indices, **Gmsh local order**), `entityTags` (geometric entity per element) |
+| `sets` | `vector<EntitySet>` | Named node or element sets: `name`, `kind`, `dimension`, `tag` (physical tag), `members` |
+| `fields` | `vector<Field>` | `name`, `location` (node / element), `components`, `times[s]`, `steps[s][entity * components + c]` |
+| `constraints` | `vector<NodeConstraint>` | `fixed[3]` per global axis plus optional `allowedMotion` basis (inclined supports) |
+| `loads` | `vector<NodalLoad>` | Nodal force [N] |
+| `elementAttributes` | `map<string, vector<double>>` | Per-element scalars: `MaterialID`, `CrossSectionArea` [m²], and any future attribute (thickness, …) |
+| `lengthUnit`, `title`, `warnings` | | Metadata; readers append non-fatal issues to `warnings` |
 
-**Export:** all nodes and elements go into one discrete 1D entity. Gmsh tags are `index + 1`. The four views above are added and the file is written in MSH 4.1 with mesh and views together. Fixity is not stored in MSH.
+- Global element index: block 0 elements first, then block 1, and so on. Sets, element fields and attributes are indexed by it.
+- `validate()` returns a message for every inconsistency (sizes, indices). Every writer refuses an invalid model; every reader validates its result.
+- Well-known names: `FieldName::Displacement` (node, 3), `FieldName::Stress` (element, Pa, tension > 0), `FieldName::AxialForce`, `Attribute::MaterialId`, `Attribute::CrossSectionArea`.
 
-### 4.3 Legacy VTK (`fileVTK.cpp`)
+### 3.1 Element types (`io/model/elementType.*`)
 
-Hand-written ASCII reader/writer (`DATASET UNSTRUCTURED_GRID`, cell type 3 = line). The output opens directly in ParaView.
+One table is the single source of truth for every format. Each row holds the dimension, node count, Gmsh type id, VTK cell id, the Gmsh → VTK node permutation, and the edge list used for wireframe previews.
 
-| Section | Content | Round-trips |
-|---|---|---|
-| `POINTS n double` | Node coordinates | yes |
-| `CELLS` / `CELL_TYPES` | 2-point lines (other cell sizes ignored on import) | yes |
-| `POINT_DATA` → `VECTORS Displacement` | Nodal displacement | yes |
-| `POINT_DATA` → `SCALARS FixityX/Y/Z int` | 1 = fixed, 0 = free | yes |
-| `POINT_DATA` → `FIELD NodeConstraints` | `AllowedMotionRank` (0..3) + `AllowedMotionBasis` (9 doubles per node) | yes |
-| `CELL_DATA` → `SCALARS Stress / MaterialID / CrossSectionArea` | Element data | yes |
-| Legacy `VECTORS FixityDirection_*` | Older fixed-direction format, import only | converted to an allowed-motion basis |
-
-When a file has no `NodeConstraints` field, the allowed-motion basis is rebuilt as the orthogonal complement of the fixed directions (Gram-Schmidt in `allowedBasisFromFixedDirections`). **VTK is the only format that preserves boundary conditions.**
-
-## 5. Format capability summary
-
-| Capability | STEP | MSH | VTK |
+| Type | Gmsh | VTK | Permuted between Gmsh and VTK |
 |---|---|---|---|
-| Geometry (nodes, lines) | yes (CAD curves) | yes | yes |
-| Displacement | sidecar | view | yes |
-| Stress / material / area | sidecar | views | yes |
-| Fixity / allowed motion | no | no | yes |
-| Opens in external tools | CAD tools | Gmsh | ParaView |
-| Needs Gmsh | yes | yes | no |
+| Point1, Line2, Line3, Tri3, Tri6, Quad4, Quad8, Quad9 | 15, 1, 8, 2, 9, 3, 16, 10 | 1, 3, 21, 5, 22, 9, 23, 28 | no |
+| Tet4, Tet10 | 4, 11 | 10, 24 | Tet10: nodes 8 ↔ 9 |
+| Hex8, Hex20, Hex27 | 5, 17, 12 | 12, 25, 29 | Hex20 / Hex27: mid-edge (and face) nodes |
+| Prism6, Prism15 | 6, 18 | 13, 26 | Prism15 |
+| Pyramid5, Pyramid13 | 7, 19 | 14, 27 | Pyramid13 |
 
-## 6. Known issues and limits
+The permutations are verified by a test that compares Gmsh's own VTK writer against its MSH output. A `static_assert` keeps the table in sync with the enum.
 
-- Stream output uses the default precision of 6 significant digits (`std::ofstream`). A VTK or sidecar round trip rounds coordinates and results, e.g. `123.456789` becomes `123.457`. Fix: `file << std::setprecision(std::numeric_limits<double>::max_digits10)`.
-- Sidecar matching is a nested loop, O(n²) for nodes and O(m²) for elements, so it is slow for large models. A spatial hash on rounded coordinates would make it O(n).
-- `exportMSH()` calls `gmsh::write()` twice: once for the mesh, and again inside `appendResultFields()`. The first write is redundant.
-- Only 2-node line elements are imported. Surfaces and volumes in STEP/MSH are ignored.
+**Adding an element type:** add the enum value, add one table row, and extend `vtkFromGmsh` / `edges` if needed. Every format supports it automatically.
 
-## 7. Related source files
+### 3.2 Model codec (`io/detail/modelCodec.*`)
 
-- [src/fileOperations/fileSTEP.hpp](../src/fileOperations/fileSTEP.hpp), [fileSTEP.cpp](../src/fileOperations/fileSTEP.cpp)
-- [src/fileOperations/fileMSH.hpp](../src/fileOperations/fileMSH.hpp), [fileMSH.cpp](../src/fileOperations/fileMSH.cpp)
-- [src/fileOperations/fileVTK.hpp](../src/fileOperations/fileVTK.hpp), [fileVTK.cpp](../src/fileOperations/fileVTK.cpp)
-- [src/fileOperations/gmshRuntime.hpp](../src/fileOperations/gmshRuntime.hpp), [gmshRuntime.cpp](../src/fileOperations/gmshRuntime.cpp)
-- [src/fileOperations/objectFileOperations/trussFileOperations/truss1D.hpp](../src/fileOperations/objectFileOperations/trussFileOperations/truss1D.hpp)
+Formats that store named arrays (VTK, VTU, the MSH data sections, the STEP sidecar) map the structured parts of the model to arrays. They all use the same names, so a model written in one format reads back identically from another.
+
+| Array (location, components) | Holds |
+|---|---|
+| `Fixity` (node, 3) | 1 = fixed, 0 = free |
+| `AllowedMotionBasis` (node, 10) | rank + 3×3 free-direction basis; only written when a node has an inclined support |
+| `NodalForce` (node, 3) | loads [N] |
+| `MaterialID`, `CrossSectionArea`, `Attribute:<name>` (element, 1) | element attributes |
+| `NodeSet:<name>` / `ElementSet:<name>` (1) | set membership (1 = member) |
+| `NodeTag`, `ElementTag`, `EntityTag` (1) | original ids (VTK / VTU only; MSH stores them natively) |
+
+On read, the legacy names written by anafinen ≤ 0.1.2 are accepted too: `FixityX/Y/Z`, `AllowedMotionRank` + 9-component `AllowedMotionBasis`, and `FixityDirection_*`.
+
+## 4. Formats
+
+### 4.1 Gmsh MSH: native (`formats/mshFormat.cpp`)
+
+| Version | Read | Write |
+|---|---|---|
+| 1.0 (`$NOD` / `$ELM`) | yes | – |
+| 2.0 / 2.1 / 2.2 | ASCII + binary | 2.2 ASCII + binary |
+| 4.0 | ASCII (Gmsh cannot write binary 4.0 either) | – |
+| 4.1 | ASCII + binary | ASCII + binary |
+
+- **Sections read:** `$MeshFormat`, `$PhysicalNames`, `$Entities`, `$Nodes`, `$Elements`, and `$NodeData` / `$ElementData` (every time step). All other sections (`$InterpolationScheme`, `$Periodic`, …) are skipped.
+- **Physical groups ↔ element sets.** Groups of dimension 0 become node sets. Groups that share a name across dimensions merge into one set.
+- **MSH 2.2 write:** an element that belongs to several sets is listed once per group with the same tag. This is Gmsh's own convention, and the reader merges the duplicates back.
+- **MSH 4.1 write:** one entity per (dimension, source entity, element type, set membership). The source entity tag is kept when that is unambiguous. Gmsh drops elements when one entity mixes element orders, which is why element type is part of the key.
+- **Values:** node and element tags are preserved, including tags of unreferenced nodes. Doubles are written in shortest round-trip form (`std::to_chars`), so ASCII values are exact.
+- **Why native instead of the Gmsh API** (all verified while writing the module):
+  1. The Gmsh 4.15 build on Fedora aborts (`_GLIBCXX_ASSERTIONS`, `readMSH4Physicals`) on **any binary MSH 4.1 file**, including the ones it writes itself. The old importer would have crashed the whole application on such a file.
+  2. Gmsh's MSH 2.2 writer renumbers node and element tags and drops unreferenced nodes.
+  3. Gmsh writes ASCII doubles with 16 significant digits, which does not round-trip exactly.
+  4. With `Mesh.SaveAll = 1`, Gmsh's MSH 2 writer writes physical tag 0 for every element.
+  5. The Gmsh API holds global state and needs a process-wide lock; native code runs on any thread.
+
+### 4.2 Legacy VTK: native (`formats/vtkLegacyFormat.cpp`)
+
+- **Versions:** read 2.0 … 5.1 (5.x `OFFSETS` / `CONNECTIVITY` layout); write 4.2 (classic `CELLS`, readable everywhere) or 5.1.
+- **Encoding:** ASCII and binary. Binary data is big-endian by specification.
+- **Datasets read:** `UNSTRUCTURED_GRID` and `POLYDATA` (`VERTICES`, `LINES`, `POLYGONS`, `TRIANGLE_STRIPS`).
+- **Attributes read:** `SCALARS`, `COLOR_SCALARS`, `VECTORS`, `NORMALS`, `TEXTURE_COORDINATES`, `TENSORS`, `TENSORS6`, `GLOBAL_IDS`, `PEDIGREE_IDS`, `FIELD` arrays. `METADATA` blocks and dataset-level `FIELD` data are skipped.
+- **Composite cells are split:** poly-vertex → points, poly-line → Line2 segments, triangle strip → triangles, polygon → Tri3 / Quad4 / fan triangles, pixel → Quad4, voxel → Hex8. Cell data is copied to every produced element.
+- **Array names** with whitespace are escaped as `%XX`, like VTK does.
+- **Precision:** an ASCII `float` array is read with float precision, exactly as VTK reads it.
+- **Time steps:** one step per file. The step is chosen with `WriteOptions::timeStep` (default: last), and a warning is added when other steps are dropped.
+
+### 4.3 VTK XML `.vtu`: native (`formats/vtuFormat.cpp`)
+
+- **Read:**
+  - file versions 0.1 / 1.0 / 2.x
+  - `header_type` UInt32 or UInt64; little or big endian
+  - `DataArray` format `ascii`, `binary` (base64), or `appended` (raw or base64)
+  - `vtkZLibDataCompressor`
+  - any number of `<Piece>` elements (merged)
+  - VTK 9 `<InformationKey>` children inside `DataArray`s are skipped
+- **Write:** version 1.0, UInt64 headers, little endian, `ascii` or inline `binary`, optional zlib compression.
+- **Not supported:** LZ4 / LZMA compressors; the reader reports a clear error. Only `UnstructuredGrid` files are read.
+
+### 4.4 CAD: STEP / IGES / BREP through Gmsh + OpenCASCADE (`formats/cadFormat.cpp`)
+
+**Import** (`ReadOptions`):
+
+| Option | Default | Effect |
+|---|---|---|
+| `cadMeshDimension` | 1 | 1 = bars (one per CAD edge, trusses and frames), 2 = surface triangles, 3 = volume tetrahedra |
+| `cadMeshSize` | 0 | Element size in metres; 0 = one element per edge (dim 1) or automatic size (dim 2/3) |
+| `cadElementOrder` | 1 | 1 = linear, 2 = quadratic |
+| `cadKeepLowerDimensions` | false | Also keep boundary elements (e.g. triangles of a tet mesh) |
+| `readSidecar` | true | Merge `<file>.anafFields` if present |
+
+- Geometry is converted to metres (`Geometry.OCCTargetUnit = M`).
+- **Bars:** crossing members (X-bracing) are **not** fragmented. The old importer split them at their intersection and connected them, which changes the structure. Coincident end nodes are merged after meshing, and coincident duplicate edges (IGES / multi-body files repeat edges) are removed so no member counts twice.
+- **Surfaces / volumes:** the geometry is fragmented first so touching bodies get conformal interfaces.
+- **IGES:** OCC exports the faces of a solid, not the solid itself. Mesh IGES solids as surfaces (dimension 2).
+
+**Export (STEP only):**
+- Every node becomes a CAD vertex and every line element a straight edge. Line3 is written as a straight edge (mid node dropped).
+- Other element types are skipped with a warning; STEP is a geometry format.
+- OCC labels STEP lengths in millimetres and scales the coordinates accordingly (0.1 m → `100.`), so CAD tools read the right size.
+
+**Sidecar `<file>.anafFields`, version 2** (everything STEP cannot carry):
+```text
+ANAFINEN_SIDECAR 2
+UNIT m
+NODES <n>
+x y z                                  (all model nodes, shortest round-trip doubles)
+ELEMENTS <m>
+2 <node index> <node index>            (exported line elements, indices into NODES)
+FIELD <N|E> <components> <steps> <name>
+TIME <t>
+<values, one row per node / element>   (fields + codec arrays: BCs, loads, attributes, sets)
+END
+```
+- **Matching on read:**
+  - Nodes are matched by position: grid hash, tolerance 1e-6 × model size, O(1) per node.
+  - Elements are matched by their matched end nodes. Centroids are not used, because crossing X-braces share their midpoint.
+- **Version 1** (anafinen ≤ 0.1.2: `NODES … x y z dx dy dz`, `ELEMENTS … mx my mz material area stress`) is still read, by position.
+
+**Gmsh session (`detail/gmshSession.*`):**
+- One process-wide mutex serializes every Gmsh call.
+- Each session clears the model and restores all option defaults, so settings such as mesh size limits cannot leak into the next import.
+- Gmsh is initialized without reading the user's `gmshrc`.
+
+## 5. Synchronous API (`io/meshIo.hpp`)
+
+```cpp
+std::expected<MeshModel, IoError>   readMesh(path, ReadOptions = {}, IoContext = {});
+std::expected<WriteReport, IoError> writeMesh(path, const MeshModel&, WriteOptions = {}, IoContext = {});
+FileFormat detectFormat(path);                          // extension, then content sniffing
+std::span<const FormatDescriptor> supportedFormats();   // names, extensions, read/write flags
+```
+
+- **No exceptions cross the API.** `IoError::Code` is one of `Cancelled`, `FileNotFound`, `UnsupportedFormat`, `ParseError`, `WriteError`, `InvalidModel`, `BackendError`.
+- **`IoContext`** carries `isCancelled()` and `onProgress(fraction, stage)`. Readers and writers check for cancellation between stages and chunks.
+- **`WriteOptions`:**
+  - `format` (Auto = from the extension)
+  - `encoding` (Ascii / Binary)
+  - `mshVersion` (2.2 / 4.1)
+  - `vtkVersion` (4.2 / 5.1)
+  - `compress` (VTU zlib)
+  - `timeStep` (single-step formats)
+  - `writeSidecar`
+  - `writeTags`
+
+## 6. Asynchronous service (`io/service/ioService.hpp`)
+
+```text
+GUI frame loop                         IoService worker thread
+--------------                         -----------------------
+task = service.runAsync<T>(desc, job) -> queue -> job(IoContext) -> task->finish(result)
+every frame: task->ready()?  (never blocks)
+             task->progress(), task->stage()
+             task->cancel()        -> context.cancelled() becomes true at the next checkpoint
+```
+
+- `importAsync(path, options)` and `exportAsync(path, shared_ptr<const MeshModel>, options)` are thin wrappers over `runAsync`.
+- `runAsync<T>` runs any job on the I/O thread. The GUI uses it to run "read + convert to snapshot" and "convert snapshot + write", so no step runs on the frame loop.
+- Jobs run one at a time, in submission order.
+- The destructor requests stop and drains the queue: pending jobs finish as `Cancelled`, so no `IoTask` is left without a result.
+- A Gmsh call in progress (e.g. OCC import of a large STEP) cannot be interrupted inside Gmsh. Cancellation takes effect at the next checkpoint.
+
+## 7. Truss adapter (`anaf_core`: `truss_1D/trussIO/trussMeshAdapter.*`)
+
+| Function | Direction | Details |
+|---|---|---|
+| `toMeshModel(MeshData, FixedDOFMap)` | export | Nodes (tag = id + 1), Line2 bars with `MaterialID` / `CrossSectionArea`, constraints from the fixity map, loads; `Displacement` and `Stress` when `MeshData::hasResults` |
+| `toMeshData(MeshModel, materials)` | import | Line2 → bars; Line3 → two straight segments; surface / volume elements → unique edges (wireframe preview); points ignored. Constraints → fixity map + node movability; loads; results; `isStressExceeded` from the material yield strength |
+
+## 8. GUI integration
+
+See [GUI.md](GUI.md) section 2.3. In short:
+- `FileIoPanel` opens the operating system's own file chooser (portable-file-dialogs: Windows common dialog, zenity / kdialog on Linux) without blocking.
+- It shows CAD / export options and a progress overlay with Cancel.
+- On success it publishes the imported snapshot through the bridge.
+
+## 9. Tests (`tests/`, `-DANAFINEN_BUILD_TESTS=ON`, run with `ctest`)
+
+| Test | What it proves |
+|---|---|
+| `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation |
+| `vtk_reference_check` | Python + official VTK 9.5: 124 files written by VTK in every legacy / XML variant are read exactly as VTK reads them; VTK reads every variant anaf_io writes. Skipped when the Python `vtk` module is missing |
+| `anaf_truss_io_tests` | The GUI data path without the GUI: solve → snapshot → adapter → every format → adapter → identical snapshot (bit-exact); STEP with X-bracing; wireframe preview; conversion off the calling thread |
+
+## 10. Known issues and limits
+
+- VTK / VTU store one time step per file. Time series need MSH, or a `.pvd` collection (not written yet).
+- STEP export writes line elements only; the rest of the model is in the sidecar.
+- Gmsh-based CAD import cannot be interrupted inside Gmsh; cancellation waits for the current Gmsh call.
+- Binary MSH 4.1 files cannot be opened by the Gmsh 4.15 build on Fedora (its bug, see 4.1). Our files are valid; use MSH 2.2 or ASCII 4.1 for that Gmsh version.
+- Element types beyond the table are skipped with a warning. Binary files with such types are rejected, because their node count is needed to skip them.
+
+## 11. Related source files
+
+- Public API: [src/io/meshIo.hpp](../src/io/meshIo.hpp), [src/io/core/ioTypes.hpp](../src/io/core/ioTypes.hpp), [src/io/service/ioService.hpp](../src/io/service/ioService.hpp)
+- Model: [src/io/model/meshModel.hpp](../src/io/model/meshModel.hpp), [src/io/model/elementType.cpp](../src/io/model/elementType.cpp)
+- Formats: [mshFormat.cpp](../src/io/formats/mshFormat.cpp), [vtkLegacyFormat.cpp](../src/io/formats/vtkLegacyFormat.cpp), [vtuFormat.cpp](../src/io/formats/vtuFormat.cpp), [cadFormat.cpp](../src/io/formats/cadFormat.cpp)
+- Internals: [modelCodec.cpp](../src/io/detail/modelCodec.cpp), [vtkCommon.cpp](../src/io/detail/vtkCommon.cpp), [textIo.hpp](../src/io/detail/textIo.hpp), [gmshSession.cpp](../src/io/detail/gmshSession.cpp)
+- Adapter: [trussMeshAdapter.cpp](../src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp)
+- GUI: [fileIoPanel.cpp](../src/gui/panels/fileIoPanel.cpp), [nativeFileDialog.cpp](../src/gui/fileDialogs/nativeFileDialog.cpp)
+- Tests: [ioTests.cpp](../tests/ioTests.cpp), [vtkReferenceCheck.py](../tests/vtkReferenceCheck.py), [trussIoTests.cpp](../tests/trussIoTests.cpp), [ioTool.cpp](../tests/ioTool.cpp)

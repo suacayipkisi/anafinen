@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -35,6 +35,7 @@
 #include "test/status.hpp"
 
 #include "gui/panels/logTerminal.hpp"
+#include "gui/panels/aboutPanel.hpp"
 
 #include "bridge/generalStatus.hpp"
 
@@ -60,6 +61,8 @@ int main(int argc, char* argv[]) {
   }
   anaf::LOG::setFloatPrecision(6); // decimal digits shown for all logged floating-point values
   anaf::LOG::core("Initializing ANAFINEN Workspace (C++23)...");
+  anaf::LOG::core("{}", anaf::GUI::kCopyrightNotice);
+  anaf::LOG::core("{}", anaf::GUI::kShortLegalNotice);
 
   const int availableThreads = omp_get_num_procs();
   const int threadCount = availableThreads > 4 ? availableThreads - 2 : availableThreads;

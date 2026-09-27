@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@
 #include <bridge/generalStatus.hpp>
 #include <trussProperties/appliedForce.hpp>
 #include <trussTypes/simpleQuadranglePrismTrussCreate.hpp>
-#include "trussFileOperations/truss1D.hpp"
+#include <io/model/meshModel.hpp>
 #include "trussSolver/deformationUnderConstForce.hpp"
 
 namespace FEM::TRUSS{
@@ -84,7 +84,7 @@ namespace FEM::TRUSS{
 
   class Truss_Imported_or_Entered {
   private:
-    std::shared_ptr<anaf::FILE::MeshImportData> m_importedData;
+    std::shared_ptr<const anaf::IO::MeshModel> m_importedData;
   public:
     Truss_Imported_or_Entered() = default;
     

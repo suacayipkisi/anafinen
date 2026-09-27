@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -39,6 +39,7 @@ namespace anaf::GUI {
     std::function<void()> on_import_mesh;
     std::function<void()> on_export_results;
     std::function<void()> on_run_solver;
+    std::function<void()> on_show_about;
 
     MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
 

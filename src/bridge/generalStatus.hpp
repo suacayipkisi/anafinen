@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -52,8 +52,10 @@ namespace anaf::BRIDGE {
   struct RenderElement {
     std::uint32_t node1{};
     std::uint32_t node2{};
-    float stress{};
+    float stress{};               // Pa, tension > 0
     bool isStressExceeded{false};
+    std::uint32_t materialID{};   // index into Gui_Calc_Bridge::allMaterials
+    double crossSectionArea{};    // m^2
   };
 
   struct MeshData {
@@ -63,6 +65,7 @@ namespace anaf::BRIDGE {
     std::vector<RenderElement> trussElements;
     std::vector<FEM::TRUSS::ForceApplied> appliedForces;
     std::atomic<double> deformScale{1.0};
+    bool hasResults{false}; // displacements / stresses come from a solve (or a result file)
 
     MeshData() = default;
 
@@ -70,7 +73,8 @@ namespace anaf::BRIDGE {
       : trussNodes(other.trussNodes),
        trussElements(other.trussElements),
        appliedForces(other.appliedForces),
-       deformScale(other.deformScale.load()) {}
+       deformScale(other.deformScale.load()),
+       hasResults(other.hasResults) {}
 
     MeshData& operator=(const MeshData& other) {
       if (this != &other) {
@@ -78,6 +82,7 @@ namespace anaf::BRIDGE {
         trussElements = other.trussElements;
         appliedForces = other.appliedForces;
         deformScale.store(other.deformScale.load());
+        hasResults = other.hasResults;
       }
       return *this;
     }
@@ -86,7 +91,8 @@ namespace anaf::BRIDGE {
       : trussNodes(std::move(other.trussNodes)),
        trussElements(std::move(other.trussElements)),
        appliedForces(std::move(other.appliedForces)),
-       deformScale(other.deformScale.load()) {}
+       deformScale(other.deformScale.load()),
+       hasResults(other.hasResults) {}
 
     MeshData& operator=(MeshData&& other) noexcept {
       if (this != &other) {
@@ -94,6 +100,7 @@ namespace anaf::BRIDGE {
         trussElements = std::move(other.trussElements);
         appliedForces = std::move(other.appliedForces);
         deformScale.store(other.deformScale.load());
+        hasResults = other.hasResults;
       }
       return *this;
     }

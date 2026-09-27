@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-27.
+> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
 
 ## 1. Overall flow (one frame)
 
@@ -46,17 +46,21 @@ The 3D scene is drawn **before** the ImGui frame, into an offscreen framebuffer.
 MainDockSpaceHost --on_select_analyze_structure(Truss_1D)--> TrussSelector.isOpen = true
 TrussSelector     --onSelected(simpleQuadranglePrism)------> TrussControlPanel.isOpen, ModelTree.isOpen
 TrussControlPanel --onOpenMaterialHandler()----------------> MaterialHandler.isOpen = true
+MainDockSpaceHost --on_import_mesh / on_export_results-----> FileIoPanel.requestImport() / requestExport()
+FileIoPanel       --onImported()---------------------------> ModelTree.isOpen = true, ViewportPanel.requestFit()
 ```
 
 | Panel | File | Window title | Status |
 |---|---|---|---|
-| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File menu: import/export "(coming soon)"; Analyze: Truss 1D. Builds the default dock layout once (left: analysis set, right: model tree, bottom: console, center: viewport). |
+| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D; Help: "About anafinen...". Builds the default dock layout once (left: analysis set, right: model tree, bottom: console, center: viewport). |
 | `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking, overlays, legends |
 | `TrussSelector` | `panels/truss/trussTypePanel.cpp` | truss type picker | "Simple Quadrangle"; imported/self-built "(coming soon)" |
 | `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker |
 | `ModelTree` | `panels/modelTree.cpp` | "Model Tree" | Boundary conditions, elements over yield (MPa), node displacements (mm) |
 | `MaterialHandler` | `panels/materialHandler.cpp` | "Material Handler" | Stub ("Coming Soon") |
 | `LogTerminal` | `panels/logTerminal.cpp` | "Console" | Colored log view (max 10,000 lines); process CPU %, process RAM, system RAM % from `/proc` (Linux) |
+| `AboutPanel` | `panels/aboutPanel.cpp` | "About anafinen" (modal) | GPLv3 "Appropriate Legal Notices": version, copyright, no-warranty text, full `LICENSE` and `THIRD_PARTY_LICENSES.md` (read from the exe folder, `/usr/share/doc/anafinen` or the source tree). The same notice is logged at startup (`main.cpp`). |
+| `FileIoPanel` | `panels/fileIoPanel.cpp` | none (popups + bottom-right overlay) | Import / export: native file chooser, CAD and export option dialogs, progress bar with Cancel, result notices. Always "open"; draws only while needed. |
 
 ### 2.1 ImGui layer (`guiMaterials/imGuiLayer.*`)
 
@@ -68,6 +72,28 @@ TrussControlPanel --onOpenMaterialHandler()----------------> MaterialHandler.isO
 ### 2.2 Log sink
 
 `anaf::LOG::setCallback()` sends every formatted line to `anafUILogSink()`, which appends to `g_ui_logs` under `g_log_mutex`. Worker threads can therefore log safely, and the console panel reads the buffer on the GUI thread.
+
+### 2.3 File import / export (`FileIoPanel`)
+
+```text
+File > Import Mesh / CAD... (Ctrl+O)
+  -> NativeFileDialog::openFile     OS chooser; ready() polled each frame (returns in ~0.2 ms)
+  -> CAD file? -> "CAD Import Options" modal: bars / surfaces / volumes, element size, order
+  -> IoService::runAsync: readMesh + ADAPTER::toMeshData       (I/O thread)
+  -> overlay: description, progress bar, stage, Cancel
+  -> done: activeMesh, fixedDOFsByNode, m_objectType = truss_imported_or_entered,
+           dataVersion++ (GUI thread, under dataMutex); log notes / warnings; tree opens, camera fits
+
+File > Export Model... (Ctrl+E)
+  -> "Export Model" modal: MSH 4.1 / MSH 2.2 / VTU / VTK 5.1 / VTK 4.2 / STEP, binary, zlib
+  -> NativeFileDialog::saveFile (extension added when missing)
+  -> snapshot pointer + fixity copied under dataMutex
+  -> IoService::runAsync: ADAPTER::toMeshModel + writeMesh     (I/O thread)
+```
+
+- **Native dialogs:** `portable-file-dialogs` behind `fileDialogs/nativeFileDialog.*`. It is the only translation unit that includes the header. On Linux it runs `zenity` / `kdialog` as a child process; closing the application kills an open chooser. When no backend exists the panel reports it instead of failing.
+- **Blocking during a calculation:** import is refused while the solver or preview worker runs, so the worker cannot overwrite the imported snapshot.
+- **Solving imported models:** surface / volume meshes are shown as wireframe. Solving imported trusses is not implemented yet (`Truss_Imported_or_Entered`).
 
 ## 3. Viewport render pipeline
 

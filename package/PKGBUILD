@@ -1,4 +1,4 @@
-# Maintainer: Ufuk Deniz Konuk <konuki8523@gmail.com>
+# Maintainer: Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) <konuki8523@gmail.com>
 pkgname=anafinen
 pkgver=0.1.2_alpha
 pkgrel=1
@@ -6,8 +6,10 @@ pkgdesc="3D FEM Analysis Engine"
 arch=('x86_64')
 url="https://github.com/suacayipkisi/anafinen"
 license=('GPL-3.0-or-later')
-depends=('glibc' 'gcc-libs' 'eigen' 'spectra' 'glfw' 'mesa' 'gmsh' 'openmp' 'suitesparse')
-makedepends=('cmake' 'ninja' 'git' 'eigen' 'spectra' 'glfw' 'mesa' 'glm' 'gmsh' 'openmp' 'suitesparse')
+depends=('glibc' 'gcc-libs' 'eigen' 'spectra' 'glfw' 'mesa' 'gmsh' 'openmp' 'suitesparse' 'libpng' 'zlib')
+makedepends=('cmake' 'ninja' 'git' 'eigen' 'spectra' 'glfw' 'mesa' 'glm' 'gmsh' 'openmp' 'suitesparse' 'libpng' 'zlib')
+optdepends=('zenity: native file dialog for File > Import / Export'
+            'kdialog: native file dialog on KDE')
 options=('!lto')
 source=()
 

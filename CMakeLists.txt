@@ -14,6 +14,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(ANAFINEN_NATIVE_OPTIMIZATIONS "Enable CPU-specific native optimizations" OFF)
+option(ANAFINEN_BUILD_TESTS "Build the anaf_io test suite (ctest)" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -23,11 +24,33 @@ include(Dependencies)
 
 include(ExternalGui)
 
+# Format-neutral mesh I/O: no solver or GUI dependency, shared by every front end (GUI / CLI).
+set(ANAF_IO_SOURCES
+    src/io/model/elementType.cpp
+    src/io/model/meshModel.cpp
+    src/io/detail/textIo.cpp
+    src/io/detail/modelCodec.cpp
+    src/io/detail/gmshSession.cpp
+    src/io/detail/vtkCommon.cpp
+    src/io/formats/mshFormat.cpp
+    src/io/formats/vtkLegacyFormat.cpp
+    src/io/formats/vtuFormat.cpp
+    src/io/formats/cadFormat.cpp
+    src/io/meshIo.cpp
+    src/io/service/ioService.cpp
+)
+
+add_library(anaf_io STATIC ${ANAF_IO_SOURCES})
+target_include_directories(anaf_io PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(anaf_io
+    PRIVATE
+        Gmsh::Gmsh
+        ZLIB::ZLIB
+        project_warnings_and_optimizations
+)
+
 set(ANAF_CORE_SOURCES
-    src/fileOperations/gmshRuntime.cpp
-    src/fileOperations/fileVTK.cpp
-    src/fileOperations/fileSTEP.cpp
-    src/fileOperations/fileMSH.cpp
+    src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
     src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_cholmod.cpp
@@ -41,8 +64,6 @@ add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
 target_include_directories(anaf_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/fileOperations
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/fileOperations/objectFileOperations
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D/trussEngine
@@ -61,8 +82,8 @@ if(SPECTRA_TARGET)
 endif()
 
 target_link_libraries(anaf_core PUBLIC
+    anaf_io
     Eigen3::Eigen
-    Gmsh::Gmsh
     project_warnings_and_optimizations
 )
 
@@ -82,6 +103,9 @@ set(ANAFINEN_SOURCES
     src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp
     src/gui/panels/viewportPanel.cpp
     src/gui/panels/viewportRenderer.cpp
+    src/gui/panels/fileIoPanel.cpp
+    src/gui/panels/aboutPanel.cpp
+    src/gui/fileDialogs/nativeFileDialog.cpp
     src/test/test.cpp
 )
 
@@ -90,6 +114,7 @@ add_executable(anafinen ${ANAFINEN_SOURCES})
 target_compile_definitions(anafinen PRIVATE
     ANAF_GUI
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    ANAFINEN_VERSION="${PROJECT_VERSION}-alpha"
     GLFW_INCLUDE_NONE
 )
 
@@ -123,6 +148,12 @@ target_include_directories(anafinen PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/guiMaterials
 )
 
+# Native file chooser (header-only, WTFPL): Windows common dialogs, zenity / kdialog on Linux.
+target_include_directories(anafinen SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/portable-file-dialogs)
+if(WIN32)
+    target_link_libraries(anafinen PRIVATE ole32 comdlg32 shell32 uuid)
+endif()
+
 add_custom_command(
     TARGET anafinen POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -151,8 +182,7 @@ if(WIN32)
 endif()
 
 # Installation rules for executable and assets
-install(TARGETS anafinen DESTINATION .)
-install(DIRECTORY assets/ DESTINATION ./assets)
+# Install layout per platform (binary, assets, licenses) lives in cmake/Packaging.cmake.
 
 # Install runtime DLL dependencies into the package root
 if(WIN32)
@@ -171,6 +201,11 @@ if(WIN32)
     if(EXISTS "${GMSH_DLL}")
         install(FILES "${GMSH_DLL}" DESTINATION .)
     endif()
+endif()
+
+if(ANAFINEN_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
 endif()
 
 include(Packaging)

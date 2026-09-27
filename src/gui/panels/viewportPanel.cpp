@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -298,6 +298,10 @@ namespace anaf::GUI {
 
       truss_1d_gui_prop.m_meshNeedsUpdate = false;
       truss_1d_gui_prop.m_lastRenderedVersion = currentVersion;
+      if (m_fitRequested_ && m_currentMesh) {
+        resetCamera();
+        m_fitRequested_ = false;
+      }
       buildSceneBatches();
     }
 

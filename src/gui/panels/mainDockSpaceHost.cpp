@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -50,10 +50,10 @@ namespace anaf::GUI {
 
     if (ImGui::BeginMenuBar()) {
       if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("(coming soon)Import Mesh (.vtk / .obj)...")) {
+        if (ImGui::MenuItem("Import Mesh / CAD...", "Ctrl+O")) {
           if (on_import_mesh) on_import_mesh();
         }
-        if (ImGui::MenuItem("(coming soon)Export Results (.vtk)...")) {
+        if (ImGui::MenuItem("Export Model...", "Ctrl+E")) {
           if (on_export_results) on_export_results();
         }
         ImGui::Separator();
@@ -73,6 +73,13 @@ namespace anaf::GUI {
           if (on_select_analyze_structure) {
             on_select_analyze_structure(Truss_3D);
           }
+        }
+        ImGui::EndMenu();
+      }
+
+      if (ImGui::BeginMenu("Help")) {
+        if (ImGui::MenuItem("About anafinen...")) {
+          if (on_show_about) on_show_about();
         }
         ImGui::EndMenu();
       }

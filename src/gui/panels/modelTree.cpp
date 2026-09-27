@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -27,9 +27,11 @@
 namespace anaf::GUI {
 
   bool ModelTree::createModelTree_truss_SQPT(anaf::BRIDGE::Gui_Calc_Bridge& bridge){
-    std::shared_ptr<BRIDGE::MeshData> meshData;
-    if(bridge.activeMesh){
-      meshData = std::make_shared<BRIDGE::MeshData>(*bridge.activeMesh);
+    // Snapshots are immutable: copying the pointer under the lock is enough (no deep copy per frame).
+    std::shared_ptr<const BRIDGE::MeshData> meshData;
+    {
+      std::lock_guard lock(bridge.dataMutex);
+      meshData = bridge.activeMesh;
     }
 
     if (ImGui::TreeNode("Boundary Conditions (fix and forces)")) {
@@ -134,7 +136,8 @@ namespace anaf::GUI {
   }
 
   bool ModelTree::createModelTree_truss_imported_or_entered(anaf::BRIDGE::Gui_Calc_Bridge& bridge){
-    return true;
+    // Imported trusses are published as the same snapshot type, so the same tree applies.
+    return createModelTree_truss_SQPT(bridge);
   }
 
   void ModelTree::onImGuiRender() {
@@ -157,6 +160,9 @@ namespace anaf::GUI {
         if(ImGui::TreeNode("Tree is not created")) {
           ImGui::TreePop();
         }
+      }
+      if(latest_type == anaf::BRIDGE::ObjectType::truss_imported_or_entered && !createModelTree_truss_imported_or_entered(bridge)) {
+        anaf::LOG::warn("Model tree for the imported model couldn't be created");
       }
       ImGui::TreePop();
     }

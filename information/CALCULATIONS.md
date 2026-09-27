@@ -3,7 +3,7 @@
 This document describes the finite element calculation for 3D truss structures built from 1D two-node bar elements. It covers the data types, the math, the solver portfolio, and the energy validator.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-27.
+> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
 > Implemented: static displacement under nodal loads + self-weight.
 > Not implemented yet: mass matrix, modal analysis (Spectra), beam/frame elements, CST.
 
@@ -48,7 +48,7 @@ Truss_SQPT (trussSolver_SQPT.cpp)                       progress
 | `Truss_1D_Container` | `trussEngine/trussSolver/deformationUnderConstForce.hpp` | Non-owning spans over force vector, nodes, elements; triplets; results; energy values |
 | `Truss_SQPT` | `trussEngine/trussSolver.hpp` | Orchestrates one solve for the simple quadrangle prism truss |
 
-Units are SI throughout: m, m², N, Pa, kg/m³. The GUI enters the cross-section in cm², and `Truss_SQPT` multiplies by `1e-4`. `Material` has both `m_elasticityModulus` and `m_youngModulus`; the solver uses `m_elasticityModulus`.
+Units are SI throughout: m, m², N, Pa, kg/m³. The GUI enters the cross-section in cm²; `Truss_SQPT` and the preview both multiply by `1e-4`. `Material` has both `m_elasticityModulus` and `m_youngModulus`; the solver uses `m_elasticityModulus`.
 
 The element constructor rejects invalid input by throwing `std::invalid_argument` / `std::out_of_range`:
 - area ≤ 0
@@ -197,7 +197,7 @@ The result is written to `bridge.m_isValid` and `bridge.m_energyDiff` and logged
 
 - Consistent/lumped mass matrix and the generalized eigenproblem `K φ = ω² M φ` with Spectra `SymGEigsShiftSolver` (shift-invert).
 - 2D/3D beam/frame elements (Euler-Bernoulli, Timoshenko) and 2D CST.
-- Imported/self-built trusses through `anaf::FILE::MeshImportData` (`Truss_Imported_or_Entered`).
+- Solving imported trusses: `Truss_Imported_or_Entered` is still a stub. Imported models (`anaf::IO::MeshModel` → `FEM::TRUSS::ADAPTER::toMeshData`) can be viewed and exported, but not solved yet.
 
 ## 13. Related source files
 

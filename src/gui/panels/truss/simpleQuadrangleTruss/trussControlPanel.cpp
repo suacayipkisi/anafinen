@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -227,7 +227,8 @@ namespace anaf::GUI {
          appliedForces = m_appliedForces](std::stop_token st) mutable {
           try {
             configureOpenMPForWorker();
-            FEM::TRUSS::SimpleTruss preview{{cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea, type};
+            // Same units as the solver (cm^2 in the panel, m^2 in the model).
+            FEM::TRUSS::SimpleTruss preview{{cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type};
             preview.setTruss();
             if (st.stop_requested()) {
               bridge.m_isGeneratingPreview = false;
@@ -239,7 +240,7 @@ namespace anaf::GUI {
             newMesh->trussElements.reserve(preview.getElements().size());
             for (const auto& element : preview.getElements()) {
               const auto& nodes = element.getEleNodes();
-              newMesh->trussElements.push_back({nodes[0], nodes[1], 0.0f});
+              newMesh->trussElements.push_back({nodes[0], nodes[1], 0.0f, false, element.getEleProperties(), element.getEleCrossSection()});
             }
             newMesh->appliedForces = appliedForces;
 
@@ -430,11 +431,14 @@ namespace anaf::GUI {
                 nodes[0],
                 nodes[1],
                 static_cast<float>(element.getEleStress()),
-                isStressExceeded
+                isStressExceeded,
+                element.getEleProperties(),
+                element.getEleCrossSection()
               });
             }
             newMesh->appliedForces = forcesToApply;
             newMesh->deformScale = deformScale;
+            newMesh->hasResults = true;
 
             // apply the boundary conditions this solve used into nodes for overlay draw
             for (auto& node : newMesh->trussNodes) {

@@ -3,7 +3,7 @@
 This document describes how mesh data for the Simple Quadrangle Prism Truss is created, stored, passed through the solver, and finally displayed in the viewport.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-27.
+> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
 > Part of the documentation set indexed in [ARCHITECTURE.md](ARCHITECTURE.md). Module details: [CALCULATIONS.md](CALCULATIONS.md), [BRIDGE.md](BRIDGE.md), [GUI.md](GUI.md).
 
 ## 1. Overall flow
@@ -174,7 +174,18 @@ The preview mesh contains the geometric mesh and GUI visualization state. The so
 - `MeshData` is published as `shared_ptr<const MeshData>`, so the viewport cannot modify the active snapshot.
 - `deformScale` does not change mesh geometry; it affects render position through `location + displacement * deformScale`.
 
-## 6. Related source files
+## 6. Import and export
+
+```text
+Export:  activeMesh (+ fixedDOFsByNode) --ADAPTER::toMeshModel--> anaf::IO::MeshModel --writeMesh--> .msh / .vtu / .vtk / .step
+Import:  file --readMesh--> anaf::IO::MeshModel --ADAPTER::toMeshData--> new MeshData --> activeMesh (+ fixedDOFsByNode)
+```
+
+- Both directions run on the `IoService` thread; only the final pointer swap happens on the GUI thread ([BRIDGE.md](BRIDGE.md) section 5).
+- A solved snapshot survives every writable format bit-exactly: positions, displacements, stresses, materials, areas, fixity and loads (`anaf_truss_io_tests`).
+- Details: [FILE_HANDLING.md](FILE_HANDLING.md).
+
+## 7. Related source files
 
 - GUI and worker flow: [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp)
 - Bridge and `MeshData`: [src/bridge/generalStatus.hpp](../src/bridge/generalStatus.hpp)
@@ -185,3 +196,4 @@ The preview mesh contains the geometric mesh and GUI visualization state. The so
 - Mesh generation: [src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp)
 - Mesh generator class: [src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp)
 - Viewport snapshot reading and drawing: [src/gui/panels/viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp)
+- Import / export adapter: [src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp](../src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp)

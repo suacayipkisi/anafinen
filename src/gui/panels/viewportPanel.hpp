@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -55,6 +55,7 @@ namespace anaf::GUI{
     glm::vec3 m_target{0.0f, 0.0f, 0.0f};
 
     bool m_draggingView {false};
+    bool m_fitRequested_ {false};
     bool m_showNodes {false};
     ImVec2 m_viewportSize{0.0f, 0.0f};
 
@@ -78,6 +79,8 @@ namespace anaf::GUI{
 
     bool isFocused() const { return m_viewportFocused_; }
     bool isHovered() const { return m_viewportHovered_; }
+    // Frames the camera on the next mesh that is loaded (e.g. after an import).
+    void requestFit() { m_fitRequested_ = true; }
     glm::mat4 getViewProjectionMatrix() const;
 
   };

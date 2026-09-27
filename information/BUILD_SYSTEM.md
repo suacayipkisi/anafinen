@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-27.
+> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
 
 ## 1. Overall flow
 
@@ -16,8 +16,10 @@ CMakeLists.txt
    +-- include(Dependencies)     -> Eigen, OpenMP, OpenGL, PNG, CHOLMOD?, Gmsh, Spectra, glm
    +-- include(ExternalGui)      -> glad_local, GLFW target, imgui_suite
    |
-   +-- add_library(anaf_core STATIC ...)   FEM + file I/O
-   +-- add_executable(anafinen ...)        GUI + bridge + log + main
+   +-- add_library(anaf_io STATIC ...)     mesh I/O (Gmsh, zlib PRIVATE)
+   +-- add_library(anaf_core STATIC ...)   FEM + truss adapter (links anaf_io)
+   +-- add_executable(anafinen ...)        GUI + bridge + log + main (+ portable-file-dialogs)
+   +-- tests/ (ANAFINEN_BUILD_TESTS=ON)    anaf_io_tests, anaf_io_tool, anaf_truss_io_tests, vtk_reference_check
    |        |
    |        +-- POST_BUILD: copy assets/ (+ generated icon, + gmsh DLL on Windows)
    |
@@ -34,23 +36,27 @@ CMakeLists.txt
 | `CMAKE_EXPORT_COMPILE_COMMANDS` | ON | `.clangd` reads `build/compile_commands.json` |
 | `CMAKE_INTERPROCEDURAL_OPTIMIZATION` | FALSE | LTO disabled explicitly |
 | `ANAFINEN_NATIVE_OPTIMIZATIONS` | option, OFF | Adds `/arch:AVX2` (MSVC) or `-march=x86-64` (GCC/Clang) |
+| `ANAFINEN_BUILD_TESTS` | option, OFF | Builds the `tests/` directory and enables `ctest` |
 
 ## 3. Targets
 
 | Target | Type | Contents | Links |
 |---|---|---|---|
 | `project_warnings_and_optimizations` | INTERFACE | Release flags and defines | - |
-| `anaf_core` | STATIC | `src/fileOperations/*`, `src/objectCalcs/truss_1D/*` | Eigen3, Gmsh, Spectra, OpenMP, CHOLMOD (optional, PRIVATE) |
+| `anaf_io` | STATIC | `src/io/*` (model, formats, service) | Gmsh, ZLIB (both PRIVATE) |
+| `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`) | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE) |
 | `glad_local` | STATIC | `external/glad/src/gl.c` | - |
 | `imgui_suite` | STATIC | ImGui core + GLFW/OpenGL3 backends + ImGuizmo + ImPlot | glad, GLFW, OpenGL |
-| `anafinen` | EXECUTABLE | `main.cpp`, bridge, log, directory, GUI, test | `anaf_core`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG |
+| `anafinen` | EXECUTABLE | `main.cpp`, bridge, log, directory, GUI, test | `anaf_core`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG; Windows: ole32, comdlg32, shell32, uuid (file dialogs) |
 
 Compile definitions on `anafinen`:
 - `ANAF_GUI`
 - `GLFW_INCLUDE_NONE`: GLAD provides the GL headers.
 - `MAIN_DIR="<source dir>"`: used as an asset search fallback in development builds.
 
-**Adding a source file:** append it to `ANAF_CORE_SOURCES` (no GUI dependency) or `ANAFINEN_SOURCES` in `CMakeLists.txt`. There is no globbing.
+**Adding a source file:** append it to `ANAF_IO_SOURCES` (file formats), `ANAF_CORE_SOURCES` (FEM, adapters) or `ANAFINEN_SOURCES` (GUI) in `CMakeLists.txt`. There is no globbing.
+
+**Front ends and macros:** shared libraries never change their types with `ANAF_GUI` or similar macros. A static library is compiled once and linked into several executables (GUI now, CLI later), and a type that differs between them would violate the ODR. GUI-only code lives in `anafinen` sources; a CLI will be a separate executable linking `anaf_core` + `anaf_io`.
 
 ## 4. Compiler options (`cmake/CompilerOptions.cmake`)
 
@@ -74,6 +80,8 @@ Compile definitions on `anafinen`:
 | Spectra | submodule `external/spectra`, else `find_package(Spectra)` | no | Header-only; imported as `spectra_local` |
 | glm | `find_package(glm CONFIG)`, else header search | yes | - |
 | ImageMagick | `find_program(magick convert)` | no | Converts `assets/icons/anafinen.svg` to a 128x128 PNG at configure time |
+| portable-file-dialogs | vendored header `external/portable-file-dialogs/` (commit `c12ea8c`, WTFPL) | yes | Native file chooser. Linux runtime needs `zenity`, `kdialog`, `matedialog` or `qarma` |
+| Python 3 + `vtk` module | `find_package(Python3)` + `import vtk` probe | no | Enables the `vtk_reference_check` test |
 
 ### 5.1 CHOLMOD detection
 
@@ -140,6 +148,24 @@ Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: suite
 
 Winget ID `suacayipkisi.anafinen` is waiting for moderator approval.
 
+### 8.2 Dependencies per platform (2026-09-28)
+
+| Platform | Build packages added for `anaf_io` | Runtime extra |
+|---|---|---|
+| Fedora | `zlib-devel` (`package.sh`, README) | RPM `Suggests: zenity` |
+| Arch / CachyOS | `libpng`, `zlib` in `depends` / `makedepends`, `glm` in `makedepends` (`PKGBUILD`) | `optdepends`: `zenity` or `kdialog` |
+| Debian / Ubuntu | `zlib1g-dev` (`package.sh`, README) | DEB `Recommends: zenity \| kdialog`; `CPACK_PACKAGE_CONTACT` is set (the DEB generator requires a maintainer) |
+| Windows (vcpkg) | `libpng`, `glm` added to the README install list (zlib comes with libpng) | none: native dialogs are part of Windows; `ole32`, `comdlg32`, `shell32`, `uuid` are linked |
+
+Without zenity / kdialog on Linux, the application works; only File > Import / Export shows "no native file dialog available".
+
+### 8.3 Licensing in packages
+
+- `LICENSE` and `THIRD_PARTY_LICENSES.md` are installed to `/usr/share/doc/anafinen/` (RPM, DEB, Arch) and next to `anafinen.exe` (Windows ZIP). `CPACK_RESOURCE_FILE_LICENSE` points to `LICENSE`.
+- The Windows ZIP redistributes GPL libraries (Gmsh, parts of SuiteSparse). `THIRD_PARTY_LICENSES.md` lists their source locations and a written source offer (GPLv3 section 6).
+- The install layout is defined only in `cmake/Packaging.cmake`. The former platform-independent `install()` lines in `CMakeLists.txt` put a second executable in `/usr/anafinen` and assets in `/usr/assets`; they were removed.
+- `ANAFINEN_VERSION` (`<version>-alpha`) is a compile definition of `anafinen`, shown in Help > About.
+
 ## 9. Common commands
 
 ```bash
@@ -147,6 +173,10 @@ Winget ID `suacayipkisi.anafinen` is waiting for moderator approval.
 git submodule update --init --recursive
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+
+# With tests
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_BUILD_TESTS=ON
+cmake --build build && (cd build && ctest --output-on-failure)
 
 # Package on the current distro
 ./package/package.sh
@@ -161,3 +191,4 @@ cmake --build build
 - [cmake/Packaging.cmake](../cmake/Packaging.cmake)
 - [package/package.sh](../package/package.sh), [package/PKGBUILD](../package/PKGBUILD), [package/PACKAGE_BUILD.md](../package/PACKAGE_BUILD.md)
 - [.gitmodules](../.gitmodules)
+- [tests/CMakeLists.txt](../tests/CMakeLists.txt)

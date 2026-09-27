@@ -42,7 +42,8 @@ As you can understand I'm making this project for educational purposes
 
 ## Libraries
 - Calculation: Eigen, Spectra, SuiteSparse CHOLMOD
-- Visualisation and GUI: OpenGL, GLAD, GLFW, ImGUI, ImGuizmo, ImPlot, glm
+- Visualisation and GUI: OpenGL, GLAD, GLFW, ImGUI, ImGuizmo, ImPlot, glm, portable-file-dialogs
+- File formats (import/export): Gmsh MSH 1/2.2/4.0/4.1, VTK legacy 2.0-5.1, VTK XML (.vtu), STEP/IGES/BREP (via Gmsh + OpenCASCADE)
 - Multithreading: OpenMP and threaded SuiteSparse/BLAS backends
 
 # Build (Linux and Windows)
@@ -76,12 +77,14 @@ sudo dnf install -y \
     glfw-devel \
     spectra-devel \
     libpng-devel \
-    glm-devel
+    zlib-devel \
+    glm-devel \
+    zenity
 ```
 
 #### Libraries Arch-CachyOS
 ```bash
-sudo pacman -S glibc gcc-libs eigen suitesparse spectra glfw mesa openmp cmake ninja git glm
+sudo pacman -S glibc gcc-libs eigen suitesparse spectra glfw mesa openmp cmake ninja git glm libpng zlib zenity
 
 # WARNING!!!!!! using paru means using AUR which is a place sometimes hackers might play around. be careful!!! 
 # If you dont want to install via AUR, you may look for installing it from their websites like what we install for windows.
@@ -91,7 +94,7 @@ paru -S gmsh-bin
 #### Libraries Debian-Ubuntu
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev
+sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev zenity
 ```
 
 ### Clone This Repo
@@ -113,6 +116,16 @@ git submodule update --init --recursive
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
+
+File > Import / Export uses the desktop's own file chooser: install `zenity` (GNOME and most desktops) or `kdialog` (KDE).
+
+### Tests (optional)
+```bash
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_BUILD_TESTS=ON
+cmake --build build
+cd build && ctest --output-on-failure
+```
+With the Python `vtk` package installed, the tests also cross-check every VTK/VTU variant against the official VTK library.
 
 ## Windows
 
@@ -154,6 +167,8 @@ Gui and visualization:
 .\vcpkg install "imgui[core,docking-experimental,glfw-binding,opengl3-binding]:x64-windows" --recurse
 .\vcpkg install implot:x64-windows
 .\vcpkg install imguizmo:x64-windows
+.\vcpkg install libpng:x64-windows
+.\vcpkg install glm:x64-windows
 ```
 
 Mesh engine:  
@@ -185,10 +200,21 @@ Mesh engine:
 
 ## Licensing & Third Party Library and Font Licenses
 
-This project is open-source software licensed under the **GNU General Public License v3.0 (GPLv3)**. See the [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) file for details.
+This project is open-source software licensed under the **GNU General Public License v3.0 (GPLv3)**.
+
+Copyright (c) 2026 Abdurrahman Konuk, professionally known as Ufuk Deniz Konuk. Both names refer to the same person, the sole copyright holder of this project; "Ufuk Deniz Konuk" is used in source headers, packages and releases. See the [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) file for details.
 
 ### Commercial & Enterprise Licensing
-If you wish to integrate this project into proprietary, closed-source software without being bound by the copyleft terms of the GPLv3, commercial licenses and custom support agreements are available directly from the copyright holder.
+
+**Using anafinen is free under the GPLv3, including commercial use.** Companies may run it for engineering work, sell services or reports produced with it, and modify it for internal use without publishing their changes. The GPLv3 obligations (providing the source code under the GPLv3) apply only when the program, or software containing it, is **distributed** to others.
+
+A separate commercial license is needed only to **embed anafinen in a proprietary, closed-source product and distribute that product** without the GPLv3 copyleft terms. Such licenses and custom support agreements are available from the copyright holder.
+
+A commercial license covers anafinen's own code only. Third-party components licensed under the GPL are not the copyright holder's to relicense:
+- Gmsh (used for CAD meshing)
+- the GPL modules of SuiteSparse CHOLMOD (optional solver)
+
+A commercially licensed build either excludes these components, or the licensee obtains their licenses separately. Permissively licensed components (MIT, zlib, MPL-2.0, LGPL with dynamic linking) keep their own notice requirements; see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 For commercial inquiries: `konuki8523@gmail.com`
 

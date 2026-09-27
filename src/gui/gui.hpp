@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Ufuk Deniz Konuk
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -27,6 +27,8 @@
 #include "panels/modelTree.hpp"
 #include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
 #include "panels/viewportPanel.hpp"
+#include "panels/fileIoPanel.hpp"
+#include "panels/aboutPanel.hpp"
 #include "panels/truss/trussTypePanel.hpp"
 #include <memory>
 
@@ -40,6 +42,8 @@ namespace anaf::GUI{
     ModelTree* tree = nullptr;
     LogTerminal* log = nullptr;
     MaterialHandler* matWindow = nullptr;
+    FileIoPanel* fileIo = nullptr;
+    AboutPanel* about = nullptr;
   };
 
   void bindAnalysisFlow(UIPanels panels);

@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-27.
+> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -14,7 +14,7 @@ This document is the entry point for the project documentation. It describes how
 | [BUILD_SYSTEM.md](BUILD_SYSTEM.md) | CMake modules, dependency detection, targets, packaging |
 | [BRIDGE.md](BRIDGE.md) | `Gui_Calc_Bridge`, `MeshData` snapshots, synchronization rules |
 | [CALCULATIONS.md](CALCULATIONS.md) | Truss FEM pipeline, stiffness assembly, solver portfolio, validator |
-| [FILE_HANDLING.md](FILE_HANDLING.md) | STEP / MSH / VTK import-export and the Gmsh session |
+| [FILE_HANDLING.md](FILE_HANDLING.md) | `anaf_io`: format-neutral mesh model, MSH / VTK / VTU / STEP / IGES / BREP, async I/O service |
 | [GUI.md](GUI.md) | Frame loop, panels, viewport render pipeline, picking |
 | [MESH_DATA_FLOW.md](MESH_DATA_FLOW.md) | End-to-end path of one truss mesh from the panel to the screen |
 | [AIM.md](AIM.md) | Master plan and phase checklist |
@@ -37,18 +37,21 @@ This document is the entry point for the project documentation. It describes how
 |            v                          | publish snapshot                  |
 |  +--------------------------------------------------------------------+   |
 |  | anaf_core (static library)                                         |   |
-|  |                                                                    |   |
-|  |  +-----------------------------+     +--------------------------+  |   |
-|  |  | FEM::TRUSS                  |     | anaf::FILE               |  |   |
-|  |  | src/objectCalcs/truss_1D/   |     | src/fileOperations/      |  |   |
-|  |  | generator, container,       |     | STEP / MSH / VTK,        |  |   |
-|  |  | solver portfolio            |     | Gmsh session             |  |   |
-|  |  +-----------------------------+     +--------------------------+  |   |
+|  |  FEM::TRUSS: generator, container, solver portfolio                |   |
+|  |  FEM::TRUSS::ADAPTER: MeshModel <-> MeshData (truss_1D/trussIO/)   |   |
+|  +---------------------------------+----------------------------------+   |
+|                                    | links                                |
+|  +---------------------------------v----------------------------------+   |
+|  | anaf_io (static library, no solver / GUI dependency)               |   |
+|  |  anaf::IO: MeshModel, MSH / VTK / VTU (native), STEP / IGES / BREP |   |
+|  |  (Gmsh + OCC), IoService (own I/O thread)                          |   |
 |  +--------------------------------------------------------------------+   |
 +---------------------------------------------------------------------------+
 ```
 
-`anaf_core` holds everything that does not need a window: FEM and file I/O. `anafinen` adds the GUI, bridge, log, and entry point.
+- `anaf_io` is the file layer shared by every front end: GUI now, CLI later, and the tests. It does not know about any solver.
+- `anaf_core` holds the FEM code and the solver-specific adapters.
+- `anafinen` adds the GUI, the bridge, the log, and the entry point.
 
 `anaf_core` also includes `bridge/generalStatus.hpp` (`Truss_SQPT` takes the bridge by reference). This is intentional until the CLI executable exists; see section 8.1.
 
@@ -60,7 +63,8 @@ This document is the entry point for the project documentation. It describes how
 | `FEM::TRUSS::SOLVER` | `src/objectCalcs/truss_1D/trussEngine/trussSolver/` | Linear solver portfolio and referee |
 | `anaf::BRIDGE` | `src/bridge/` | Shared state between GUI thread and worker thread |
 | `anaf::GUI` | `src/gui/` | Window, ImGui layer, panels, OpenGL renderer |
-| `anaf::FILE` | `src/fileOperations/` | Mesh import/export, Gmsh session |
+| `anaf::IO` | `src/io/` | Format-neutral mesh model, readers / writers, async I/O service (library `anaf_io`) |
+| `FEM::TRUSS::ADAPTER` | `src/objectCalcs/truss_1D/trussIO/` | `MeshModel` ↔ truss snapshot conversion |
 | `anaf::MATERIAL` | `src/material/` | `Material` property record |
 | `anaf::LOG` | `src/log/` | Formatted logging with file, stdout and GUI sinks |
 | `anaf::DIRECTORY` | `src/directory/` | Executable directory lookup (asset resolution) |
@@ -75,6 +79,7 @@ This document is the entry point for the project documentation. It describes how
 | Main (GUI) thread | OS | GLFW events, ImGui frame, OpenGL rendering | `Gui_Calc_Bridge` (mutex + atomics) |
 | Worker thread | `TrussControlPanel` (`bridge.workerThread`, `std::jthread`) | Preview mesh generation or a full solve | Publishes a new `MeshData`, bumps `dataVersion` |
 | OpenMP team | Inside the worker (`#pragma omp parallel`) | Mesh generation, assembly, reductions, Block-CG | Joins before the worker continues |
+| I/O thread | `IoService` owned by `FileIoPanel` | Import / export: parsing, writing, snapshot ↔ model conversion | `IoTask` polled every frame; results published through the bridge on the GUI thread |
 
 Rules:
 - Only the main thread touches OpenGL and ImGui.
@@ -101,7 +106,7 @@ Rules:
 1. The frame loop exits when the window is closed.
 2. Inside the GL resource scope in `initgui()`:
    - The worker receives `request_stop()` and is joined (`workerThread = std::jthread{}`).
-   - Panels, the renderer, and the framebuffer are destroyed while the GL context is still current.
+   - Panels, the renderer, and the framebuffer are destroyed while the GL context is still current. `FileIoPanel` destroys its `IoService`, which cancels queued jobs and joins the I/O thread.
 3. `imguiLayer.shutdown()` destroys ImGui backends and context.
 4. `glfwDestroyWindow()` and `glfwTerminate()` run.
 5. `main()` closes the log.
@@ -127,13 +132,12 @@ Update the documents when any of the following happens:
 
 | # | Issue | Location | Effect |
 |---|---|---|---|
-| 1 | Stream output uses the default 6 significant digits. | `fileVTK.cpp`, `fileSTEP.cpp` (sidecar) | A VTK or sidecar round trip rounds coordinates and results. |
-| 2 | `exportMSH()` writes the file twice. | `fileMSH.cpp` | Redundant I/O. |
-| 3 | Stub types are declared but not implemented: `Truss`, `TrussBuild`, `Truss_Imported_or_Entered::setImportedData`. | `truss.hpp`, `selectTrussType.hpp`, `trussSolver.hpp` | Placeholders for imported/self-built trusses. |
+| 1 | Stub types are declared but not implemented: `Truss`, `TrussBuild`, `Truss_Imported_or_Entered::setImportedData`. | `truss.hpp`, `selectTrussType.hpp`, `trussSolver.hpp` | Imported trusses can be viewed, exported and inspected, but not solved yet. |
+| 2 | The Gmsh 4.15 build on Fedora aborts when it opens any binary MSH 4.1 file (its own too). | Gmsh (external) | Only affects opening our binary 4.1 files **in Gmsh**; anafinen reads MSH natively. |
 
 ### 8.1 Deferred by design
 
-- `anaf_core` includes `bridge/generalStatus.hpp` (`Truss_SQPT` takes `Gui_Calc_Bridge&`). This is intentional for now. A pure CLI executable is planned for a later phase; at that point the bridge gets a CLI-side counterpart and the core is built against that instead of the GUI side.
+- `anaf_core` includes `bridge/generalStatus.hpp` (`Truss_SQPT` takes `Gui_Calc_Bridge&`) and calls `anaf::LOG`. Their sources (`generalStatus.cpp`, `anaf_info.cpp`) are compiled into the GUI executable only, so `anaf_core` cannot be linked on its own yet; `anaf_truss_io_tests` adds the two files explicitly. This is intentional for now. A pure CLI executable is planned for a later phase; at that point the bridge gets a CLI-side counterpart and the core is built against that instead of the GUI side.
 
 ### 8.2 Fixed
 
@@ -142,7 +146,15 @@ Update the documents when any of the following happens:
 | Displacement drawn twice (`location += displacement` in `calculate()`) | 2026-09-27 | Node locations stay undeformed. The displacement is stored only in `m_displacement`. |
 | Worker read `fixedDOFsByNode` / `allMaterials` without `dataMutex` | 2026-09-27 | The GUI thread copies both under the lock and moves the copies into the worker. The solver takes the fixity map as an argument. |
 | Default gravity `{0, -9,80665, 0}` | 2026-09-27 | Now `{0.0, -9.80665, 0.0}`. The old value was a latent compile error: Eigen's static assert fires as soon as the default is used. |
-| Turkish comments in `fileSTEP.cpp` | 2026-09-27 | Translated. |
+| Turkish comments in `fileSTEP.cpp` | 2026-09-27 | Translated (the file was later replaced by `anaf_io`). |
 | Element stress stored as an absolute value | 2026-09-27 | Stress and axial force are signed (tension > 0, compression < 0). Magnitudes are unchanged. |
 | Material comments said GPa for values stored in Pa | 2026-09-27 | Comments corrected to Pa. The aluminum yield literal `276.0e9 / 1e3` was simplified to `276.0e6` (same value). |
 | Stress colorbar labelled MPa but divided by 1e3 (showed kPa numbers) | 2026-09-27 | Divides by 1e6; label is now `\|Stress\| (MPa)`. |
+| VTK / sidecar written with 6 significant digits | 2026-09-28 | Every text format writes shortest round-trip doubles (`std::to_chars`); round trips are bit-exact (tested). |
+| `exportMSH()` wrote the file twice | 2026-09-28 | MSH is written natively in one pass. |
+| `.msh` import through `gmsh::open` crashed the application on binary MSH 4.1 (Gmsh 4.15 bug) | 2026-09-28 | Native MSH reader. |
+| STEP import split crossing bars (X-bracing) and connected them | 2026-09-28 | No fragmenting for bar import; coincident nodes are merged after meshing, duplicate edges removed. |
+| STEP sidecar matched elements by centroid (crossing bars share it) | 2026-09-28 | Sidecar v2 matches elements by their end nodes. |
+| File I/O ran on the calling thread | 2026-09-28 | `IoService` runs all file work (and snapshot conversion) on its own thread. |
+| `ModelTree` read `bridge.activeMesh` without the lock and deep-copied the mesh every frame | 2026-09-28 | Pointer copy under `dataMutex`; snapshots are immutable. |
+| Preview used the cross-section in cm² while the solver used m² | 2026-09-28 | Preview converts to m² like the solver. |
