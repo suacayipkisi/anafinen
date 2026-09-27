@@ -172,12 +172,12 @@ The preview mesh contains the geometric mesh and GUI visualization state. The so
 
 ## 6. Related source files
 
-- GUI and worker flow: [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp)
-- Bridge and `MeshData`: [src/bridge/generalStatus.hpp](src/bridge/generalStatus.hpp)
-- Solver orchestration: [src/truss_1D/trussEngine/trussSolver.cpp](src/truss_1D/trussEngine/trussSolver.cpp)
-- Solver class: [src/truss_1D/trussEngine/trussSolver.hpp](src/truss_1D/trussEngine/trussSolver.hpp)
-- Container calculations: [src/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp](src/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp)
-- Container data fields: [src/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp](src/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp)
-- Mesh generation: [src/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp](src/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp)
-- Mesh generator class: [src/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp](src/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp)
-- Viewport snapshot reading and drawing: [src/gui/panels/viewportPanel.cpp](src/gui/panels/viewportPanel.cpp)
+- GUI and worker flow: [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp)
+- Bridge and `MeshData`: [src/bridge/generalStatus.hpp](../src/bridge/generalStatus.hpp)
+- Solver orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver_SQPT.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_SQPT.cpp)
+- Solver class: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp)
+- Container calculations: [src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp)
+- Container data fields: [src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp)
+- Mesh generation: [src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp)
+- Mesh generator class: [src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp)
+- Viewport snapshot reading and drawing: [src/gui/panels/viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp)

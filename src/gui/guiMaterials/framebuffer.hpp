@@ -22,72 +22,60 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#include "glHandle.hpp"
+
 namespace anaf::GUI {
 
+  // Move-only: every GL object is owned by a GlHandle, so copies are rejected at compile time.
   class Framebuffer {
   private:
     // Resolve targets: single-sample, used for ImGui display and entity-ID picking.
-    std::uint32_t m_fbo_id_ {};
-    std::uint32_t m_texture_id_ {};
-    std::uint32_t m_entity_tex_id_ {};
+    GlFramebuffer m_fbo_;
+    GlTexture m_texture_;
+    GlTexture m_entity_tex_;
 
     // MSAA targets: actual render destination, resolved into the above after each frame.
-    std::uint32_t m_msaa_fbo_id_ {};
-    std::uint32_t m_msaa_color_rbo_ {};
-    std::uint32_t m_msaa_entity_rbo_ {};
-    std::uint32_t m_msaa_depth_rbo_ {};
+    GlFramebuffer m_msaa_fbo_;
+    GlRenderbuffer m_msaa_color_rbo_;
+    GlRenderbuffer m_msaa_entity_rbo_;
+    GlRenderbuffer m_msaa_depth_rbo_;
     int m_samples_ {4};
 
     std::uint32_t m_width_ {};
     std::uint32_t m_height_ {};
 
-    void cleanup() {
-      if (m_fbo_id_) {    
-        glDeleteFramebuffers(1, &m_fbo_id_);
-        glDeleteTextures(1, &m_texture_id_);
-        glDeleteTextures(1, &m_entity_tex_id_);
-        m_fbo_id_ = 0;
-        m_texture_id_ = 0;
-        m_entity_tex_id_ = 0;
-      }
-      if (m_msaa_fbo_id_) {
-        glDeleteFramebuffers(1, &m_msaa_fbo_id_);
-        glDeleteRenderbuffers(1, &m_msaa_color_rbo_);
-        glDeleteRenderbuffers(1, &m_msaa_entity_rbo_);
-        glDeleteRenderbuffers(1, &m_msaa_depth_rbo_);
-        m_msaa_fbo_id_ = 0;
-        m_msaa_color_rbo_ = 0;
-        m_msaa_entity_rbo_ = 0;
-        m_msaa_depth_rbo_ = 0;
-      }
-    }
-  public: 
-    Framebuffer(std::uint32_t width, uint32_t height) {
-      resize(width, height);
-    }
+    // Blits the MSAA attachments into the single-sample resolve targets. The MSAA FBO must
+    // not be bound as the draw framebuffer here: radeonsi then blits stale samples (the last
+    // blended draws are missing). unbind() guarantees that ordering.
+    void resolve() const;
 
-    ~Framebuffer(){
-      cleanup();
+  public:
+    Framebuffer(std::uint32_t width, std::uint32_t height) {
+      resize(width, height);
     }
 
     // Rendering happens into the MSAA framebuffer; resolve() (called from unbind) blits it down.
     void bind() const {
-      glBindFramebuffer(GL_FRAMEBUFFER, m_msaa_fbo_id_);
-      glViewport(0, 0, m_width_, m_height_);
+      glBindFramebuffer(GL_FRAMEBUFFER, m_msaa_fbo_.get());
+      glViewport(0, 0, static_cast<GLsizei>(m_width_), static_cast<GLsizei>(m_height_));
     }
 
     void unbind() const {
-      resolve();
       glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      resolve();
     }
 
-    void resolve() const;
+    // Clears the MSAA color, entity-ID and depth attachments. Integer attachments cannot be
+    // cleared by glClear, so each attachment is cleared with its own typed call.
+    void clear(float r, float g, float b, float a, int entityClearValue = -1) const;
 
     void resize(std::uint32_t width, std::uint32_t height);
 
-    int readPixel(std::uint32_t attachmentIndex, int x, int y) const;
+    // Reads the entity ID (attachment 1) at framebuffer pixel (x, y), origin bottom-left.
+    // Returns -1 when the pixel is outside the framebuffer or nothing was drawn there.
+    int readEntityID(int x, int y) const;
 
-    std::uint32_t getTextureID() const { return m_texture_id_;}
+    std::uint32_t getTextureID() const { return m_texture_.get();}
     std::uint32_t getWidth() const { return m_width_;}
     std::uint32_t getHeight() const { return m_height_;}
 

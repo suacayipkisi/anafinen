@@ -27,11 +27,109 @@
 
 #include <imgui.h>
 
-#include <string>
-#include <vector>
+#include <algorithm>
 #include <cstddef>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <log/anaf_info.hpp>
 
 namespace anaf::GUI {
+
+  namespace {
+
+    // Drops the null terminator and trailing newlines drivers append to info logs.
+    void trimInfoLog(std::string& infoLog) {
+      while (!infoLog.empty() && (infoLog.back() == '\0' || infoLog.back() == '\n')) {
+        infoLog.pop_back();
+      }
+    }
+
+    // Returns an empty handle and logs the driver's info log when compilation fails.
+    GlShader compileStage(GLenum stage, const char* source, std::string_view programName) {
+      GlShader shader{glCreateShader(stage)};
+      glShaderSource(shader.get(), 1, &source, nullptr);
+      glCompileShader(shader.get());
+
+      GLint status = GL_FALSE;
+      glGetShaderiv(shader.get(), GL_COMPILE_STATUS, &status);
+      if (status != GL_TRUE) {
+        GLint logLength = 0;
+        glGetShaderiv(shader.get(), GL_INFO_LOG_LENGTH, &logLength);
+        std::string infoLog(static_cast<std::size_t>(std::max(logLength, 1)), '\0');
+        glGetShaderInfoLog(shader.get(), logLength, nullptr, infoLog.data());
+        trimInfoLog(infoLog);
+        anaf::LOG::error("{} {} shader compile failed: {}",
+          programName, stage == GL_VERTEX_SHADER ? "vertex" : "fragment", infoLog);
+        return {};
+      }
+      return shader;
+    }
+
+    // Returns an empty handle and logs the driver's info log when any stage or the link fails.
+    // Shader objects are released on return; a linked program does not need them.
+    GlProgram buildProgram(const char* vertexSource, const char* fragmentSource, std::string_view programName) {
+      const GlShader vs = compileStage(GL_VERTEX_SHADER, vertexSource, programName);
+      const GlShader fs = compileStage(GL_FRAGMENT_SHADER, fragmentSource, programName);
+      if (!vs || !fs) {
+        return {};
+      }
+
+      GlProgram program{glCreateProgram()};
+      glAttachShader(program.get(), vs.get());
+      glAttachShader(program.get(), fs.get());
+      glLinkProgram(program.get());
+      glDetachShader(program.get(), vs.get());
+      glDetachShader(program.get(), fs.get());
+
+      GLint status = GL_FALSE;
+      glGetProgramiv(program.get(), GL_LINK_STATUS, &status);
+      if (status != GL_TRUE) {
+        GLint logLength = 0;
+        glGetProgramiv(program.get(), GL_INFO_LOG_LENGTH, &logLength);
+        std::string infoLog(static_cast<std::size_t>(std::max(logLength, 1)), '\0');
+        glGetProgramInfoLog(program.get(), logLength, nullptr, infoLog.data());
+        trimInfoLog(infoLog);
+        anaf::LOG::error("{} shader program link failed: {}", programName, infoLog);
+        return {};
+      }
+      return program;
+    }
+
+    // DSA vertex layout helpers: every VAO here reads from a single vertex buffer at binding 0.
+    constexpr GLuint kVertexBinding = 0;
+
+    void setFloatAttrib(GLuint vao, GLuint location, GLint components, std::size_t offset) {
+      glEnableVertexArrayAttrib(vao, location);
+      glVertexArrayAttribFormat(vao, location, components, GL_FLOAT, GL_FALSE, static_cast<GLuint>(offset));
+      glVertexArrayAttribBinding(vao, location, kVertexBinding);
+    }
+
+    void setIntAttrib(GLuint vao, GLuint location, std::size_t offset) {
+      glEnableVertexArrayAttrib(vao, location);
+      glVertexArrayAttribIFormat(vao, location, 1, GL_INT, static_cast<GLuint>(offset));
+      glVertexArrayAttribBinding(vao, location, kVertexBinding);
+    }
+
+    // Layout shared by line and glow-line batches: position, color, entity ID.
+    void setupVertex3DLayout(const GlVertexArray& vao, const GlBuffer& vbo) {
+      glVertexArrayVertexBuffer(vao.get(), kVertexBinding, vbo.get(), 0, sizeof(Vertex3D));
+      setFloatAttrib(vao.get(), 0, 3, offsetof(Vertex3D, position));
+      setFloatAttrib(vao.get(), 1, 4, offsetof(Vertex3D, color));
+      setIntAttrib(vao.get(), 2, offsetof(Vertex3D, entityID));
+    }
+
+    // Re-specifies the whole store each upload (orphaning), same as the previous glBufferData path.
+    template <typename T>
+    GLsizei uploadVertices(const GlBuffer& vbo, const std::vector<T>& vertices) {
+      if (!vertices.empty()) {
+        glNamedBufferData(vbo.get(), static_cast<GLsizeiptr>(vertices.size() * sizeof(T)), vertices.data(), GL_DYNAMIC_DRAW);
+      }
+      return static_cast<GLsizei>(vertices.size());
+    }
+
+  } // namespace end
 
   void ViewportRenderer::compileShaders() {
     const char* vertexShaderSource = R"(
@@ -68,23 +166,9 @@ namespace anaf::GUI {
       }
     )";
 
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vertexShaderSource, nullptr);
-    glCompileShader(vs);
+    m_program = buildProgram(vertexShaderSource, fragmentShaderSource, "scene");
 
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fragmentShaderSource, nullptr);
-    glCompileShader(fs);
-
-    m_program = glCreateProgram();
-    glAttachShader(m_program, vs);
-    glAttachShader(m_program, fs);
-    glLinkProgram(m_program);
-
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    m_mvpLoc = glGetUniformLocation(m_program, "u_MVP");
+    m_mvpLoc = glGetUniformLocation(m_program.get(), "u_MVP");
   }
 
   void ViewportRenderer::compileGridShader() {
@@ -127,25 +211,11 @@ namespace anaf::GUI {
       }
     )";
 
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vertexShaderSource, nullptr);
-    glCompileShader(vs);
+    m_gridProgram = buildProgram(vertexShaderSource, fragmentShaderSource, "grid");
 
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fragmentShaderSource, nullptr);
-    glCompileShader(fs);
-
-    m_gridProgram = glCreateProgram();
-    glAttachShader(m_gridProgram, vs);
-    glAttachShader(m_gridProgram, fs);
-    glLinkProgram(m_gridProgram);
-
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    m_gridMvpLoc = glGetUniformLocation(m_gridProgram, "u_MVP");
-    m_gridSpacingLoc = glGetUniformLocation(m_gridProgram, "u_GridSpacing");
-    m_gridAxisGapLoc = glGetUniformLocation(m_gridProgram, "u_AxisGap");
+    m_gridMvpLoc = glGetUniformLocation(m_gridProgram.get(), "u_MVP");
+    m_gridSpacingLoc = glGetUniformLocation(m_gridProgram.get(), "u_GridSpacing");
+    m_gridAxisGapLoc = glGetUniformLocation(m_gridProgram.get(), "u_AxisGap");
   }
 
   void ViewportRenderer::compileTextShader() {
@@ -183,23 +253,10 @@ namespace anaf::GUI {
       }
     )";
 
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vertexShaderSource, nullptr);
-    glCompileShader(vs);
+    m_textProgram = buildProgram(vertexShaderSource, fragmentShaderSource, "text");
 
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fragmentShaderSource, nullptr);
-    glCompileShader(fs);
-
-    m_textProgram = glCreateProgram();
-    glAttachShader(m_textProgram, vs);
-    glAttachShader(m_textProgram, fs);
-    glLinkProgram(m_textProgram);
-
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    m_textSamplerLoc = glGetUniformLocation(m_textProgram, "u_FontTex");
+    // The font atlas is always bound to texture unit 0, so the sampler is set once here.
+    glProgramUniform1i(m_textProgram.get(), glGetUniformLocation(m_textProgram.get(), "u_FontTex"), 0);
   }
 
   ViewportRenderer::ViewportRenderer() {
@@ -215,82 +272,38 @@ namespace anaf::GUI {
       {-gridReach, 0.001f,  gridReach}
     };
 
-    glGenVertexArrays(1, &m_gridVao);
-    glGenBuffers(1, &m_gridVbo);
-    glBindVertexArray(m_gridVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_gridVbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(gridVertices), gridVertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
+    m_gridVbo = createBuffer();
+    glNamedBufferStorage(m_gridVbo.get(), sizeof(gridVertices), gridVertices, 0);
+    m_gridVao = createVertexArray();
+    glVertexArrayVertexBuffer(m_gridVao.get(), kVertexBinding, m_gridVbo.get(), 0, sizeof(glm::vec3));
+    setFloatAttrib(m_gridVao.get(), 0, 3, 0);
 
     // Line Buffers
-    glGenVertexArrays(1, &m_lineVao);
-    glGenBuffers(1, &m_lineVbo);
-
-    glBindVertexArray(m_lineVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_lineVbo);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, position));
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, color));
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribIPointer(2, 1, GL_INT, sizeof(Vertex3D), (void*)offsetof(Vertex3D, entityID));
+    m_lineVbo = createBuffer();
+    m_lineVao = createVertexArray();
+    setupVertex3DLayout(m_lineVao, m_lineVbo);
 
     // Glow Line Buffers (additive-blended halo pass, same vertex layout as regular lines)
-    glGenVertexArrays(1, &m_glowLineVao);
-    glGenBuffers(1, &m_glowLineVbo);
-
-    glBindVertexArray(m_glowLineVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_glowLineVbo);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, position));
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, color));
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribIPointer(2, 1, GL_INT, sizeof(Vertex3D), (void*)offsetof(Vertex3D, entityID));
+    m_glowLineVbo = createBuffer();
+    m_glowLineVao = createVertexArray();
+    setupVertex3DLayout(m_glowLineVao, m_glowLineVbo);
 
     // Point Buffers
-    glGenVertexArrays(1, &m_pointVao);
-    glGenBuffers(1, &m_pointVbo);
-
-    glBindVertexArray(m_pointVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_pointVbo);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Point3D), (void*)offsetof(Point3D, position));
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Point3D), (void*)offsetof(Point3D, color));
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribIPointer(2, 1, GL_INT, sizeof(Point3D), (void*)offsetof(Point3D, entityID));
-
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Point3D), (void*)offsetof(Point3D, size));
+    m_pointVbo = createBuffer();
+    m_pointVao = createVertexArray();
+    glVertexArrayVertexBuffer(m_pointVao.get(), kVertexBinding, m_pointVbo.get(), 0, sizeof(Point3D));
+    setFloatAttrib(m_pointVao.get(), 0, 3, offsetof(Point3D, position));
+    setFloatAttrib(m_pointVao.get(), 1, 4, offsetof(Point3D, color));
+    setIntAttrib(m_pointVao.get(), 2, offsetof(Point3D, entityID));
+    setFloatAttrib(m_pointVao.get(), 3, 1, offsetof(Point3D, size));
 
     // Text (glyph quad) Buffers
-    glGenVertexArrays(1, &m_textVao);
-    glGenBuffers(1, &m_textVbo);
-
-    glBindVertexArray(m_textVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_textVbo);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex), (void*)offsetof(TextVertex, position));
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex), (void*)offsetof(TextVertex, uv));
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(TextVertex), (void*)offsetof(TextVertex, color));
-
-    glBindVertexArray(0);
+    m_textVbo = createBuffer();
+    m_textVao = createVertexArray();
+    glVertexArrayVertexBuffer(m_textVao.get(), kVertexBinding, m_textVbo.get(), 0, sizeof(TextVertex));
+    setFloatAttrib(m_textVao.get(), 0, 2, offsetof(TextVertex, position));
+    setFloatAttrib(m_textVao.get(), 1, 2, offsetof(TextVertex, uv));
+    setFloatAttrib(m_textVao.get(), 2, 4, offsetof(TextVertex, color));
   }
 
   void ViewportRenderer::addLine(const glm::vec3& p1, const glm::vec3& p2, const glm::vec4& color, int entityID) {
@@ -367,41 +380,13 @@ namespace anaf::GUI {
   }
 
   void ViewportRenderer::uploadCurrentBuffer() {
-    m_lineVertexCount = static_cast<GLsizei>(m_lineBuffer.size());
-    if (m_lineVertexCount > 0) {
-      glBindVertexArray(m_lineVao);
-      glBindBuffer(GL_ARRAY_BUFFER, m_lineVbo);
-      glBufferData(GL_ARRAY_BUFFER, m_lineBuffer.size() * sizeof(Vertex3D), m_lineBuffer.data(), GL_DYNAMIC_DRAW);
-    }
-
-    m_glowLineVertexCount = static_cast<GLsizei>(m_glowLineBuffer.size());
-    if (m_glowLineVertexCount > 0) {
-      glBindVertexArray(m_glowLineVao);
-      glBindBuffer(GL_ARRAY_BUFFER, m_glowLineVbo);
-      glBufferData(GL_ARRAY_BUFFER, m_glowLineBuffer.size() * sizeof(Vertex3D), m_glowLineBuffer.data(), GL_DYNAMIC_DRAW);
-    }
-
-    m_pointVertexCount = static_cast<GLsizei>(m_pointBuffer.size());
-    if (m_pointVertexCount > 0) {
-      glBindVertexArray(m_pointVao);
-      glBindBuffer(GL_ARRAY_BUFFER, m_pointVbo);
-      glBufferData(GL_ARRAY_BUFFER, m_pointBuffer.size() * sizeof(Point3D), m_pointBuffer.data(), GL_DYNAMIC_DRAW);
-    }
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    m_lineVertexCount = uploadVertices(m_lineVbo, m_lineBuffer);
+    m_glowLineVertexCount = uploadVertices(m_glowLineVbo, m_glowLineBuffer);
+    m_pointVertexCount = uploadVertices(m_pointVbo, m_pointBuffer);
   }
 
   void ViewportRenderer::uploadTextBuffer() {
-    m_textVertexCount = static_cast<GLsizei>(m_textBuffer.size());
-    if (m_textVertexCount > 0) {
-      glBindVertexArray(m_textVao);
-      glBindBuffer(GL_ARRAY_BUFFER, m_textVbo);
-      glBufferData(GL_ARRAY_BUFFER, m_textBuffer.size() * sizeof(TextVertex), m_textBuffer.data(), GL_DYNAMIC_DRAW);
-    }
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    m_textVertexCount = uploadVertices(m_textVbo, m_textBuffer);
   }
 
   void ViewportRenderer::renderGrid(const glm::mat4& mvp, float spacing) {
@@ -409,12 +394,12 @@ namespace anaf::GUI {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
 
-    glUseProgram(m_gridProgram);
-    glUniformMatrix4fv(m_gridMvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
-    glUniform1f(m_gridSpacingLoc, spacing);
-    glUniform1f(m_gridAxisGapLoc, spacing * 0.16f);
+    glProgramUniformMatrix4fv(m_gridProgram.get(), m_gridMvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
+    glProgramUniform1f(m_gridProgram.get(), m_gridSpacingLoc, spacing);
+    glProgramUniform1f(m_gridProgram.get(), m_gridAxisGapLoc, spacing * 0.16f);
 
-    glBindVertexArray(m_gridVao);
+    glUseProgram(m_gridProgram.get());
+    glBindVertexArray(m_gridVao.get());
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
     glBindVertexArray(0);
 
@@ -424,8 +409,8 @@ namespace anaf::GUI {
   }
 
   void ViewportRenderer::render(const glm::mat4& mvp) {
-    glUseProgram(m_program);
-    glUniformMatrix4fv(m_mvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
+    glProgramUniformMatrix4fv(m_program.get(), m_mvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
+    glUseProgram(m_program.get());
 
     // Coverage-based AA on top of MSAA, so thin lines don't fall back to hard, blocky edges.
     glEnable(GL_LINE_SMOOTH);
@@ -434,7 +419,7 @@ namespace anaf::GUI {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     if (m_lineVertexCount > 0) {
-      glBindVertexArray(m_lineVao);
+      glBindVertexArray(m_lineVao.get());
       glLineWidth(1.5f);
       glDrawArrays(GL_LINES, 0, m_lineVertexCount);
     }
@@ -444,7 +429,7 @@ namespace anaf::GUI {
       glDepthMask(GL_FALSE);
       glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
-      glBindVertexArray(m_glowLineVao);
+      glBindVertexArray(m_glowLineVao.get());
       glLineWidth(6.0f);
       glDrawArrays(GL_LINES, 0, m_glowLineVertexCount);
 
@@ -457,7 +442,7 @@ namespace anaf::GUI {
 
     if (m_pointVertexCount > 0) {
       glEnable(GL_PROGRAM_POINT_SIZE);
-      glBindVertexArray(m_pointVao);
+      glBindVertexArray(m_pointVao.get());
       glDrawArrays(GL_POINTS, 0, m_pointVertexCount);
     }
 
@@ -477,12 +462,10 @@ namespace anaf::GUI {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glUseProgram(m_textProgram);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, fontTex);
-    glUniform1i(m_textSamplerLoc, 0);
+    glUseProgram(m_textProgram.get());
+    glBindTextureUnit(0, fontTex);
 
-    glBindVertexArray(m_textVao);
+    glBindVertexArray(m_textVao.get());
     glDrawArrays(GL_TRIANGLES, 0, m_textVertexCount);
     glBindVertexArray(0);
     glUseProgram(0);

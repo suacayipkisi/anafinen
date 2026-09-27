@@ -304,13 +304,8 @@ namespace anaf::GUI {
     m_fbo_->bind();
     glEnable(GL_DEPTH_TEST);
 
-    // Clear Color Attachment 0 (Scene Image)
-    glClearColor(0.08f, 0.09f, 0.11f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // Clear Color Attachment 1 (Entity ID Buffer to -1)
-    const int clearEntityID = -1;
-    glClearBufferiv(GL_COLOR, 1, &clearEntityID);
+    // Scene color, entity-ID buffer (-1 = nothing picked) and depth.
+    m_fbo_->clear(0.08f, 0.09f, 0.11f, 1.0f, -1);
 
     const glm::mat4 mvp = getViewProjectionMatrix();
     const float gridScale = std::max(0.25f, m_cameraDistance / 12.0f);
@@ -566,7 +561,7 @@ namespace anaf::GUI {
       const int mouseX = static_cast<int>(mousePos.x - origin.x);
       const int mouseY = static_cast<int>(m_viewportSize.y - (mousePos.y - origin.y)); // Invert Y for OpenGL
 
-      const int pickedID = m_fbo_->readPixel(1, mouseX, mouseY);
+      const int pickedID = m_fbo_->readEntityID(mouseX, mouseY);
 
       auto& bridge = BRIDGE::buildBridge();
       std::lock_guard<std::mutex> lock(bridge.dataMutex);

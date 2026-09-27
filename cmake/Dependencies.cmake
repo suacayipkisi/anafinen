@@ -3,7 +3,10 @@ find_package(OpenMP REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
-# SuiteSparse & CHOLMOD detection
+# SuiteSparse & CHOLMOD detection (single source of truth for ANAFINEN_HAS_CHOLMOD)
+# find_package(CHOLMOD CONFIG) is intentionally not used: Fedora's suitesparse-devel
+# ships CAMD/CCOLAMD configs that include missing *Targets_static.cmake files, which
+# is a hard configure error even with QUIET. The manual fallback below covers it.
 find_package(SuiteSparse CONFIG QUIET)
 
 if(TARGET SuiteSparse::CHOLMOD)
@@ -145,24 +148,5 @@ if(NOT TARGET glm::glm)
         )
     else()
         message(FATAL_ERROR "GLM headers not found!")
-    endif()
-endif()
-
-# CHOLMOD / SuiteSparse detection
-find_package(SuiteSparse QUIET)
-
-if(SuiteSparse_FOUND OR TARGET SuiteSparse::CHOLMOD)
-    set(ANAFINEN_HAS_CHOLMOD ON)
-    if(TARGET SuiteSparse::CHOLMOD)
-        set(CHOLMOD_LIBRARIES SuiteSparse::CHOLMOD)
-    endif()
-else()
-    # Fallback to manual find if Config mode is not used
-    find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h)
-    find_library(CHOLMOD_LIBRARIES NAMES cholmod)
-    if(CHOLMOD_INCLUDE_DIR AND CHOLMOD_LIBRARIES)
-        set(ANAFINEN_HAS_CHOLMOD ON)
-    else()
-        set(ANAFINEN_HAS_CHOLMOD OFF)
     endif()
 endif()

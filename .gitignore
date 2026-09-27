@@ -11,6 +11,7 @@ _CPack_Packages/
 .vscode/
 .zed/
 .zed/tasks.json
+CLAUDE.md
 
 .clangd
 *.log

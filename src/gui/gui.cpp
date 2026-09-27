@@ -189,40 +189,43 @@ namespace anaf::GUI {
     ImGuiLayer imguiLayer;
     imguiLayer.init(window);
 
-    auto fbo = std::make_shared<Framebuffer>(1280, 720);
+    // Every object owning GL resources lives in this scope, so its destructor
+    // runs while the GL context and the ImGui context are still alive.
+    {
+      auto fbo = std::make_shared<Framebuffer>(1280, 720);
 
-    // register UI panels
-    PanelManager panelManager;
-    auto viewport = openPanels(panelManager, window, fbo);
-    
+      // register UI panels
+      PanelManager panelManager;
+      auto viewport = openPanels(panelManager, window, fbo);
 
-    // game loop
-    while (!glfwWindowShouldClose(window)){
-      glfwPollEvents();
+      // game loop
+      while (!glfwWindowShouldClose(window)){
+        glfwPollEvents();
 
-      if (viewport && viewport->isOpen) {
-        viewport->renderSceneOpenGL();
+        if (viewport && viewport->isOpen) {
+          viewport->renderSceneOpenGL();
+        }
+
+        //clear default framebuffer and render imgui panels
+        int w, h;
+        glfwGetFramebufferSize(window, &w, &h);
+        glViewport(0, 0, w, h);
+        glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        imguiLayer.beginFrame();
+
+        panelManager.onImGuiRender();
+        imguiLayer.endFrame();
+
+        glfwSwapBuffers(window);
+
       }
 
-      //clear default framebuffer and render imgui panels
-      int w, h;
-      glfwGetFramebufferSize(window, &w, &h);
-      glViewport(0, 0, w, h);
-      glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
-      glClear(GL_COLOR_BUFFER_BIT);
-
-      imguiLayer.beginFrame();
-      
-      panelManager.onImGuiRender();
-      imguiLayer.endFrame();
-
-      glfwSwapBuffers(window);
-
-    }
-
-    auto& calculationBridge = anaf::BRIDGE::buildBridge();
-    calculationBridge.workerThread.request_stop();
-    calculationBridge.workerThread = std::jthread{};
+      auto& calculationBridge = anaf::BRIDGE::buildBridge();
+      calculationBridge.workerThread.request_stop();
+      calculationBridge.workerThread = std::jthread{};
+    } // GL resources released here, before the context is destroyed
 
     imguiLayer.shutdown();
     glfwDestroyWindow(window);

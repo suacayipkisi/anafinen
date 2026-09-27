@@ -20,6 +20,8 @@
 #include <glad/gl.h>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <guiMaterials/glHandle.hpp>
+
 #include <string>
 #include <vector>
 
@@ -46,23 +48,28 @@ namespace anaf::GUI {
   };
 
 
+  // Move-only: every GL object is owned by a GlHandle, so copies are rejected at compile time.
   class ViewportRenderer {
   private:
-    GLuint m_program{0};
-    GLuint m_lineVao{0}, m_lineVbo{0};
-    GLuint m_glowLineVao{0}, m_glowLineVbo{0};
-    GLuint m_pointVao{0}, m_pointVbo{0};
+    GlProgram m_program;
+    GlVertexArray m_lineVao;
+    GlBuffer m_lineVbo;
+    GlVertexArray m_glowLineVao;
+    GlBuffer m_glowLineVbo;
+    GlVertexArray m_pointVao;
+    GlBuffer m_pointVbo;
     GLint m_mvpLoc{-1};
 
-    GLuint m_gridProgram{0};
-    GLuint m_gridVao{0}, m_gridVbo{0};
+    GlProgram m_gridProgram;
+    GlVertexArray m_gridVao;
+    GlBuffer m_gridVbo;
     GLint m_gridMvpLoc{-1};
     GLint m_gridSpacingLoc{-1};
     GLint m_gridAxisGapLoc{-1};
 
-    GLuint m_textProgram{0};
-    GLuint m_textVao{0}, m_textVbo{0};
-    GLint m_textSamplerLoc{-1};
+    GlProgram m_textProgram;
+    GlVertexArray m_textVao;
+    GlBuffer m_textVbo;
 
     std::vector<Vertex3D> m_lineBuffer;
     std::vector<Vertex3D> m_glowLineBuffer;
@@ -82,22 +89,6 @@ namespace anaf::GUI {
 
   public:
     ViewportRenderer();
-
-    ~ViewportRenderer() {
-      if (m_lineVao) glDeleteVertexArrays(1, &m_lineVao);
-      if (m_lineVbo) glDeleteBuffers(1, &m_lineVbo);
-      if (m_glowLineVao) glDeleteVertexArrays(1, &m_glowLineVao);
-      if (m_glowLineVbo) glDeleteBuffers(1, &m_glowLineVbo);
-      if (m_pointVao) glDeleteVertexArrays(1, &m_pointVao);
-      if (m_pointVbo) glDeleteBuffers(1, &m_pointVbo);
-      if (m_gridVao) glDeleteVertexArrays(1, &m_gridVao);
-      if (m_gridVbo) glDeleteBuffers(1, &m_gridVbo);
-      if (m_textVao) glDeleteVertexArrays(1, &m_textVao);
-      if (m_textVbo) glDeleteBuffers(1, &m_textVbo);
-      if (m_program) glDeleteProgram(m_program);
-      if (m_gridProgram) glDeleteProgram(m_gridProgram);
-      if (m_textProgram) glDeleteProgram(m_textProgram);
-    }
 
     void addLine(const glm::vec3& p1, const glm::vec3& p2, const glm::vec4& color, int entityID = -1);
 

@@ -14,11 +14,6 @@ if(WIN32)
     install(FILES "${GMSH_DLL}"
         DESTINATION .
     )
-    if(CHOLMOD_DLLS)
-        install(FILES ${CHOLMOD_DLLS}
-            DESTINATION .
-        )
-    endif()
 
     # use MinGW DLL if croscompile on linux
     if(CMAKE_CROSSCOMPILING)
