@@ -136,11 +136,24 @@ namespace {
 
     const double s = 1.0 / std::sqrt(2.0);
     model.constraints = {
-      NodeConstraint{0, {true, true, true}, {}},
-      NodeConstraint{1, {false, true, false}, {}},
-      NodeConstraint{2, {true, true, true}, {{s, s, 0.0}}}, // inclined roller along x = y
+      NodeConstraint{0, {true, true, true}, {}, {}, {}},
+      NodeConstraint{1, {false, true, false}, {}, {0.0, -2.5e-3, 0.0}, "Ramp"}, // imposed settlement
+      NodeConstraint{2, {true, true, true}, {{s, s, 0.0}}, {}, {}}, // inclined roller along x = y
     };
-    model.loads = {NodalLoad{5, {0.0, -1000.5, 0.0}}, NodalLoad{7, {1e-3, 2e5, -3.25}}};
+    model.loads = {NodalLoad{5, {0.0, -1000.5, 0.0}, {}}, NodalLoad{7, {1e-3, 2e5, -3.25}, {}}, NodalLoad{7, {0.0, 0.0, 12.5}, "Pulse"}};
+    model.temperatureConstraints = {TemperatureConstraint{3, 293.15, {}}, TemperatureConstraint{4, 0.0, "Heat Cycle"}};
+    model.heatLoads = {HeatLoad{6, 150.0, {}}, HeatLoad{8, -1.0 / 3.0, "Heat Cycle"}};
+    model.amplitudes = {
+      Amplitude{"Ramp", {0.0, 1.0}, {0.0, 1.0}},
+      Amplitude{"Pulse", {0.0, 0.1, 0.1, 0.2}, {0.0, 1.0, -0.5, 0.0}},  // a jump at t = 0.1
+      Amplitude{"Heat Cycle", {0.0, 3600.0, 7200.0}, {1.0, awkward(3, 5), 1.0}},
+    };
+    std::vector<double> velocity(nodeTotal * 3), temperature(nodeTotal);
+    for (std::size_t i = 0; i < velocity.size(); ++i) velocity[i] = awkward(i, 6);
+    for (std::size_t i = 0; i < temperature.size(); ++i) temperature[i] = 273.15 + static_cast<double>(i);
+    model.initialConditions = {InitialCondition{InitialQuantity::Velocity, 3, velocity},
+                               InitialCondition{InitialQuantity::Temperature, 1, temperature}};
+    model.damping = Damping{0.05, 2e-4, {0.02, 0.03, 1.0 / 3.0}};
 
     std::vector<double> material(elementTotal), area(elementTotal), thickness(elementTotal);
     for (std::size_t e = 0; e < elementTotal; ++e) {
@@ -151,6 +164,7 @@ namespace {
     model.elementAttributes[Attribute::MaterialId] = material;
     model.elementAttributes[Attribute::CrossSectionArea] = area;
     model.elementAttributes["Thickness"] = thickness;
+    model.elementAttributes[Attribute::HeatGeneration] = std::vector<double>(elementTotal, 5e3);
     return model;
   }
 
@@ -300,6 +314,49 @@ TEST(pvdRoundTripKeepsTimeHistory) {
   cancelled.isCancelled = [] { return true; };
   const auto aborted = writeMesh(workDir() / "cancelled.pvd", model, {}, cancelled);
   CHECK(!aborted.has_value() && aborted.error().code == IoError::Code::Cancelled);
+}
+
+TEST(boundaryConditionsAreStoredInEveryFormat) {
+  // The round trips above compare the decoded model; this checks the arrays are really in the files.
+  const auto model = makeSampleModel();
+  for (const auto* name : {"bc.msh", "bc.vtk", "bc.vtu"}) {
+    const auto path = workDir() / name;
+    mustWrite(path, model, {});
+    const std::string text = readText(path);
+    const bool legacy = fs::path(name).extension() == ".vtk"; // legacy VTK escapes spaces in names as %20
+    for (const std::string token : {"PrescribedDisplacement:Ramp", "NodalForce:Pulse", "PrescribedTemperature", "NodalHeat",
+                                    "Initial:Velocity", "RayleighDamping", "ModalDampingRatio", "HeatGeneration",
+                                    legacy ? "Amplitude:Heat%20Cycle" : "Amplitude:Heat Cycle",
+                                    legacy ? "NodalHeat:Heat%20Cycle" : "NodalHeat:Heat Cycle"}) {
+      CHECK_MSG(text.find(token) != std::string::npos, std::string(name) + ": " + token);
+    }
+  }
+}
+
+TEST(amplitudeInterpolation) {
+  const Amplitude pulse{"Pulse", {0.0, 0.1, 0.1, 0.2}, {0.0, 1.0, -0.5, 0.0}};
+  CHECK(pulse.factorAt(-1.0) == 0.0);   // held before the first point
+  CHECK(pulse.factorAt(0.05) == 0.5);
+  CHECK(pulse.factorAt(0.1) == 1.0);    // a jump takes the value reached from the left
+  CHECK(std::abs(pulse.factorAt(0.15) + 0.25) < 1e-12); // (0.15 - 0.1) / 0.1 is not exactly 0.5
+  CHECK(pulse.factorAt(5.0) == 0.0);    // held after the last point
+  CHECK(Amplitude{}.factorAt(1.0) == 1.0);
+}
+
+TEST(validateRejectsBrokenBoundaryConditions) {
+  auto model = makeSampleModel();
+  model.loads.push_back(NodalLoad{0, {1.0, 0.0, 0.0}, "Missing"});
+  model.amplitudes.push_back(Amplitude{"Bad \"name\"", {1.0, 0.0}, {0.0, 1.0}});
+  model.initialConditions.push_back(InitialCondition{"Short", 3, {1.0}});
+  const auto problems = model.validate();
+  auto mentions = [&](const std::string& text) {
+    return std::ranges::any_of(problems, [&](const std::string& p) { return p.find(text) != std::string::npos; });
+  };
+  CHECK(mentions("unknown amplitude 'Missing'"));
+  CHECK(mentions("without quotes"));
+  CHECK(mentions("not sorted"));
+  CHECK(mentions("initial condition 'Short'"));
+  CHECK(!writeMesh(workDir() / "invalid.msh", model, {}).has_value());
 }
 
 TEST(crossFormatChainPreservesModel) {
@@ -573,14 +630,17 @@ TEST(stepRoundTripWithSidecar) {
   const std::size_t elements = model.elementCount();
   model.elementAttributes[Attribute::MaterialId] = std::vector<double>(elements, 1.0);
   model.elementAttributes[Attribute::CrossSectionArea] = std::vector<double>(elements, 8e-3);
-  model.constraints = {NodeConstraint{0, {true, true, true}, {}}, NodeConstraint{2, {false, true, false}, {}}};
-  model.loads = {NodalLoad{4, {0.0, -1e4, 0.0}}};
+  model.constraints = {NodeConstraint{0, {true, true, true}, {}, {}, {}}, NodeConstraint{2, {false, true, false}, {}, {}, {}}};
+  model.loads = {NodalLoad{4, {0.0, -1e4, 0.0}, {}}};
   std::vector<double> stress(elements);
   for (std::size_t e = 0; e < elements; ++e) stress[e] = (e % 2 ? -1.0 : 1.0) * awkward(e, 4);
   model.fields = {Field{FieldName::Stress, FieldLocation::Element, 1, {0.0}, {stress}, StepKind::Time, {}},
                   Field{"CaseForce", FieldLocation::Node, 1, {1.0, 2.0}, {std::vector<double>(6, 1.0), std::vector<double>(6, 2.0)},
                         StepKind::LoadCase, {"Dead load", " Snow  (drift) "}}};
   model.globalData = {GlobalArray{GlobalName::NaturalFrequency, 1, {awkward(1, 2), 12.5}}};
+  model.temperatureConstraints = {TemperatureConstraint{5, 350.0, "Warm Up"}};
+  model.amplitudes = {Amplitude{"Warm Up", {0.0, 60.0}, {0.0, 1.0}}};
+  model.damping = Damping{0.1, 0.0, {}};
   model.sets = {EntitySet{"Chords", SetKind::Element, 1, -1, {0, 1, 2, 3}}};
 
   const auto path = workDir() / "truss.step";
@@ -626,6 +686,12 @@ TEST(stepRoundTripWithSidecar) {
   CHECK(cases->stepLabels == model.fields[1].stepLabels);
   const auto* frequencies = back.findGlobal(GlobalName::NaturalFrequency);
   CHECK(frequencies && frequencies->values == model.globalData[0].values);
+  REQUIRE(back.temperatureConstraints.size() == 1);
+  CHECK(back.temperatureConstraints[0].node == nodeAt(model.nodes[5].position));
+  CHECK(back.temperatureConstraints[0].temperature == 350.0 && back.temperatureConstraints[0].amplitude == "Warm Up");
+  const auto* warmUp = back.findAmplitude("Warm Up");
+  CHECK(warmUp && warmUp->factors == model.amplitudes[0].factors);
+  CHECK(back.damping && back.damping->rayleighAlpha == 0.1 && back.damping->modalRatios.empty());
 }
 
 TEST(cadSolidImportAllKernels) {

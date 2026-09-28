@@ -87,6 +87,34 @@ namespace anaf::IO {
     return nullptr;
   }
 
+  double Amplitude::factorAt(const double time) const noexcept {
+    const std::size_t count = std::min(times.size(), factors.size());
+    if (count == 0) return 1.0;
+    if (time <= times.front()) return factors.front();
+    for (std::size_t i = 1; i < count; ++i) {
+      if (time <= times[i]) {
+        const double span = times[i] - times[i - 1];
+        if (span <= 0.0) return factors[i];
+        return factors[i - 1] + (factors[i] - factors[i - 1]) * (time - times[i - 1]) / span;
+      }
+    }
+    return factors[count - 1];
+  }
+
+  const Amplitude* MeshModel::findAmplitude(const std::string& name) const {
+    for (const auto& amplitude : amplitudes) {
+      if (amplitude.name == name) return &amplitude;
+    }
+    return nullptr;
+  }
+
+  const InitialCondition* MeshModel::findInitialCondition(const std::string& quantity) const {
+    for (const auto& condition : initialConditions) {
+      if (condition.quantity == quantity) return &condition;
+    }
+    return nullptr;
+  }
+
   GlobalArray* MeshModel::findGlobal(const std::string& name) {
     for (auto& array : globalData) {
       if (array.name == name) return &array;
@@ -173,11 +201,40 @@ namespace anaf::IO {
         if (globalData[other].name == array.name) problems.push_back(std::format("global '{}' appears twice", array.name));
       }
     }
-    for (const auto& constraint : constraints) {
-      if (constraint.node >= nodeTotal) problems.push_back(std::format("constraint on missing node {}", constraint.node));
+    for (std::size_t a = 0; a < amplitudes.size(); ++a) {
+      const auto& amplitude = amplitudes[a];
+      // Names end up in array names of every format: keep them printable and unambiguous.
+      if (amplitude.name.empty() || amplitude.name.find_first_of("\"\n\r") != std::string::npos) {
+        problems.push_back(std::format("amplitude '{}': the name must be non-empty without quotes or line breaks", amplitude.name));
+      }
+      if (amplitude.times.size() != amplitude.factors.size() || amplitude.times.empty()) {
+        problems.push_back(std::format("amplitude '{}': {} times for {} factors", amplitude.name, amplitude.times.size(), amplitude.factors.size()));
+      }
+      if (!std::ranges::is_sorted(amplitude.times)) problems.push_back(std::format("amplitude '{}': times are not sorted", amplitude.name));
+      for (std::size_t other = 0; other < a; ++other) {
+        if (amplitudes[other].name == amplitude.name) problems.push_back(std::format("amplitude '{}' appears twice", amplitude.name));
+      }
     }
-    for (const auto& load : loads) {
-      if (load.node >= nodeTotal) problems.push_back(std::format("load on missing node {}", load.node));
+    auto checkReference = [&](const std::string& amplitude, const char* what, const std::uint32_t node) {
+      if (node >= nodeTotal) problems.push_back(std::format("{} on missing node {}", what, node));
+      if (!amplitude.empty() && !findAmplitude(amplitude)) {
+        problems.push_back(std::format("{} on node {}: unknown amplitude '{}'", what, node, amplitude));
+      }
+    };
+    for (const auto& constraint : constraints) checkReference(constraint.amplitude, "constraint", constraint.node);
+    for (const auto& load : loads) checkReference(load.amplitude, "load", load.node);
+    for (const auto& constraint : temperatureConstraints) checkReference(constraint.amplitude, "temperature constraint", constraint.node);
+    for (const auto& load : heatLoads) checkReference(load.amplitude, "heat load", load.node);
+    for (std::size_t i = 0; i < initialConditions.size(); ++i) {
+      const auto& condition = initialConditions[i];
+      if (condition.quantity.empty() || condition.components < 1
+          || condition.values.size() != nodeTotal * static_cast<std::size_t>(std::max(condition.components, 1))) {
+        problems.push_back(std::format("initial condition '{}': {} values for {} nodes x {} components",
+          condition.quantity, condition.values.size(), nodeTotal, condition.components));
+      }
+      for (std::size_t other = 0; other < i; ++other) {
+        if (initialConditions[other].quantity == condition.quantity) problems.push_back(std::format("initial condition '{}' appears twice", condition.quantity));
+      }
     }
     return problems;
   }

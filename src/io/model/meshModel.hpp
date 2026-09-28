@@ -97,18 +97,65 @@ namespace anaf::IO {
     std::size_t tuples() const noexcept { return components > 0 ? values.size() / static_cast<std::size_t>(components) : 0; }
   };
 
+  // Boundary conditions and loads refer to an Amplitude by name; an empty name means a
+  // constant factor of 1. Values are the reference magnitudes that the amplitude scales.
+
   // Kinematic constraint of one node. `fixed[axis] == true` removes that global DOF.
   // `allowedMotion` optionally stores an orthonormal basis of the free directions
   // (inclined supports); empty means "derive from `fixed`".
+  // `prescribed` is the imposed displacement of the fixed DOFs in global components (m);
+  // zero is an ordinary support. For inclined supports the part normal to `allowedMotion` applies.
   struct NodeConstraint {
     std::uint32_t node{};
     std::array<bool, 3> fixed{};
     std::vector<std::array<double, 3>> allowedMotion;
+    std::array<double, 3> prescribed{};
+    std::string amplitude;
   };
 
   struct NodalLoad {
     std::uint32_t node{};
     std::array<double, 3> force{}; // N
+    std::string amplitude;
+  };
+
+  // Prescribed temperature (Dirichlet) of one node, K.
+  struct TemperatureConstraint {
+    std::uint32_t node{};
+    double temperature{};
+    std::string amplitude;
+  };
+
+  // Concentrated heat flow into one node, W (> 0 heats the body).
+  struct HeatLoad {
+    std::uint32_t node{};
+    double power{};
+    std::string amplitude;
+  };
+
+  // Time-dependent scale factor: piecewise linear through (times[i], factors[i]), held
+  // constant before the first and after the last point. `times` is non-decreasing.
+  struct Amplitude {
+    std::string name;
+    std::vector<double> times;
+    std::vector<double> factors;
+
+    double factorAt(double time) const noexcept;
+  };
+
+  // Nodal initial state for transient analyses: values[node * components + c].
+  struct InitialCondition {
+    std::string quantity;   // InitialQuantity::* or any other name
+    int components{1};
+    std::vector<double> values;
+  };
+
+  // Global damping model: Rayleigh C = alpha * M + beta * K, and / or one damping ratio per
+  // mode for modal superposition (modalRatios[i] belongs to mode i + 1).
+  struct Damping {
+    double rayleighAlpha{}; // 1/s
+    double rayleighBeta{};  // s
+    std::vector<double> modalRatios;
   };
 
   struct ElementLocation {
@@ -120,6 +167,14 @@ namespace anaf::IO {
   namespace Attribute {
     inline constexpr const char* MaterialId = "MaterialID";
     inline constexpr const char* CrossSectionArea = "CrossSectionArea"; // m^2
+    inline constexpr const char* HeatGeneration = "HeatGeneration";     // W/m^3 (volumetric heat source)
+  }
+
+  // Well-known initial condition quantities.
+  namespace InitialQuantity {
+    inline constexpr const char* Displacement = "Displacement"; // 3 components, m
+    inline constexpr const char* Velocity = "Velocity";         // 3 components, m/s
+    inline constexpr const char* Temperature = "Temperature";   // 1 component, K
   }
 
   // Well-known field names shared by all formats and solvers.
@@ -145,6 +200,11 @@ namespace anaf::IO {
     std::vector<Field> fields;
     std::vector<NodeConstraint> constraints;
     std::vector<NodalLoad> loads;
+    std::vector<TemperatureConstraint> temperatureConstraints;
+    std::vector<HeatLoad> heatLoads;
+    std::vector<Amplitude> amplitudes;
+    std::vector<InitialCondition> initialConditions;
+    std::optional<Damping> damping;
     // Per-element scalar attributes indexed by global element index (MaterialID, CrossSectionArea, ...).
     std::map<std::string, std::vector<double>> elementAttributes;
     std::vector<GlobalArray> globalData;
@@ -169,6 +229,8 @@ namespace anaf::IO {
     Field* findField(const std::string& name, FieldLocation location);
     const Field* findField(const std::string& name, FieldLocation location) const;
     const EntitySet* findSet(const std::string& name, SetKind kind) const;
+    const Amplitude* findAmplitude(const std::string& name) const;
+    const InitialCondition* findInitialCondition(const std::string& quantity) const;
     GlobalArray* findGlobal(const std::string& name);
     const GlobalArray* findGlobal(const std::string& name) const;
 

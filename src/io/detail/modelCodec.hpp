@@ -24,11 +24,20 @@
 // Field names written:
 //   node    "Fixity"               3 comps, 1 = fixed, 0 = free
 //   node    "AllowedMotionBasis"  10 comps, rank + 3 x 3 basis (only when a node has an inclined support)
-//   node    "NodalForce"           3 comps, N
+//   node    "NodalForce"           3 comps, N; "NodalForce:<amplitude>" for loads with an amplitude
+//   node    "PrescribedDisplacement[:<amplitude>]"  4 comps: member flag, ux, uy, uz (m)
+//   node    "PrescribedTemperature[:<amplitude>]"   2 comps: member flag, K
+//   node    "NodalHeat[:<amplitude>]"               1 comp, W
+//   node    "Initial:<quantity>"   initial conditions, their own component count
+//   element "HeatGeneration"       1 comp, W/m^3 (an attribute like "MaterialID")
 //   element "MaterialID", "CrossSectionArea", "Attribute:<name>"   1 comp each
 //   node    "NodeSet:<name>"       1 comp, 1 = member      (VTK / VTU / sidecar)
 //   element "ElementSet:<name>"    1 comp, 1 = member      (VTK / VTU / sidecar)
 //   node    "NodeTag", element "ElementTag", "EntityTag"   original ids (VTK / VTU)
+// Global arrays (encodeModelGlobals):
+//   "Amplitude:<name>"   2 comps per tuple: time, factor
+//   "RayleighDamping"    2 comps, 1 tuple: alpha, beta
+//   "ModalDampingRatio"  1 comp, one tuple per mode
 // Legacy names accepted on read: "FixityX/Y/Z", "AllowedMotionRank" + 9-comp "AllowedMotionBasis",
 // "FixityDirection_*" (fixed directions).
 
@@ -51,7 +60,11 @@ namespace anaf::IO::detail {
   // Fields to write in addition to `model.fields` (single step, time 0).
   std::vector<Field> encodeModelData(const MeshModel& model, const CodecOptions& options);
 
-  // Moves recognised fields out of `model.fields` into constraints, loads, attributes, sets and tags.
+  // Global arrays to write in addition to `model.globalData` (amplitudes, damping).
+  std::vector<GlobalArray> encodeModelGlobals(const MeshModel& model);
+
+  // Moves recognised fields out of `model.fields` (and globals out of `model.globalData`) into
+  // constraints, loads, thermal BCs, initial conditions, amplitudes, damping, attributes, sets and tags.
   void decodeModelData(MeshModel& model, const CodecOptions& options);
 
   // Field restricted to one time step (-1 = last), for single-step formats.
@@ -76,7 +89,7 @@ namespace anaf::IO::detail {
 
   struct FlatData {
     std::vector<FlatArray> arrays;       // node / element arrays, in input order
-    std::vector<GlobalArray> globals;    // model.globalData, generated *_Values arrays and TimeValue
+    std::vector<GlobalArray> globals;    // model.globalData, encodeModelGlobals(), *_Values arrays and TimeValue
     std::vector<std::string> warnings;
   };
 

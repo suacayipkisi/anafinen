@@ -208,7 +208,9 @@ namespace anaf::IO::formats {
           }
         }
       }
-      for (const auto& global : model.globalData) {
+      std::vector<GlobalArray> globals = model.globalData;
+      for (auto& global : detail::encodeModelGlobals(model)) globals.push_back(std::move(global));
+      for (const auto& global : globals) {
         out += std::format("GLOBAL {} {} {}\n", global.components, global.tuples(), global.name);
         for (std::size_t i = 0; i < global.values.size(); ++i) {
           detail::appendNumber(out, global.values[i]);

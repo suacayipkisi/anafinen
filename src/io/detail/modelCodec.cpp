@@ -33,6 +33,13 @@ namespace anaf::IO::detail {
     constexpr std::string_view kFixity = "Fixity";
     constexpr std::string_view kAllowedMotion = "AllowedMotionBasis";
     constexpr std::string_view kNodalForce = "NodalForce";
+    constexpr std::string_view kPrescribedDisplacement = "PrescribedDisplacement";
+    constexpr std::string_view kPrescribedTemperature = "PrescribedTemperature";
+    constexpr std::string_view kNodalHeat = "NodalHeat";
+    constexpr std::string_view kInitialPrefix = "Initial:";
+    constexpr std::string_view kAmplitudePrefix = "Amplitude:";
+    constexpr std::string_view kRayleighDamping = "RayleighDamping";
+    constexpr std::string_view kModalDampingRatio = "ModalDampingRatio";
     constexpr std::string_view kAttributePrefix = "Attribute:";
     constexpr std::string_view kNodeSetPrefix = "NodeSet:";
     constexpr std::string_view kElementSetPrefix = "ElementSet:";
@@ -53,7 +60,19 @@ namespace anaf::IO::detail {
     }
 
     bool isKnownAttribute(const std::string_view name) {
-      return name == Attribute::MaterialId || name == Attribute::CrossSectionArea;
+      return name == Attribute::MaterialId || name == Attribute::CrossSectionArea || name == Attribute::HeatGeneration;
+    }
+
+    // "<base>" for constant data, "<base>:<amplitude>" otherwise.
+    std::string withAmplitude(const std::string_view base, const std::string& amplitude) {
+      return amplitude.empty() ? std::string(base) : std::string(base) + ":" + amplitude;
+    }
+
+    // Amplitude name of "<base>" / "<base>:<amplitude>", or nullopt for other names.
+    std::optional<std::string> amplitudeOf(const std::string& name, const std::string_view base) {
+      if (name == base) return std::string();
+      if (name.size() > base.size() + 1 && name.starts_with(base) && name[base.size()] == ':') return name.substr(base.size() + 1);
+      return std::nullopt;
     }
 
     double dot(const Direction& a, const Direction& b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
@@ -128,7 +147,7 @@ namespace anaf::IO::detail {
     NodeConstraint& constraintFor(MeshModel& model, std::vector<int>& indexByNode, const std::uint32_t node) {
       if (indexByNode[node] < 0) {
         indexByNode[node] = static_cast<int>(model.constraints.size());
-        model.constraints.push_back(NodeConstraint{node, {false, false, false}, {}});
+        model.constraints.push_back(NodeConstraint{node, {false, false, false}, {}, {}, {}});
       }
       return model.constraints[static_cast<std::size_t>(indexByNode[node])];
     }
@@ -145,6 +164,7 @@ namespace anaf::IO::detail {
                         const StepPicker& pick, const std::optional<double> time) {
     FlatData out;
     out.globals = model.globalData;
+    for (auto& global : encodeModelGlobals(model)) out.globals.push_back(std::move(global));
     std::optional<double> timeValue = time;
     bool labelsDropped = false;
     for (const auto* group : {&model.fields, &encoded}) {
@@ -288,12 +308,54 @@ namespace anaf::IO::detail {
       }
     }
 
-    if (!model.loads.empty()) {
-      std::vector<double> force(nodeTotal * 3, 0.0);
-      for (const auto& load : model.loads) {
-        for (int axis = 0; axis < 3; ++axis) force[load.node * 3 + axis] += load.force[axis];
-      }
-      out.push_back(makeField(std::string(kNodalForce), FieldLocation::Node, 3, std::move(force)));
+    // Per-amplitude arrays; std::map keeps the output order stable.
+    std::map<std::string, std::vector<double>> prescribed;
+    for (const auto& constraint : model.constraints) {
+      const bool imposed = constraint.prescribed != std::array<double, 3>{} || !constraint.amplitude.empty();
+      if (!imposed) continue;
+      auto& values = prescribed[constraint.amplitude];
+      if (values.empty()) values.assign(nodeTotal * 4, 0.0);
+      values[constraint.node * 4] = 1.0;
+      for (int axis = 0; axis < 3; ++axis) values[constraint.node * 4 + 1 + axis] = constraint.prescribed[axis];
+    }
+    for (auto& [amplitude, values] : prescribed) {
+      out.push_back(makeField(withAmplitude(kPrescribedDisplacement, amplitude), FieldLocation::Node, 4, std::move(values)));
+    }
+
+    std::map<std::string, std::vector<double>> forces;
+    for (const auto& load : model.loads) {
+      auto& force = forces[load.amplitude];
+      if (force.empty()) force.assign(nodeTotal * 3, 0.0);
+      for (int axis = 0; axis < 3; ++axis) force[load.node * 3 + axis] += load.force[axis];
+    }
+    for (auto& [amplitude, force] : forces) {
+      out.push_back(makeField(withAmplitude(kNodalForce, amplitude), FieldLocation::Node, 3, std::move(force)));
+    }
+
+    std::map<std::string, std::vector<double>> temperatures;
+    for (const auto& constraint : model.temperatureConstraints) {
+      auto& values = temperatures[constraint.amplitude];
+      if (values.empty()) values.assign(nodeTotal * 2, 0.0);
+      values[constraint.node * 2] = 1.0;
+      values[constraint.node * 2 + 1] = constraint.temperature;
+    }
+    for (auto& [amplitude, values] : temperatures) {
+      out.push_back(makeField(withAmplitude(kPrescribedTemperature, amplitude), FieldLocation::Node, 2, std::move(values)));
+    }
+
+    std::map<std::string, std::vector<double>> heat;
+    for (const auto& load : model.heatLoads) {
+      auto& values = heat[load.amplitude];
+      if (values.empty()) values.assign(nodeTotal, 0.0);
+      values[load.node] += load.power;
+    }
+    for (auto& [amplitude, values] : heat) {
+      out.push_back(makeField(withAmplitude(kNodalHeat, amplitude), FieldLocation::Node, 1, std::move(values)));
+    }
+
+    for (const auto& condition : model.initialConditions) {
+      if (condition.values.size() != nodeTotal * static_cast<std::size_t>(condition.components)) continue;
+      out.push_back(makeField(std::string(kInitialPrefix) + condition.quantity, FieldLocation::Node, condition.components, condition.values));
     }
 
     for (const auto& [name, values] : model.elementAttributes) {
@@ -335,6 +397,23 @@ namespace anaf::IO::detail {
       }
       out.push_back(makeField(std::string(kElementTag), FieldLocation::Element, 1, std::move(elementTags)));
       if (anyEntity) out.push_back(makeField(std::string(kEntityTag), FieldLocation::Element, 1, std::move(entityTags)));
+    }
+    return out;
+  }
+
+  std::vector<GlobalArray> encodeModelGlobals(const MeshModel& model) {
+    std::vector<GlobalArray> out;
+    for (const auto& amplitude : model.amplitudes) {
+      GlobalArray array{std::string(kAmplitudePrefix) + amplitude.name, 2, {}};
+      for (std::size_t i = 0; i < amplitude.times.size() && i < amplitude.factors.size(); ++i) {
+        array.values.push_back(amplitude.times[i]);
+        array.values.push_back(amplitude.factors[i]);
+      }
+      out.push_back(std::move(array));
+    }
+    if (model.damping) {
+      out.push_back(GlobalArray{std::string(kRayleighDamping), 2, {model.damping->rayleighAlpha, model.damping->rayleighBeta}});
+      if (!model.damping->modalRatios.empty()) out.push_back(GlobalArray{std::string(kModalDampingRatio), 1, model.damping->modalRatios});
     }
     return out;
   }
@@ -436,14 +515,70 @@ namespace anaf::IO::detail {
       constraint.allowedMotion = freeBasisFromFixed(directions);
     }
 
-    // Loads.
-    if (auto force = takeField(model, kNodalForce, FieldLocation::Node); force && force->components == 3 && sized(*force, nodeTotal)) {
-      const auto& values = *lastStep(*force);
-      for (std::uint32_t n = 0; n < nodeTotal; ++n) {
-        const std::array<double, 3> f{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
-        if (f[0] != 0.0 || f[1] != 0.0 || f[2] != 0.0) model.loads.push_back(NodalLoad{n, f});
+    // Prescribed displacements, loads, thermal BCs and initial conditions (all node arrays).
+    for (auto it = model.fields.begin(); it != model.fields.end();) {
+      const Field& field = *it;
+      bool consumed = false;
+      if (field.location == FieldLocation::Node && sized(field, nodeTotal)) {
+        const auto& values = field.steps.back();
+        if (const auto amplitude = amplitudeOf(field.name, kPrescribedDisplacement); amplitude && field.components == 4) {
+          for (std::uint32_t n = 0; n < nodeTotal; ++n) {
+            if (values[n * 4] == 0.0) continue;
+            auto& constraint = constraintFor(model, constraintIndex, n);
+            constraint.prescribed = {values[n * 4 + 1], values[n * 4 + 2], values[n * 4 + 3]};
+            constraint.amplitude = *amplitude;
+          }
+          consumed = true;
+        } else if (const auto forceAmplitude = amplitudeOf(field.name, kNodalForce); forceAmplitude && field.components == 3) {
+          for (std::uint32_t n = 0; n < nodeTotal; ++n) {
+            const std::array<double, 3> f{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
+            if (f[0] != 0.0 || f[1] != 0.0 || f[2] != 0.0) model.loads.push_back(NodalLoad{n, f, *forceAmplitude});
+          }
+          consumed = true;
+        } else if (const auto temperatureAmplitude = amplitudeOf(field.name, kPrescribedTemperature); temperatureAmplitude && field.components == 2) {
+          for (std::uint32_t n = 0; n < nodeTotal; ++n) {
+            if (values[n * 2] != 0.0) model.temperatureConstraints.push_back(TemperatureConstraint{n, values[n * 2 + 1], *temperatureAmplitude});
+          }
+          consumed = true;
+        } else if (const auto heatAmplitude = amplitudeOf(field.name, kNodalHeat); heatAmplitude && field.components == 1) {
+          for (std::uint32_t n = 0; n < nodeTotal; ++n) {
+            if (values[n] != 0.0) model.heatLoads.push_back(HeatLoad{n, values[n], *heatAmplitude});
+          }
+          consumed = true;
+        } else if (field.name.size() > kInitialPrefix.size() && field.name.starts_with(kInitialPrefix)) {
+          model.initialConditions.push_back(InitialCondition{field.name.substr(kInitialPrefix.size()), field.components, values});
+          consumed = true;
+        }
       }
+      it = consumed ? model.fields.erase(it) : it + 1;
     }
+
+    // Amplitudes and damping (global arrays).
+    std::optional<Damping> damping;
+    for (auto it = model.globalData.begin(); it != model.globalData.end();) {
+      bool consumed = false;
+      if (it->name.size() > kAmplitudePrefix.size() && it->name.starts_with(kAmplitudePrefix) && it->components == 2) {
+        Amplitude amplitude;
+        amplitude.name = it->name.substr(kAmplitudePrefix.size());
+        for (std::size_t i = 0; i + 1 < it->values.size(); i += 2) {
+          amplitude.times.push_back(it->values[i]);
+          amplitude.factors.push_back(it->values[i + 1]);
+        }
+        model.amplitudes.push_back(std::move(amplitude));
+        consumed = true;
+      } else if (it->name == kRayleighDamping && it->components == 2 && it->values.size() == 2) {
+        if (!damping) damping.emplace();
+        damping->rayleighAlpha = it->values[0];
+        damping->rayleighBeta = it->values[1];
+        consumed = true;
+      } else if (it->name == kModalDampingRatio && it->components == 1) {
+        if (!damping) damping.emplace();
+        damping->modalRatios = it->values;
+        consumed = true;
+      }
+      it = consumed ? model.globalData.erase(it) : it + 1;
+    }
+    if (damping) model.damping = std::move(damping);
 
     // Element attributes, sets and tags.
     std::vector<std::uint64_t> nodeTags;

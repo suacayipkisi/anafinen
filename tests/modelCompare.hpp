@@ -186,12 +186,57 @@ namespace anaf::TESTING {
         continue;
       }
       if (c.fixed != it->second.fixed) diff(std::format("constraint on node {} fixity differs", node));
+      if (c.prescribed != it->second.prescribed || c.amplitude != it->second.amplitude) {
+        diff(std::format("constraint on node {} prescribed displacement / amplitude differs", node));
+      }
       if (!c.allowedMotion.empty() && c.allowedMotion != it->second.allowedMotion) diff(std::format("constraint on node {} basis differs", node));
     }
-    std::map<std::uint32_t, std::array<double, 3>> expectedLoads, actualLoads;
-    for (const auto& l : expected.loads) expectedLoads[nodeMap[l.node]] = l.force;
-    for (const auto& l : actual.loads) actualLoads[l.node] = l.force;
+    std::map<std::pair<std::uint32_t, std::string>, std::array<double, 3>> expectedLoads, actualLoads;
+    for (const auto& l : expected.loads) expectedLoads[{nodeMap[l.node], l.amplitude}] = l.force;
+    for (const auto& l : actual.loads) actualLoads[{l.node, l.amplitude}] = l.force;
     if (expectedLoads != actualLoads) diff("loads differ");
+
+    std::map<std::pair<std::uint32_t, std::string>, double> expectedTemperatures, actualTemperatures, expectedHeat, actualHeat;
+    for (const auto& c : expected.temperatureConstraints) expectedTemperatures[{nodeMap[c.node], c.amplitude}] = c.temperature;
+    for (const auto& c : actual.temperatureConstraints) actualTemperatures[{c.node, c.amplitude}] = c.temperature;
+    if (expectedTemperatures != actualTemperatures) diff("temperature constraints differ");
+    for (const auto& l : expected.heatLoads) expectedHeat[{nodeMap[l.node], l.amplitude}] = l.power;
+    for (const auto& l : actual.heatLoads) actualHeat[{l.node, l.amplitude}] = l.power;
+    if (expectedHeat != actualHeat) diff("heat loads differ");
+
+    for (const auto& amplitude : expected.amplitudes) {
+      const auto* other = actual.findAmplitude(amplitude.name);
+      if (!other) diff(std::format("amplitude '{}' missing", amplitude.name));
+      else if (other->times != amplitude.times || other->factors != amplitude.factors) diff(std::format("amplitude '{}' differs", amplitude.name));
+    }
+    if (expected.amplitudes.size() != actual.amplitudes.size()) diff("amplitude count differs");
+
+    for (const auto& condition : expected.initialConditions) {
+      const auto* other = actual.findInitialCondition(condition.quantity);
+      if (!other || other->components != condition.components || other->values.size() != condition.values.size()) {
+        diff(std::format("initial condition '{}' missing or resized", condition.quantity));
+        continue;
+      }
+      const auto c = static_cast<std::size_t>(condition.components);
+      for (std::size_t n = 0; n < expected.nodes.size(); ++n) {
+        for (std::size_t k = 0; k < c; ++k) {
+          if (condition.values[n * c + k] != other->values[nodeMap[n] * c + k]) {
+            diff(std::format("initial condition '{}' differs at node {}", condition.quantity, n));
+            n = expected.nodes.size();
+            break;
+          }
+        }
+      }
+    }
+    if (expected.initialConditions.size() != actual.initialConditions.size()) diff("initial condition count differs");
+
+    if (expected.damping.has_value() != actual.damping.has_value()) {
+      diff("damping presence differs");
+    } else if (expected.damping && (expected.damping->rayleighAlpha != actual.damping->rayleighAlpha
+               || expected.damping->rayleighBeta != actual.damping->rayleighBeta
+               || expected.damping->modalRatios != actual.damping->modalRatios)) {
+      diff("damping differs");
+    }
 
     for (const auto& [name, values] : expected.elementAttributes) {
       const auto it = actual.elementAttributes.find(name);

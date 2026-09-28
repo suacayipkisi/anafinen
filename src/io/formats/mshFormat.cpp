@@ -1153,18 +1153,22 @@ namespace anaf::IO::formats {
       }
 
       void anafData() {
-        std::size_t records = m_model.globalData.size();
+        std::vector<const GlobalArray*> globals;
+        for (const auto& global : m_model.globalData) globals.push_back(&global);
+        const auto encoded = detail::encodeModelGlobals(m_model);
+        for (const auto& global : encoded) globals.push_back(&global);
+        std::size_t records = globals.size();
         for (const auto& field : m_model.fields) {
           if (field.stepKind != StepKind::Time || !field.stepLabels.empty()) ++records;
         }
         if (records == 0) return;
         text(std::format("$AnafData\n1\n{}\n", records));
-        for (const auto& global : m_model.globalData) {
-          text(std::format("GLOBAL {} {}\n", global.components, global.tuples()));
-          text(escapedQuoted(global.name));
-          const auto components = static_cast<std::size_t>(global.components);
-          for (std::size_t i = 0; i < global.values.size(); ++i) {
-            number(global.values[i]);
+        for (const auto* global : globals) {
+          text(std::format("GLOBAL {} {}\n", global->components, global->tuples()));
+          text(escapedQuoted(global->name));
+          const auto components = static_cast<std::size_t>(global->components);
+          for (std::size_t i = 0; i < global->values.size(); ++i) {
+            number(global->values[i]);
             text((i + 1) % components == 0 ? "\n" : " ");
           }
         }

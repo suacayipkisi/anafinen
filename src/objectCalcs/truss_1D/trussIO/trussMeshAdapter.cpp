@@ -80,11 +80,11 @@ namespace FEM::TRUSS::ADAPTER {
 
     for (const auto& [id, fixed] : fixity) {
       if (!(fixed[0] || fixed[1] || fixed[2])) continue;
-      if (const auto it = indexById.find(id); it != indexById.end()) model.constraints.push_back(NodeConstraint{it->second, fixed, {}});
+      if (const auto it = indexById.find(id); it != indexById.end()) model.constraints.push_back(NodeConstraint{it->second, fixed, {}, {}, {}});
     }
     for (const auto& force : mesh.appliedForces) {
       if (const auto it = indexById.find(force.getApliedNode()); it != indexById.end()) {
-        model.loads.push_back(NodalLoad{it->second, force.getForce()});
+        model.loads.push_back(NodalLoad{it->second, force.getForce(), {}});
       }
     }
 

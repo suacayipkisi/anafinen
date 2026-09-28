@@ -7,7 +7,7 @@ This document describes `anaf_io`, the mesh import/export library:
 - how the GUI (and a future CLI) use it
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28 (step kinds, global data, `.pvd`).
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28 (step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -54,14 +54,20 @@ This document describes `anaf_io`, the mesh import/export library:
 | `blocks` | `vector<ElementBlock>` | One block per element type: `tags`, `connectivity` (node indices, **Gmsh local order**), `entityTags` (geometric entity per element) |
 | `sets` | `vector<EntitySet>` | Named node or element sets: `name`, `kind`, `dimension`, `tag` (physical tag), `members` |
 | `fields` | `vector<Field>` | `name`, `location` (node / element), `components`, `times[s]`, `steps[s][entity * components + c]`, `stepKind`, optional `stepLabels[s]` |
-| `constraints` | `vector<NodeConstraint>` | `fixed[3]` per global axis plus optional `allowedMotion` basis (inclined supports) |
-| `loads` | `vector<NodalLoad>` | Nodal force [N] |
+| `constraints` | `vector<NodeConstraint>` | `fixed[3]` per global axis, optional `allowedMotion` basis (inclined supports), `prescribed[3]` imposed displacement of the fixed DOFs [m], `amplitude` |
+| `loads` | `vector<NodalLoad>` | Nodal force [N], `amplitude` |
+| `temperatureConstraints` | `vector<TemperatureConstraint>` | Prescribed nodal temperature [K], `amplitude` |
+| `heatLoads` | `vector<HeatLoad>` | Concentrated heat flow into a node [W] (> 0 heats), `amplitude` |
+| `amplitudes` | `vector<Amplitude{name, times, factors}>` | Piecewise linear time factor, held constant outside its range (`factorAt(t)`) |
+| `initialConditions` | `vector<InitialCondition{quantity, components, values}>` | Nodal initial state: `InitialQuantity::Displacement` (3), `Velocity` (3), `Temperature` (1), or any name |
+| `damping` | `optional<Damping>` | Rayleigh `alpha` [1/s], `beta` [s] (C = αM + βK) and `modalRatios` (one per mode) |
 | `elementAttributes` | `map<string, vector<double>>` | Per-element scalars: `MaterialID`, `CrossSectionArea` [m²], and any future attribute (thickness, …) |
 | `globalData` | `vector<GlobalArray{name, components, values}>` | Model-level arrays that belong to no node or element (natural frequencies, modal masses, …) |
 | `lengthUnit`, `title`, `warnings` | | Metadata; readers append non-fatal issues to `warnings` |
 
 - Global element index: block 0 elements first, then block 1, and so on. Sets, element fields and attributes are indexed by it.
-- `validate()` returns a message for every inconsistency (sizes, indices). Every writer refuses an invalid model; every reader validates its result.
+- `validate()` returns a message for every inconsistency (sizes, indices, unknown amplitude names, unsorted amplitude times, amplitude names with quotes or line breaks). Every writer refuses an invalid model; every reader validates its result.
+- **Amplitude references:** a BC or load names its amplitude; an empty name is a constant factor 1. The stored value is the reference magnitude that the amplitude scales.
 - Well-known names: `FieldName::Displacement` (node, 3), `FieldName::Stress` (element, Pa, tension > 0), `FieldName::AxialForce`, `Attribute::MaterialId`, `Attribute::CrossSectionArea`, `GlobalName::NaturalFrequency` (Hz, one tuple per mode).
 
 **Step kinds** (`Field::stepKind`) say what `times[s]` holds:
@@ -109,10 +115,23 @@ Formats that store named arrays (VTK, VTU, the MSH data sections, the STEP sidec
 |---|---|
 | `Fixity` (node, 3) | 1 = fixed, 0 = free |
 | `AllowedMotionBasis` (node, 10) | rank + 3×3 free-direction basis; only written when a node has an inclined support |
-| `NodalForce` (node, 3) | loads [N] |
+| `NodalForce` (node, 3) | loads [N]; `NodalForce:<amplitude>` for loads with an amplitude (loads on one node with the same amplitude are summed) |
+| `PrescribedDisplacement[:<amplitude>]` (node, 4) | member flag, ux, uy, uz [m]; only written when a constraint has a non-zero value or an amplitude |
+| `PrescribedTemperature[:<amplitude>]` (node, 2) | member flag, temperature [K] |
+| `NodalHeat[:<amplitude>]` (node, 1) | heat loads [W] |
+| `Initial:<quantity>` (node, any) | initial conditions |
+| `HeatGeneration` (element, 1) | volumetric heat source [W/m³], an element attribute |
 | `MaterialID`, `CrossSectionArea`, `Attribute:<name>` (element, 1) | element attributes |
 | `NodeSet:<name>` / `ElementSet:<name>` (1) | set membership (1 = member) |
 | `NodeTag`, `ElementTag`, `EntityTag` (1) | original ids (VTK / VTU only; MSH stores them natively) |
+
+Global arrays (`encodeModelGlobals()`), stored like `globalData` in every format:
+
+| Global array (components) | Holds |
+|---|---|
+| `Amplitude:<name>` (2) | one (time, factor) tuple per point |
+| `RayleighDamping` (2) | one tuple: alpha, beta |
+| `ModalDampingRatio` (1) | one ratio per mode; only written when not empty |
 
 **Materials by name (truss adapter, 0.1.3):** `toMeshModel()` writes one element set `Material:<material name>` per material used, in addition to `MaterialID`. Sets survive every format (MSH physical groups, `ElementSet:Material:<name>` arrays in VTK / VTU / sidecar), so `toMeshData()` matches bars to the current material list by name (ASCII case-insensitive). An unknown name, or a `MaterialID` outside the list, falls back to material 0 with a warning note. Files without material sets (anafinen ≤ 0.1.2) use `MaterialID`, which matches the built-in order (0 steel, 1 aluminum). MSH 4.1 stores elements per entity, so a multi-material model reads back grouped by material; node pairs, materials and results stay matched (tested for MSH 4.1 / 2.2, VTK, VTU, STEP + sidecar).
 
@@ -292,7 +311,7 @@ See [GUI.md](GUI.md) section 2.3. In short:
 
 | Test | What it proves |
 |---|---|
-| `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar (v3: step kinds, labels, globals); step kinds, labels and global data in every format; `TimeValue`; `.pvd` series with a late-starting field, progress and cancellation; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation |
+| `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar (v3: step kinds, labels, globals, thermal BCs, amplitudes, damping); prescribed displacements, thermal BCs, amplitudes, initial conditions and damping in every format, checked in the file text too; amplitude interpolation; `validate()` of broken references; step kinds, labels and global data in every format; `TimeValue`; `.pvd` series with a late-starting field, progress and cancellation; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation |
 | `vtk_reference_check` | Python + official VTK 9.5: 124 files written by VTK in every legacy / XML variant are read exactly as VTK reads them; VTK reads every variant anaf_io writes. The grids include field data, `TimeValue` and `_Mode_NNN` arrays. Skipped when the Python `vtk` module is missing |
 | `anaf_truss_io_tests` | The GUI data path without the GUI: solve → snapshot → adapter → every format → adapter → identical snapshot (bit-exact); STEP with X-bracing; wireframe preview; conversion off the calling thread; material library loading, user material add / remove / save (temporary files only, never the real user config); materials matched by name after the list changes (all writable formats); material files under a non-ASCII folder |
 
@@ -301,6 +320,7 @@ See [GUI.md](GUI.md) section 2.3. In short:
 - VTK / VTU store one time step per file. Time series need MSH or a `.pvd` collection.
 - Step labels (load case names) are not stored in VTK / VTU / `.pvd`.
 - No complex values (harmonic response with phase) yet.
+- BCs and loads are nodal only: no element-face loads (pressure, surface heat flux, convection), no nodal springs or dashpots.
 - STEP export writes line elements only; the rest of the model is in the sidecar.
 - Gmsh-based CAD import cannot be interrupted inside Gmsh; cancellation waits for the current Gmsh call.
 - Binary MSH 4.1 files cannot be opened by the Gmsh 4.15 build on Fedora (its bug, see 4.1). Our files are valid; use MSH 2.2 or ASCII 4.1 for that Gmsh version.
