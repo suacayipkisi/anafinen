@@ -5,7 +5,7 @@ This guide shows how code outside `src/io/` reads and writes model files through
 For the file formats themselves (which data goes where in MSH, VTK, VTU, `.pvd` and the STEP sidecar), see [FILE_HANDLING.md](FILE_HANDLING.md).
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28 (after `e309902`).
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28 (after `8a947e1`).
 
 ## 1. Overview
 
