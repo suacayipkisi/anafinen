@@ -13,7 +13,7 @@ fi
 if [ -f /etc/fedora-release ]; then
     echo "Detected Fedora. Generating RPM..."
     sudo dnf install -y rpm-build ninja-build cmake gcc-c++ eigen3-devel suitesparse-devel libpng-devel mesa-libGL-devel gmsh-devel glfw-devel spectra-devel glm-devel zlib-devel json-devel
-    cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release
+    cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_NATIVE_OPTIMIZATIONS=OFF
     cmake --build "$BUILD_DIR"
     cpack --config "$BUILD_DIR/CPackConfig.cmake" -G RPM -B "$BUILD_DIR"
     echo "RPM created successfully in $BUILD_DIR/"
@@ -25,13 +25,13 @@ elif [ -f /etc/debian_version ]; then
     echo "Detected Debian-based system. Generating DEB..."
     sudo apt-get update
     sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev
-    cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release
+    cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_NATIVE_OPTIMIZATIONS=OFF
     cmake --build "$BUILD_DIR"
     cpack --config "$BUILD_DIR/CPackConfig.cmake" -G DEB -B "$BUILD_DIR"
     echo "DEB created successfully in $BUILD_DIR/"
 else
     echo "Unsupported distribution for native packaging. Generating tarball..."
-    cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release
+    cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_NATIVE_OPTIMIZATIONS=OFF
     cmake --build "$BUILD_DIR"
     cpack --config "$BUILD_DIR/CPackConfig.cmake" -G TGZ -B "$BUILD_DIR"
 fi

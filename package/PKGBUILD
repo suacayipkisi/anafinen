@@ -17,6 +17,7 @@ build() {
   cd "$startdir"
   cmake -B build-pkg -S "$startdir/.." -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
+    -DANAFINEN_NATIVE_OPTIMIZATIONS=OFF \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
     -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=bfd -fno-lto"

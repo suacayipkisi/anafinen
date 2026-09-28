@@ -90,4 +90,15 @@ elseif(UNIX AND NOT APPLE)
     set(CPACK_RPM_PACKAGE_SUGGESTS "zenity")
 endif()
 
+# Packages must run on any x86-64 CPU. A build tree configured with
+# ANAFINEN_NATIVE_OPTIMIZATIONS=ON (-march=native / /arch:AVX2) is refused by cpack.
+if(ANAFINEN_NATIVE_OPTIMIZATIONS)
+    set(ANAFINEN_CPACK_NATIVE_GUARD "${CMAKE_CURRENT_BINARY_DIR}/cpackRejectNativeBuild.cmake")
+    file(WRITE "${ANAFINEN_CPACK_NATIVE_GUARD}"
+        "message(FATAL_ERROR \"This build uses ANAFINEN_NATIVE_OPTIMIZATIONS=ON (CPU-specific code). \"\n"
+        "  \"Reconfigure with -DANAFINEN_NATIVE_OPTIMIZATIONS=OFF before packaging.\")\n")
+    set(CPACK_PRE_BUILD_SCRIPTS "${ANAFINEN_CPACK_NATIVE_GUARD}")
+    message(WARNING "ANAFINEN_NATIVE_OPTIMIZATIONS=ON: the binary only runs on CPUs like this one; cpack is disabled for this build tree.")
+endif()
+
 include(CPack)

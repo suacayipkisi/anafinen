@@ -35,7 +35,7 @@ CMakeLists.txt
 | `CMAKE_CXX_STANDARD` | 23, required, extensions off | `std::format`, `std::jthread`, `std::span`, `starts_with` |
 | `CMAKE_EXPORT_COMPILE_COMMANDS` | ON | `.clangd` reads `build/compile_commands.json` |
 | `CMAKE_INTERPROCEDURAL_OPTIMIZATION` | FALSE | LTO disabled explicitly |
-| `ANAFINEN_NATIVE_OPTIMIZATIONS` | option, OFF | Adds `/arch:AVX2` (MSVC) or `-march=native` (GCC/Clang). Local builds only: the binary then needs the build machine's CPU, so packages never set it. (Before 0.1.3 it passed `-march=x86-64`, the baseline, which had no effect.) |
+| `ANAFINEN_NATIVE_OPTIMIZATIONS` | option, OFF | Adds `/arch:AVX2` (MSVC) or `-march=native` (GCC/Clang). Local builds only: the binary then needs the build machine's CPU. Packages are protected twice: `package.sh` and `PKGBUILD` pass `-DANAFINEN_NATIVE_OPTIMIZATIONS=OFF` (so a value cached in `build/` cannot leak in), and when the option is ON, `Packaging.cmake` adds a `CPACK_PRE_BUILD_SCRIPTS` guard that makes every `cpack` run (RPM, DEB, TGZ, Windows ZIP) fail with an explanation. (Before 0.1.3 it passed `-march=x86-64`, the baseline, which had no effect.) |
 | `ANAFINEN_WARNINGS_AS_ERRORS` | option, OFF (`cmake/CompilerOptions.cmake`) | Adds `-Werror` / `/WX`. For CI and pre-commit checks; the tree builds warning-free with it. |
 | `ANAFINEN_BUILD_TESTS` | option, OFF | Builds the `tests/` directory and enables `ctest` |
 
