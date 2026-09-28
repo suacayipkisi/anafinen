@@ -6,6 +6,8 @@ This document describes `anaf_io`, the mesh import/export library:
 - the asynchronous service
 - how the GUI (and a future CLI) use it
 
+For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
+
 > **Document status**
 > Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28 (step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.

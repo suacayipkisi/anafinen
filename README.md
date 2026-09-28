@@ -222,4 +222,4 @@ A commercially licensed build either excludes these components, or the licensee 
 For commercial inquiries: `konuki8523@gmail.com`
 
 ### Contributing
-Contributions are welcome. By submitting a pull request, you agree to our [Contributor License Agreement (CLA)](CLA.md), granting the maintainer the right to re-license contributions under both GPLv3 and commercial terms.
+Contributions are welcome. By submitting a pull request, you agree to our [Contributor License Agreement (CLA)](.github/CLA.md), granting the maintainer the right to re-license contributions under both GPLv3 and commercial terms.

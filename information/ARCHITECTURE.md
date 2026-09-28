@@ -15,6 +15,7 @@ This document is the entry point for the project documentation. It describes how
 | [BRIDGE.md](BRIDGE.md) | `Gui_Calc_Bridge`, `MeshData` snapshots, synchronization rules |
 | [CALCULATIONS.md](CALCULATIONS.md) | Truss FEM pipeline, stiffness assembly, solver portfolio, validator |
 | [FILE_HANDLING.md](FILE_HANDLING.md) | `anaf_io`: format-neutral mesh model, MSH / VTK / VTU / STEP / IGES / BREP, async I/O service |
+| [IO_USAGE.md](IO_USAGE.md) | How callers use `anaf_io`: public headers, `readMesh` / `writeMesh`, `IoService`, building and reading a `MeshModel`, solver adapters |
 | [GUI.md](GUI.md) | Frame loop, panels, viewport render pipeline, picking |
 | [MESH_DATA_FLOW.md](MESH_DATA_FLOW.md) | End-to-end path of one truss mesh from the panel to the screen |
 | [AIM.md](AIM.md) | Master plan and phase checklist |
@@ -126,6 +127,7 @@ Update the documents when any of the following happens:
 | New field in `MeshData` or `Gui_Calc_Bridge` | [BRIDGE.md](BRIDGE.md) |
 | New panel, shader, or GL resource | [GUI.md](GUI.md) |
 | New file format or format change | [FILE_HANDLING.md](FILE_HANDLING.md) |
+| `anaf_io` public API change (`meshIo.hpp`, `ioService.hpp`, `MeshModel` members, options) | [IO_USAGE.md](IO_USAGE.md), [FILE_HANDLING.md](FILE_HANDLING.md) |
 | New dependency, CMake option, or package target | [BUILD_SYSTEM.md](BUILD_SYSTEM.md) |
 | A known issue is fixed | Remove it from section 8 below |
 
