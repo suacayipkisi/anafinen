@@ -188,7 +188,7 @@ namespace anaf::GUI {
     }
     const anaf::IO::ReadOptions options = isCad(path) ? m_cadOptions : anaf::IO::ReadOptions{};
     m_importTask = m_service->runAsync<FEM::TRUSS::ADAPTER::ImportedTruss>(
-      "Import " + path.filename().string(),
+      "Import " + anaf::IO::pathToUtf8(path.filename()),
       [path, options, materials = std::move(materials)](const anaf::IO::IoContext& context)
         -> std::expected<FEM::TRUSS::ADAPTER::ImportedTruss, anaf::IO::IoError> {
         auto model = anaf::IO::readMesh(path, options, context);
@@ -235,7 +235,7 @@ namespace anaf::GUI {
 
     // The snapshot is immutable and the conversion runs on the I/O thread as well.
     m_exportTask = m_service->runAsync<anaf::IO::WriteReport>(
-      "Export " + path.filename().string(),
+      "Export " + anaf::IO::pathToUtf8(path.filename()),
       [mesh = std::move(mesh), fixity = std::move(fixity), materials = std::move(materials), path, options](const anaf::IO::IoContext& context) {
         const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*mesh, fixity, materials);
         context.progress(0.1f, "writing");
@@ -306,7 +306,7 @@ namespace anaf::GUI {
         anaf::LOG::success("Exported '{}'", result->path);
         for (const auto& extra : result->extraFiles) anaf::LOG::info("Also written: '{}'", extra);
         for (const auto& warning : result->warnings) anaf::LOG::warn("{}", warning);
-        notify("Exported " + std::filesystem::path(result->path).filename().string(), false);
+        notify("Exported " + anaf::IO::pathToUtf8(anaf::IO::pathFromUtf8(result->path).filename()), false);
       } else if (result.error().code == anaf::IO::IoError::Code::Cancelled) {
         anaf::LOG::warn("{} cancelled", m_exportTask->description());
         notify("Export cancelled", false);
@@ -324,7 +324,7 @@ namespace anaf::GUI {
     if (m_stage == Stage::CadOptions && !ImGui::IsPopupOpen(popup)) ImGui::OpenPopup(popup);
     if (!ImGui::BeginPopupModal(popup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
-    ImGui::TextUnformatted(m_pendingImport.filename().string().c_str());
+    ImGui::TextUnformatted(anaf::IO::pathToUtf8(m_pendingImport.filename()).c_str());
     ImGui::Separator();
     ImGui::TextUnformatted("Mesh the CAD geometry as:");
     ImGui::RadioButton("Bars: one element per CAD edge (truss / frame)", &m_cadOptions.cadMeshDimension, 1);

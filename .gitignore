@@ -20,3 +20,6 @@ build-mingw/
 build-rpm/
 .claude/settings.local.json
 build-containers/
+
+# Locally built release packages (kept on disk, never pushed)
+package/early-release-packages/

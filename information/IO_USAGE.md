@@ -423,7 +423,7 @@ Rules:
 
 - Never use `path.string()` or `path(std::string)` for text that is shown, logged, or passed to ImGui, Gmsh or pfd. On Windows these use the ANSI code page.
 - Use `pathToUtf8(path)` and `pathFromUtf8(text)`. `WriteReport::path` and `extraFiles` are already UTF-8.
-- Some older code still uses `path.string()` ([ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 3).
+- `anaf_io`, the file panel and the native dialog follow this rule (fixed 2026-09-28, [ARCHITECTURE.md](ARCHITECTURE.md) section 8.2).
 
 ## 9. Related files
 

@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "meshIo.hpp"
+#include "core/pathUtf8.hpp"
 #include "detail/textIo.hpp"
 #include "formats/formats.hpp"
 
@@ -87,7 +88,7 @@ namespace anaf::IO {
   }
 
   FileFormat detectFormat(const std::filesystem::path& path) {
-    const std::string extension = detail::toLower(path.extension().string());
+    const std::string extension = detail::toLower(pathToUtf8(path.extension()));
     for (const auto& row : formatTable()) {
       for (const auto ext : row.extensions) {
         if (extension == ext) return row.format;
@@ -98,11 +99,11 @@ namespace anaf::IO {
 
   std::expected<MeshModel, IoError> readMesh(const std::filesystem::path& path, const ReadOptions& options, const IoContext& context) {
     if (!std::filesystem::exists(path)) {
-      return std::unexpected(IoError{IoError::Code::FileNotFound, "file not found: " + path.string()});
+      return std::unexpected(IoError{IoError::Code::FileNotFound, "file not found: " + pathToUtf8(path)});
     }
     FileFormat format = options.format == FileFormat::Auto ? detectFormat(path) : options.format;
     if (format == FileFormat::Auto) {
-      return std::unexpected(IoError{IoError::Code::UnsupportedFormat, "cannot determine the format of " + path.string()});
+      return std::unexpected(IoError{IoError::Code::UnsupportedFormat, "cannot determine the format of " + pathToUtf8(path)});
     }
     return guarded([&]() -> MeshModel {
       MeshModel model;
@@ -127,7 +128,7 @@ namespace anaf::IO {
                                                 const WriteOptions& options, const IoContext& context) {
     FileFormat format = options.format;
     if (format == FileFormat::Auto) {
-      const std::string extension = detail::toLower(path.extension().string());
+      const std::string extension = detail::toLower(pathToUtf8(path.extension()));
       for (const auto& row : formatTable()) {
         for (const auto ext : row.extensions) {
           if (extension == ext) format = row.format;
@@ -135,7 +136,7 @@ namespace anaf::IO {
       }
     }
     if (format == FileFormat::Auto) {
-      return std::unexpected(IoError{IoError::Code::UnsupportedFormat, "cannot determine the output format from " + path.string()});
+      return std::unexpected(IoError{IoError::Code::UnsupportedFormat, "cannot determine the output format from " + pathToUtf8(path)});
     }
     return guarded([&]() -> WriteReport {
       switch (format) {

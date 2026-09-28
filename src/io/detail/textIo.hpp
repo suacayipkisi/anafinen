@@ -19,6 +19,8 @@
 
 // Internal helpers shared by the text/binary format implementations. Not part of the public IO API.
 
+#include "../core/pathUtf8.hpp"
+
 #include <array>
 #include <bit>
 #include <charconv>
@@ -62,7 +64,7 @@ namespace anaf::IO::detail {
 
   inline std::string readWholeFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
-    if (!file) throw ParseFailure("cannot open '" + path.string() + "'");
+    if (!file) throw ParseFailure("cannot open '" + pathToUtf8(path) + "'");
     std::string content;
     file.seekg(0, std::ios::end);
     const auto size = file.tellg();
@@ -76,9 +78,9 @@ namespace anaf::IO::detail {
 
   inline void writeWholeFile(const std::filesystem::path& path, const std::string_view content) {
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
-    if (!file) throw std::runtime_error("cannot open '" + path.string() + "' for writing");
+    if (!file) throw std::runtime_error("cannot open '" + pathToUtf8(path) + "' for writing");
     file.write(content.data(), static_cast<std::streamsize>(content.size()));
-    if (!file) throw std::runtime_error("failed while writing '" + path.string() + "'");
+    if (!file) throw std::runtime_error("failed while writing '" + pathToUtf8(path) + "'");
   }
 
   inline bool isSpace(const char c) noexcept {

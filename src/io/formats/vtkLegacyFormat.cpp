@@ -26,6 +26,7 @@
 //        Global data (and TimeValue) as dataset-level FIELD; steps as in detail::flattenSteps().
 
 #include "formats.hpp"
+#include "../core/pathUtf8.hpp"
 #include "../detail/modelCodec.hpp"
 #include "../detail/textIo.hpp"
 #include "../detail/vtkCommon.hpp"
@@ -429,7 +430,7 @@ namespace anaf::IO::formats {
       throw std::invalid_argument("model is inconsistent: " + problems.front());
     }
     WriteReport report;
-    report.path = path.string();
+    report.path = pathToUtf8(path);
     const bool binary = options.encoding == Encoding::Binary;
     const bool v51 = options.vtkVersion == VtkLegacyVersion::V5_1;
     LegacyWriter writer(binary);

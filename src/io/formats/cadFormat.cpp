@@ -30,6 +30,7 @@
 //   before "END":              "GLOBAL <components> <tuples> <name>" followed by the values
 
 #include "formats.hpp"
+#include "../core/pathUtf8.hpp"
 #include "../detail/gmshSession.hpp"
 #include "../detail/modelCodec.hpp"
 #include "../detail/textIo.hpp"
@@ -66,7 +67,9 @@ namespace anaf::IO::formats {
     }
 
     std::filesystem::path sidecarPath(const std::filesystem::path& cadPath) {
-      return std::filesystem::path(cadPath.string() + std::string(kSidecarSuffix));
+      std::filesystem::path sidecar = cadPath;
+      sidecar += kSidecarSuffix;
+      return sidecar;
     }
 
     // Uniform grid hash for "same position within tolerance" lookups (O(1) per query).
@@ -519,7 +522,7 @@ namespace anaf::IO::formats {
       gmsh::option::setString("Geometry.OCCTargetUnit", "M");
       context.progress(0.05f, "importing CAD");
       gmsh::vectorpair imported;
-      gmsh::model::occ::importShapes(path.string(), imported, false);
+      gmsh::model::occ::importShapes(pathToUtf8(path), imported, false); // Gmsh expects UTF-8
       // Surfaces / volumes: fragment the geometry so touching bodies get conformal interfaces.
       // Bars: no fragmenting, it would split crossing members (X-bracing) at their intersection
       // and connect them; coincident end nodes are merged after meshing instead.
@@ -567,7 +570,7 @@ namespace anaf::IO::formats {
       }
       if (removed > 0) model.warnings.push_back(std::format("{} duplicate CAD edges were merged", removed));
     }
-    model.title = path.stem().string();
+    model.title = pathToUtf8(path.stem());
     if (model.elementCount() == 0) {
       model.warnings.push_back(std::format("the CAD file produced no {}D elements", dimension));
     }
@@ -590,7 +593,7 @@ namespace anaf::IO::formats {
       throw std::invalid_argument("model is inconsistent: " + problems.front());
     }
     WriteReport report;
-    report.path = path.string();
+    report.path = pathToUtf8(path);
 
     std::vector<std::size_t> exportedElements;
     std::map<std::string, std::size_t> skipped;
@@ -621,7 +624,7 @@ namespace anaf::IO::formats {
       }
       gmsh::model::occ::synchronize();
       context.progress(0.7f, "saving");
-      gmsh::write(path.string());
+      gmsh::write(pathToUtf8(path));
     }
     for (const auto& [name, count] : skipped) {
       report.warnings.push_back(std::format("{} {} elements are not representable in STEP and were skipped", count, name));
@@ -633,7 +636,7 @@ namespace anaf::IO::formats {
     if (options.writeSidecar) {
       const auto sidecar = sidecarPath(path);
       writeSidecar(sidecar, model, exportedElements);
-      report.extraFiles.push_back(sidecar.string());
+      report.extraFiles.push_back(pathToUtf8(sidecar));
     }
     context.progress(1.0f, "done");
     return report;

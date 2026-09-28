@@ -44,6 +44,7 @@
 //       $EndAnafData
 
 #include "formats.hpp"
+#include "../core/pathUtf8.hpp"
 #include "../detail/modelCodec.hpp"
 #include "../detail/textIo.hpp"
 
@@ -1210,7 +1211,7 @@ namespace anaf::IO::formats {
       throw std::invalid_argument("model is inconsistent: " + problems.front());
     }
     WriteReport report;
-    report.path = path.string();
+    report.path = pathToUtf8(path);
     MshWriter writer(model, options, report);
     const std::string content = writer.write(context);
     checkCancel(context);

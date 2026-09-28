@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ioService.hpp"
+#include "../core/pathUtf8.hpp"
 
 namespace anaf::IO {
 
@@ -57,7 +58,7 @@ namespace anaf::IO {
   }
 
   std::shared_ptr<IoTask<MeshModel>> IoService::importAsync(std::filesystem::path path, ReadOptions options) {
-    const std::string description = "Import " + path.filename().string();
+    const std::string description = "Import " + pathToUtf8(path.filename());
     return runAsync<MeshModel>(description, [path = std::move(path), options](const IoContext& context) {
       return readMesh(path, options, context);
     });
@@ -65,7 +66,7 @@ namespace anaf::IO {
 
   std::shared_ptr<IoTask<WriteReport>> IoService::exportAsync(std::filesystem::path path, std::shared_ptr<const MeshModel> model,
                                                               WriteOptions options) {
-    const std::string description = "Export " + path.filename().string();
+    const std::string description = "Export " + pathToUtf8(path.filename());
     return runAsync<WriteReport>(description, [path = std::move(path), model = std::move(model), options](const IoContext& context) {
       return writeMesh(path, *model, options, context);
     });

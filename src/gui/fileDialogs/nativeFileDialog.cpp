@@ -20,6 +20,8 @@
 // portable-file-dialogs is a large header; it is included in this translation unit only.
 #include <portable-file-dialogs.h>
 
+#include <io/core/pathUtf8.hpp> // pfd takes and returns UTF-8 strings
+
 #include <variant>
 
 namespace anaf::GUI {
@@ -70,7 +72,7 @@ namespace anaf::GUI {
   std::unique_ptr<NativeFileDialog> NativeFileDialog::saveFile(const std::string& title, const std::filesystem::path& defaultPath,
                                                                const std::vector<FileFilter>& filters) {
     auto impl = std::make_unique<Impl>();
-    impl->dialog = std::make_unique<pfd::save_file>(title, defaultPath.string(), toPfdFilters(filters), pfd::opt::force_overwrite);
+    impl->dialog = std::make_unique<pfd::save_file>(title, anaf::IO::pathToUtf8(defaultPath), toPfdFilters(filters), pfd::opt::force_overwrite);
     return std::unique_ptr<NativeFileDialog>(new NativeFileDialog(std::move(impl)));
   }
 
@@ -84,10 +86,10 @@ namespace anaf::GUI {
       std::optional<std::filesystem::path> path;
       if (auto* open = std::get_if<std::unique_ptr<pfd::open_file>>(&m_impl->dialog)) {
         const auto files = (*open)->result();
-        if (!files.empty() && !files.front().empty()) path = files.front();
+        if (!files.empty() && !files.front().empty()) path = anaf::IO::pathFromUtf8(files.front());
       } else {
         const auto file = std::get<std::unique_ptr<pfd::save_file>>(m_impl->dialog)->result();
-        if (!file.empty()) path = file;
+        if (!file.empty()) path = anaf::IO::pathFromUtf8(file);
       }
       m_impl->cached = path;
     }
