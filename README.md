@@ -79,12 +79,14 @@ sudo dnf install -y \
     zlib-devel \
     json-devel \
     glm-devel \
+    ImageMagick \
     zenity
 ```
 
 #### Libraries Arch-CachyOS
 ```bash
-sudo pacman -S glibc gcc-libs eigen suitesparse spectra glfw mesa openmp cmake ninja git glm libpng zlib nlohmann-json zenity
+# Spectra comes from the git submodule (it is not in the official repos); OpenMP is GCC's libgomp (gcc-libs).
+sudo pacman -S glibc gcc-libs eigen suitesparse glfw mesa cmake ninja git glm libpng zlib nlohmann-json librsvg zenity
 
 # WARNING!!!!!! using paru means using AUR which is a place sometimes hackers might play around. be careful!!! 
 # If you dont want to install via AUR, you may look for installing it from their websites like what we install for windows.
@@ -94,7 +96,7 @@ paru -S gmsh-bin
 #### Libraries Debian-Ubuntu
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev zenity
+sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev librsvg2-bin zenity
 ```
 
 ### Clone This Repo

@@ -6,8 +6,10 @@ pkgdesc="3D FEM Analysis Engine"
 arch=('x86_64')
 url="https://github.com/suacayipkisi/anafinen"
 license=('GPL-3.0-or-later')
-depends=('glibc' 'gcc-libs' 'eigen' 'spectra' 'glfw' 'mesa' 'gmsh' 'openmp' 'suitesparse' 'libpng' 'zlib')
-makedepends=('cmake' 'ninja' 'git' 'eigen' 'spectra' 'glfw' 'mesa' 'glm' 'gmsh' 'openmp' 'suitesparse' 'libpng' 'zlib' 'nlohmann-json')
+# Header-only libraries (eigen, glm, nlohmann-json) are build-time only; Spectra comes from the
+# external/spectra submodule. OpenMP is GCC's libgomp (gcc-libs). gmsh is in the AUR (gmsh or gmsh-bin).
+depends=('glibc' 'gcc-libs' 'glfw' 'libglvnd' 'gmsh' 'suitesparse' 'libpng' 'zlib')
+makedepends=('cmake' 'ninja' 'git' 'eigen' 'glm' 'nlohmann-json' 'librsvg')
 optdepends=('zenity: native file dialog for File > Import / Export'
             'kdialog: native file dialog on KDE')
 options=('!lto')

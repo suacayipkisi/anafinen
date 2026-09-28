@@ -253,6 +253,8 @@ See [GUI.md](GUI.md) section 2.3. In short:
 - STEP export writes line elements only; the rest of the model is in the sidecar.
 - Gmsh-based CAD import cannot be interrupted inside Gmsh; cancellation waits for the current Gmsh call.
 - Binary MSH 4.1 files cannot be opened by the Gmsh 4.15 build on Fedora (its bug, see 4.1). Our files are valid; use MSH 2.2 or ASCII 4.1 for that Gmsh version.
+- Debian 13's Gmsh 4.13 package aborts inside its own second-order 3D meshing (Eigen assertion; see [ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 4). CAD import with element order 2 may hit it.
+- `anaf_io` must not instantiate standard templates on types that Gmsh also uses internally (for example `std::map<std::pair<int, int>, std::string>`, Gmsh's physical-name map). Such an instantiation is exported from the executable and replaces libgmsh's copy at run time; with a Gmsh SDK built by another GCC (AUR `gmsh-bin`) the two libstdc++ versions then share one tree and Gmsh loses physical names. `mshFormat.cpp` uses the file-local `IntPair` key for this reason.
 - Element types beyond the table are skipped with a warning. Binary files with such types are rejected, because their node count is needed to skip them.
 
 ## 11. Related source files

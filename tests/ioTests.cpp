@@ -614,6 +614,9 @@ TEST(readsFilesWrittenByAnafinen012) {
 
   // Version 1 STEP sidecar ("NODES n / x y z dx dy dz", "ELEMENTS m / mx my mz mat area stress").
   resetGmshForFixture();
+  // Same unit as the anafinen STEP writer. Without it Gmsh 4.13 labels the file in millimetres and the
+  // reader (OCCTargetUnit M) scales the line to 0.002, so the coordinate-mapped sidecar never matches.
+  gmsh::option::setString("Geometry.OCCTargetUnit", "M");
   gmsh::model::add("v1");
   const int p0 = gmsh::model::occ::addPoint(0, 0, 0);
   const int p1 = gmsh::model::occ::addPoint(2, 0, 0);

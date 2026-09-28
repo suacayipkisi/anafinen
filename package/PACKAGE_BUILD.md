@@ -17,9 +17,21 @@ distribution.
 ./package/package.sh
 ```
 
-For Arch/CachyOS, `makepkg` uses [PKGBUILD](PKGBUILD). For Debian, the script
-uses CPack's DEB generator and derives shared-library dependencies with
-`dpkg-shlibdeps`.
+The script can be started from any directory; it works from the repository root.
+
+For Arch/CachyOS, `makepkg` uses [PKGBUILD](PKGBUILD) and installs the build
+dependencies from the official repositories itself. Gmsh is only in the AUR, so
+install it first (`gmsh`, built from source, or the prebuilt `gmsh-bin`); the
+script stops with a hint when it is missing. For Debian, the script uses CPack's
+DEB generator and derives shared-library dependencies with `dpkg-shlibdeps`.
+
+The 128x128 PNG icon is rendered from `assets/icons/anafinen.svg` with
+`rsvg-convert` (librsvg) or, as a fallback, ImageMagick. The scripts install
+the converter. Without one, the package has no PNG icon (CMake warns).
+
+Known issue on Debian 13: its `libgmsh4.13` aborts inside second-order 3D
+meshing (an Eigen assertion in Gmsh itself), so `anaf_io_tests` aborts there.
+The package builds and installs normally.
 
 ## Packaging for Windows
 

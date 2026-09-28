@@ -60,6 +60,17 @@ namespace anaf::IO::formats {
     using detail::Cursor;
     using detail::ParseFailure;
 
+    // Map key used instead of std::pair<int, int>. Gmsh keeps its physical names in a
+    // std::map<std::pair<int, int>, std::string>; the same instantiation here would be exported
+    // from the executable and interpose libgmsh's own copy. With a Gmsh SDK built by an older
+    // GCC (AUR gmsh-bin) that mixes two libstdc++ implementations and loses physical names.
+    // A type with internal linkage keeps every instantiation local to this file.
+    struct IntPair {
+      int first;
+      int second;
+      auto operator<=>(const IntPair&) const = default;
+    };
+
     void checkCancel(const IoContext& context) {
       if (context.cancelled()) throw detail::CancelledFailure();
     }
@@ -583,11 +594,11 @@ namespace anaf::IO::formats {
       bool m_binary{false};
       bool m_bigEndian{false};
       bool m_sawNodes{false};
-      std::map<std::pair<int, int>, std::string> m_physicalNames;
-      std::map<std::pair<int, int>, std::vector<int>> m_entityPhysicals;
+      std::map<IntPair, std::string> m_physicalNames;
+      std::map<IntPair, std::vector<int>> m_entityPhysicals;
       std::unordered_map<std::uint64_t, std::uint32_t> m_nodeIndex;
       std::unordered_map<std::uint64_t, ElementLocation> m_elementByTag;
-      std::map<std::pair<int, int>, std::vector<ElementLocation>> m_physicalMembers;
+      std::map<IntPair, std::vector<ElementLocation>> m_physicalMembers;
       std::map<std::pair<std::string, int>, RawField> m_fields;
       std::map<int, std::size_t> m_skippedTypes;
     };
@@ -689,7 +700,7 @@ namespace anaf::IO::formats {
         // Element type is part of the key: Gmsh drops elements when one entity mixes element
         // orders (e.g. Tri3 with Tri6), so every entity holds a single element type.
         std::map<std::tuple<int, int, int, std::vector<int>>, std::size_t> partitionIndex;
-        std::map<std::pair<int, int>, int> partitionsPerSource;
+        std::map<IntPair, int> partitionsPerSource;
         std::size_t global = 0;
         for (const auto& block : m_model.blocks) {
           const int dim = elementInfo(block.type).dimension;
@@ -1040,7 +1051,7 @@ namespace anaf::IO::formats {
       std::vector<std::uint64_t> m_elementTags;
       std::vector<Entity> m_entities;
       std::vector<std::size_t> m_elementEntity;
-      std::map<std::pair<int, int>, int> m_physicalTag; // (set index, dim) -> physical tag
+      std::map<IntPair, int> m_physicalTag; // (set index, dim) -> physical tag
     };
 
   } // namespace end

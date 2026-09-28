@@ -51,16 +51,13 @@ namespace FEM::TRUSS {
       }
     }
 
-    std::vector<std::string> fixInfo;
+    // Joined by hand: range formatting of std::vector needs libstdc++ 15 (Debian 13 ships GCC 14).
+    std::string fixInfo;
     for (const auto& [nodeId, dofs] : fixedDOFsByNode) {
-      std::string x, y, z;
-      std::string node =  std::format("{}", nodeId);
-      x = (dofs[0] == true ? "x" : "-");
-      y = (dofs[1] == true ? "y" : "-");
-      z = (dofs[2] == true ? "z" : "-");
-      fixInfo.push_back(node + ":" + x + y + z);
+      if (!fixInfo.empty()) fixInfo += ", ";
+      fixInfo += std::format("{}:{}{}{}", nodeId, dofs[0] ? 'x' : '-', dofs[1] ? 'y' : '-', dofs[2] ? 'z' : '-');
     }
-    anaf::LOG::info("Fixed nodes {}", fixInfo);
+    anaf::LOG::info("Fixed nodes [{}]", fixInfo);
     bridge.m_progress = 0.20f;
   }
 

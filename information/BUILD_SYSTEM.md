@@ -90,7 +90,7 @@ Third-party include directories are marked `SYSTEM` (`imgui_suite`, `glad_local`
 | Spectra | submodule `external/spectra`, else `find_package(Spectra)` | no | Header-only; imported as `spectra_local` |
 | glm | `find_package(glm CONFIG)`, else header search | yes | - |
 | nlohmann/json | `find_package(nlohmann_json 3.11 CONFIG)`, else `FetchContent` of the v3.12.0 release tarball (SHA-256 pinned) | yes | Header-only, linked PRIVATE into `anaf_core` for the material library. The fetch covers the MinGW cross-build sysroot. |
-| ImageMagick | `find_program(magick convert)` | no | Converts `assets/icons/anafinen.svg` to a 128x128 PNG at configure time |
+| librsvg / ImageMagick | `find_program(rsvg-convert)`, else `find_program(magick convert)` | no | Converts `assets/icons/anafinen.svg` to a 128x128 PNG at configure time (`ANAFINEN_ICON_PNG`). `rsvg-convert` is preferred: Debian's ImageMagick has no rsvg delegate, and its internal MSVG renderer draws only the background while still exiting with 0. Without a converter there is no PNG: a configure warning, the PNG install rules and the POST_BUILD copy are skipped, and the window starts without an icon. (Before 0.1.3 the SVG was copied under the `.png` name, which shipped a broken hicolor icon.) |
 | portable-file-dialogs | vendored header `external/portable-file-dialogs/` (commit `c12ea8c`, WTFPL) | yes | Native file chooser. Linux runtime needs `zenity`, `kdialog`, `matedialog` or `qarma` |
 | Python 3 + `vtk` module | `find_package(Python3)` + `import vtk` probe | no | Enables the `vtk_reference_check` test |
 
@@ -143,7 +143,7 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 
 | Platform | Install layout | CPack generator | Package name |
 |---|---|---|---|
-| Linux | `bin/anafinen`, `share/anafinen/assets`, `.desktop`, hicolor icons (SVG + 128px PNG) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
+| Linux | `bin/anafinen`, `share/anafinen/assets` (without the `.desktop` file), `share/applications/anafinen.desktop`, hicolor icons (SVG + 128px PNG) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
 | Windows | Flat: `anafinen.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES` | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
 | Windows (MinGW cross) | Same + MinGW runtime DLLs from the Fedora sysroot (`RUNTIME_DEPENDENCIES` is skipped: not supported when cross-compiling) | `ZIP` | same |
 
@@ -154,17 +154,19 @@ Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: suite
 | Script | Platform | What it does |
 |---|---|---|
 | `package/package.sh` | Fedora | Installs build deps with `dnf`, Release build, `cpack -G RPM` |
-| `package/package.sh` | Arch / CachyOS | `makepkg -f` using `package/PKGBUILD` |
+| `package/package.sh` | Arch / CachyOS | Stops with a hint when `gmsh` is not installed (AUR only: `gmsh` or `gmsh-bin`), then `makepkg --syncdeps --noconfirm --force` in `package/` using `package/PKGBUILD` |
 | `package/package.sh` | Debian / Ubuntu | Installs deps with `apt`, Release build, `cpack -G DEB` |
 | VS Code task | Windows | `cpack -G ZIP` from the configured build dir (see `package/PACKAGE_BUILD.md`) |
+
+`package.sh` changes to the repository root first, so it works from any working directory. Tested in containers on 2026-09-28: Debian 13 (GCC 14) and Arch (GCC 16, `gmsh-bin` from the AUR) both build, package and install.
 
 ### 8.2 Dependencies per platform (2026-09-28)
 
 | Platform | Build packages added for `anaf_io` | Runtime extra |
 |---|---|---|
-| Fedora | `zlib-devel` (`package.sh`, README) | RPM `Suggests: zenity` |
-| Arch / CachyOS | `libpng`, `zlib` in `depends` / `makedepends`, `glm` in `makedepends` (`PKGBUILD`) | `optdepends`: `zenity` or `kdialog` |
-| Debian / Ubuntu | `zlib1g-dev` (`package.sh`, README) | DEB `Recommends: zenity \| kdialog`; `CPACK_PACKAGE_CONTACT` is set (the DEB generator requires a maintainer) |
+| Fedora | `zlib-devel`, `ImageMagick` (`package.sh`, README) | RPM `Suggests: zenity` |
+| Arch / CachyOS | `depends`: `glibc gcc-libs glfw libglvnd gmsh suitesparse libpng zlib`. `makedepends`: `cmake ninja git eigen glm nlohmann-json librsvg`. Header-only libraries are build-time only; Spectra comes from the submodule; OpenMP is GCC's `libgomp` in `gcc-libs` (the `openmp` package is LLVM's). `gmsh` is only in the AUR. | `optdepends`: `zenity` or `kdialog` |
+| Debian / Ubuntu | `zlib1g-dev`, `librsvg2-bin` (`package.sh`, README) | DEB `Recommends: zenity \| kdialog`, `Section: science`; `CPACK_PACKAGE_CONTACT` is set (the DEB generator requires a maintainer) |
 | All (0.1.3) | `nlohmann/json`: Fedora `json-devel`, Arch `nlohmann-json` (`makedepends`), Debian `nlohmann-json3-dev`, vcpkg `nlohmann-json` | none (header-only) |
 | Windows (vcpkg) | `libpng`, `glm` added to the README install list (zlib comes with libpng) | none: native dialogs are part of Windows; `ole32`, `comdlg32`, `shell32`, `uuid`, `psapi`, `dxgi`, `advapi32` (`src/platform/`: resource usage, VRAM, CPU name from the registry) are linked |
 

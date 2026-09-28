@@ -8,9 +8,11 @@ if(WIN32)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
         DESTINATION "assets"
     )
-    install(FILES "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
-        DESTINATION "assets/icons"
-    )
+    if(ANAFINEN_ICON_PNG)
+        install(FILES "${ANAFINEN_ICON_PNG}"
+            DESTINATION "assets/icons"
+        )
+    endif()
     install(FILES "${GMSH_DLL}"
         DESTINATION .
     )
@@ -37,12 +39,16 @@ else()
     install(TARGETS anafinen
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
+    # The desktop entry is installed once, under applications/ (see below).
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets"
+        PATTERN "anafinen.desktop" EXCLUDE
     )
-    install(FILES "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets/icons"
-    )
+    if(ANAFINEN_ICON_PNG)
+        install(FILES "${ANAFINEN_ICON_PNG}"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets/icons"
+        )
+    endif()
 endif()
 
 if(UNIX AND NOT APPLE)
@@ -56,16 +62,18 @@ if(UNIX AND NOT APPLE)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
     )
-    install(FILES "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/128x128/apps
-    )
+    if(ANAFINEN_ICON_PNG)
+        install(FILES "${ANAFINEN_ICON_PNG}"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/128x128/apps
+        )
+    endif()
 endif()
 
 set(CPACK_PACKAGE_NAME "anafinen")
 set(CPACK_PACKAGE_VENDOR "Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_RELEASE "1")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "3D FEM Dynamic and Modal Analysis Engine")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "3D FEM Analysis Engine")
 set(CPACK_PACKAGE_LICENSE "GPL-3.0-or-later")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_CONTACT "Abdurrahman Konuk (Ufuk Deniz Konuk) <konuki8523@gmail.com>") # required by the DEB generator
@@ -85,6 +93,7 @@ elseif(UNIX AND NOT APPLE)
     endif()
     set(CPACK_DEBIAN_PACKAGE_VERSION "${PROJECT_VERSION}~alpha1")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    set(CPACK_DEBIAN_PACKAGE_SECTION "science")
     # File > Import / Export needs a native dialog helper at run time.
     set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "zenity | kdialog")
     set(CPACK_RPM_PACKAGE_SUGGESTS "zenity")

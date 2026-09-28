@@ -178,11 +178,11 @@ add_custom_target(anafinen_material_library ALL
 )
 
 # copy icon if it exists
-if(EXISTS "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png")
+if(ANAFINEN_ICON_PNG)
     add_custom_command(
         TARGET anafinen POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+            "${ANAFINEN_ICON_PNG}"
             "$<TARGET_FILE_DIR:anafinen>/assets/icons/anafinen.png"
     )
 endif()

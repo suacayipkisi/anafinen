@@ -57,33 +57,40 @@ if(WIN32 AND NOT TARGET OpenGL::GL)
 endif()
 
 # Icon conversion
+# rsvg-convert (librsvg) is preferred: ImageMagick without an rsvg delegate (e.g. Debian) falls back to
+# its internal MSVG renderer, which draws only the icon background and still exits with 0.
+find_program(ANAFINEN_SVG_RENDERER NAMES rsvg-convert)
 find_program(ANAFINEN_IMAGE_CONVERTER NAMES magick convert)
 set(ANAFINEN_GENERATED_ASSETS_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-assets")
 file(MAKE_DIRECTORY "${ANAFINEN_GENERATED_ASSETS_DIR}/icons")
 
-set(CONVERSION_SUCCESS FALSE)
+# ANAFINEN_ICON_PNG is empty when no PNG could be made; the install rules and the POST_BUILD
+# copy skip the icon then (the window starts without an icon, the SVG is still installed).
+set(ANAFINEN_ICON_PNG "")
+set(_anafinen_icon_png "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png")
 
-if(ANAFINEN_IMAGE_CONVERTER)
+if(ANAFINEN_SVG_RENDERER)
     execute_process(
-        COMMAND "${ANAFINEN_IMAGE_CONVERTER}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
-                -resize 128x128 "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
+        COMMAND "${ANAFINEN_SVG_RENDERER}" --width 128 --height 128 --keep-aspect-ratio
+                --output "${_anafinen_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
         RESULT_VARIABLE ANAFINEN_ICON_CONVERSION_RESULT
     )
-    if(ANAFINEN_ICON_CONVERSION_RESULT EQUAL 0)
-        set(CONVERSION_SUCCESS TRUE)
-    endif()
+elseif(ANAFINEN_IMAGE_CONVERTER)
+    execute_process(
+        COMMAND "${ANAFINEN_IMAGE_CONVERTER}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
+                -resize 128x128 "${_anafinen_icon_png}"
+        RESULT_VARIABLE ANAFINEN_ICON_CONVERSION_RESULT
+    )
+endif()
+if(DEFINED ANAFINEN_ICON_CONVERSION_RESULT AND ANAFINEN_ICON_CONVERSION_RESULT EQUAL 0)
+    set(ANAFINEN_ICON_PNG "${_anafinen_icon_png}")
 endif()
 
-# Icon creation fallback
-if(NOT CONVERSION_SUCCESS)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg")
-        file(COPY_FILE
-            "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
-            "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png"
-        )
-    else()
-        message(WARNING "Neither ImageMagick nor fallback anafinen.png was found")
-    endif()
+if(NOT ANAFINEN_ICON_PNG)
+    # Never ship a stale PNG from an earlier configure, nor the SVG under a .png name.
+    file(REMOVE "${_anafinen_icon_png}")
+    message(WARNING "Neither rsvg-convert nor ImageMagick (magick / convert) could convert assets/icons/anafinen.svg; "
+                    "the build and packages have no PNG application icon. Install librsvg (rsvg-convert).")
 endif()
 
 # Gmsh SDK integration

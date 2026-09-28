@@ -136,6 +136,7 @@ Update the documents when any of the following happens:
 | 1 | Stub types are declared but not implemented: `Truss`, `TrussBuild`, `Truss_Imported_or_Entered::setImportedData`. | `truss.hpp`, `selectTrussType.hpp`, `trussSolver.hpp` | Imported trusses can be viewed, exported and inspected, but not solved yet. |
 | 2 | The Gmsh 4.15 build on Fedora aborts when it opens any binary MSH 4.1 file (its own too). | Gmsh (external) | Only affects opening our binary 4.1 files **in Gmsh**; anafinen reads MSH natively. |
 | 3 | Paths are converted with `path::string()` in code older than 0.1.3: `anaf_io` (error texts, `report.path`, Gmsh calls in `cadFormat.cpp`), `fileIoPanel.cpp`, `nativeFileDialog.cpp` (path from a pfd UTF-8 string). On Windows this is the ANSI code page: MSVC throws and Gmsh / pfd get wrong names for files such as `köprü.msh`. Linux is unaffected. | see list | Fix: `anaf::IO::pathToUtf8()` / `pathFromUtf8()` (`io/core/pathUtf8.hpp`), as the 0.1.3 material and asset code does. |
+| 4 | Debian 13's `libgmsh4.13` (4.13.1+ds1) is built with Eigen assertions on and aborts inside its own second-order 3D meshing (`gmsh::model::mesh::generate` → `MElement::signedInvCondNumRange` → Eigen `invalid matrix product`). | Gmsh (external), Debian package | `anaf_io_tests` aborts in `highOrderNodeOrderingMatchesGmshVtkWriter` on Debian; the other tests pass when run one by one. A CAD import with element order 2 may abort the application on Debian as well. Fedora and Arch are not affected. |
 
 ### 8.1 Deferred by design
 
@@ -166,3 +167,7 @@ Update the documents when any of the following happens:
 | File I/O ran on the calling thread | 2026-09-28 | `IoService` runs all file work (and snapshot conversion) on its own thread. |
 | `ModelTree` read `bridge.activeMesh` without the lock and deep-copied the mesh every frame | 2026-09-28 | Pointer copy under `dataMutex`; snapshots are immutable. |
 | Preview used the cross-section in cm² while the solver used m² | 2026-09-28 | Preview converts to m² like the solver. |
+| Build failed with GCC 14 (Debian 13): `std::vector<std::string>` passed to `std::format` (range formatting needs libstdc++ 15) | 2026-09-28 | `trussSolver_SQPT.cpp` joins the fixed-node list by hand. |
+| With the AUR `gmsh-bin` SDK (built by an older GCC), Gmsh lost physical names: our `std::map<std::pair<int, int>, std::string>` instantiation was exported from the executable and interposed libgmsh's own copy | 2026-09-28 | `mshFormat.cpp` keys its maps with a file-local `IntPair` type, so the instantiations have internal linkage. See [FILE_HANDLING.md](FILE_HANDLING.md) section 10. |
+| Linux packaging: `package.sh` only worked from `package/` on Arch; `PKGBUILD` required `spectra` (AUR, header-only) and `eigen` at run time and LLVM `openmp`; without ImageMagick the SVG was installed as `anafinen.png`; Debian's ImageMagick rendered an empty icon | 2026-09-28 | See [BUILD_SYSTEM.md](BUILD_SYSTEM.md) sections 5 and 8. |
+| `readsFilesWrittenByAnafinen012` failed with Gmsh 4.13: the STEP fixture was written in millimetres | 2026-09-28 | The fixture sets `Geometry.OCCTargetUnit` to `M`, like the STEP writer. |

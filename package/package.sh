@@ -6,25 +6,33 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BUILD_DIR="${BUILD_DIR:-build}"
 
+# Every path below is relative to the repository root, whatever the caller's working directory.
+cd "$REPO_ROOT"
+
 if [[ -f .gitmodules ]] && command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git submodule update --init --recursive
 fi
 
 if [ -f /etc/fedora-release ]; then
     echo "Detected Fedora. Generating RPM..."
-    sudo dnf install -y rpm-build ninja-build cmake gcc-c++ eigen3-devel suitesparse-devel libpng-devel mesa-libGL-devel gmsh-devel glfw-devel spectra-devel glm-devel zlib-devel json-devel
+    sudo dnf install -y rpm-build ninja-build cmake gcc-c++ ImageMagick eigen3-devel suitesparse-devel libpng-devel mesa-libGL-devel gmsh-devel glfw-devel spectra-devel glm-devel zlib-devel json-devel
     cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_NATIVE_OPTIMIZATIONS=OFF
     cmake --build "$BUILD_DIR"
     cpack --config "$BUILD_DIR/CPackConfig.cmake" -G RPM -B "$BUILD_DIR"
     echo "RPM created successfully in $BUILD_DIR/"
 elif [ -f /etc/cachyos-release ] || [ -f /etc/arch-release ]; then
     echo "Detected Arch/Arch-based. Generating native pacman package..."
-    makepkg -f
+    # gmsh is only in the AUR (gmsh, or the prebuilt gmsh-bin); makepkg --syncdeps cannot install it.
+    if ! pacman -T gmsh >/dev/null; then
+        echo "gmsh is not installed. Install it from the AUR first (gmsh or gmsh-bin), e.g. 'yay -S gmsh'." >&2
+        exit 1
+    fi
+    (cd "$SCRIPT_DIR" && makepkg --syncdeps --noconfirm --force)
     echo "Package (.pkg.tar.zst) created successfully."
 elif [ -f /etc/debian_version ]; then
     echo "Detected Debian-based system. Generating DEB..."
     sudo apt-get update
-    sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev
+    sudo apt-get install -y cmake ninja-build build-essential pkg-config librsvg2-bin libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev
     cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_NATIVE_OPTIMIZATIONS=OFF
     cmake --build "$BUILD_DIR"
     cpack --config "$BUILD_DIR/CPackConfig.cmake" -G DEB -B "$BUILD_DIR"
