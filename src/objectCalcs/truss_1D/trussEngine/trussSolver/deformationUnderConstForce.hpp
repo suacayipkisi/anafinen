@@ -82,11 +82,11 @@ namespace FEM::TRUSS {
 
     void runValidator(const std::span<const anaf::MATERIAL::Material> allMaterials);
 
-    inline const bool getIsCalculationValid() const {return m_isCalculationValid;}
-    inline const double getEnergyDiff() const {return m_energyDiff;}
-    inline const double getEnergyRelativeDiff() const {return m_energyRelativeDiff;}
-    inline const double getWorkDone_External() const {return m_workDone_external;}
-    inline const double getElasticDeformationEnergy_Internal() const {return m_elasticDeformationEnergy_internal;}
+    inline bool getIsCalculationValid() const {return m_isCalculationValid;}
+    inline double getEnergyDiff() const {return m_energyDiff;}
+    inline double getEnergyRelativeDiff() const {return m_energyRelativeDiff;}
+    inline double getWorkDone_External() const {return m_workDone_external;}
+    inline double getElasticDeformationEnergy_Internal() const {return m_elasticDeformationEnergy_internal;}
   };
 
 } // namespace FEM::TRUSS end

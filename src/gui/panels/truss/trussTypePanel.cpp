@@ -36,8 +36,6 @@ namespace anaf::GUI {
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(400.0f, 220.0f), ImGuiCond_FirstUseEver);
     
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize;
-
     if (ImGui::Begin("Select Truss Type")) {
       if (ImGui::BeginCombo("Truss Type", m_types[static_cast<int>(m_trussType)].data())) {
         for (int i = 0; i < static_cast<int>(m_types.size()); ++i) {

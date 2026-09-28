@@ -86,7 +86,7 @@ namespace FEM::TRUSS::SOLVER {
       return residual.norm() / force.norm();
     }
 
-    bool accepted(const Result& result) noexcept {
+    [[maybe_unused]] bool accepted(const Result& result) noexcept { // only called with CHOLMOD
       return result.available && result.converged && std::isfinite(result.relativeResidual)
         && result.relativeResidual <= 1e-7;
     }

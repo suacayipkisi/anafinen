@@ -85,7 +85,7 @@ namespace FEM::TRUSS {
       std::array<double, 3> loc1{allNodes[node_1].getLocation()};
       std::array<double, 3> loc2{allNodes[node_2].getLocation()};
       for (std::size_t i{0}; i < 3; ++i){
-        m_cosinuses[i] = (loc2[i] - loc1[i]) / m_length;
+        m_cosinuses[i] = static_cast<float>((loc2[i] - loc1[i]) / m_length);
       }
     } // TrussElement_1D(.......) Contructor end
 
@@ -94,12 +94,12 @@ namespace FEM::TRUSS {
     inline void setEleAxialForce(const double axialForce) {m_axialForce = axialForce;}
     inline void setEleStress(const double stress) {m_stress = stress;}
 
-    inline const double getEleLength() const {return m_length;}
-    inline const double getEleCrossSection() const {return m_crossSectionArea;}
-    inline const double getEleElongation() const {return m_elongation;}
-    inline const double getEleAxialForces() const {return m_axialForce;}
-    inline const double getEleStress() const {return m_stress;}
-    inline const std::uint32_t getEleProperties() const {return m_type;}
+    inline double getEleLength() const {return m_length;}
+    inline double getEleCrossSection() const {return m_crossSectionArea;}
+    inline double getEleElongation() const {return m_elongation;}
+    inline double getEleAxialForces() const {return m_axialForce;}
+    inline double getEleStress() const {return m_stress;}
+    inline std::uint32_t getEleProperties() const {return m_type;}
     inline const std::array<float, 3>& getEleCosinuses() const {return m_cosinuses;}
     inline const std::array<std::uint32_t, 2>& getEleNodes() const {return m_nodes;}
 

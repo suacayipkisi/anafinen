@@ -46,7 +46,7 @@ extern "C" {
 }
 #endif
 
-int main(int argc, char* argv[]) {
+int main() {
   anaf::LOG::setCallback(
     [](anaf::LOG::Level level, std::string_view message) {
       anaf::GUI::anafUILogSink(level, std::string(message).c_str());

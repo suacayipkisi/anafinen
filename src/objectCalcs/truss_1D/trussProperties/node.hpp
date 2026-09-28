@@ -47,18 +47,6 @@ namespace FEM::TRUSS {
       m_Location({locX, locY, locZ})
     {}
 
-    Node(
-      const std::uint32_t ID,
-      const double locX,
-      const double locY,
-      const double locZ,
-      const double forceX,
-      const double forceY,
-      const double forceZ
-    ):
-      m_nodeID(ID),
-      m_Location({locX, locY, locZ})
-    {}
 
     // isMovable[i] == true means the DOF is free to move.
     inline void setMovable(const std::array<bool, 3> isMovable) {
@@ -107,11 +95,11 @@ namespace FEM::TRUSS {
       setAllowedMotionDirections(std::move(directions));
     }
 
-    const std::uint32_t getNodeID() const {return m_nodeID;}
+    std::uint32_t getNodeID() const {return m_nodeID;}
     const std::array<double, 3>& getLocation() const {return m_Location;}
-    const double getLocX() const {return m_Location[0];}
-    const double getLocY() const {return m_Location[1];}
-    const double getLocZ() const {return m_Location[2];}
+    double getLocX() const {return m_Location[0];}
+    double getLocY() const {return m_Location[1];}
+    double getLocZ() const {return m_Location[2];}
 
     const std::array<double, 3>& getDisplacement() const {return m_displacement;}
     const std::array<bool, 3>& getMovable() const {return m_isMovable;}

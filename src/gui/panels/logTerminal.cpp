@@ -118,7 +118,7 @@ namespace anaf::GUI {
     }
     if (totalKiB != 0) {
       m_systemRamPercent = static_cast<float>(
-        std::clamp(100.0 * (totalKiB - availableKiB) / totalKiB, 0.0, 100.0)
+        std::clamp(100.0 * static_cast<double>(totalKiB - availableKiB) / static_cast<double>(totalKiB), 0.0, 100.0)
       );
     }
     m_lastUsageSample = now;

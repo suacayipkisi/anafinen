@@ -35,7 +35,8 @@ CMakeLists.txt
 | `CMAKE_CXX_STANDARD` | 23, required, extensions off | `std::format`, `std::jthread`, `std::span`, `starts_with` |
 | `CMAKE_EXPORT_COMPILE_COMMANDS` | ON | `.clangd` reads `build/compile_commands.json` |
 | `CMAKE_INTERPROCEDURAL_OPTIMIZATION` | FALSE | LTO disabled explicitly |
-| `ANAFINEN_NATIVE_OPTIMIZATIONS` | option, OFF | Adds `/arch:AVX2` (MSVC) or `-march=x86-64` (GCC/Clang) |
+| `ANAFINEN_NATIVE_OPTIMIZATIONS` | option, OFF | Adds `/arch:AVX2` (MSVC) or `-march=native` (GCC/Clang). Local builds only: the binary then needs the build machine's CPU, so packages never set it. (Before 0.1.3 it passed `-march=x86-64`, the baseline, which had no effect.) |
+| `ANAFINEN_WARNINGS_AS_ERRORS` | option, OFF (`cmake/CompilerOptions.cmake`) | Adds `-Werror` / `/WX`. For CI and pre-commit checks; the tree builds warning-free with it. |
 | `ANAFINEN_BUILD_TESTS` | option, OFF | Builds the `tests/` directory and enables `ctest` |
 
 ## 3. Targets
@@ -64,6 +65,15 @@ Compile definitions on `anafinen`:
 |---|---|---|
 | GCC / Clang | `-O3 -ffast-math -fno-finite-math-only` | Linker: `mold` if found, else `lld` (Linux only) |
 | MSVC | `/O2`, `/utf-8` (sources and literals are UTF-8) | `NOMINMAX`, `_CRT_SECURE_NO_WARNINGS`, `WIN32_LEAN_AND_MEAN` |
+
+Warnings (all configurations, through `project_warnings_and_optimizations`, so only first-party targets: `anaf_io`, `anaf_core`, `anafinen`, tests):
+
+| Compiler | Flags | Notes |
+|---|---|---|
+| GCC / Clang | `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion` | Clang's `-Wconversion` includes `-Wsign-conversion` (GCC's does not in C++); it is turned off because signed OpenMP indices and `int` / `size_t` mixing make it noise. |
+| MSVC | `/W4 /permissive- /external:anglebrackets /external:W0` | `<...>` includes count as external and are not checked. |
+
+Third-party include directories are marked `SYSTEM` (`imgui_suite`, `glad_local`, `spectra_local`, portable-file-dialogs; imported targets such as Eigen are SYSTEM by default), so their headers do not trigger these flags. Status on 2026-09-28: zero warnings with GCC 16, Clang, and MinGW GCC 16 (with and without CHOLMOD); MSVC `/W4` has not been run yet.
 | All | `NDEBUG`, `EIGEN_NO_DEBUG` in Release | `ccache` as compiler launcher if found |
 
 `-ffast-math` allows reassociation, so floating-point results can differ slightly between Debug and Release. `-fno-finite-math-only` keeps `std::isfinite` checks working, which the solver referee relies on.

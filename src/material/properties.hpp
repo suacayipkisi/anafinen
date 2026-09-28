@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace anaf::MATERIAL {
 
@@ -57,18 +58,19 @@ namespace anaf::MATERIAL {
       const float ductility,
       const std::uint32_t materialID
     ):
+      // Declaration order (-Wreorder); the parameter order is the public API.
       m_isBuiltin(isBuiltin),
-      m_materialType(name),
-      m_elasticityModulus(elasticityModulusE),
-      m_shearModulus(shearModulusG),
-      m_bulkModulus(bulkModulusK),
-      m_yieldTensileStrength(yieldTensileStrength),
-      m_ultimateTensileStrength(ultimateTensileStrength),
-      m_youngModulus(youngModulus),
-      m_density(density),
-      m_poissonsRatio(poissonsRatio),
+      m_materialID(materialID),
       m_ductility(ductility),
-      m_materialID(materialID)
+      m_poissonsRatio(poissonsRatio),
+      m_density(density),
+      m_youngModulus(youngModulus),
+      m_ultimateTensileStrength(ultimateTensileStrength),
+      m_yieldTensileStrength(yieldTensileStrength),
+      m_bulkModulus(bulkModulusK),
+      m_shearModulus(shearModulusG),
+      m_elasticityModulus(elasticityModulusE),
+      m_materialType(std::move(name))
     {}
 
     // if all properties not determined we can determine later
@@ -103,18 +105,18 @@ namespace anaf::MATERIAL {
       if(m_materialType.empty()) m_materialType = type;
     }
 
-    inline const bool getIsBuiltin() const {return m_isBuiltin;}
-    inline const std::uint32_t getMaterialID() const {return m_materialID;}
-    inline const float getDuctility() const {return m_ductility;}
-    inline const float getPoisson() const {return m_poissonsRatio;}
-    inline const double getDensity() const {return m_density;}
-    inline const double getYoungModulus() const {return m_youngModulus;}
-    inline const double getUltTensile() const {return m_ultimateTensileStrength;}
-    inline const double getYieldTensile() const {return m_yieldTensileStrength;}
-    inline const double getBulkModulus() const {return m_bulkModulus;}
-    inline const double getShearModulues() const {return m_shearModulus;}
-    inline const double getElasticityModulues() const {return m_elasticityModulus;}
-    inline const std::string_view getMaterialType() const {return m_materialType;}
+    inline bool getIsBuiltin() const {return m_isBuiltin;}
+    inline std::uint32_t getMaterialID() const {return m_materialID;}
+    inline float getDuctility() const {return m_ductility;}
+    inline float getPoisson() const {return m_poissonsRatio;}
+    inline double getDensity() const {return m_density;}
+    inline double getYoungModulus() const {return m_youngModulus;}
+    inline double getUltTensile() const {return m_ultimateTensileStrength;}
+    inline double getYieldTensile() const {return m_yieldTensileStrength;}
+    inline double getBulkModulus() const {return m_bulkModulus;}
+    inline double getShearModulues() const {return m_shearModulus;}
+    inline double getElasticityModulues() const {return m_elasticityModulus;}
+    inline std::string_view getMaterialType() const {return m_materialType;}
   };
 
 } // namespace anaf::MATERIAL end

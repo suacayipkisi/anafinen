@@ -27,7 +27,7 @@ namespace FEM::TRUSS::SOLVER {
     const Eigen::VectorXd& force,
     Eigen::VectorXd& displacement
   ) {
-    Result result{Kind::SimplicialLDLT};
+    Result result{.kind = Kind::SimplicialLDLT};
     const auto start = std::chrono::steady_clock::now();
     Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper> solver;
     solver.compute(upperMatrix);

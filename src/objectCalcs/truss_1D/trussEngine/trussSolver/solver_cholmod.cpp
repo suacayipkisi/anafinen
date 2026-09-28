@@ -26,12 +26,13 @@
 
 namespace FEM::TRUSS::SOLVER {
 
+  // Parameters are unused in builds without CHOLMOD (MinGW, CMAKE_IGNORE_PATH test builds).
   Result solveCholmod(
-    const Eigen::SparseMatrix<double>& upperMatrix,
-    const Eigen::VectorXd& force,
-    Eigen::VectorXd& displacement
+    [[maybe_unused]] const Eigen::SparseMatrix<double>& upperMatrix,
+    [[maybe_unused]] const Eigen::VectorXd& force,
+    [[maybe_unused]] Eigen::VectorXd& displacement
   ) {
-    Result result{Kind::Cholmod};
+    Result result{.kind = Kind::Cholmod};
 #ifdef ANAFINEN_HAS_CHOLMOD
     const auto start = std::chrono::steady_clock::now();
     Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<double>, Eigen::Upper> solver;

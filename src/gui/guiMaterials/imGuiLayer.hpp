@@ -29,8 +29,6 @@ namespace anaf::GUI {
   void setupSpecialTheme();
 
   class ImGuiLayer {
-  private:
-    bool m_notCloseWindow{true};
   public:
     static inline ImFont* font_ui = nullptr;
     static inline ImFont* font_console = nullptr;

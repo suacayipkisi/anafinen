@@ -36,7 +36,7 @@ namespace FEM::TRUSS {
     const std::uint32_t ny_nodes = ny + 1;
     const std::uint32_t nz_nodes = nz + 1;
 
-    const std::size_t totalNodes = static_cast<std::size_t>(nx_nodes * ny_nodes * nz_nodes);
+    const std::size_t totalNodes = static_cast<std::size_t>(nx_nodes) * ny_nodes * nz_nodes;
     m_allNodes.resize(totalNodes);
     
     // id = i + j * nx_nodes + k * (nx_nodes * ny_nodes)
@@ -45,12 +45,14 @@ namespace FEM::TRUSS {
     for (long long k = 0; k < nz_nodes; ++k) {
       for (std::uint32_t j = 0; j < ny_nodes; ++j) {
         for (std::uint32_t i = 0; i < nx_nodes; ++i) {
-          std::uint32_t nodeID = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
+          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
+          const auto kk = static_cast<std::uint32_t>(k);
+          std::uint32_t nodeID = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
           m_allNodes[nodeID] = Node(
             nodeID,
             static_cast<double>(m_cubeEdgeLength * i),
             static_cast<double>(m_cubeEdgeLength * j),
-            static_cast<double>(m_cubeEdgeLength * k)
+            static_cast<double>(m_cubeEdgeLength * kk)
           );
         }
       }
@@ -84,9 +86,11 @@ namespace FEM::TRUSS {
     for (long long k = 0; k < nz_nodes; ++k) {
       for (std::uint32_t j = 0; j < ny_nodes; ++j) {
         for (std::uint32_t i = 0; i < nx; ++i) {
-          std::uint32_t n1 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n2 = (i + 1) + j * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::size_t idx = offset_xEdges + (i + j * nx + k * (nx * ny_nodes));
+          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
+          const auto kk = static_cast<std::uint32_t>(k);
+          std::uint32_t n1 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n2 = (i + 1) + j * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::size_t idx = offset_xEdges + (i + j * nx + kk * (nx * ny_nodes));
           m_allElements[idx] = TrussElement_1D(m_type, m_area, n1, n2, allNodes);
         }
       }
@@ -97,9 +101,11 @@ namespace FEM::TRUSS {
     for (long long k = 0; k < nz_nodes; ++k) {
       for (std::uint32_t j = 0; j < ny; ++j) {
         for (std::uint32_t i = 0; i < nx_nodes; ++i) {
-          std::uint32_t n1 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n2 = i + (j + 1) * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::size_t idx = offset_yEdges + (i + j * nx_nodes + k * (nx_nodes * ny));
+          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
+          const auto kk = static_cast<std::uint32_t>(k);
+          std::uint32_t n1 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n2 = i + (j + 1) * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::size_t idx = offset_yEdges + (i + j * nx_nodes + kk * (nx_nodes * ny));
           m_allElements[idx] = TrussElement_1D(m_type, m_area, n1, n2, allNodes);
         }
       }
@@ -110,9 +116,11 @@ namespace FEM::TRUSS {
     for (long long k = 0; k < nz; ++k) {
       for (std::uint32_t j = 0; j < ny_nodes; ++j) {
         for (std::uint32_t i = 0; i < nx_nodes; ++i) {
-          std::uint32_t n1 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n2 = i + j * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
-          std::size_t idx = offset_zEdges + (i + j * nx_nodes + k * (nx_nodes * ny_nodes));
+          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
+          const auto kk = static_cast<std::uint32_t>(k);
+          std::uint32_t n1 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n2 = i + j * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
+          std::size_t idx = offset_zEdges + (i + j * nx_nodes + kk * (nx_nodes * ny_nodes));
           m_allElements[idx] = TrussElement_1D(m_type, m_area, n1, n2, allNodes);
         }
       }
@@ -123,12 +131,14 @@ namespace FEM::TRUSS {
     for (long long k = 0; k < nz_nodes; ++k) {
       for (std::uint32_t j = 0; j < ny; ++j) {
         for (std::uint32_t i = 0; i < nx; ++i) {
-          std::uint32_t n00 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n10 = (i + 1) + j * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n01 = i + (j + 1) * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n11 = (i + 1) + (j + 1) * nx_nodes + k * (nx_nodes * ny_nodes);
+          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
+          const auto kk = static_cast<std::uint32_t>(k);
+          std::uint32_t n00 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n10 = (i + 1) + j * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n01 = i + (j + 1) * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n11 = (i + 1) + (j + 1) * nx_nodes + kk * (nx_nodes * ny_nodes);
 
-          std::size_t baseIdx = offset_xyCross + 2 * (i + j * nx + k * (nx * ny));
+          std::size_t baseIdx = offset_xyCross + 2 * (i + j * nx + kk * (nx * ny));
           m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, n00, n11, allNodes);
           m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, n10, n01, allNodes);
         }
@@ -140,12 +150,14 @@ namespace FEM::TRUSS {
     for (long long k = 0; k < nz; ++k) {
       for (std::uint32_t j = 0; j < ny_nodes; ++j) {
         for (std::uint32_t i = 0; i < nx; ++i) {
-          std::uint32_t n00 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n10 = (i + 1) + j * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n01 = i + j * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
-          std::uint32_t n11 = (i + 1) + j * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
+          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
+          const auto kk = static_cast<std::uint32_t>(k);
+          std::uint32_t n00 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n10 = (i + 1) + j * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n01 = i + j * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
+          std::uint32_t n11 = (i + 1) + j * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
 
-          std::size_t baseIdx = offset_xzCross + 2 * (i + j * nx + k * (nx * ny_nodes));
+          std::size_t baseIdx = offset_xzCross + 2 * (i + j * nx + kk * (nx * ny_nodes));
           m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, n00, n11, allNodes);
           m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, n10, n01, allNodes);
         }
@@ -157,12 +169,14 @@ namespace FEM::TRUSS {
     for (long long k = 0; k < nz; ++k) {
       for (std::uint32_t j = 0; j < ny; ++j) {
         for (std::uint32_t i = 0; i < nx_nodes; ++i) {
-          std::uint32_t n00 = i + j * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n10 = i + (j + 1) * nx_nodes + k * (nx_nodes * ny_nodes);
-          std::uint32_t n01 = i + j * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
-          std::uint32_t n11 = i + (j + 1) * nx_nodes + (k + 1) * (nx_nodes * ny_nodes);
+          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
+          const auto kk = static_cast<std::uint32_t>(k);
+          std::uint32_t n00 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n10 = i + (j + 1) * nx_nodes + kk * (nx_nodes * ny_nodes);
+          std::uint32_t n01 = i + j * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
+          std::uint32_t n11 = i + (j + 1) * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
 
-          std::size_t baseIdx = offset_yzCross + 2 * (i + j * nx_nodes + k * (nx_nodes * ny));
+          std::size_t baseIdx = offset_yzCross + 2 * (i + j * nx_nodes + kk * (nx_nodes * ny));
           m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, n00, n11, allNodes);
           m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, n10, n01, allNodes);
         }

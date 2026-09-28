@@ -6,7 +6,7 @@ set(GLAD_DIR     "${EXTERNAL_DIR}/glad")
 
 # GLAD
 add_library(glad_local STATIC "${GLAD_DIR}/src/gl.c")
-target_include_directories(glad_local PUBLIC "${GLAD_DIR}/include")
+target_include_directories(glad_local SYSTEM PUBLIC "${GLAD_DIR}/include")
 set(GLAD_TARGET glad_local)
 
 # GLFW
@@ -85,7 +85,8 @@ if(EXISTS "${IMGUI_DIR}/imgui.cpp")
         ${IMPLOT_DIR}/implot.cpp
         ${IMPLOT_DIR}/implot_items.cpp
     )
-    target_include_directories(imgui_suite PUBLIC
+    # SYSTEM: third-party headers do not trigger our warning flags.
+    target_include_directories(imgui_suite SYSTEM PUBLIC
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
         ${IMGUIZMO_DIR}

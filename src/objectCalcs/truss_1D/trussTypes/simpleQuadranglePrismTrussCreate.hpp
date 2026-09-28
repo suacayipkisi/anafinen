@@ -43,9 +43,9 @@ namespace FEM::TRUSS {
       std::uint32_t type
     ): 
       m_cubeNum(cubeNum),
+      m_type(type),
       m_cubeEdgeLength(cubeEdgeLength),
-      m_area(area),
-      m_type(type)
+      m_area(area)
     {}
 
     void setTruss();
@@ -56,7 +56,7 @@ namespace FEM::TRUSS {
     std::vector<TrussElement_1D>& getElements() { return m_allElements; }
     const std::vector<TrussElement_1D>& getElements() const { return m_allElements; }
 
-    std::uint32_t getNodeNum() const {return m_allNodes.size();}
+    std::uint32_t getNodeNum() const {return static_cast<std::uint32_t>(m_allNodes.size());}
   };
 
 } // namespace FEM::TRUSS end

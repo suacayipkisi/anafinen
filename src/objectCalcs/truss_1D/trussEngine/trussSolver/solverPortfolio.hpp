@@ -34,13 +34,13 @@ namespace FEM::TRUSS::SOLVER {
   };
 
   struct Result {
-    Kind kind;
+    Kind kind{};
     bool available{false};
     bool converged{false};
     Eigen::Index iterations{0};
     double relativeResidual{0.0};
     double elapsedSeconds{0.0};
-    std::string message;
+    std::string message{};
   };
 
   Result solveCholmod(

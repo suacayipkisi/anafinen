@@ -439,7 +439,6 @@ namespace anaf::GUI {
 
     // Colorbars
     if (currentMesh && !currentMesh->trussNodes.empty()) {
-      const auto& mesh = *currentMesh;
       constexpr float barWidth = 10.0f;
       constexpr float barHeight = 180.0f;
       constexpr int colorSteps = 30;
@@ -473,8 +472,8 @@ namespace anaf::GUI {
         const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
         const float tBottom = 1.0f - static_cast<float>(i + 1) / static_cast<float>(colorSteps);
         drawList->AddRectFilledMultiColor(
-          ImVec2(startX, startY + i * stepHeight),
-          ImVec2(startX + barWidth, startY + (i + 1) * stepHeight),
+          ImVec2(startX, startY + static_cast<float>(i) * stepHeight),
+          ImVec2(startX + barWidth, startY + static_cast<float>(i + 1) * stepHeight),
           getJetColor(tTop), getJetColor(tTop), getJetColor(tBottom), getJetColor(tBottom)
         );
       }
@@ -504,8 +503,8 @@ namespace anaf::GUI {
           const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
           const float tBottom = 1.0f - static_cast<float>(i + 1) / static_cast<float>(colorSteps);
           drawList->AddRectFilledMultiColor(
-            ImVec2(startX, startYDisp + i * stepHeightDisp),
-            ImVec2(startX + barWidth, startYDisp + (i + 1) * stepHeightDisp),
+            ImVec2(startX, startYDisp + static_cast<float>(i) * stepHeightDisp),
+            ImVec2(startX + barWidth, startYDisp + static_cast<float>(i + 1) * stepHeightDisp),
             getJetColor(tTop), getJetColor(tTop), getJetColor(tBottom), getJetColor(tBottom)
           );
         }
