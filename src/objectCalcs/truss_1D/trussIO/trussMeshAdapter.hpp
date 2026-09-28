@@ -27,13 +27,23 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace FEM::TRUSS::ADAPTER {
 
+  // Materials travel by name: one element set "Material:<name>" per material used. Every
+  // format keeps element sets (MSH physical groups, VTK / VTU / sidecar membership arrays),
+  // so a file stays correct when the material list changes (new built-ins, user materials
+  // added or removed, another machine). The MaterialID attribute (index into the list at
+  // export time) is still written for viewers such as ParaView and for older anafinen.
+  inline constexpr std::string_view kMaterialSetPrefix = "Material:";
+
   // Snapshot + boundary conditions -> model (for export). Results are included when the
-  // snapshot carries them (MeshData::hasResults).
-  anaf::IO::MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, const anaf::BRIDGE::FixedDOFMap& fixity);
+  // snapshot carries them (MeshData::hasResults). materials: the list the snapshot's
+  // materialID values index into (bridge.allMaterials).
+  anaf::IO::MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, const anaf::BRIDGE::FixedDOFMap& fixity,
+                                  std::span<const anaf::MATERIAL::Material> materials);
 
   struct ImportedTruss {
     std::shared_ptr<anaf::BRIDGE::MeshData> mesh;
@@ -43,6 +53,9 @@ namespace FEM::TRUSS::ADAPTER {
 
   // Model -> snapshot (for the viewport). Line elements become bars; surface and volume
   // elements are shown as their edges. Node ids in the snapshot are 0-based model indices.
+  // Bar materials: "Material:<name>" sets are matched by name (case-insensitive); an unknown
+  // name or index falls back to material 0 with a note. Files without these sets
+  // (anafinen <= 0.1.2) use the MaterialID index, which matches the built-in order.
   ImportedTruss toMeshData(const anaf::IO::MeshModel& model, std::span<const anaf::MATERIAL::Material> materials);
 
 } // namespace FEM::TRUSS::ADAPTER end

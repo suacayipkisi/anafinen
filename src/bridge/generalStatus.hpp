@@ -18,7 +18,11 @@
 #pragma once
 
 #include "material/properties.hpp"
+#include <expected>
+#include <filesystem>
 #include <memory>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <truss_1D/trussProperties/appliedForce.hpp>
 #include <truss_1D/trussProperties/node.hpp>
@@ -33,11 +37,6 @@
 #include <vector>
 
 namespace anaf::BRIDGE {
-  enum AddRemove {
-    ADD,
-    REMOVE
-  };
-  
   enum ObjectType {
     truss_SQPT,
     truss_imported_or_entered,
@@ -120,17 +119,42 @@ namespace anaf::BRIDGE {
     std::atomic<bool> m_isValid{false};
     std::atomic<double> m_energyDiff;
 
-    // general access
+    // Elements refer to a material by its index in this vector (RenderElement::materialID,
+    // TrussElement_1D::m_type). Built-ins come first in file order, user materials follow.
+    // Material::getMaterialID() is a stable ID that is never reused; use it to keep a
+    // selection across removals. Guarded by dataMutex.
     std::vector<anaf::MATERIAL::Material> allMaterials;
-    std::vector<anaf::MATERIAL::Material> createdMaterials;
 
     FixedDOFMap fixedDOFsByNode;
     std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};
     bool hasTrussPreview{false};
 
-    // built in material properties etc.
-    void setStaticInfo();
-    void setDynamicMaterialInfo(anaf::MATERIAL::Material material, AddRemove operation);
+    // Loads the built-in materials from assets/bridge/materialProperties.json.
+    // Call once at startup, after the log is initialized. Returns false on failure.
+    bool setStaticInfo();
+
+    // Loads the user materials saved in path and saves every later add / remove there.
+    // Call after setStaticInfo(). Without this call user materials are session-only
+    // (the tests rely on that to never touch the real user file).
+    void loadUserMaterials(std::filesystem::path path);
+
+    // Appends a user material (builtin flag and ID are assigned here) and returns its ID.
+    // A failed save is logged; the material stays for this session.
+    std::expected<std::uint32_t, std::string> addUserMaterial(const anaf::MATERIAL::Material& material);
+
+    // Removes a user material. Refused for built-ins, while a worker runs, and while the
+    // active mesh uses it; indices above it in the active mesh are shifted down.
+    std::expected<void, std::string> removeUserMaterial(std::uint32_t materialID);
+
+    // Index of the material with this ID in allMaterials. Caller holds dataMutex.
+    std::optional<std::uint32_t> findMaterialIndex(std::uint32_t materialID) const;
+
+  private:
+    std::uint32_t m_nextMaterialID{0};
+    std::filesystem::path m_userMaterialPath; // empty: user materials are not persisted
+
+    void saveUserMaterials();
+    std::uint32_t appendUserMaterialLocked(const anaf::MATERIAL::Material& material);
   };
 
   Gui_Calc_Bridge& buildBridge();

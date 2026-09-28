@@ -7,7 +7,7 @@ This document describes `anaf_io`, the mesh import/export library:
 - how the GUI (and a future CLI) use it
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -91,6 +91,8 @@ Formats that store named arrays (VTK, VTU, the MSH data sections, the STEP sidec
 | `MaterialID`, `CrossSectionArea`, `Attribute:<name>` (element, 1) | element attributes |
 | `NodeSet:<name>` / `ElementSet:<name>` (1) | set membership (1 = member) |
 | `NodeTag`, `ElementTag`, `EntityTag` (1) | original ids (VTK / VTU only; MSH stores them natively) |
+
+**Materials by name (truss adapter, 0.1.3):** `toMeshModel()` writes one element set `Material:<material name>` per material used, in addition to `MaterialID`. Sets survive every format (MSH physical groups, `ElementSet:Material:<name>` arrays in VTK / VTU / sidecar), so `toMeshData()` matches bars to the current material list by name (ASCII case-insensitive). An unknown name, or a `MaterialID` outside the list, falls back to material 0 with a warning note. Files without material sets (anafinen ≤ 0.1.2) use `MaterialID`, which matches the built-in order (0 steel, 1 aluminum). MSH 4.1 stores elements per entity, so a multi-material model reads back grouped by material; node pairs, materials and results stay matched (tested for MSH 4.1 / 2.2, VTK, VTU, STEP + sidecar).
 
 On read, the legacy names written by anafinen ≤ 0.1.2 are accepted too: `FixityX/Y/Z`, `AllowedMotionRank` + 9-component `AllowedMotionBasis`, and `FixityDirection_*`.
 
@@ -243,7 +245,7 @@ See [GUI.md](GUI.md) section 2.3. In short:
 |---|---|
 | `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation |
 | `vtk_reference_check` | Python + official VTK 9.5: 124 files written by VTK in every legacy / XML variant are read exactly as VTK reads them; VTK reads every variant anaf_io writes. Skipped when the Python `vtk` module is missing |
-| `anaf_truss_io_tests` | The GUI data path without the GUI: solve → snapshot → adapter → every format → adapter → identical snapshot (bit-exact); STEP with X-bracing; wireframe preview; conversion off the calling thread |
+| `anaf_truss_io_tests` | The GUI data path without the GUI: solve → snapshot → adapter → every format → adapter → identical snapshot (bit-exact); STEP with X-bracing; wireframe preview; conversion off the calling thread; material library loading, user material add / remove / save (temporary files only, never the real user config); materials matched by name after the list changes (all writable formats); material files under a non-ASCII folder |
 
 ## 10. Known issues and limits
 

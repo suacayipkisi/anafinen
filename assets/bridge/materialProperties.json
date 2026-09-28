@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "units": {
+    "modulus": "Pa",
+    "strength": "Pa",
+    "density": "kg/m^3",
+    "poissonsRatio": "-",
+    "ductility": "elongation at break, fraction (0.25 = 25 %)"
+  },
+  "materials": [
+    {
+      "id": 0,
+      "name": "Structural Steel (AISI 4130)",
+      "elasticityModulus": 205.0e9,
+      "youngModulus": 205.0e9,
+      "shearModulus": 78.0e9,
+      "bulkModulus": 160.0e9,
+      "yieldTensileStrength": 435.0e6,
+      "ultimateTensileStrength": 670.0e6,
+      "density": 7850.0,
+      "poissonsRatio": 0.29,
+      "ductility": 0.25
+    },
+    {
+      "id": 1,
+      "name": "Aluminum 6061-T6",
+      "elasticityModulus": 68.9e9,
+      "youngModulus": 68.9e9,
+      "shearModulus": 26.0e9,
+      "bulkModulus": 67.5e9,
+      "yieldTensileStrength": 276.0e6,
+      "ultimateTensileStrength": 310.0e6,
+      "density": 2700.0,
+      "poissonsRatio": 0.33,
+      "ductility": 0.12
+    }
+  ]
+}

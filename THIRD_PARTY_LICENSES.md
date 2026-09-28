@@ -49,10 +49,14 @@ This project incorporates and builds upon the following third-party software and
    - License: PNG Reference Library License version 2
    - Copyright (C) Cosmin Truta and the PNG Reference Library authors
 
-13. **Inter Font**
+13. **nlohmann/json** (material library file, header-only)
+   - License: MIT License
+   - Copyright (C) Niels Lohmann
+
+14. **Inter Font**
    - See license at [assets/fonts/Inter/LICENSE.txt](assets/fonts/Inter/LICENSE.txt)
 
-14. **CascadiaCode Font**
+15. **CascadiaCode Font**
    - See license at [assets/fonts/CascadiaCode/LICENSE.txt](assets/fonts/CascadiaCode/LICENSE.txt)
 
 ## License of anafinen

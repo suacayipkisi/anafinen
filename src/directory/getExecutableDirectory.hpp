@@ -23,6 +23,17 @@ namespace anaf::DIRECTORY {
 
   std::filesystem::path getExecutableDirectory();
 
+  // Finds a shipped asset (subpath relative to "assets/"). Search order: next to the
+  // executable (build tree, Windows ZIP), the Linux package location, the working
+  // directory, the source tree. Returns an empty path when the asset is not found.
+  std::filesystem::path findAssetPath(const std::filesystem::path& subpath);
+
+  // Per-user, writable settings directory (not created here): $XDG_CONFIG_HOME/anafinen or
+  // ~/.config/anafinen on Linux, the roaming AppData folder + \anafinen on Windows (wide API,
+  // so non-ASCII user names work). Empty if it cannot be determined.
+  // User data goes here, never into assets/: that tree is shipped read-only in every package.
+  std::filesystem::path getUserConfigDirectory();
+
 } // namespace anaf::DIRECTORY end
 
 

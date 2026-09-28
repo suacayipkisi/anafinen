@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
 
 ## 1. Overall flow (one frame)
 
@@ -55,9 +55,9 @@ FileIoPanel       --onImported()---------------------------> ModelTree.isOpen = 
 | `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D; Help: "About anafinen...". Builds the default dock layout once (left: analysis set, right: model tree, bottom: console, center: viewport). |
 | `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking, overlays, legends |
 | `TrussSelector` | `panels/truss/trussTypePanel.cpp` | truss type picker | "Simple Quadrangle"; imported/self-built "(coming soon)" |
-| `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker |
+| `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). |
 | `ModelTree` | `panels/modelTree.cpp` | "Model Tree" | Boundary conditions, elements over yield (MPa), node displacements (mm) |
-| `MaterialHandler` | `panels/materialHandler.cpp` | "Material Handler" | Stub ("Coming Soon") |
+| `MaterialHandler` | `panels/materialHandler.cpp` | "Material Handler" (floating, not dockable) | Table of all materials (E, G, K in GPa; yield / ultimate in MPa; density; ν; ductility in %). Form to add a user material (engineering units, converted to SI); user materials are saved to the user config directory. "Delete" only on user materials; refusals (in use, worker running) are shown in the panel. See [BRIDGE.md](BRIDGE.md) section 5.1. |
 | `LogTerminal` | `panels/logTerminal.cpp` | "Console" | Colored log view (max 10,000 lines); process CPU %, process RAM, system RAM % from `/proc` (Linux) |
 | `AboutPanel` | `panels/aboutPanel.cpp` | "About anafinen" (modal) | GPLv3 "Appropriate Legal Notices": version, copyright, no-warranty text, full `LICENSE` and `THIRD_PARTY_LICENSES.md` (read from the exe folder, `/usr/share/doc/anafinen` or the source tree). The same notice is logged at startup (`main.cpp`). |
 | `FileIoPanel` | `panels/fileIoPanel.cpp` | none (popups + bottom-right overlay) | Import / export: native file chooser, CAD and export option dialogs, progress bar with Cancel, result notices. Always "open"; draws only while needed. |

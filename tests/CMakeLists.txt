@@ -32,9 +32,15 @@ endif()
 add_executable(anaf_truss_io_tests
     trussIoTests.cpp
     ${PROJECT_SOURCE_DIR}/src/bridge/generalStatus.cpp
+    ${PROJECT_SOURCE_DIR}/src/directory/getExecutableDirectory.cpp
     ${PROJECT_SOURCE_DIR}/src/log/anaf_info.cpp
 )
 target_include_directories(anaf_truss_io_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/log ${PROJECT_SOURCE_DIR}/src/bridge)
+# The bridge finds assets/bridge/materialProperties.json in the source tree.
+target_compile_definitions(anaf_truss_io_tests PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}")
+if(WIN32)
+    target_link_libraries(anaf_truss_io_tests PRIVATE shell32 ole32 uuid) # getUserConfigDirectory()
+endif()
 target_link_libraries(anaf_truss_io_tests PRIVATE anaf_core project_warnings_and_optimizations)
 if(ANAFINEN_HAS_CHOLMOD)
     target_compile_definitions(anaf_truss_io_tests PRIVATE ANAFINEN_HAS_CHOLMOD)

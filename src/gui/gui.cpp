@@ -23,6 +23,8 @@
 #include <png.h>
 
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -52,30 +54,20 @@ namespace anaf::GUI {
   namespace {
     void setWindowIcon(GLFWwindow* window) {
       const std::filesystem::path icon_subpath = std::filesystem::path("icons") / "anafinen.png";
-      const std::vector<std::filesystem::path> candidates = {
-        anaf::DIRECTORY::getExecutableDirectory() / "assets" / icon_subpath,
-        std::filesystem::path("assets") / icon_subpath,
-#ifdef MAIN_DIR
-        std::filesystem::path(MAIN_DIR) / "assets" / icon_subpath,
-#endif
-        std::filesystem::path("/usr/share/anafinen/assets") / icon_subpath
-      };
-
-      std::filesystem::path icon_path;
-      for (const auto& candidate : candidates) {
-        if (std::filesystem::exists(candidate)) {
-          icon_path = candidate;
-          break;
-        }
-      }
+      const std::filesystem::path icon_path = anaf::DIRECTORY::findAssetPath(icon_subpath);
       if (icon_path.empty()) {
         anaf::LOG::warn("[GUI] Application icon not found.");
         return;
       }
 
+      // Read through std::ifstream: libpng's *_from_file uses fopen(), which cannot open
+      // non-ASCII paths on Windows (e.g. a ZIP extracted under "C:\Users\Şule").
+      std::ifstream file(icon_path, std::ios::binary);
+      const std::vector<char> encoded{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+
       png_image image{};
       image.version = PNG_IMAGE_VERSION;
-      if (!png_image_begin_read_from_file(&image, icon_path.string().c_str())) {
+      if (encoded.empty() || !png_image_begin_read_from_memory(&image, encoded.data(), encoded.size())) {
         anaf::LOG::warn("[GUI] Failed to read application icon.");
         return;
       }

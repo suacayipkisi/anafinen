@@ -32,7 +32,7 @@ namespace anaf::GUI {
     std::uint32_t m_cubeNumX {10};
     std::uint32_t m_cubeNumY {1};
     std::uint32_t m_cubeNumZ {10};
-    std::uint32_t m_type{1};
+    std::uint32_t m_materialID{1}; // stable Material ID, resolved to an index when a job starts
     double m_cubeEdgeLength{1.0};
     double m_crossSectionalArea{80.0};
     std::uint32_t m_forceNodeId{126};

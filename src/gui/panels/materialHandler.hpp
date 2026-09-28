@@ -18,12 +18,37 @@
 #pragma once
 
 #include "iPanel.hpp"
-#include <functional>
+
+#include <array>
+#include <string>
+
 namespace anaf::GUI {
+
+  // Lists the materials; user materials can be added and removed, built-ins are read-only.
   class MaterialHandler : public IPanel {
   private:
+    // Form values in the units shown in the panel (GPa, MPa, kg/m^3, %).
+    struct Draft {
+      std::array<char, 128> name{}; // UTF-8 from ImGui; kMaxMaterialNameLength is 120 bytes
+      double elasticityModulusGPa{};
+      double shearModulusGPa{};
+      double bulkModulusGPa{};
+      double yieldStrengthMPa{};
+      double ultimateStrengthMPa{};
+      double density{};
+      float poissonsRatio{0.3f};
+      float ductilityPercent{};
+    };
+
+    Draft m_draft{};
+    std::string m_status;
+    bool m_statusIsError{false};
+
+    void renderMaterialTable();
+    void renderAddForm();
+    void setStatus(std::string message, bool isError);
   public:
-    std::function<void()> onSelected;
     void onImGuiRender() override;
   };
+
 } // namespace anaf::GUI end

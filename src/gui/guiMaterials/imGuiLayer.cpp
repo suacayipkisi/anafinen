@@ -22,6 +22,7 @@
 #include <GLFW/glfw3.h>
 
 #include <directory/getExecutableDirectory.hpp>
+#include <io/core/pathUtf8.hpp> // ImGui opens files from UTF-8 names
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -31,29 +32,6 @@
 #include <log/anaf_info.hpp>
 
 namespace anaf::GUI {
-
-  namespace {
-    std::filesystem::path resolveAssetPath(const std::filesystem::path& relative_subpath) {
-      const std::filesystem::path exe_dir = anaf::DIRECTORY::getExecutableDirectory();
-
-      const std::vector<std::filesystem::path> search_paths = {
-        std::filesystem::path("/usr/share/anafinen/assets") / relative_subpath,
-        exe_dir / "assets" / relative_subpath,
-        std::filesystem::path("assets") / relative_subpath,
-#ifdef MAIN_DIR
-        std::filesystem::path(MAIN_DIR) / "assets" / relative_subpath
-#endif
-      };
-
-      for (const auto& candidate : search_paths) {
-        if (std::filesystem::exists(candidate)) {
-          return candidate;
-        }
-      }
-
-      return {};
-    }
-  }
 
   void setupSpecialTheme(){
     ImGuiStyle& style = ImGui::GetStyle();
@@ -127,18 +105,18 @@ namespace anaf::GUI {
     const std::filesystem::path ui_font_subpath = std::filesystem::path("fonts") / "Inter" / "ttf" / "Inter-Medium.ttf";
     const std::filesystem::path console_font_subpath = std::filesystem::path("fonts") / "CascadiaCode" / "ttf" / "CascadiaMono.ttf";
 
-    const std::filesystem::path ui_font_resolved = resolveAssetPath(ui_font_subpath);
-    const std::filesystem::path console_font_resolved = resolveAssetPath(console_font_subpath);
+    const std::filesystem::path ui_font_resolved = anaf::DIRECTORY::findAssetPath(ui_font_subpath);
+    const std::filesystem::path console_font_resolved = anaf::DIRECTORY::findAssetPath(console_font_subpath);
 
     if (!ui_font_resolved.empty()) {
-      font_ui = io.Fonts->AddFontFromFileTTF(ui_font_resolved.string().c_str(), 18.0f * render_scale);
+      font_ui = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(ui_font_resolved).c_str(), 18.0f * render_scale);
     } else {
       anaf::LOG::warn("[ImGuiLayer] UI font missing, using fallback.");
       font_ui = io.Fonts->AddFontDefault();
     }
 
     if (!console_font_resolved.empty()) {
-      font_console = io.Fonts->AddFontFromFileTTF(console_font_resolved.string().c_str(), 18.0f * render_scale);
+      font_console = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(console_font_resolved).c_str(), 18.0f * render_scale);
     } else {
       font_console = font_ui;
     }

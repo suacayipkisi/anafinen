@@ -3,14 +3,14 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
 
 ## 1. Overall flow
 
 ```text
 CMakeLists.txt
    |
-   +-- project(anafinen VERSION 0.1.2), C++23, compile_commands.json
+   +-- project(anafinen VERSION 0.1.3), C++23, compile_commands.json
    |
    +-- include(CompilerOptions)  -> project_warnings_and_optimizations (INTERFACE)
    +-- include(Dependencies)     -> Eigen, OpenMP, OpenGL, PNG, CHOLMOD?, Gmsh, Spectra, glm
@@ -63,7 +63,7 @@ Compile definitions on `anafinen`:
 | Compiler | Release flags | Extra |
 |---|---|---|
 | GCC / Clang | `-O3 -ffast-math -fno-finite-math-only` | Linker: `mold` if found, else `lld` (Linux only) |
-| MSVC | `/O2` | `NOMINMAX`, `_CRT_SECURE_NO_WARNINGS`, `WIN32_LEAN_AND_MEAN` |
+| MSVC | `/O2`, `/utf-8` (sources and literals are UTF-8) | `NOMINMAX`, `_CRT_SECURE_NO_WARNINGS`, `WIN32_LEAN_AND_MEAN` |
 | All | `NDEBUG`, `EIGEN_NO_DEBUG` in Release | `ccache` as compiler launcher if found |
 
 `-ffast-math` allows reassociation, so floating-point results can differ slightly between Debug and Release. `-fno-finite-math-only` keeps `std::isfinite` checks working, which the solver referee relies on.
@@ -79,6 +79,7 @@ Compile definitions on `anafinen`:
 | Gmsh SDK | `find_path` / `find_library` | yes | Windows: `GMSH_SDK_DIR` (default `C:/libs/gmsh-sdk`), also resolves `GMSH_DLL` |
 | Spectra | submodule `external/spectra`, else `find_package(Spectra)` | no | Header-only; imported as `spectra_local` |
 | glm | `find_package(glm CONFIG)`, else header search | yes | - |
+| nlohmann/json | `find_package(nlohmann_json 3.11 CONFIG)`, else `FetchContent` of the v3.12.0 release tarball (SHA-256 pinned) | yes | Header-only, linked PRIVATE into `anaf_core` for the material library. The fetch covers the MinGW cross-build sysroot. |
 | ImageMagick | `find_program(magick convert)` | no | Converts `assets/icons/anafinen.svg` to a 128x128 PNG at configure time |
 | portable-file-dialogs | vendored header `external/portable-file-dialogs/` (commit `c12ea8c`, WTFPL) | yes | Native file chooser. Linux runtime needs `zenity`, `kdialog`, `matedialog` or `qarma` |
 | Python 3 + `vtk` module | `find_package(Python3)` + `import vtk` probe | no | Enables the `vtk_reference_check` test |
@@ -120,11 +121,12 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 ## 7. Build artifacts and assets
 
 - `POST_BUILD` copies `assets/` next to the executable. It also copies the generated PNG icon and, on Windows, the Gmsh DLL.
-- Runtime asset lookup order (fonts, icon):
+- Runtime asset lookup order (fonts, icon, material library), all through `anaf::DIRECTORY::findAssetPath()`:
   1. `<exe dir>/assets`
-  2. `./assets`
-  3. `MAIN_DIR/assets`
-  4. `/usr/share/anafinen/assets`
+  2. `/usr/share/anafinen/assets`
+  3. `./assets`
+  4. `MAIN_DIR/assets`
+- `assets/bridge/materialProperties.json` is the built-in material library. The `POST_BUILD` copy runs only when `anafinen` relinks, so the custom target `anafinen_material_library` (ALL) copies this one file with `copy_if_different` on every build; editing the JSON needs no relink.
 - `anafinen_run.log` is written to the current working directory.
 
 ## 8. Install and packaging (`cmake/Packaging.cmake`)
@@ -133,7 +135,7 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 |---|---|---|---|
 | Linux | `bin/anafinen`, `share/anafinen/assets`, `.desktop`, hicolor icons (SVG + 128px PNG) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
 | Windows | Flat: `anafinen.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES` | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
-| Windows (MinGW cross) | Same + MinGW runtime DLLs from the Fedora sysroot | `ZIP` | same |
+| Windows (MinGW cross) | Same + MinGW runtime DLLs from the Fedora sysroot (`RUNTIME_DEPENDENCIES` is skipped: not supported when cross-compiling) | `ZIP` | same |
 
 Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: suitesparse` when CHOLMOD is enabled.
 
@@ -146,8 +148,6 @@ Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: suite
 | `package/package.sh` | Debian / Ubuntu | Installs deps with `apt`, Release build, `cpack -G DEB` |
 | VS Code task | Windows | `cpack -G ZIP` from the configured build dir (see `package/PACKAGE_BUILD.md`) |
 
-Winget ID `suacayipkisi.anafinen` is waiting for moderator approval.
-
 ### 8.2 Dependencies per platform (2026-09-28)
 
 | Platform | Build packages added for `anaf_io` | Runtime extra |
@@ -155,6 +155,7 @@ Winget ID `suacayipkisi.anafinen` is waiting for moderator approval.
 | Fedora | `zlib-devel` (`package.sh`, README) | RPM `Suggests: zenity` |
 | Arch / CachyOS | `libpng`, `zlib` in `depends` / `makedepends`, `glm` in `makedepends` (`PKGBUILD`) | `optdepends`: `zenity` or `kdialog` |
 | Debian / Ubuntu | `zlib1g-dev` (`package.sh`, README) | DEB `Recommends: zenity \| kdialog`; `CPACK_PACKAGE_CONTACT` is set (the DEB generator requires a maintainer) |
+| All (0.1.3) | `nlohmann/json`: Fedora `json-devel`, Arch `nlohmann-json` (`makedepends`), Debian `nlohmann-json3-dev`, vcpkg `nlohmann-json` | none (header-only) |
 | Windows (vcpkg) | `libpng`, `glm` added to the README install list (zlib comes with libpng) | none: native dialogs are part of Windows; `ole32`, `comdlg32`, `shell32`, `uuid` are linked |
 
 Without zenity / kdialog on Linux, the application works; only File > Import / Export shows "no native file dialog available".

@@ -4,7 +4,7 @@ if(POLICY CMP0207)
     cmake_policy(SET CMP0207 NEW)
 endif()
 
-project(anafinen VERSION 0.1.2 LANGUAGES C CXX)
+project(anafinen VERSION 0.1.3 LANGUAGES C CXX)
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE FALSE)
@@ -50,6 +50,7 @@ target_link_libraries(anaf_io
 )
 
 set(ANAF_CORE_SOURCES
+    src/material/materialLibrary.cpp
     src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
     src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp
@@ -80,6 +81,8 @@ endif()
 if(SPECTRA_TARGET)
     target_link_libraries(anaf_core PUBLIC ${SPECTRA_TARGET})
 endif()
+
+target_link_libraries(anaf_core PRIVATE nlohmann_json::nlohmann_json)
 
 target_link_libraries(anaf_core PUBLIC
     anaf_io
@@ -161,6 +164,16 @@ add_custom_command(
         $<TARGET_FILE_DIR:anafinen>/assets
 )
 
+# The POST_BUILD copy above runs only when anafinen relinks; keep the editable
+# material library current on every build.
+add_custom_target(anafinen_material_library ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:anafinen>/assets/bridge
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/bridge/materialProperties.json
+        $<TARGET_FILE_DIR:anafinen>/assets/bridge/materialProperties.json
+    COMMENT "Syncing assets/bridge/materialProperties.json"
+)
+
 # copy icon if it exists
 if(EXISTS "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png")
     add_custom_command(
@@ -184,8 +197,9 @@ endif()
 # Installation rules for executable and assets
 # Install layout per platform (binary, assets, licenses) lives in cmake/Packaging.cmake.
 
-# Install runtime DLL dependencies into the package root
-if(WIN32)
+# Install runtime DLL dependencies into the package root. RUNTIME_DEPENDENCIES is not
+# supported when cross-compiling; the MinGW build lists its DLLs in cmake/Packaging.cmake.
+if(WIN32 AND NOT CMAKE_CROSSCOMPILING)
     install(TARGETS anafinen
         RUNTIME_DEPENDENCIES
             DIRECTORIES 

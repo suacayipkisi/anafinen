@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -25,7 +25,7 @@ This document is the entry point for the project documentation. It describes how
 +---------------------------------------------------------------------------+
 | anafinen (executable)                                                     |
 |                                                                           |
-|  main.cpp ---> LOG init ---> OpenMP setup ---> GUI::initgui()             |
+|  main.cpp ---> LOG init ---> materials ---> OpenMP ---> GUI::initgui()    |
 |                                                                           |
 |  +-------------------+     +--------------------+     +----------------+  |
 |  | GUI               |     | BRIDGE             |     | LOG            |  |
@@ -65,9 +65,9 @@ This document is the entry point for the project documentation. It describes how
 | `anaf::GUI` | `src/gui/` | Window, ImGui layer, panels, OpenGL renderer |
 | `anaf::IO` | `src/io/` | Format-neutral mesh model, readers / writers, async I/O service (library `anaf_io`) |
 | `FEM::TRUSS::ADAPTER` | `src/objectCalcs/truss_1D/trussIO/` | `MeshModel` ↔ truss snapshot conversion |
-| `anaf::MATERIAL` | `src/material/` | `Material` property record |
+| `anaf::MATERIAL` | `src/material/` | `Material` property record; material library loader and validation (`materialLibrary.*`, in `anaf_core`) |
 | `anaf::LOG` | `src/log/` | Formatted logging with file, stdout and GUI sinks |
-| `anaf::DIRECTORY` | `src/directory/` | Executable directory lookup (asset resolution) |
+| `anaf::DIRECTORY` | `src/directory/` | Executable directory lookup; `findAssetPath()` is the single asset search used by fonts, icon and material library; `getUserConfigDirectory()` for per-user data |
 | `anaf::TEST` | `src/test/` | Startup self-check (Eigen determinant) |
 | `anafGen` | `src/gen/` | Hash-based ID generator (not used yet) |
 | `platform_utils` | `src/gui/linuxCursor.hpp` | Linux cursor theme setup for GLFW |
@@ -90,9 +90,9 @@ Rules:
 
 ## 5. Startup sequence
 
-1. `main()` builds the bridge singleton (`buildBridge()`) and loads the built-in materials (`setStaticInfo()`).
-2. `anaf::LOG::setCallback()` routes every log line into the GUI console buffer (`anafUILogSink`).
-3. `anaf::LOG::init("anafinen_run.log")` opens the log file in the working directory.
+1. `anaf::LOG::setCallback()` routes every log line into the GUI console buffer (`anafUILogSink`).
+2. `anaf::LOG::init("anafinen_run.log")` opens the log file in the working directory.
+3. `main()` builds the bridge singleton (`buildBridge()`) and loads the built-in materials from `assets/bridge/materialProperties.json` (`setStaticInfo()`). This runs after the log init so a missing or broken file is reported. `loadUserMaterials()` then adds the saved user materials from the user config directory ([BRIDGE.md](BRIDGE.md) section 5.1).
 4. OpenMP and Eigen thread counts are configured.
 5. `anaf::TEST::AllStatus` runs the Eigen self-check.
 6. `anaf::GUI::initgui()`:
@@ -134,10 +134,12 @@ Update the documents when any of the following happens:
 |---|---|---|---|
 | 1 | Stub types are declared but not implemented: `Truss`, `TrussBuild`, `Truss_Imported_or_Entered::setImportedData`. | `truss.hpp`, `selectTrussType.hpp`, `trussSolver.hpp` | Imported trusses can be viewed, exported and inspected, but not solved yet. |
 | 2 | The Gmsh 4.15 build on Fedora aborts when it opens any binary MSH 4.1 file (its own too). | Gmsh (external) | Only affects opening our binary 4.1 files **in Gmsh**; anafinen reads MSH natively. |
+| 3 | Paths are converted with `path::string()` in code older than 0.1.3: `anaf_io` (error texts, `report.path`, Gmsh calls in `cadFormat.cpp`), `fileIoPanel.cpp`, `nativeFileDialog.cpp` (path from a pfd UTF-8 string). On Windows this is the ANSI code page: MSVC throws and Gmsh / pfd get wrong names for files such as `köprü.msh`. Linux is unaffected. | see list | Fix: `anaf::IO::pathToUtf8()` / `pathFromUtf8()` (`io/core/pathUtf8.hpp`), as the 0.1.3 material and asset code does. |
+| 4 | No compiler warning flags are set (`CompilerOptions.cmake` has only optimization flags). A `-Wall -Wextra -Wpedantic -Wshadow -Wconversion` survey on 2026-09-28 found 90 warnings in `src/`: `-Wconversion` 27, `-Wignored-qualifiers` 26, `-Wreorder` 24 (one member order issue in `properties.hpp`, repeated per translation unit), `-Wunused-parameter` 7, `-Wmissing-field-initializers` 3, `-Wunused-variable` 2. None in `src/io/`. Most `-Wconversion` hits come from OpenMP loops that use a `long long` index on purpose (signed loop variables for MSVC OpenMP); they are fixed with an explicit `static_cast` at the use, not by switching to `size_t`. | `cmake/CompilerOptions.cmake` | Real bugs (narrowing, init order) are not reported during normal builds. |
 
 ### 8.1 Deferred by design
 
-- `anaf_core` includes `bridge/generalStatus.hpp` (`Truss_SQPT` takes `Gui_Calc_Bridge&`) and calls `anaf::LOG`. Their sources (`generalStatus.cpp`, `anaf_info.cpp`) are compiled into the GUI executable only, so `anaf_core` cannot be linked on its own yet; `anaf_truss_io_tests` adds the two files explicitly. This is intentional for now. A pure CLI executable is planned for a later phase; at that point the bridge gets a CLI-side counterpart and the core is built against that instead of the GUI side.
+- `anaf_core` includes `bridge/generalStatus.hpp` (`Truss_SQPT` takes `Gui_Calc_Bridge&`) and calls `anaf::LOG`. Their sources (`generalStatus.cpp`, `anaf_info.cpp`, and `getExecutableDirectory.cpp` for the material library lookup) are compiled into the GUI executable only, so `anaf_core` cannot be linked on its own yet; `anaf_truss_io_tests` adds these files explicitly. The material library loader itself (`materialLibrary.cpp`) is already in `anaf_core` and has no GUI or log dependency. This is intentional for now. A pure CLI executable is planned for a later phase; at that point the bridge gets a CLI-side counterpart and the core is built against that instead of the GUI side.
 
 ### 8.2 Fixed
 
@@ -148,6 +150,11 @@ Update the documents when any of the following happens:
 | Default gravity `{0, -9,80665, 0}` | 2026-09-27 | Now `{0.0, -9.80665, 0.0}`. The old value was a latent compile error: Eigen's static assert fires as soon as the default is used. |
 | Turkish comments in `fileSTEP.cpp` | 2026-09-27 | Translated (the file was later replaced by `anaf_io`). |
 | Element stress stored as an absolute value | 2026-09-27 | Stress and axial force are signed (tension > 0, compression < 0). Magnitudes are unchanged. |
+| Built-in materials hard-coded in `generalStatus.cpp`; Material Handler was a stub; unused `createdMaterials` / `setDynamicMaterialInfo()` | 2026-09-28 | Built-ins come from `assets/bridge/materialProperties.json` (validated); user materials can be added and removed without shifting indices under the active mesh. |
+| Three copies of the asset search path (fonts, icon) | 2026-09-28 | `anaf::DIRECTORY::findAssetPath()`. |
+| Exported files referred to materials only by index | 2026-09-28 | `Material:<name>` element sets; import matches by name (see [FILE_HANDLING.md](FILE_HANDLING.md) section 3). |
+| Windows: exe directory read with `GetModuleFileNameA` (non-ASCII folders became `?`); icon read with `fopen` | 2026-09-28 | `GetModuleFileNameW`; icon read through `std::ifstream` + `png_image_begin_read_from_memory`; fonts get UTF-8 paths. |
+| MinGW cross-build did not configure (`install(RUNTIME_DEPENDENCIES)` is not allowed when cross-compiling) and `main.cpp` included the unused `gmsh.h` without linking Gmsh | 2026-09-28 | Guarded with `NOT CMAKE_CROSSCOMPILING`; include removed. The cross-build and its tests (under Wine) pass. |
 | Material comments said GPa for values stored in Pa | 2026-09-27 | Comments corrected to Pa. The aluminum yield literal `276.0e9 / 1e3` was simplified to `276.0e6` (same value). |
 | Stress colorbar labelled MPa but divided by 1e3 (showed kPa numbers) | 2026-09-27 | Divides by 1e6; label is now `\|Stress\| (MPa)`. |
 | VTK / sidecar written with 6 significant digits | 2026-09-28 | Every text format writes shortest round-trip doubles (`std::to_chars`); round trips are bit-exact (tested). |

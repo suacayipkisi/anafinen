@@ -17,9 +17,13 @@
 
 #include "trussMeshAdapter.hpp"
 
+#include <material/materialLibrary.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <map>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <unordered_map>
@@ -29,7 +33,8 @@ namespace FEM::TRUSS::ADAPTER {
 
   using namespace anaf::IO;
 
-  MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, const anaf::BRIDGE::FixedDOFMap& fixity) {
+  MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, const anaf::BRIDGE::FixedDOFMap& fixity,
+                        const std::span<const anaf::MATERIAL::Material> materials) {
     MeshModel model;
     model.title = "anafinen truss";
 
@@ -48,6 +53,7 @@ namespace FEM::TRUSS::ADAPTER {
 
     auto& bars = model.blockFor(ElementType::Line2);
     std::vector<double> material, area, stress;
+    std::map<std::uint32_t, std::vector<std::uint32_t>> elementsByMaterial;
     for (std::size_t e = 0; e < mesh.trussElements.size(); ++e) {
       const auto& element = mesh.trussElements[e];
       bars.tags.push_back(e + 1);
@@ -55,11 +61,22 @@ namespace FEM::TRUSS::ADAPTER {
       bars.connectivity.push_back(indexOf(element.node1));
       bars.connectivity.push_back(indexOf(element.node2));
       material.push_back(static_cast<double>(element.materialID));
+      elementsByMaterial[element.materialID].push_back(static_cast<std::uint32_t>(e));
       area.push_back(element.crossSectionArea);
       stress.push_back(static_cast<double>(element.stress));
     }
     model.elementAttributes[Attribute::MaterialId] = std::move(material);
     model.elementAttributes[Attribute::CrossSectionArea] = std::move(area);
+
+    for (auto& [materialIndex, members] : elementsByMaterial) {
+      if (materialIndex >= materials.size()) continue; // no name known: only MaterialID is written
+      EntitySet set;
+      set.name = std::string(kMaterialSetPrefix) + std::string(materials[materialIndex].getMaterialType());
+      set.kind = SetKind::Element;
+      set.dimension = 1;
+      set.members = std::move(members);
+      model.sets.push_back(std::move(set));
+    }
 
     for (const auto& [id, fixed] : fixity) {
       if (!(fixed[0] || fixed[1] || fixed[2])) continue;
@@ -115,6 +132,27 @@ namespace FEM::TRUSS::ADAPTER {
     const auto* material = attribute(Attribute::MaterialId);
     const auto* area = attribute(Attribute::CrossSectionArea);
 
+    // Material by name wins over the MaterialID index (see kMaterialSetPrefix).
+    std::vector<std::optional<std::uint32_t>> materialByName(model.elementCount());
+    for (const auto& set : model.sets) {
+      if (set.kind != SetKind::Element || !set.name.starts_with(kMaterialSetPrefix)) continue;
+      const std::string_view name = std::string_view(set.name).substr(kMaterialSetPrefix.size());
+      const auto found = std::ranges::find_if(materials, [&](const anaf::MATERIAL::Material& candidate) {
+        return anaf::MATERIAL::sameMaterialName(candidate.getMaterialType(), name);
+      });
+      std::uint32_t index = 0;
+      if (found != materials.end()) {
+        index = static_cast<std::uint32_t>(found - materials.begin());
+      } else {
+        result.notes.push_back(std::format("warning: material '{}' is not in the material list; its {} elements use '{}'",
+                                           name, set.members.size(), materials.empty() ? "none" : std::string(materials[0].getMaterialType())));
+      }
+      for (const auto member : set.members) {
+        if (member < materialByName.size()) materialByName[member] = index;
+      }
+    }
+    std::size_t invalidMaterialIds = 0;
+
     std::size_t bars = 0, splitQuadratic = 0, wireframeElements = 0, points = 0;
     std::set<std::pair<std::uint32_t, std::uint32_t>> wireframeEdges;
     std::size_t global = 0;
@@ -129,7 +167,17 @@ namespace FEM::TRUSS::ADAPTER {
         }
         if (info.dimension == 1) {
           const float s = stress ? static_cast<float>(stress->steps.back()[global]) : 0.0f;
-          const auto materialId = material ? static_cast<std::uint32_t>((*material)[global]) : 0u;
+          std::uint32_t materialId = 0;
+          if (materialByName[global]) {
+            materialId = *materialByName[global];
+          } else if (material) {
+            const double value = (*material)[global];
+            if (value >= 0.0 && value < static_cast<double>(materials.size()) && value == std::floor(value)) {
+              materialId = static_cast<std::uint32_t>(value);
+            } else {
+              ++invalidMaterialIds;
+            }
+          }
           const bool exceeded = materialId < materials.size() && std::abs(s) > materials[materialId].getYieldTensile();
           for (std::size_t k = 0; k + 1 < info.edges.size(); k += 2) {
             mesh.trussElements.push_back({nodes[info.edges[k]], nodes[info.edges[k + 1]], s, exceeded, materialId,
@@ -169,6 +217,9 @@ namespace FEM::TRUSS::ADAPTER {
                                          wireframeElements, wireframeEdges.size()));
     }
     if (points > 0) result.notes.push_back(std::format("{} point elements ignored", points));
+    if (invalidMaterialIds > 0) {
+      result.notes.push_back(std::format("warning: {} elements have a MaterialID outside the material list and use material 0", invalidMaterialIds));
+    }
     return result;
   }
 

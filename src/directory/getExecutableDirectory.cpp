@@ -17,6 +17,9 @@
 
 #include "getExecutableDirectory.hpp"
 
+#include <io/core/pathUtf8.hpp>
+
+#include <cstdlib>
 #include <filesystem>
 
 #ifdef __linux__
@@ -26,6 +29,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <shlobj.h> // SHGetKnownFolderPath (shell32, ole32, uuid)
+#include <string>
 #endif
 
 namespace anaf::DIRECTORY {
@@ -38,13 +43,59 @@ namespace anaf::DIRECTORY {
         return std::filesystem::path(std::string(result, count)).parent_path();
       }
 #elif defined(_WIN32)
-      char result[MAX_PATH];
-      const DWORD count = GetModuleFileNameA(nullptr, result, MAX_PATH);
-      if (count != 0) {
-        return std::filesystem::path(std::string(result, count)).parent_path();
+      // Wide API: the ANSI variant mangles folders such as "C:\Users\Şule" to '?'.
+      std::wstring result(MAX_PATH, L'\0');
+      for (;;) {
+        const DWORD count = GetModuleFileNameW(nullptr, result.data(), static_cast<DWORD>(result.size()));
+        if (count == 0) break;
+        if (count < result.size()) {
+          result.resize(count);
+          return std::filesystem::path(result).parent_path();
+        }
+        result.resize(result.size() * 2); // truncated (long path), retry
       }
 #endif
       return std::filesystem::current_path();
+  }
+
+  std::filesystem::path findAssetPath(const std::filesystem::path& subpath) {
+    const std::filesystem::path candidates[] = {
+      getExecutableDirectory() / "assets" / subpath,
+#ifndef _WIN32
+      std::filesystem::path("/usr/share/anafinen/assets") / subpath,
+#endif
+      std::filesystem::path("assets") / subpath,
+#ifdef MAIN_DIR
+      anaf::IO::pathFromUtf8(MAIN_DIR) / "assets" / subpath,
+#endif
+    };
+    for (const auto& candidate : candidates) {
+      std::error_code ec;
+      if (std::filesystem::exists(candidate, ec)) return candidate;
+    }
+    return {};
+  }
+
+  std::filesystem::path getUserConfigDirectory() {
+#ifdef _WIN32
+    PWSTR roaming = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, KF_FLAG_DEFAULT, nullptr, &roaming))) {
+      std::filesystem::path base(roaming);
+      CoTaskMemFree(roaming);
+      return base / "anafinen";
+    }
+    CoTaskMemFree(roaming); // documented: free even on failure
+    const wchar_t* appData = _wgetenv(L"APPDATA");
+    return (appData && *appData) ? std::filesystem::path(appData) / "anafinen" : std::filesystem::path{};
+#else
+    const auto fromEnv = [](const char* name) -> std::filesystem::path {
+      const char* value = std::getenv(name);
+      return (value && *value) ? std::filesystem::path(value) : std::filesystem::path{};
+    };
+    if (const auto xdg = fromEnv("XDG_CONFIG_HOME"); xdg.is_absolute()) return xdg / "anafinen";
+    const auto home = fromEnv("HOME");
+    return home.empty() ? home : home / ".config" / "anafinen";
+#endif
   }
 
 } // namespace anaf::DIRECTORY end

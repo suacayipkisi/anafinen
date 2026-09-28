@@ -159,10 +159,12 @@ namespace anaf::GUI {
     auto& bridge = BRIDGE::buildBridge();
     std::shared_ptr<const BRIDGE::MeshData> mesh;
     BRIDGE::FixedDOFMap fixity;
+    std::vector<anaf::MATERIAL::Material> materials; // names for the snapshot's material indices
     {
       std::lock_guard lock(bridge.dataMutex);
       mesh = bridge.activeMesh;
       fixity = bridge.fixedDOFsByNode;
+      materials = bridge.allMaterials;
     }
     if (!mesh) {
       notify("Nothing to export", true);
@@ -179,8 +181,8 @@ namespace anaf::GUI {
     // The snapshot is immutable and the conversion runs on the I/O thread as well.
     m_exportTask = m_service->runAsync<anaf::IO::WriteReport>(
       "Export " + path.filename().string(),
-      [mesh = std::move(mesh), fixity = std::move(fixity), path, options](const anaf::IO::IoContext& context) {
-        const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*mesh, fixity);
+      [mesh = std::move(mesh), fixity = std::move(fixity), materials = std::move(materials), path, options](const anaf::IO::IoContext& context) {
+        const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*mesh, fixity, materials);
         context.progress(0.1f, "writing");
         return anaf::IO::writeMesh(path, model, options, context);
       });

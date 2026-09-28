@@ -3,6 +3,19 @@ find_package(OpenMP REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
+
+# nlohmann/json (header-only, MIT): material library file. The system / vcpkg package is used
+# when present; otherwise (e.g. the MinGW cross-build sysroot) the pinned release is fetched.
+find_package(nlohmann_json 3.11 CONFIG QUIET)
+if(NOT TARGET nlohmann_json::nlohmann_json)
+    include(FetchContent)
+    FetchContent_Declare(nlohmann_json
+        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+        URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+    )
+    FetchContent_MakeAvailable(nlohmann_json)
+    message(STATUS "nlohmann_json not found, fetched v3.12.0")
+endif()
 # SuiteSparse & CHOLMOD detection (single source of truth for ANAFINEN_HAS_CHOLMOD)
 # find_package(CHOLMOD CONFIG) is intentionally not used: Fedora's suitesparse-devel
 # ships CAMD/CCOLAMD configs that include missing *Targets_static.cmake files, which

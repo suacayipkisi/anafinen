@@ -44,6 +44,18 @@ namespace anaf::GUI {
       Eigen::setNbThreads(threadCount);
     }
 
+    // Elements and the solver take the material as an index into allMaterials.
+    bool resolveMaterialIndex(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t materialID, std::uint32_t& index) {
+      std::lock_guard lock(bridge.dataMutex);
+      const auto found = bridge.findMaterialIndex(materialID);
+      if (!found) {
+        anaf::LOG::error("No material selected (material library empty or not loaded)");
+        return false;
+      }
+      index = *found;
+      return true;
+    }
+
     void ensureDemoTrussCase(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t forceNodeId) {
       bridge.fixedDOFsByNode.clear();
       bridge.fixedDOFsByNode[0u] = {true, true, true};
@@ -63,6 +75,7 @@ namespace anaf::GUI {
 
   void TrussControlPanel::onImGuiRender() {
     BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
+    std::uint32_t materialIndex{};
 
     ImGui::Begin("Truss(1D) Analysis Set", &isOpen);
 
@@ -124,15 +137,19 @@ namespace anaf::GUI {
           ImGui::TextDisabled("No materials available");
         }
         else {
-          if (m_type >= bridge.allMaterials.size()) {
-            m_type = 0;
+          // The selected material may have been removed in the Material Handler.
+          if (!bridge.findMaterialIndex(m_materialID)) {
+            m_materialID = bridge.allMaterials.front().getMaterialID();
           }
+          const auto& selected = bridge.allMaterials[*bridge.findMaterialIndex(m_materialID)];
 
-          if (ImGui::BeginCombo("##Material TypeCombo", bridge.allMaterials[m_type].getMaterialType().data())) {
-            for (std::size_t i = 0; i < bridge.allMaterials.size(); ++i) {
-              if (ImGui::Selectable(bridge.allMaterials[i].getMaterialType().data(), m_type == static_cast<std::uint32_t>(i))) {
-                m_type = static_cast<std::uint32_t>(i);
+          if (ImGui::BeginCombo("##Material TypeCombo", selected.getMaterialType().data())) {
+            for (const auto& material : bridge.allMaterials) {
+              ImGui::PushID(static_cast<int>(material.getMaterialID()));
+              if (ImGui::Selectable(material.getMaterialType().data(), material.getMaterialID() == m_materialID)) {
+                m_materialID = material.getMaterialID();
               }
+              ImGui::PopID();
             }
             ImGui::EndCombo();
           }
@@ -188,7 +205,9 @@ namespace anaf::GUI {
       m_cubeNumZ = 10;
       {
         std::lock_guard lock(bridge.dataMutex);
-        m_type = bridge.allMaterials.size() > 1 ? 1u : 0u;
+        if (!bridge.allMaterials.empty()) {
+          m_materialID = bridge.allMaterials[bridge.allMaterials.size() > 1 ? 1 : 0].getMaterialID();
+        }
       }
       m_cubeEdgeLength = 1.0;
       m_crossSectionalArea = 80.0;
@@ -212,7 +231,7 @@ namespace anaf::GUI {
       ImGui::Button("Generating Preview...", ImVec2(-1, 32));
       ImGui::EndDisabled();
     }
-    else if (ImGui::Button("Generate Preview", ImVec2(-1, 32))) {
+    else if (ImGui::Button("Generate Preview", ImVec2(-1, 32)) && resolveMaterialIndex(bridge, m_materialID, materialIndex)) {
       anaf::LOG::core("Press 'ctrl' to toggle node visibility");
 
       bridge.m_isGeneratingPreview = true;
@@ -223,7 +242,7 @@ namespace anaf::GUI {
          cubeNumZ = m_cubeNumZ,
          cubeEdgeLength = m_cubeEdgeLength,
          crossSectionalArea = m_crossSectionalArea,
-         type = m_type,
+         type = materialIndex,
          appliedForces = m_appliedForces](std::stop_token st) mutable {
           try {
             configureOpenMPForWorker();
@@ -366,7 +385,7 @@ namespace anaf::GUI {
       ImGui::Button("Calculating");
       ImGui::EndDisabled();
     }
-    else if (ImGui::Button("Run Solver for Truss", ImVec2(-1, 32))) {
+    else if (ImGui::Button("Run Solver for Truss", ImVec2(-1, 32)) && resolveMaterialIndex(bridge, m_materialID, materialIndex)) {
       bridge.m_isRunning = true;
       bridge.m_progress = 0.0f;
 
@@ -389,7 +408,7 @@ namespace anaf::GUI {
          cubeNumZ = m_cubeNumZ,
          cubeEdgeLength = m_cubeEdgeLength,
          crossSectionalArea = m_crossSectionalArea,
-         type = m_type,
+         type = materialIndex,
          deformScale = currentScale,
          forcesToApply = m_appliedForces
         ](std::stop_token st) mutable {
@@ -480,7 +499,7 @@ namespace anaf::GUI {
       m_cubeNumX = 1;
       m_cubeNumY = 1;
       m_cubeNumZ = 1;
-      m_type = 0;
+      m_materialID = 0;
       m_cubeEdgeLength = 1.0;
       m_crossSectionalArea = 80.0;
       m_forceNodeId = 0;

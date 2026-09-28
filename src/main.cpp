@@ -27,7 +27,6 @@
 #include <Eigen/Sparse>
 #include <Spectra/SymGEigsShiftSolver.h>
 
-#include <gmsh.h>
 #include <omp.h>
 
 #include "log/anaf_info.hpp"
@@ -38,6 +37,7 @@
 #include "gui/panels/aboutPanel.hpp"
 
 #include "bridge/generalStatus.hpp"
+#include "directory/getExecutableDirectory.hpp"
 
 #ifdef _WIN32
 extern "C" {
@@ -47,9 +47,6 @@ extern "C" {
 #endif
 
 int main(int argc, char* argv[]) {
-  anaf::BRIDGE::Gui_Calc_Bridge& GUI_CALC_BRIDGE = anaf::BRIDGE::buildBridge();
-  GUI_CALC_BRIDGE.setStaticInfo();
-
   anaf::LOG::setCallback(
     [](anaf::LOG::Level level, std::string_view message) {
       anaf::GUI::anafUILogSink(level, std::string(message).c_str());
@@ -63,6 +60,12 @@ int main(int argc, char* argv[]) {
   anaf::LOG::core("Initializing ANAFINEN Workspace (C++23)...");
   anaf::LOG::core("{}", anaf::GUI::kCopyrightNotice);
   anaf::LOG::core("{}", anaf::GUI::kShortLegalNotice);
+
+  // After the log init, so a missing or broken material file is reported.
+  anaf::BRIDGE::Gui_Calc_Bridge& GUI_CALC_BRIDGE = anaf::BRIDGE::buildBridge();
+  GUI_CALC_BRIDGE.setStaticInfo();
+  // Outside assets/ on purpose: materials added while testing a build never reach a package.
+  GUI_CALC_BRIDGE.loadUserMaterials(anaf::DIRECTORY::getUserConfigDirectory() / "userMaterials.json");
 
   const int availableThreads = omp_get_num_procs();
   const int threadCount = availableThreads > 4 ? availableThreads - 2 : availableThreads;

@@ -8,11 +8,10 @@
 
 ## 📦 Downloads (v0.1.2-alpha)
 
-Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases/tag/v0.1.0-alpha).
+Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases).
 
 | Platform | File | Quick Run / Install Command |
 | --- | --- | --- |
-| **Windows** (via Winget) | *Package Manager* (moderator approve waiting) | `winget install suacayipkisi.anafinen` |
 | **Windows** (10/11 x64 Portable) | [`anafinen-0.1.1-windows-x86_64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.1-alpha/anafinen-0.1.1-windows-x86_64-alpha.zip) | Extract `.zip` and **run as administrator** `bin/anafinen.exe` |
 | **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.1.2-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.2-alpha/anafinen-0.1.2-alpha.rpm) | `sudo dnf install ./anafinen-0.1.2-alpha.rpm` |
 | **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.1.1_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.1-alpha/anafinen-0.1.1_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.1.1_alpha-1-x86_64.pkg.tar.zst` |
@@ -23,7 +22,7 @@ Pre-compiled binary releases for Windows and Linux are available under [GitHub R
 
 Look `information/` foler for documentation, project progress and so on.  
 
-Currently project is at phase 1 and 2 together. (0.1.1-alpha)  
+Currently project is at phase 1 and 2 together. (0.1.3-alpha in development, latest release 0.1.2-alpha)  
 Next version release date: approximately first week of the october 2026
 Next version feature aim: phase 1 and 2 finished.
 - Displacement Under Applied Force (phase-1)
@@ -78,13 +77,14 @@ sudo dnf install -y \
     spectra-devel \
     libpng-devel \
     zlib-devel \
+    json-devel \
     glm-devel \
     zenity
 ```
 
 #### Libraries Arch-CachyOS
 ```bash
-sudo pacman -S glibc gcc-libs eigen suitesparse spectra glfw mesa openmp cmake ninja git glm libpng zlib zenity
+sudo pacman -S glibc gcc-libs eigen suitesparse spectra glfw mesa openmp cmake ninja git glm libpng zlib nlohmann-json zenity
 
 # WARNING!!!!!! using paru means using AUR which is a place sometimes hackers might play around. be careful!!! 
 # If you dont want to install via AUR, you may look for installing it from their websites like what we install for windows.
@@ -94,7 +94,7 @@ paru -S gmsh-bin
 #### Libraries Debian-Ubuntu
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev zenity
+sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev zenity
 ```
 
 ### Clone This Repo
@@ -169,6 +169,7 @@ Gui and visualization:
 .\vcpkg install imguizmo:x64-windows
 .\vcpkg install libpng:x64-windows
 .\vcpkg install glm:x64-windows
+.\vcpkg install nlohmann-json:x64-windows
 ```
 
 Mesh engine:  

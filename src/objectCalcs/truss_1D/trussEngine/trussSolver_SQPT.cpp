@@ -58,7 +58,7 @@ namespace FEM::TRUSS {
       x = (dofs[0] == true ? "x" : "-");
       y = (dofs[1] == true ? "y" : "-");
       z = (dofs[2] == true ? "z" : "-");
-      fixInfo.push_back(node + " " + x + " " + y + " " + z + " / ");
+      fixInfo.push_back(node + ":" + x + y + z);
     }
     anaf::LOG::info("Fixed nodes {}", fixInfo);
     bridge.m_progress = 0.20f;

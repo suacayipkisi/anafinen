@@ -21,6 +21,9 @@
 #include "testSupport.hpp"
 
 #include <io/meshIo.hpp>
+#include <material/materialLibrary.hpp>
+#include <io/core/pathUtf8.hpp>
+#include <directory/getExecutableDirectory.hpp>
 #include <io/service/ioService.hpp>
 #include <trussEngine/trussSolver.hpp>
 #include <truss_1D/trussIO/trussMeshAdapter.hpp>
@@ -29,6 +32,7 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <map>
 #include <set>
@@ -51,7 +55,7 @@ namespace {
   // Builds the snapshot exactly like TrussControlPanel's solver worker does.
   std::shared_ptr<BRIDGE::MeshData> solvedSnapshot(BRIDGE::FixedDOFMap& fixity) {
     auto& bridge = BRIDGE::buildBridge();
-    if (bridge.allMaterials.empty()) bridge.setStaticInfo();
+    if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
     fixity = {{0u, {true, true, true}}, {5u, {true, true, true}}, {60u, {true, true, true}}, {65u, {false, true, false}}};
     const std::vector<FEM::TRUSS::ForceApplied> forces{{20u, {0.0, -12000.0, 0.0}}, {27u, {500.0, 0.0, -250.0}}};
 
@@ -116,7 +120,7 @@ TEST(solvedTrussSurvivesEveryWritableFormat) {
   BRIDGE::FixedDOFMap fixity;
   const auto snapshot = solvedSnapshot(fixity);
   REQUIRE(BRIDGE::buildBridge().m_isValid.load());
-  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, fixity);
+  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, fixity, BRIDGE::buildBridge().allMaterials);
   CHECK(model.validate().empty());
 
   struct Variant { const char* file; IO::WriteOptions options; };
@@ -145,7 +149,7 @@ TEST(solvedTrussSurvivesEveryWritableFormat) {
 TEST(stepExportKeepsTrussData) {
   BRIDGE::FixedDOFMap fixity;
   const auto snapshot = solvedSnapshot(fixity);
-  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, fixity);
+  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, fixity, BRIDGE::buildBridge().allMaterials);
   const auto path = workDir() / "truss.step";
   REQUIRE(IO::writeMesh(path, model, {}).has_value());
   const auto read = IO::readMesh(path);
@@ -186,7 +190,7 @@ TEST(asyncImportConvertsOffTheCallingThread) {
   BRIDGE::FixedDOFMap fixity;
   const auto snapshot = solvedSnapshot(fixity);
   const auto path = workDir() / "async.msh";
-  REQUIRE(IO::writeMesh(path, FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, fixity), {.encoding = IO::Encoding::Binary}).has_value());
+  REQUIRE(IO::writeMesh(path, FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, fixity, BRIDGE::buildBridge().allMaterials), {.encoding = IO::Encoding::Binary}).has_value());
   const auto materials = BRIDGE::buildBridge().allMaterials;
   const auto caller = std::this_thread::get_id();
   std::thread::id worker;
@@ -201,6 +205,158 @@ TEST(asyncImportConvertsOffTheCallingThread) {
   REQUIRE(task->wait().has_value());
   CHECK(worker != caller);
   compareSnapshots(*snapshot, fixity, *task->wait(), "async");
+}
+
+namespace {
+  MATERIAL::Material renamedCopy(const MATERIAL::Material& m, std::string name) {
+    return {false, std::move(name), m.getElasticityModulues(), m.getShearModulues(), m.getBulkModulus(),
+            m.getYieldTensile(), m.getUltTensile(), m.getYoungModulus(), m.getDensity(), m.getPoisson(),
+            m.getDuctility(), 0u};
+  }
+} // namespace end
+
+TEST(materialLibraryFileIsLoadedWithStableIds) {
+  auto& bridge = BRIDGE::buildBridge();
+  if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
+  REQUIRE(bridge.allMaterials.size() >= 2);
+  for (std::uint32_t i = 0; i < bridge.allMaterials.size(); ++i) {
+    CHECK(bridge.allMaterials[i].getIsBuiltin());
+    CHECK(bridge.allMaterials[i].getMaterialID() == i);
+  }
+  // Saved models store these indices: steel 0, aluminum 1 as in anafinen <= 0.1.2.
+  CHECK(bridge.allMaterials[0].getElasticityModulues() == 205.0e9);
+  CHECK(bridge.allMaterials[1].getYieldTensile() == 276.0e6);
+
+  const auto gap = workDir() / "materials_gap.json";
+  std::ofstream(gap) << R"({"materials": [{"id": 1, "name": "X", "elasticityModulus": 1e9, "shearModulus": 1e9,
+    "bulkModulus": 1e9, "yieldTensileStrength": 1e6, "ultimateTensileStrength": 2e6, "density": 1000,
+    "poissonsRatio": 0.3, "ductility": 0.1}]})";
+  CHECK(!MATERIAL::loadMaterialLibrary(gap).has_value());
+  CHECK(!MATERIAL::loadMaterialLibrary(workDir() / "missing.json").has_value());
+}
+
+TEST(userMaterialsAreAddedAndRemovedWithoutBreakingIndices) {
+  auto& bridge = BRIDGE::buildBridge();
+  if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
+  const auto builtinCount = static_cast<std::uint32_t>(bridge.allMaterials.size());
+  const auto steel = bridge.allMaterials[0];
+
+  const auto a = bridge.addUserMaterial(renamedCopy(steel, "Test A"));
+  const auto b = bridge.addUserMaterial(renamedCopy(steel, "Test B"));
+  REQUIRE(a.has_value() && b.has_value());
+  CHECK(*a != *b && *a >= builtinCount);
+  CHECK(!bridge.addUserMaterial(renamedCopy(steel, "test a")).has_value()); // duplicate name
+  CHECK(!bridge.addUserMaterial(renamedCopy(steel, "")).has_value());
+  CHECK(!bridge.removeUserMaterial(steel.getMaterialID()).has_value()); // built-in
+
+  auto mesh = std::make_shared<BRIDGE::MeshData>();
+  mesh->trussElements.push_back({0u, 1u, 0.0f, false, builtinCount + 1, 1.0}); // uses B
+  bridge.activeMesh = mesh;
+  CHECK(!bridge.removeUserMaterial(*b).has_value()); // in use
+  REQUIRE(bridge.removeUserMaterial(*a).has_value());
+  CHECK(bridge.activeMesh->trussElements[0].materialID == builtinCount); // shifted onto B
+  CHECK(bridge.allMaterials[builtinCount].getMaterialID() == *b);
+
+  bridge.activeMesh = nullptr;
+  REQUIRE(bridge.removeUserMaterial(*b).has_value());
+  CHECK(bridge.allMaterials.size() == builtinCount);
+}
+
+TEST(userMaterialsArePersistedOutsideTheAssets) {
+  const auto steel = [] {
+    auto& bridge = BRIDGE::buildBridge();
+    if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
+    return bridge.allMaterials[0];
+  }();
+  const auto path = workDir() / "config" / "userMaterials.json";
+
+  auto saved = renamedCopy(steel, "Persisted");
+  REQUIRE(MATERIAL::saveUserMaterialFile(path, std::vector{steel, saved}).has_value()); // built-in is skipped
+  const auto loaded = MATERIAL::loadUserMaterialFile(path);
+  REQUIRE(loaded.has_value() && loaded->size() == 1);
+  CHECK(!(*loaded)[0].getIsBuiltin());
+  CHECK((*loaded)[0].getMaterialType() == "Persisted");
+  CHECK((*loaded)[0].getElasticityModulues() == steel.getElasticityModulues());
+  CHECK((*loaded)[0].getPoisson() == steel.getPoisson());
+  CHECK((*loaded)[0].getDuctility() == steel.getDuctility());
+  CHECK(!fs::exists(fs::path(path) += ".tmp"));
+
+  // A missing file is an empty list; a broken one is an error.
+  CHECK(MATERIAL::loadUserMaterialFile(workDir() / "none.json").value().empty());
+  std::ofstream(workDir() / "broken.json") << "{ not json";
+  CHECK(!MATERIAL::loadUserMaterialFile(workDir() / "broken.json").has_value());
+}
+
+TEST(materialsAreMatchedByNameWhenTheListChanges) {
+  BRIDGE::FixedDOFMap fixity;
+  auto snapshot = solvedSnapshot(fixity);
+  const auto& builtins = BRIDGE::buildBridge().allMaterials;
+  REQUIRE(builtins.size() >= 2);
+
+  // Export time: built-ins + one user material used by every other bar.
+  std::vector<MATERIAL::Material> atExport(builtins.begin(), builtins.end());
+  atExport.push_back(renamedCopy(builtins[0], "Copper C110 (annealed)"));
+  auto mesh = std::make_shared<BRIDGE::MeshData>(*snapshot);
+  for (std::size_t e = 0; e < mesh->trussElements.size(); e += 2) mesh->trussElements[e].materialID = 2;
+
+  // Import time: a new built-in was inserted before aluminum, the user material name differs in case.
+  const std::vector<MATERIAL::Material> atImport{
+    builtins[0], renamedCopy(builtins[0], "New Built-in"), builtins[1], renamedCopy(builtins[0], "copper c110 (ANNEALED)")};
+  const std::map<std::uint32_t, std::uint32_t> expectedIndex{{0u, 0u}, {1u, 2u}, {2u, 3u}};
+
+  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*mesh, fixity, atExport);
+  for (const char* file : {"names.msh", "names22.msh", "names.vtk", "names.vtu", "names.step"}) {
+    const auto path = workDir() / file;
+    IO::WriteOptions options;
+    if (std::string_view(file) == "names22.msh") options.mshVersion = IO::MshVersion::V2_2;
+    REQUIRE(IO::writeMesh(path, model, options).has_value());
+    const auto read = IO::readMesh(path);
+    REQUIRE(read.has_value());
+
+    // MSH 4.1 stores elements per entity (one per material set), so compare by end nodes.
+    const auto imported = FEM::TRUSS::ADAPTER::toMeshData(*read, atImport);
+    REQUIRE(imported.mesh->trussElements.size() == mesh->trussElements.size());
+    std::map<std::pair<std::uint32_t, std::uint32_t>, const BRIDGE::RenderElement*> byNodes;
+    for (const auto& element : imported.mesh->trussElements) byNodes[{element.node1, element.node2}] = &element;
+    bool allMatched = true;
+    for (const auto& element : mesh->trussElements) {
+      const auto it = byNodes.find({element.node1, element.node2});
+      allMatched = allMatched && it != byNodes.end()
+                   && it->second->materialID == expectedIndex.at(element.materialID)
+                   && it->second->stress == element.stress;
+    }
+    CHECK_MSG(allMatched, file);
+
+    // Unknown name: material 0 and a warning.
+    const auto missing = FEM::TRUSS::ADAPTER::toMeshData(*read, std::span(builtins));
+    CHECK_MSG(std::ranges::all_of(missing.mesh->trussElements, [](const BRIDGE::RenderElement& element) { return element.materialID <= 1u; }), file);
+    CHECK_MSG(std::ranges::any_of(missing.notes, [](const std::string& n) { return n.find("Copper C110 (annealed)") != std::string::npos; }), file);
+  }
+}
+
+TEST(materialFilesWorkUnderNonAsciiFolders) {
+  // Typical Windows profile folder of a Turkish user; UTF-8 in the source, wide on Windows.
+  const auto dir = workDir() / IO::pathFromUtf8("Kullanıcı Şükrü İğ");
+  const auto path = dir / "userMaterials.json";
+  const auto& builtins = [] -> const std::vector<MATERIAL::Material>& {
+    auto& bridge = BRIDGE::buildBridge();
+    if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
+    return bridge.allMaterials;
+  }();
+
+  const auto named = renamedCopy(builtins[0], "Çelik S235 (ığüşöç)");
+  REQUIRE(MATERIAL::saveUserMaterialFile(path, std::vector{named}).has_value());
+  CHECK(fs::exists(path));
+  const auto loaded = MATERIAL::loadUserMaterialFile(path);
+  REQUIRE(loaded.has_value() && loaded->size() == 1);
+  CHECK((*loaded)[0].getMaterialType() == "Çelik S235 (ığüşöç)");
+
+  // Error messages carry the folder name as UTF-8 instead of throwing.
+  const auto missing = MATERIAL::loadMaterialLibrary(dir / "none.json");
+  REQUIRE(!missing.has_value());
+  CHECK(missing.error().find("Şükrü") != std::string::npos);
+  CHECK(IO::pathFromUtf8(IO::pathToUtf8(path)) == path);
+  CHECK(!DIRECTORY::getUserConfigDirectory().empty());
 }
 
 int main(int argc, char** argv) {

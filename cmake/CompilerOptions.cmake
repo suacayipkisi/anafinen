@@ -12,6 +12,7 @@ if(MSVC)
     )
     target_compile_options(project_warnings_and_optimizations INTERFACE
         $<$<CONFIG:Release>:/O2>
+        /utf-8 # sources and string literals are UTF-8 (default is the ANSI code page)
     )
     if(ANAFINEN_NATIVE_OPTIMIZATIONS)
         target_compile_options(project_warnings_and_optimizations INTERFACE /arch:AVX2)

@@ -17,8 +17,14 @@
 
 #include "generalStatus.hpp"
 #include "anaf_info.hpp"
+#include "material/materialLibrary.hpp"
 #include "material/properties.hpp"
+#include <directory/getExecutableDirectory.hpp>
+#include <io/core/pathUtf8.hpp>
+
 #include <algorithm>
+#include <format>
+#include <ranges>
 #include <string_view>
 
 namespace anaf::BRIDGE {
@@ -34,65 +40,160 @@ namespace anaf::BRIDGE {
     }
   }
 
-  void Gui_Calc_Bridge::setStaticInfo() {
-    allMaterials.push_back(
-      {
-        true,
-        "Structural Steel (AISI 4130)",
-        205.0e9,
-        78.0e9,
-        160.0e9,
-        435.0e6,
-        670.0e6,
-        205.0e9,
-        7850.0,
-        0.29f,
-        0.25f,
-        0u
-      }
-    );
-    allMaterials.push_back(
-      {
-        true,
-        "Aluminum 6061-T6",
-        68.9e9,
-        26.0e9,
-        67.5e9,
-        276.0e6,
-        310.0e6,
-        68.9e9,
-        2700.0,
-        0.33f,
-        0.12f,
-        1u
-      }
-    );
+  bool Gui_Calc_Bridge::setStaticInfo() {
+    const std::filesystem::path subpath = std::filesystem::path("bridge") / "materialProperties.json";
+    const std::filesystem::path path = anaf::DIRECTORY::findAssetPath(subpath);
+    if (path.empty()) {
+      anaf::LOG::error("Material library not found: assets/{}", subpath.generic_string());
+      return false;
+    }
+
+    auto loaded = anaf::MATERIAL::loadMaterialLibrary(path);
+    if (!loaded) {
+      anaf::LOG::error("Material library not loaded: {}", loaded.error());
+      return false;
+    }
+
+    std::lock_guard lock(dataMutex);
+    allMaterials = std::move(*loaded);
+    m_nextMaterialID = static_cast<std::uint32_t>(allMaterials.size()); // IDs are 0..n-1
+    anaf::LOG::info("Loaded {} built-in materials from {}", allMaterials.size(), anaf::IO::pathToUtf8(path));
+    return true;
   }
 
-  void Gui_Calc_Bridge::setDynamicMaterialInfo(anaf::MATERIAL::Material material, AddRemove operation) {
-    switch (operation) {
-      case ADD:
-        allMaterials.push_back(std::move(material));
-        break;
-      case REMOVE: {
-        if(material.getIsBuiltin()) {
-          anaf::LOG::warn("You cannot delete builtin material: {}", material.getMaterialType());
-          return;
+  void Gui_Calc_Bridge::loadUserMaterials(std::filesystem::path path) {
+    if (path.empty()) {
+      anaf::LOG::warn("No user config directory; user materials will not be saved");
+      return;
+    }
+    m_userMaterialPath = std::move(path);
+
+    auto loaded = anaf::MATERIAL::loadUserMaterialFile(m_userMaterialPath);
+    if (!loaded) {
+      // Keep the unreadable file for the user instead of overwriting it on the next save.
+      auto backup = m_userMaterialPath;
+      backup += ".corrupt";
+      std::error_code ec;
+      std::filesystem::rename(m_userMaterialPath, backup, ec);
+      anaf::LOG::error("User materials not loaded: {}. The file was moved to {}", loaded.error(),
+                       ec ? std::string("(move failed: ") + ec.message() + ")" : anaf::IO::pathToUtf8(backup));
+      return;
+    }
+
+    std::size_t added = 0;
+    {
+      std::lock_guard lock(dataMutex);
+      for (const auto& material : *loaded) {
+        const auto sameName = [&](const anaf::MATERIAL::Material& other) {
+          return anaf::MATERIAL::sameMaterialName(other.getMaterialType(), material.getMaterialType());
+        };
+        if (std::ranges::any_of(allMaterials, sameName)) {
+          anaf::LOG::warn("User material '{}' skipped: a material with that name already exists", material.getMaterialType());
+          continue;
         }
-        const auto materialID = material.getMaterialID();
-        const auto materialIt = std::find_if(
-          allMaterials.begin(),
-          allMaterials.end(),
-          [materialID](const anaf::MATERIAL::Material& currentMaterial) {
-            return currentMaterial.getMaterialID() == materialID;
-          }
-        );
-        if (materialIt != allMaterials.end()) {
-          allMaterials.erase(materialIt);
-        }
-        break;
+        appendUserMaterialLocked(material);
+        ++added;
       }
     }
+    if (added > 0) anaf::LOG::info("Loaded {} user materials from {}", added, anaf::IO::pathToUtf8(m_userMaterialPath));
+  }
+
+  std::uint32_t Gui_Calc_Bridge::appendUserMaterialLocked(const anaf::MATERIAL::Material& material) {
+    const std::uint32_t id = m_nextMaterialID++;
+    allMaterials.emplace_back(
+      false,
+      std::string(material.getMaterialType()),
+      material.getElasticityModulues(),
+      material.getShearModulues(),
+      material.getBulkModulus(),
+      material.getYieldTensile(),
+      material.getUltTensile(),
+      material.getYoungModulus(),
+      material.getDensity(),
+      material.getPoisson(),
+      material.getDuctility(),
+      id
+    );
+    return id;
+  }
+
+  void Gui_Calc_Bridge::saveUserMaterials() {
+    if (m_userMaterialPath.empty()) return;
+
+    std::vector<anaf::MATERIAL::Material> snapshot;
+    {
+      std::lock_guard lock(dataMutex);
+      snapshot = allMaterials;
+    }
+    if (const auto saved = anaf::MATERIAL::saveUserMaterialFile(m_userMaterialPath, snapshot); !saved) {
+      anaf::LOG::warn("User materials not saved (kept for this session): {}", saved.error());
+    }
+  }
+
+  std::expected<std::uint32_t, std::string> Gui_Calc_Bridge::addUserMaterial(const anaf::MATERIAL::Material& material) {
+    if (const auto valid = anaf::MATERIAL::validateMaterial(material); !valid) {
+      return std::unexpected(valid.error());
+    }
+
+    std::uint32_t id{};
+    {
+      std::lock_guard lock(dataMutex);
+      const auto sameName = [&](const anaf::MATERIAL::Material& other) {
+        return anaf::MATERIAL::sameMaterialName(other.getMaterialType(), material.getMaterialType());
+      };
+      if (std::ranges::any_of(allMaterials, sameName)) {
+        return std::unexpected(std::format("a material named '{}' already exists", material.getMaterialType()));
+      }
+      id = appendUserMaterialLocked(material);
+    }
+    saveUserMaterials();
+    return id;
+  }
+
+  std::expected<void, std::string> Gui_Calc_Bridge::removeUserMaterial(const std::uint32_t materialID) {
+    bool meshShifted = false;
+    {
+      std::lock_guard lock(dataMutex);
+      const auto index = findMaterialIndex(materialID);
+      if (!index) return std::unexpected(std::format("no material with ID {}", materialID));
+
+      const auto& material = allMaterials[*index];
+      if (material.getIsBuiltin()) {
+        return std::unexpected(std::format("'{}' is a built-in material", material.getMaterialType()));
+      }
+      // A running worker publishes element indices taken from its own copy of the list.
+      if (m_isRunning.load() || m_isGeneratingPreview.load()) {
+        return std::unexpected("wait until the running solve / preview has finished");
+      }
+
+      const bool usedByMesh = activeMesh && std::ranges::any_of(
+        activeMesh->trussElements, [i = *index](const RenderElement& element) { return element.materialID == i; });
+      if (usedByMesh) {
+        return std::unexpected(std::format("'{}' is used by the current model", material.getMaterialType()));
+      }
+
+      allMaterials.erase(allMaterials.begin() + *index);
+
+      // Keep the active mesh pointing at the same materials after the shift.
+      meshShifted = activeMesh && std::ranges::any_of(
+        activeMesh->trussElements, [i = *index](const RenderElement& element) { return element.materialID > i; });
+      if (meshShifted) {
+        auto shifted = std::make_shared<MeshData>(*activeMesh);
+        for (auto& element : shifted->trussElements) {
+          if (element.materialID > *index) --element.materialID;
+        }
+        activeMesh = std::move(shifted);
+      }
+    }
+    if (meshShifted) dataVersion.fetch_add(1, std::memory_order_release);
+    saveUserMaterials();
+    return {};
+  }
+
+  std::optional<std::uint32_t> Gui_Calc_Bridge::findMaterialIndex(const std::uint32_t materialID) const {
+    const auto it = std::ranges::find(allMaterials, materialID, &anaf::MATERIAL::Material::getMaterialID);
+    if (it == allMaterials.end()) return std::nullopt;
+    return static_cast<std::uint32_t>(it - allMaterials.begin());
   }
 
   Gui_Calc_Bridge& buildBridge() {

@@ -3,7 +3,7 @@
 This document describes `anaf::BRIDGE`, the shared state between the GUI thread and the calculation worker. It covers what the bridge stores, who reads and writes each field, and which synchronization rule protects it.
 
 > **Document status**
-> Verified against: `v0.1.2-alpha` + working tree, 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
 
 ## 1. Overall flow
 
@@ -21,11 +21,11 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | Gui_Calc_Bridge  (process-wide singleton: buildBridge())           v                  |
 |                                                                                       |
 |  dataMutex ---- guards --> activeMesh, fixedDOFsByNode, selectedNodeId,               |
-|                            hasTrussPreview                                            |
+|                            hasTrussPreview, allMaterials                              |
 |  atomics ------------------> m_isRunning, m_isGeneratingPreview, m_progress,          |
 |                              dataVersion, m_isValid, m_energyDiff, m_objectType       |
 |  workerThread (std::jthread)                                                          |
-|  allMaterials / createdMaterials                                                      |
+|  allMaterials  <-- assets/bridge/materialProperties.json + <user config>/userMaterials |
 +----------------------------------------+----------------------------------------------+
                                          |
                                          v  dataVersion changed?
@@ -51,8 +51,9 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `m_isValid`, `m_energyDiff` | atomics | `Truss_SQPT::calculate()` | Panels | atomic (written under `dataMutex`) |
 | `m_objectType` | `atomic<ObjectType>` | - | Model tree | atomic |
 | `workerThread` | `std::jthread` | Control panel | `initgui()` shutdown | GUI thread only |
-| `allMaterials` | `vector<Material>` | `setStaticInfo()`, `setDynamicMaterialInfo()` | Control panel (material combo, copies it for the worker) | `dataMutex` for the worker copy; the solver worker only sees a copy |
-| `createdMaterials` | `vector<Material>` | - (reserved) | - | - |
+| `allMaterials` | `vector<Material>` | `setStaticInfo()` (built-ins from JSON), `addUserMaterial()`, `removeUserMaterial()` | Control panel (material combo, copies it for the worker), Material Handler, File > Import | `dataMutex`; the solver worker only sees a copy |
+| `m_nextMaterialID` (private) | `uint32_t` | `setStaticInfo()`, `addUserMaterial()`, `loadUserMaterials()` | - | `dataMutex` |
+| `m_userMaterialPath` (private) | `filesystem::path` | `loadUserMaterials()` (startup) | `saveUserMaterials()` | GUI thread only; empty = not persisted |
 
 `ObjectType` is `truss_SQPT`, `truss_imported_or_entered` or `no_type`. `getObjectTypeName()` converts it to a string for the model tree.
 
@@ -108,6 +109,50 @@ Consequences:
 
 Assigning a new `std::jthread` to `workerThread` destroys the old one. `std::jthread`'s destructor calls `request_stop()` and joins, so two workers never run at the same time. Long loops in the solver check `stop_token` between steps.
 
+### 5.1 Materials
+
+Elements refer to a material by its **index** in `allMaterials` (`RenderElement::materialID`, `TrussElement_1D::m_type`), and exported files store that index. `Material::getMaterialID()` is a separate, stable ID that is never reused; the GUI keeps selections by ID.
+
+| Range | Source | Built-in flag | ID | Removable |
+|---|---|---|---|---|
+| `0 .. n-1` | [assets/bridge/materialProperties.json](../assets/bridge/materialProperties.json), in file order | `true` | `id` field, must be `0..n-1` | No |
+| `n ..` | `userMaterials.json` in the user config directory, then Material Handler "Add Material" | `false` | `m_nextMaterialID++` at load / add | Yes, with the rules below |
+
+Loading (`setStaticInfo()`, called by `main()` after the log is initialized):
+
+1. `anaf::DIRECTORY::findAssetPath("bridge/materialProperties.json")` searches next to the executable, `/usr/share/anafinen/assets`, the working directory, then `MAIN_DIR`.
+2. `anaf::MATERIAL::loadMaterialLibrary()` (`anaf_core`, nlohmann/json) parses the file, checks every entry with `validateMaterial()`, rejects duplicate names and requires IDs `0..n-1`.
+3. On success `allMaterials` is replaced under `dataMutex` and `m_nextMaterialID = n`. On failure an error is logged and the list stays empty; Preview / Solve then log "No material selected" instead of starting.
+
+JSON units are SI: Pa for moduli and strengths, kg/m³ for density, ductility as a fraction. `youngModulus` is optional and defaults to `elasticityModulus`. Mesh files identify materials by name ([FILE_HANDLING.md](FILE_HANDLING.md) section 3), so new built-ins may go anywhere in the file. Keep IDs 0 (steel) and 1 (aluminum) for files from anafinen ≤ 0.1.2, which only carry the index. Names: at most 120 bytes of UTF-8, no `"` and no control characters (they are written into MSH physical names and line-based formats).
+
+Adding (`addUserMaterial()`):
+
+1. `validateMaterial()`: positive moduli, strengths and density, ultimate ≥ yield, -1 < ν < 0.5, ductility ≥ 0, non-empty name.
+2. Under `dataMutex`: reject a name that already exists (case-insensitive), then append with `isBuiltin = false` and a new ID. Appending never shifts existing indices, so it is allowed while a worker runs.
+
+Removing (`removeUserMaterial(id)`), all under `dataMutex`:
+
+1. Refused for built-ins.
+2. Refused while `m_isRunning` or `m_isGeneratingPreview`: the worker publishes indices from its own copy of the list.
+3. Refused while an element of `activeMesh` uses the material.
+4. Erase. If elements of `activeMesh` use higher indices, a shifted copy is published and `dataVersion` is bumped.
+
+Persistence (`loadUserMaterials(path)`, called by `main()` right after `setStaticInfo()`):
+
+| Platform | File |
+|---|---|
+| Linux | `$XDG_CONFIG_HOME/anafinen/userMaterials.json`, else `~/.config/anafinen/userMaterials.json` |
+| Windows | `<Roaming AppData>\anafinen\userMaterials.json` (`SHGetKnownFolderPath(FOLDERID_RoamingAppData)`, wide API; `%APPDATA%` as fallback) |
+
+1. `anaf::DIRECTORY::getUserConfigDirectory()` gives the directory. It is never inside `assets/`, the build tree or the install prefix, so materials added while testing a build cannot end up in a package.
+2. A missing file is an empty list. A file that does not parse or validate is renamed to `userMaterials.json.corrupt` and an error is logged, so the next save does not overwrite the user's data.
+3. Entries whose name matches an existing material (case-insensitive, e.g. a later built-in) are skipped with a warning.
+4. Every successful add / remove rewrites the file (`saveUserMaterialFile()`: written to `userMaterials.json.tmp`, then renamed over the old file). A failed save is logged; the material stays for the session.
+5. Same schema as the library, without `id`. The bridge assigns IDs at load time.
+
+Without a `loadUserMaterials()` call (the tests), user materials are session-only and nothing is written.
+
 ## 6. Rules for new worker code
 
 - Copy every mutable bridge container the worker needs under `dataMutex` **before** creating the `std::jthread`, and move the copies into the lambda. Never read `bridge.<container>` from the worker.
@@ -121,4 +166,6 @@ Assigning a new `std::jthread` to `workerThread` destroys the old one. `std::jth
 - Worker creation and publishing: [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp)
 - Snapshot consumer: [src/gui/panels/viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [src/gui/panels/modelTree.cpp](../src/gui/panels/modelTree.cpp) (copies the pointer under the lock; no deep copy per frame)
 - Import / export publisher: [src/gui/panels/fileIoPanel.cpp](../src/gui/panels/fileIoPanel.cpp)
-- Built-in materials: [src/material/properties.hpp](../src/material/properties.hpp)
+- Materials: [src/material/properties.hpp](../src/material/properties.hpp), [src/material/materialLibrary.hpp](../src/material/materialLibrary.hpp), [src/material/materialLibrary.cpp](../src/material/materialLibrary.cpp), [assets/bridge/materialProperties.json](../assets/bridge/materialProperties.json)
+- Material editor: [src/gui/panels/materialHandler.cpp](../src/gui/panels/materialHandler.cpp)
+- Asset lookup: [src/directory/getExecutableDirectory.cpp](../src/directory/getExecutableDirectory.cpp)
