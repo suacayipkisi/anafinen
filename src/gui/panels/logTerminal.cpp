@@ -95,7 +95,8 @@ namespace anaf::GUI {
 
     ImGui::Separator();
     
-    ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), ImGuiChildFlags_None,
+    // Negative height leaves room for the status footer below the log.
+    ImGui::BeginChild("LogScrollRegion", ImVec2(0, -StatusBar::height()), ImGuiChildFlags_None,
                       m_wrapLines ? ImGuiWindowFlags_None : ImGuiWindowFlags_HorizontalScrollbar);
     // 0.0f wraps at the right edge of the region, so lines re-wrap when the panel is resized.
     if (m_wrapLines) ImGui::PushTextWrapPos(0.0f);
@@ -176,6 +177,7 @@ namespace anaf::GUI {
     }
 
     ImGui::EndChild();
+    m_statusBar.render();
     ImGui::End();
 
     ImGui::PopFont();

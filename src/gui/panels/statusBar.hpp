@@ -17,18 +17,25 @@
 
 #pragma once
 
-#include <guiMaterials/iPanel.hpp>
 #include <platform/resourceMonitor.hpp>
+
+#include <string>
 
 namespace anaf::GUI {
 
-  // Bottom bar of the main viewport: worker state on the left, resource usage on the right.
-  // It shrinks the viewport work area, so the dockspace ends above it.
-  class StatusBar : public IPanel {
+  // One status line: worker state and a short hardware summary on the left, live resource
+  // usage on the right. Drawn by the console as its footer, so it spans the console's width.
+  class StatusBar {
   private:
     PLATFORM::ResourceMonitor m_monitor;
+    std::string m_hardware; // built once on the first render (needs the GL context for the GPU)
+
+    void queryHardware();
   public:
-    void onImGuiRender() override;
+    // Call inside a window, on the GUI thread with the GL context current.
+    void render();
+    // Height to reserve for render(), including the separator above it.
+    static float height();
   };
 
 } // namespace anaf::GUI end

@@ -19,6 +19,7 @@
 
 #include <log/anaf_info.hpp>
 #include <guiMaterials/iPanel.hpp>
+#include "statusBar.hpp"
 
 #include <cstddef>
 #include <mutex>
@@ -45,6 +46,7 @@ namespace anaf::GUI {
   private:
     bool m_autoScroll {true};
     bool m_wrapLines {true}; // wrap at the panel width; off: one line per entry + horizontal scrollbar
+    StatusBar m_statusBar;    // footer: worker state, hardware, resource usage
   public:
     LogTerminal();
 

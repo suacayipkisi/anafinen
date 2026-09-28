@@ -110,6 +110,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/aboutPanel.cpp
     src/gui/panels/statusBar.cpp
     src/platform/resourceMonitor.cpp
+    src/platform/systemInfo.cpp
     src/gui/fileDialogs/nativeFileDialog.cpp
     src/test/test.cpp
 )
@@ -156,7 +157,7 @@ target_include_directories(anafinen PRIVATE
 # Native file chooser (header-only, WTFPL): Windows common dialogs, zenity / kdialog on Linux.
 target_include_directories(anafinen SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/portable-file-dialogs)
 if(WIN32)
-    target_link_libraries(anafinen PRIVATE ole32 comdlg32 shell32 uuid psapi) # psapi: resourceMonitor
+    target_link_libraries(anafinen PRIVATE ole32 comdlg32 shell32 uuid psapi dxgi advapi32) # psapi / dxgi / advapi32: src/platform
 endif()
 
 add_custom_command(
