@@ -19,30 +19,24 @@
 
 #include "imgui.h"
 
-#include <Eigen/Core>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <mutex>
-#include <omp.h>
 #include <stop_token>
 #include <thread>
 
 #include <truss_1D/trussEngine/trussSolver.hpp>
 #include <bridge/generalStatus.hpp>
+#include <panels/truss/trussWorker.hpp>
 
 namespace anaf::GUI {
 
   namespace {
-    void configureOpenMPForWorker() {
-      const int availableThreads = omp_get_num_procs();
-      const int threadCount = availableThreads > 4 ? availableThreads - 2 : availableThreads;
-      omp_set_dynamic(0);
-      omp_set_num_threads(threadCount);
-      Eigen::setNbThreads(threadCount);
-    }
+    using TRUSS_WORKER::configureOpenMPForWorker;
 
     // Elements and the solver take the material as an index into allMaterials.
     bool resolveMaterialIndex(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t materialID, std::uint32_t& index) {
@@ -71,6 +65,21 @@ namespace anaf::GUI {
         bridge.activeMesh = std::move(updatedMesh);
       }
     }
+  }
+
+  void TrussControlPanel::resetState() {
+    m_cubeNumX = 10;
+    m_cubeNumY = 1;
+    m_cubeNumZ = 10;
+    m_materialID = 1;
+    m_cubeEdgeLength = 1.0;
+    m_crossSectionalArea = 80.0;
+    m_forceNodeId = 126;
+    m_forceVector = {0.0, 10000.0, 0.0};
+    m_appliedForces.clear();
+    m_fixed = {false, false, false};
+    m_fixChanged = false;
+    m_lastFixNode = std::numeric_limits<std::uint32_t>::max();
   }
 
   void TrussControlPanel::onImGuiRender() {
@@ -192,13 +201,8 @@ namespace anaf::GUI {
     ImGui::Separator();
 
     if (ImGui::Button("Load Demo (10x1x10 self weight)")) {
-      if (bridge.workerThread.joinable()) {
-        bridge.workerThread.request_stop();
-      }
-
-      bridge.m_isRunning = false;
-      bridge.m_isGeneratingPreview = false;
-      bridge.m_progress = 0.0f;
+      bridge.resetModel(BRIDGE::ObjectType::truss_SQPT);
+      resetState();
 
       m_cubeNumX = 10;
       m_cubeNumY = 1;
@@ -217,10 +221,6 @@ namespace anaf::GUI {
 
       {
         std::lock_guard lock(bridge.dataMutex);
-        bridge.activeMesh = nullptr;
-        bridge.fixedDOFsByNode.clear();
-        bridge.hasTrussPreview = false;
-        bridge.selectedNodeId = std::numeric_limits<std::uint32_t>::max();
         ensureDemoTrussCase(bridge, m_forceNodeId);
       }
       bridge.dataVersion.fetch_add(1, std::memory_order_release);
@@ -234,9 +234,11 @@ namespace anaf::GUI {
     else if (ImGui::Button("Generate Preview", ImVec2(-1, 32)) && resolveMaterialIndex(bridge, m_materialID, materialIndex)) {
       anaf::LOG::core("Press 'ctrl' to toggle node visibility");
 
+      bridge.joinWorker();
       bridge.m_isGeneratingPreview = true;
       bridge.workerThread = std::jthread(
         [&bridge,
+         generation = bridge.modelGeneration.load(),
          cubeNumX = m_cubeNumX,
          cubeNumY = m_cubeNumY,
          cubeNumZ = m_cubeNumZ,
@@ -259,12 +261,16 @@ namespace anaf::GUI {
             newMesh->trussElements.reserve(preview.getElements().size());
             for (const auto& element : preview.getElements()) {
               const auto& nodes = element.getEleNodes();
-              newMesh->trussElements.push_back({nodes[0], nodes[1], 0.0f, false, element.getEleProperties(), element.getEleCrossSection()});
+              newMesh->trussElements.push_back({nodes[0], nodes[1], 0.0f, false, element.getEleProperties(), element.getEleCrossSection(), false});
             }
             newMesh->appliedForces = appliedForces;
 
             {
               std::lock_guard lock(bridge.dataMutex);
+              if (bridge.modelGeneration.load() != generation) {
+                bridge.m_isGeneratingPreview = false;
+                return; // the model was reset while the preview was built
+              }
               for (auto& node : newMesh->trussNodes) {
                 std::array<bool, 3> movable{true, true, true};
                 const auto it = bridge.fixedDOFsByNode.find(node.getNodeID());
@@ -333,29 +339,23 @@ namespace anaf::GUI {
       }
     }
 
-    static std::uint32_t lastNodeID {0};
-    static bool fixedX;
-    static bool fixedY;
-    static bool fixedZ;
-    static bool fixChanged = false;
-    {    
+    // Panel members, not statics: resetState() clears them when the object type changes.
+    {
       std::lock_guard lock(bridge.dataMutex);
-      if (lastNodeID != currentSelectedNode) {
-        fixedX = fixedDOFs[0];
-        fixedY = fixedDOFs[1];
-        fixedZ = fixedDOFs[2];
+      if (m_lastFixNode != currentSelectedNode) {
+        m_fixed = fixedDOFs;
       }
-      
-      if (ImGui::Checkbox("Fix X##fix_x", &fixedX)) fixChanged = true;
-      if (ImGui::Checkbox("Fix Y##fix_y", &fixedY)) fixChanged = true;
-      if (ImGui::Checkbox("Fix Z##fix_z", &fixedZ)) fixChanged = true;
+
+      if (ImGui::Checkbox("Fix X##fix_x", &m_fixed[0])) m_fixChanged = true;
+      if (ImGui::Checkbox("Fix Y##fix_y", &m_fixed[1])) m_fixChanged = true;
+      if (ImGui::Checkbox("Fix Z##fix_z", &m_fixed[2])) m_fixChanged = true;
 
       if (ImGui::Button("Apply Fixity")) {
-        if(fixChanged) {
-          bridge.fixedDOFsByNode[m_forceNodeId] = {fixedX, fixedY, fixedZ};
+        if (m_fixChanged) {
+          bridge.fixedDOFsByNode[m_forceNodeId] = m_fixed;
         }
       }
-      lastNodeID = currentSelectedNode;
+      m_lastFixNode = currentSelectedNode;
     }
   
     ImGui::SetNextItemWidth(160.0f);
@@ -386,6 +386,7 @@ namespace anaf::GUI {
       ImGui::EndDisabled();
     }
     else if (ImGui::Button("Run Solver for Truss", ImVec2(-1, 32)) && resolveMaterialIndex(bridge, m_materialID, materialIndex)) {
+      bridge.joinWorker();
       bridge.m_isRunning = true;
       bridge.m_progress = 0.0f;
 
@@ -401,6 +402,7 @@ namespace anaf::GUI {
 
       bridge.workerThread = std::jthread(
         [&bridge,
+         generation = bridge.modelGeneration.load(),
          fixedDOFs = std::move(fixedDOFsSnapshot),
          allMaterials = std::move(materialsSnapshot),
          cubeNumX = m_cubeNumX,
@@ -452,7 +454,8 @@ namespace anaf::GUI {
                 static_cast<float>(element.getEleStress()),
                 isStressExceeded,
                 element.getEleProperties(),
-                element.getEleCrossSection()
+                element.getEleCrossSection(),
+                false
               });
             }
             newMesh->appliedForces = forcesToApply;
@@ -469,14 +472,18 @@ namespace anaf::GUI {
               node.setMovable(movable);
             }
 
+            bool published = false;
             {
               std::lock_guard lock(bridge.dataMutex);
-              bridge.activeMesh = std::move(newMesh);
-              bridge.hasTrussPreview = true;
+              if (bridge.modelGeneration.load() == generation) { // not reset while solving
+                bridge.activeMesh = std::move(newMesh);
+                bridge.hasTrussPreview = true;
+                published = true;
+              }
             }
 
             // send signal to gui to draw scene
-            bridge.dataVersion.fetch_add(1, std::memory_order_release);
+            if (published) bridge.dataVersion.fetch_add(1, std::memory_order_release);
 
           } catch (const std::exception& exception) {
             anaf::LOG::error("Solver failed: {}", exception.what());
@@ -488,32 +495,14 @@ namespace anaf::GUI {
     }
 
     if (ImGui::Button("Clear All", ImVec2(-1, 32))) {
-      if (bridge.workerThread.joinable()) {
-        bridge.workerThread.request_stop();
-      }
-
-      bridge.m_isRunning = false;
-      bridge.m_isGeneratingPreview = false;
-      bridge.m_progress = 0.0f;
-
+      bridge.resetModel(BRIDGE::ObjectType::truss_SQPT);
+      resetState();
       m_cubeNumX = 1;
       m_cubeNumY = 1;
       m_cubeNumZ = 1;
       m_materialID = 0;
-      m_cubeEdgeLength = 1.0;
-      m_crossSectionalArea = 80.0;
       m_forceNodeId = 0;
       m_forceVector = {0.0, 0.0, 0.0};
-      m_appliedForces.clear();
-
-      {
-        std::lock_guard lock(bridge.dataMutex);
-        bridge.activeMesh = nullptr;
-        bridge.fixedDOFsByNode.clear();
-        bridge.hasTrussPreview = false;
-        bridge.selectedNodeId = std::numeric_limits<std::uint32_t>::max();
-      }
-      bridge.dataVersion.fetch_add(1, std::memory_order_release);
     }
     
     ImGui::End();

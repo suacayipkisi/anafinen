@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "generator": "anaf_truss_library_tool (do not edit; regenerate instead)",
+  "models": [
+    {
+      "id": "roof_king_post",
+      "name": "King post roof truss",
+      "category": "Roof",
+      "description": "Span 8 m, rise 2 m (26.6 deg), king post with two struts. 4 trusses at 4 m, tied by purlins and roof bracing. Pin / roller at the eaves. 6 kN per top node (roofing + snow). Steel, chords 12 cm^2, webs 8 cm^2."
+    },
+    {
+      "id": "roof_queen_post",
+      "name": "Queen post roof truss",
+      "category": "Roof",
+      "description": "Span 10 m, rise 2.5 m, two queen posts and ridge braces. 4 trusses at 4.5 m with purlins and bracing. Pin / roller at the eaves. 8 kN per top node. Steel, chords 14 cm^2, webs 9 cm^2."
+    },
+    {
+      "id": "roof_fink",
+      "name": "Fink (W) roof truss",
+      "category": "Roof",
+      "description": "Span 12 m, rise 3 m (26.6 deg), W-shaped web, the most common house / warehouse roof truss. 5 trusses at 5 m. Pin / roller. 10 kN per top node. Steel, chords 16 cm^2, webs 10 cm^2."
+    },
+    {
+      "id": "roof_howe",
+      "name": "Howe roof truss",
+      "category": "Roof",
+      "description": "Span 16 m, rise 4 m, 8 panels, verticals in tension and diagonals rising to the ridge. 5 trusses at 6 m. Pin / roller. 12 kN per top node. Steel, chords 20 cm^2, webs 12 cm^2."
+    },
+    {
+      "id": "roof_pratt",
+      "name": "Pratt roof truss",
+      "category": "Roof",
+      "description": "Span 20 m, rise 4 m, 10 panels, diagonals falling to mid-span (tension under gravity). 5 trusses at 6 m. Pin / roller. 12 kN per top node. Steel, chords 24 cm^2, webs 14 cm^2."
+    },
+    {
+      "id": "roof_scissors",
+      "name": "Scissors roof truss",
+      "category": "Roof",
+      "description": "Span 10 m, roof rise 3.5 m, sloped bottom chord rising 1.5 m for a vaulted ceiling. 4 trusses at 4 m. Pin / roller (the roller lets the truss spread). 6 kN per top node. Steel, chords 14 cm^2, webs 9 cm^2."
+    },
+    {
+      "id": "roof_bowstring",
+      "name": "Bowstring roof truss (hangar)",
+      "category": "Roof",
+      "description": "Span 24 m, parabolic top chord rising 4.5 m, flat tie, 8 panels. 5 trusses at 6 m for a hangar / sports hall. Pin / roller. 14 kN per top node. Steel, chords 30 cm^2, webs 14 cm^2."
+    },
+    {
+      "id": "bridge_pratt",
+      "name": "Pratt through-truss bridge",
+      "category": "Bridge",
+      "description": "Span 36 m, 6 panels of 6 m, height 6 m, inclined end posts. Two trusses 7 m apart with floor beams, top and bottom wind bracing. Pin / roller bearings. Deck: 300 kN per panel point (150 kN per truss). Steel, chords 220 cm^2, webs 120 cm^2."
+    },
+    {
+      "id": "bridge_howe",
+      "name": "Howe through-truss bridge",
+      "category": "Bridge",
+      "description": "Span 36 m, 6 panels, height 6 m, diagonals rising to mid-span (compression) and verticals in tension, the classic timber-era layout. Two trusses 7 m apart, braced. Pin / roller. 300 kN per panel point. Steel, chords 220 cm^2, webs 120 cm^2."
+    },
+    {
+      "id": "bridge_warren",
+      "name": "Warren truss bridge",
+      "category": "Bridge",
+      "description": "Span 30 m, 6 panels of 5 m, height 4.5 m, equilateral-style diagonals without verticals. Two trusses 6 m apart, braced (pedestrian / light road bridge). Pin / roller. 200 kN per panel point. Steel, chords 180 cm^2, diagonals 100 cm^2."
+    },
+    {
+      "id": "bridge_k_truss",
+      "name": "K-truss bridge",
+      "category": "Bridge",
+      "description": "Span 48 m, 8 panels of 6 m, height 8 m. Verticals split at mid-height by K-shaped diagonals, which keeps compression members short on deep, long spans. Two trusses 8 m apart, braced. Pin / roller. 400 kN per panel point. Steel, chords 260 cm^2, webs 140 cm^2."
+    },
+    {
+      "id": "bridge_parker",
+      "name": "Parker (camelback) bridge",
+      "category": "Bridge",
+      "description": "Span 48 m, 8 panels, Pratt web under a polygonal top chord rising from 6 m at the ends to 9 m at mid-span, where the bending moment peaks. Two trusses 8 m apart, braced. Pin / roller. 400 kN per panel point. Steel, chords 260 cm^2, webs 140 cm^2."
+    },
+    {
+      "id": "stadium_grandstand_cantilever",
+      "name": "Grandstand cantilever roof",
+      "category": "Stadium",
+      "description": "20 m cantilever trusses over a stand, 3.5 m deep at the back tapering to the tip, anchored at two points on the back column (both pinned). 6 trusses at 8 m with purlins and bracing. 15 kN per top node. Steel, chords 60 cm^2, webs 30 cm^2."
+    },
+    {
+      "id": "stadium_space_frame",
+      "name": "Double-layer space frame roof",
+      "category": "Stadium",
+      "description": "24 x 24 m square-on-square offset grid (3 m modules, 2.1 m deep) at 12 m, the typical exhibition hall / stadium concourse roof. Carried on every top perimeter node, corners pinned. 9 kN per top node (1 kN/m^2). Steel, chords 20 cm^2, webs 12 cm^2."
+    },
+    {
+      "id": "stadium_schwedler_dome",
+      "name": "Schwedler dome (sports hall)",
+      "category": "Stadium",
+      "description": "Spherical cap, 36.8 m base diameter, 8.6 m rise: 16 meridian ribs, 5 rings and one diagonal per panel, the classic arena / gasholder dome. Pinned on the base ring. 12 kN per node (snow + cladding). Steel, ribs and rings 25 cm^2, base ring 40 cm^2, diagonals 15 cm^2."
+    },
+    {
+      "id": "stadium_geodesic_dome",
+      "name": "Geodesic dome (3V)",
+      "category": "Stadium",
+      "description": "Frequency-3 icosahedral geodesic dome, radius 10 m: triangulated, so every bar works in pure tension / compression. Pinned on its lower edge nodes. 4 kN per free node. Aluminum 6061-T6, 12 cm^2 tubes."
+    },
+    {
+      "id": "tower_transmission",
+      "name": "Transmission line tower",
+      "category": "Tower & Platform",
+      "description": "30 m square lattice tower tapering from 8 m to 2 m, X-braced faces, two 7 m cross-arms. Base legs pinned. Conductors: 20 kN down and 6 kN wind at each arm tip; 1.5 kN wind per tower node. Steel, legs 45 cm^2, bracing 18 cm^2."
+    },
+    {
+      "id": "platform_offshore_jacket",
+      "name": "Offshore jacket platform",
+      "category": "Tower & Platform",
+      "description": "Four-leg steel jacket, 40 m high, battered from 24 x 24 m at the seabed to 14 x 14 m at the deck, X-braced faces and plan bracing at every level. Piles modelled as pins. 10 MN topsides (2.5 MN per leg) and 150 kN wave load per node at two levels. Steel, legs 400 cm^2, braces 150 cm^2."
+    },
+    {
+      "id": "tower_crane_jib",
+      "name": "Crane jib (triangular lattice)",
+      "category": "Tower & Platform",
+      "description": "24 m cantilever jib with a triangular 1.6 m x 2.2 m section, 8 bays, laced on all three faces, fixed (pinned chords) at the mast. 30 kN hook load at the tip. Steel, chords 60 cm^2, lacing 12 cm^2."
+    }
+  ]
+}

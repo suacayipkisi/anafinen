@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <format>
+#include <limits>
 #include <ranges>
 #include <string_view>
 
@@ -38,6 +39,32 @@ namespace anaf::BRIDGE {
       default:
         return "no_type";
     }
+  }
+
+  void Gui_Calc_Bridge::resetModel(const ObjectType type) {
+    modelGeneration.fetch_add(1, std::memory_order_acq_rel);
+    if (workerThread.joinable()) workerThread.request_stop();
+    m_isRunning = false;
+    m_isGeneratingPreview = false;
+    m_progress = 0.0f;
+    {
+      std::lock_guard lock(dataMutex);
+      activeMesh = nullptr;
+      fixedDOFsByNode.clear();
+      hasTrussPreview = false;
+      selectedNodeId = std::numeric_limits<std::uint32_t>::max();
+      m_isValid = false;
+      m_energyDiff = 0.0;
+      m_objectType = type;
+    }
+    dataVersion.fetch_add(1, std::memory_order_release);
+    anaf::LOG::info("Model reset, object type: {}", getObjectTypeName(type));
+  }
+
+  void Gui_Calc_Bridge::joinWorker() {
+    if (!workerThread.joinable()) return;
+    workerThread.request_stop();
+    workerThread.join();
   }
 
   bool Gui_Calc_Bridge::setStaticInfo() {

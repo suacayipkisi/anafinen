@@ -55,6 +55,7 @@ namespace anaf::BRIDGE {
     bool isStressExceeded{false};
     std::uint32_t materialID{};   // index into Gui_Calc_Bridge::allMaterials
     double crossSectionArea{};    // m^2
+    bool isWireframe{false};      // edge of an imported surface / volume element: drawn, never solved
   };
 
   struct MeshData {
@@ -114,7 +115,11 @@ namespace anaf::BRIDGE {
     std::mutex dataMutex;
     std::jthread workerThread;
 
-    std::atomic<ObjectType> m_objectType;
+    std::atomic<ObjectType> m_objectType{no_type};
+    // Bumped by resetModel(). A worker takes it before it starts and publishes its snapshot
+    // only if it is unchanged (checked under dataMutex), so a solve or preview that was still
+    // running when the model was reset never brings the old model back.
+    std::atomic<std::uint64_t> modelGeneration{0};
     std::shared_ptr<const MeshData> activeMesh{nullptr};
     std::atomic<bool> m_isValid{false};
     std::atomic<double> m_energyDiff;
@@ -128,6 +133,15 @@ namespace anaf::BRIDGE {
     FixedDOFMap fixedDOFsByNode;
     std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};
     bool hasTrussPreview{false};
+
+    // Drops the whole model (snapshot, fixity, selection, solve status) and switches to type.
+    // A running worker is asked to stop and can no longer publish (see modelGeneration).
+    // Call from the GUI thread; panels reset their own inputs separately.
+    void resetModel(ObjectType type);
+
+    // Stops and joins the previous worker. Call before setting m_isRunning /
+    // m_isGeneratingPreview for a new job: a worker that is still finishing clears them on exit.
+    void joinWorker();
 
     // Loads the built-in materials from assets/bridge/materialProperties.json.
     // Call once at startup, after the log is initialized. Returns false on failure.

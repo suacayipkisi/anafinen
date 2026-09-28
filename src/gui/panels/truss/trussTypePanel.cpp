@@ -15,16 +15,13 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "generalStatus.hpp"
 #include "imgui.h"
 
 #include "trussTypePanel.hpp"
-#include <log/anaf_info.hpp>
 
 namespace anaf::GUI {
   void TrussSelector::onImGuiRender() {
     if (!isOpen) return;
-    BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImVec2 center = ImVec2(
@@ -46,20 +43,18 @@ namespace anaf::GUI {
         ImGui::EndCombo();
       }
 
-      if(ImGui::Button("Select", ImVec2(-1, 32))) {
+      if (m_trussType == simpleQuadranglePrism) {
+        ImGui::TextWrapped("Generated grid truss. Export is available; import is not.");
+      } else {
+        ImGui::TextWrapped("Import a mesh / CAD file or build the truss node by node.");
+      }
+      ImGui::TextDisabled("Changing the type clears the current model.");
+
+      if (ImGui::Button("Select", ImVec2(-1, 32))) {
         if (onSelected) {
           onSelected(m_trussType);
         }
-        switch (m_trussType) {
-          case simpleQuadranglePrism:
-            bridge.m_objectType = anaf::BRIDGE::ObjectType::truss_SQPT;
-            break;
-          case nodeEntered:
-            bridge.m_objectType = anaf::BRIDGE::ObjectType::truss_imported_or_entered;
-            break;
-        }
         isOpen = false;
-
       }
     }
 

@@ -23,6 +23,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <vector>
 
 namespace anaf::GUI {
@@ -38,10 +39,17 @@ namespace anaf::GUI {
     std::uint32_t m_forceNodeId{126};
     std::array<double, 3> m_forceVector{0.0, 10000.0, 0.0};
     std::vector<FEM::TRUSS::ForceApplied> m_appliedForces;
+    std::array<bool, 3> m_fixed{false, false, false};
+    bool m_fixChanged{false};
+    std::uint32_t m_lastFixNode{std::numeric_limits<std::uint32_t>::max()};
   public:
     ~TrussControlPanel() override = default;
     std::function<void()> onCalculated;
     std::function<void()> onOpenMaterialHandler;
+
+    // Back to the default inputs (loads, fixity checkboxes, grid). The model itself lives in
+    // the bridge and is cleared with Gui_Calc_Bridge::resetModel().
+    void resetState();
     void onImGuiRender() override;
     
   };

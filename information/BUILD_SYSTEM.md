@@ -19,7 +19,8 @@ CMakeLists.txt
    +-- add_library(anaf_io STATIC ...)     mesh I/O (Gmsh, zlib PRIVATE)
    +-- add_library(anaf_core STATIC ...)   FEM + truss adapter (links anaf_io)
    +-- add_executable(anafinen ...)        GUI + bridge + log + main (+ portable-file-dialogs)
-   +-- tests/ (ANAFINEN_BUILD_TESTS=ON)    anaf_io_tests, anaf_io_tool, anaf_truss_io_tests, vtk_reference_check
+   +-- tests/ (ANAFINEN_BUILD_TESTS=ON)    anaf_io_tests, anaf_io_tool, anaf_truss_io_tests, vtk_reference_check,
+   |                                       anaf_truss_library_tool (regenerates assets/objects/truss/truss1D)
    |        |
    |        +-- POST_BUILD: copy assets/ (+ generated icon, + gmsh DLL on Windows)
    |

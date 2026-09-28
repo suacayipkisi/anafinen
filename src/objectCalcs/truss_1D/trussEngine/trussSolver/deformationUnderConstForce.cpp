@@ -232,11 +232,7 @@ namespace FEM::TRUSS {
         displacement[axis + 3] = m_resultDisplacements[nodes[1]][axis];
       }
 
-      const Eigen::Vector3d axis(
-        static_cast<double>(direction[0]),
-        static_cast<double>(direction[1]),
-        static_cast<double>(direction[2])
-      );
+      const Eigen::Vector3d axis(direction[0], direction[1], direction[2]);
       Eigen::Vector<double, 6> transformation;
       transformation << -axis[0], -axis[1], -axis[2], axis[0], axis[1], axis[2];
       const double elongation = transformation.dot(displacement);

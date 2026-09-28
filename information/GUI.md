@@ -44,18 +44,27 @@ The 3D scene is drawn **before** the ImGui frame, into an offscreen framebuffer.
 
 ```text
 MainDockSpaceHost --on_select_analyze_structure(Truss_1D)--> TrussSelector.isOpen = true
-TrussSelector     --onSelected(simpleQuadranglePrism)------> TrussControlPanel.isOpen, ModelTree.isOpen
+TrussSelector     --onSelected(type)-----------------------> type changed? FileIoPanel.cancelImport(),
+                                                              bridge.resetModel(type), both truss panels resetState();
+                                                              TrussControlPanel / TrussModelEditor .isOpen by type,
+                                                              ModelTree.isOpen
 TrussControlPanel --onOpenMaterialHandler()----------------> MaterialHandler.isOpen = true
+TrussModelEditor  --onOpenMaterialHandler / onRequestImport-> MaterialHandler.isOpen / FileIoPanel.requestImport()
 MainDockSpaceHost --on_import_mesh / on_export_results-----> FileIoPanel.requestImport() / requestExport()
-FileIoPanel       --onImported()---------------------------> ModelTree.isOpen = true, ViewportPanel.requestFit()
+MainDockSpaceHost --is_import_enabled()--------------------> FileIoPanel::importAllowed() (false for truss_SQPT)
+FileIoPanel       --onImported()---------------------------> panels resetState(), TrussModelEditor + ModelTree open,
+                                                              ViewportPanel.requestFit()
 ```
+
+Object type switch: selecting the type that is already active only reopens its panel. Selecting a different type goes through `Gui_Calc_Bridge::resetModel()` ([BRIDGE.md](BRIDGE.md) section 4.1), so no model, fixity, selection, result or panel input of the previous type survives, and a solve still running for it cannot publish.
 
 | Panel | File | Window title | Status |
 |---|---|---|---|
-| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D; Help: "About anafinen...". Builds the default dock layout once (left: analysis set, right: model tree, bottom: console, center: viewport). |
+| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O; greyed out with a tooltip while `truss_SQPT` is active), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D; Help: "About anafinen...". Builds the default dock layout once (left: analysis set and model editor, right: model tree, bottom: console, center: viewport). |
 | `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking, overlays, legends |
-| `TrussSelector` | `panels/truss/trussTypePanel.cpp` | truss type picker | "Simple Quadrangle"; imported/self-built "(coming soon)" |
-| `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). |
+| `TrussSelector` | `panels/truss/trussTypePanel.cpp` | "Select Truss Type" | "Simple Quadrangle" (generated, export only) or "Imported / Self-Built". Warns that a type change clears the model. |
+| `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). `resetState()` restores the default inputs. |
+| `TrussModelEditor` | `panels/truss/importedTruss/trussModelEditor.cpp` | "Truss(1D) Model Editor" | For `truss_imported_or_entered`, see section 2.4. |
 | `ModelTree` | `panels/modelTree.cpp` | "Model Tree" | Boundary conditions, elements over yield (MPa), node displacements (mm) |
 | `MaterialHandler` | `panels/materialHandler.cpp` | "Material Handler" (floating, not dockable) | Table of all materials (E, G, K in GPa; yield / ultimate in MPa; density; ν; ductility in %). Form to add a user material (engineering units, converted to SI); user materials are saved to the user config directory. "Delete" only on user materials; refusals (in use, worker running) are shown in the panel. See [BRIDGE.md](BRIDGE.md) section 5.1. |
 | `LogTerminal` | `panels/logTerminal.cpp` | "Console" | Colored log view (max 10,000 lines, trimmed under the log mutex). "Wrap lines" (default on) wraps at the panel width; off gives one row per entry and a horizontal scrollbar. |
@@ -82,8 +91,9 @@ File > Import Mesh / CAD... (Ctrl+O)
   -> CAD file? -> "CAD Import Options" modal: bars / surfaces / volumes, element size, order
   -> IoService::runAsync: readMesh + ADAPTER::toMeshData       (I/O thread)
   -> overlay: description, progress bar, stage, Cancel
-  -> done: activeMesh, fixedDOFsByNode, m_objectType = truss_imported_or_entered,
-           dataVersion++ (GUI thread, under dataMutex); log notes / warnings; tree opens, camera fits
+  -> done: type switched to truss_SQPT meanwhile? discard. Else resetModel(truss_imported_or_entered),
+           activeMesh, fixedDOFsByNode, dataVersion++ (GUI thread, under dataMutex); log notes / warnings;
+           model editor and tree open, camera fits
 
 File > Export Model... (Ctrl+E)
   -> "Export Model" modal: MSH 4.1 / MSH 2.2 / VTU / VTK 5.1 / VTK 4.2 / STEP, binary, zlib
@@ -94,7 +104,47 @@ File > Export Model... (Ctrl+E)
 
 - **Native dialogs:** `portable-file-dialogs` behind `fileDialogs/nativeFileDialog.*`. It is the only translation unit that includes the header. On Linux it runs `zenity` / `kdialog` as a child process; closing the application kills an open chooser. When no backend exists the panel reports it instead of failing.
 - **Blocking during a calculation:** import is refused while the solver or preview worker runs, so the worker cannot overwrite the imported snapshot.
-- **Solving imported models:** surface / volume meshes are shown as wireframe. Solving imported trusses is not implemented yet (`Truss_Imported_or_Entered`).
+- **Generated truss:** while `truss_SQPT` is active, import is refused (menu item disabled, Ctrl+O and the editor button show a notice); export works. Import from `no_type` switches to `truss_imported_or_entered`.
+- **Solving imported models:** bars are solved in the model editor (section 2.4). Surface / volume meshes are shown as wireframe edges (`RenderElement::isWireframe`) and are never solved.
+
+### 2.4 Model editor (`TrussModelEditor`)
+
+```text
++-- Truss(1D) Model Editor ------------------------------+
+| [Import File...]                                       |
+| Nodes / Bars / wireframe edges / loads / supports      |
+| results state + last edit message                      |
+|-- Built-in Models (collapsed) ------------------------|
+| combo grouped by category, description                |
+| [Load Built-in Model]   (read-only; copy in memory)   |
+|-- Whole Model: Section & Material --------------------|
+| Material, Area [cm^2], [ ] also wireframe edges       |
+| [Apply to Whole Model]                                |
+|-- Nodes ----------------------------------------------|
+| Position [m] x y z            [Add Node]              |
+| Selected node (viewport click or typed id)            |
+| Position [m] x y z  [Move Node] [Delete Node]         |
+|-- Bars -----------------------------------------------|
+| Material, [Open Material Handler], Area [cm^2]        |
+| Node A - B                    [Add Bar]               |
+| bar list (clipped, click to select)                   |
+| [Apply to Selected] [Delete Bar]                      |
+|-- Supports & Loads (selected node) -------------------|
+| Fix X / Y / Z                 [Apply Support]         |
+| Force [N] x y z   [Apply Load] [Remove Load]          |
+|-------------------------------------------------------|
+| Deformation Scale, [Run Solver for Truss], progress   |
+| [Clear Model]                                         |
++-------------------------------------------------------+
+```
+
+1. Every edit copies the active snapshot (an empty one if there is none), changes it, drops stale results and publishes it ([BRIDGE.md](BRIDGE.md) section 5). Editing is disabled while a worker runs, because the solve result would overwrite the edit.
+2. Node ids stay `0..n-1`. "Delete Node" removes the node's bars, load and support and moves later ids down by one.
+3. "Add Bar" refuses missing or identical nodes, coincident positions, an existing bar between the same nodes, a missing material or an area ≤ 0. The next bar starts at the last end node, so chains are quick to enter.
+4. "Apply to Whole Model" sets one material and area on every bar in a single edit; use it after importing a file without a `CrossSectionArea` attribute. With "also turn the wireframe edges into bars", the edges of an imported surface mesh become bars too (e.g. a triangulated shell becomes a space truss).
+5. "Built-in Models" lists the library from `assets/objects/truss/truss1D/index.json` ([CALCULATIONS.md](CALCULATIONS.md) section 3.2). "Load Built-in Model" imports the file through `FileIoPanel::importFile()` like File > Import; the file itself is never written, and File > Export refuses a target inside the library folder.
+6. "Run Solver for Truss" solves the snapshot with `Truss_Imported_or_Entered` ([CALCULATIONS.md](CALCULATIONS.md) section 3.1). If the model cannot be solved, the reason is logged as "Solver not started: ...".
+7. "Clear Model" calls `resetModel(truss_imported_or_entered)` and `resetState()`.
 
 ## 3. Viewport render pipeline
 
@@ -207,5 +257,5 @@ Drawn by `renderOverlay2D()` on top of the image:
 - Frame loop and wiring: [src/gui/gui.hpp](../src/gui/gui.hpp), [src/gui/gui.cpp](../src/gui/gui.cpp)
 - Infrastructure: [iPanel.hpp](../src/gui/guiMaterials/iPanel.hpp), [imGuiLayer.hpp](../src/gui/guiMaterials/imGuiLayer.hpp), [imGuiLayer.cpp](../src/gui/guiMaterials/imGuiLayer.cpp), [glHandle.hpp](../src/gui/guiMaterials/glHandle.hpp), [framebuffer.hpp](../src/gui/guiMaterials/framebuffer.hpp), [framebuffer.cpp](../src/gui/guiMaterials/framebuffer.cpp)
 - Viewport: [viewportPanel.hpp](../src/gui/panels/viewportPanel.hpp), [viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [viewportRenderer.hpp](../src/gui/panels/viewportRenderer.hpp), [viewportRenderer.cpp](../src/gui/panels/viewportRenderer.cpp)
-- Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussTypePanel.cpp](../src/gui/panels/truss/trussTypePanel.cpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
+- Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp), [trussWorker.hpp](../src/gui/panels/truss/trussWorker.hpp), [trussTypePanel.cpp](../src/gui/panels/truss/trussTypePanel.cpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
 - Platform: [linuxCursor.hpp](../src/gui/linuxCursor.hpp), [getExecutableDirectory.cpp](../src/directory/getExecutableDirectory.cpp)

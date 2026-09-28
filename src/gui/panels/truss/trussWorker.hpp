@@ -17,29 +17,20 @@
 
 #pragma once
 
-#include <guiMaterials/iPanel.hpp>
+// Helpers shared by the truss panels' solver / preview workers.
 
-#include <functional>
-#include <string_view>
-#include <vector>
+#include <Eigen/Core>
+#include <omp.h>
 
-namespace anaf::GUI {
+namespace anaf::GUI::TRUSS_WORKER {
 
-  enum TrussTypes {
-    simpleQuadranglePrism,
-    nodeEntered
-  };
+  // Leaves two cores to the GUI on machines with more than four.
+  inline void configureOpenMPForWorker() {
+    const int availableThreads = omp_get_num_procs();
+    const int threadCount = availableThreads > 4 ? availableThreads - 2 : availableThreads;
+    omp_set_dynamic(0);
+    omp_set_num_threads(threadCount);
+    Eigen::setNbThreads(threadCount);
+  }
 
-  class TrussSelector : public IPanel {
-  private:
-    TrussTypes m_trussType{simpleQuadranglePrism};
-    const std::vector<std::string_view> m_types {"Simple Quadrangle", "Imported / Self-Built"};
-  public:
-    // Switches the object type (see bindAnalysisFlow): the bridge model and the panels are
-    // reset when the type changes, so nothing of the previous model is left behind.
-    std::function<void(TrussTypes)> onSelected;
-    
-    void onImGuiRender() override;
-  };
-} // namespace anaf::GUI end
-
+} // namespace anaf::GUI::TRUSS_WORKER end

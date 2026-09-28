@@ -123,7 +123,8 @@ namespace anaf::GUI {
             }
             nodeDisp = sqrt(nodeDisp);
             ImGui::Text("%u: %.3f(mm)", nodeNum, nodeDisp * 1e3);
-          } 
+            nodeNum++;
+          }
           ImGui::EndChild();
         }
       }
@@ -145,14 +146,12 @@ namespace anaf::GUI {
 
     ImGui::Begin("Model Tree");
 
-    static anaf::BRIDGE::ObjectType latest_type;
-    std::string a_tempName = "Root Assembly";
-
-    if (latest_type || latest_type != bridge.m_objectType) {
-      latest_type = bridge.m_objectType;
-      const auto objectTypeName = anaf::BRIDGE::getObjectTypeName(latest_type);
-      a_tempName.assign(objectTypeName.data(), objectTypeName.size());
-    }
+    // Read every frame, so the tree follows a type change (and its reset) immediately.
+    const anaf::BRIDGE::ObjectType latest_type = bridge.m_objectType.load();
+    std::string a_tempName = latest_type == anaf::BRIDGE::ObjectType::no_type
+      ? std::string("Root Assembly")
+      : std::string(anaf::BRIDGE::getObjectTypeName(latest_type));
+    a_tempName += "###ModelTreeRoot"; // same ImGui ID (open state) for every type
 
     if (ImGui::TreeNode(a_tempName.c_str())) {
       if(latest_type == anaf::BRIDGE::ObjectType::truss_SQPT && !createModelTree_truss_SQPT(bridge)) {

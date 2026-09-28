@@ -46,3 +46,9 @@ if(ANAFINEN_HAS_CHOLMOD)
     target_compile_definitions(anaf_truss_io_tests PRIVATE ANAFINEN_HAS_CHOLMOD)
 endif()
 add_test(NAME anaf_truss_io_tests COMMAND anaf_truss_io_tests)
+
+# Regenerates assets/objects/truss/truss1D (built-in truss library) from trussLibrary.cpp.
+# anaf_truss_io_tests fails when the committed files differ from the generator.
+add_executable(anaf_truss_library_tool trussLibraryTool.cpp)
+target_compile_definitions(anaf_truss_library_tool PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(anaf_truss_library_tool PRIVATE anaf_core project_warnings_and_optimizations)

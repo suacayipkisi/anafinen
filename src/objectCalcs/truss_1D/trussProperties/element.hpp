@@ -40,7 +40,7 @@ namespace FEM::TRUSS {
     double m_elongation{};
     double m_axialForce{}; // N, tension > 0, compression < 0
     double m_stress{}; // Pa, tension > 0, compression < 0
-    std::array<float, 3> m_cosinuses;
+    std::array<double, 3> m_cosinuses{}; // double: float products put ~1e-7 relative error into K
     std::array<std::uint32_t, 2> m_nodes{};
   protected:
   public:
@@ -85,7 +85,7 @@ namespace FEM::TRUSS {
       std::array<double, 3> loc1{allNodes[node_1].getLocation()};
       std::array<double, 3> loc2{allNodes[node_2].getLocation()};
       for (std::size_t i{0}; i < 3; ++i){
-        m_cosinuses[i] = static_cast<float>((loc2[i] - loc1[i]) / m_length);
+        m_cosinuses[i] = (loc2[i] - loc1[i]) / m_length;
       }
     } // TrussElement_1D(.......) Contructor end
 
@@ -100,7 +100,7 @@ namespace FEM::TRUSS {
     inline double getEleAxialForces() const {return m_axialForce;}
     inline double getEleStress() const {return m_stress;}
     inline std::uint32_t getEleProperties() const {return m_type;}
-    inline const std::array<float, 3>& getEleCosinuses() const {return m_cosinuses;}
+    inline const std::array<double, 3>& getEleCosinuses() const {return m_cosinuses;}
     inline const std::array<std::uint32_t, 2>& getEleNodes() const {return m_nodes;}
 
   };

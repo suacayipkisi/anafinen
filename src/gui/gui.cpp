@@ -96,19 +96,42 @@ namespace anaf::GUI {
       }
     };
 
+    // Only a change of type resets: selecting the current type again just reopens its panel.
     panels.selector->onSelected = [panels](TrussTypes type) {
+      const auto objectType = type == simpleQuadranglePrism
+        ? anaf::BRIDGE::ObjectType::truss_SQPT
+        : anaf::BRIDGE::ObjectType::truss_imported_or_entered;
+      auto& bridge = anaf::BRIDGE::buildBridge();
+      if (bridge.m_objectType.load() != objectType) {
+        panels.fileIo->cancelImport();
+        bridge.resetModel(objectType);
+        panels.control->resetState();
+        panels.editor->resetState();
+      }
       panels.control->isOpen = (type == simpleQuadranglePrism);
-      panels.tree->isOpen = (type == simpleQuadranglePrism);
+      panels.editor->isOpen = (type == nodeEntered);
+      panels.tree->isOpen = true;
     };
 
     panels.control->onOpenMaterialHandler = [panels] {
       panels.matWindow->isOpen = true;
     };
+    panels.editor->onOpenMaterialHandler = [panels] {
+      panels.matWindow->isOpen = true;
+    };
+    panels.editor->onRequestImport = [panels] { panels.fileIo->requestImport(); };
+    panels.editor->onLoadBuiltin = [panels](const std::filesystem::path& path) { panels.fileIo->importFile(path); };
 
     panels.dock->on_show_about = [panels] { panels.about->isOpen = true; };
     panels.dock->on_import_mesh = [panels] { panels.fileIo->requestImport(); };
     panels.dock->on_export_results = [panels] { panels.fileIo->requestExport(); };
+    panels.dock->is_import_enabled = [] { return FileIoPanel::importAllowed(); };
+    // The import itself reset the bridge to truss_imported_or_entered (FileIoPanel::pollTasks).
     panels.fileIo->onImported = [panels] {
+      panels.control->resetState();
+      panels.editor->resetState();
+      panels.control->isOpen = false;
+      panels.editor->isOpen = true;
       panels.tree->isOpen = true;
       panels.viewport->requestFit();
     };
@@ -124,6 +147,7 @@ namespace anaf::GUI {
     auto matWindow = panelManager.addPanel<MaterialHandler>();
     auto fileIo = panelManager.addPanel<FileIoPanel>();
     auto about = panelManager.addPanel<AboutPanel>();
+    auto editor = panelManager.addPanel<TrussModelEditor>();
 
     UIPanels panels{
       dock.get(),
@@ -134,11 +158,13 @@ namespace anaf::GUI {
       log.get(),
       matWindow.get(),
       fileIo.get(),
-      about.get()
+      about.get(),
+      editor.get()
     };
 
     trussSelector->isOpen = false;
     trussControl->isOpen = false;
+    editor->isOpen = false;
     tree->isOpen = false;
     matWindow->isOpen = false;
 

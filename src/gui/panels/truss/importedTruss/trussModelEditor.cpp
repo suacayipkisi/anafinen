@@ -1,0 +1,677 @@
+// Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "trussModelEditor.hpp"
+
+#include <bridge/generalStatus.hpp>
+#include <directory/getExecutableDirectory.hpp>
+#include <log/anaf_info.hpp>
+#include <panels/truss/trussWorker.hpp>
+#include <truss_1D/trussEngine/trussSolver.hpp>
+
+#include "imgui.h"
+
+#include <algorithm>
+#include <cfloat>
+#include <cmath>
+#include <cstddef>
+#include <exception>
+#include <format>
+#include <memory>
+#include <mutex>
+#include <stop_token>
+#include <string_view>
+#include <thread>
+#include <utility>
+#include <vector>
+
+namespace anaf::GUI {
+
+  namespace {
+
+    using BRIDGE::FixedDOFMap;
+    using BRIDGE::Gui_Calc_Bridge;
+    using BRIDGE::MeshData;
+
+    constexpr double kCm2ToM2 = 1e-4;
+
+    // Results no longer match an edited model.
+    void dropResults(MeshData& mesh) {
+      if (!mesh.hasResults) return;
+      for (auto& node : mesh.trussNodes) node.setDisplacements({0.0, 0.0, 0.0});
+      for (auto& element : mesh.trussElements) {
+        element.stress = 0.0f;
+        element.isStressExceeded = false;
+      }
+      mesh.hasResults = false;
+    }
+
+    // Runs edit on a copy of the active snapshot (an empty one if there is none) under
+    // dataMutex and publishes the copy. edit returns false to publish nothing.
+    template <typename Edit>
+    bool editModel(Gui_Calc_Bridge& bridge, Edit&& edit) {
+      {
+        std::lock_guard lock(bridge.dataMutex);
+        auto mesh = bridge.activeMesh ? std::make_shared<MeshData>(*bridge.activeMesh) : std::make_shared<MeshData>();
+        if (!edit(*mesh, bridge.fixedDOFsByNode)) return false;
+        dropResults(*mesh);
+        bridge.activeMesh = std::move(mesh);
+        bridge.hasTrussPreview = true;
+        bridge.m_isValid = false;
+      }
+      bridge.dataVersion.fetch_add(1, std::memory_order_release);
+      return true;
+    }
+
+    // Removes node k with its bars, load and fixity; later ids move down by one so that ids
+    // stay equal to positions (the solver and the viewport index nodes by id).
+    void deleteNode(MeshData& mesh, FixedDOFMap& fixity, const std::uint32_t k) {
+      const auto shift = [k](const std::uint32_t id) { return id > k ? id - 1 : id; };
+
+      std::vector<FEM::TRUSS::Node> nodes;
+      nodes.reserve(mesh.trussNodes.size());
+      for (const auto& node : mesh.trussNodes) {
+        if (node.getNodeID() == k) continue;
+        FEM::TRUSS::Node renumbered(shift(node.getNodeID()), node.getLocX(), node.getLocY(), node.getLocZ());
+        renumbered.setAllowedMotionDirections(node.getAllowedMotionDirections()); // keeps inclined supports
+        renumbered.setDisplacements(node.getDisplacement());
+        nodes.push_back(std::move(renumbered));
+      }
+      mesh.trussNodes = std::move(nodes);
+
+      std::erase_if(mesh.trussElements, [k](const BRIDGE::RenderElement& element) {
+        return element.node1 == k || element.node2 == k;
+      });
+      for (auto& element : mesh.trussElements) {
+        element.node1 = shift(element.node1);
+        element.node2 = shift(element.node2);
+      }
+
+      std::vector<FEM::TRUSS::ForceApplied> forces;
+      for (const auto& force : mesh.appliedForces) {
+        if (force.getApliedNode() != k) forces.emplace_back(shift(force.getApliedNode()), force.getForce());
+      }
+      mesh.appliedForces = std::move(forces);
+
+      FixedDOFMap shifted;
+      for (const auto& [id, dofs] : fixity) {
+        if (id != k) shifted[shift(id)] = dofs;
+      }
+      fixity = std::move(shifted);
+    }
+
+    // Material picker over bridge.allMaterials; keeps materialID valid when the selected
+    // material was removed in the Material Handler.
+    void materialCombo(Gui_Calc_Bridge& bridge, const char* label, std::uint32_t& materialID) {
+      std::lock_guard lock(bridge.dataMutex);
+      if (bridge.allMaterials.empty()) {
+        ImGui::TextDisabled("No materials available");
+        return;
+      }
+      if (!bridge.findMaterialIndex(materialID)) materialID = bridge.allMaterials.front().getMaterialID();
+      const auto& selected = bridge.allMaterials[*bridge.findMaterialIndex(materialID)];
+      if (ImGui::BeginCombo(label, selected.getMaterialType().data())) {
+        for (const auto& material : bridge.allMaterials) {
+          ImGui::PushID(static_cast<int>(material.getMaterialID()));
+          if (ImGui::Selectable(material.getMaterialType().data(), material.getMaterialID() == materialID)) {
+            materialID = material.getMaterialID();
+          }
+          ImGui::PopID();
+        }
+        ImGui::EndCombo();
+      }
+    }
+
+    std::shared_ptr<const MeshData> currentMesh(Gui_Calc_Bridge& bridge) {
+      std::lock_guard lock(bridge.dataMutex);
+      return bridge.activeMesh;
+    }
+
+  } // namespace end
+
+  void TrussModelEditor::resetState() {
+    m_newNode = {0.0, 0.0, 0.0};
+    m_nodePosition = {0.0, 0.0, 0.0};
+    m_barNodeA = 0;
+    m_barNodeB = 1;
+    m_areaCm2 = 80.0;
+    m_selectedBar = kNone;
+    m_force = {0.0, 0.0, 0.0};
+    m_fixed = {false, false, false};
+    m_loadedNode = kNone;
+    m_status.clear();
+    m_statusIsError = false;
+  }
+
+  void TrussModelEditor::setStatus(std::string message, const bool error) {
+    if (error) anaf::LOG::warn("Model editor: {}", message);
+    m_status = std::move(message);
+    m_statusIsError = error;
+  }
+
+  void TrussModelEditor::syncSelection(const std::uint32_t selectedNode) {
+    if (selectedNode == m_loadedNode) return;
+    m_loadedNode = selectedNode;
+    m_force = {0.0, 0.0, 0.0};
+    m_fixed = {false, false, false};
+    if (selectedNode == kNone) return;
+
+    auto& bridge = BRIDGE::buildBridge();
+    std::lock_guard lock(bridge.dataMutex);
+    if (!bridge.activeMesh || selectedNode >= bridge.activeMesh->trussNodes.size()) return;
+    m_nodePosition = bridge.activeMesh->trussNodes[selectedNode].getLocation();
+    for (const auto& force : bridge.activeMesh->appliedForces) {
+      if (force.getApliedNode() == selectedNode) m_force = force.getForce();
+    }
+    if (const auto it = bridge.fixedDOFsByNode.find(selectedNode); it != bridge.fixedDOFsByNode.end()) {
+      m_fixed = it->second;
+    }
+  }
+
+  void TrussModelEditor::renderSummary() {
+    auto& bridge = BRIDGE::buildBridge();
+    const auto mesh = currentMesh(bridge);
+
+    std::size_t bars = 0, wireframe = 0, supports = 0;
+    if (mesh) {
+      for (const auto& element : mesh->trussElements) {
+        if (element.isWireframe) ++wireframe;
+        else ++bars;
+      }
+    }
+    {
+      std::lock_guard lock(bridge.dataMutex);
+      supports = bridge.fixedDOFsByNode.size();
+    }
+
+    if (ImGui::Button("Import File...", ImVec2(-1.0f, 0.0f)) && onRequestImport) onRequestImport();
+
+    if (!mesh) {
+      ImGui::TextWrapped("No model yet. Import a file (Ctrl+O) or add nodes and bars below.");
+    } else {
+      ImGui::Text("Nodes: %zu   Bars: %zu", mesh->trussNodes.size(), bars);
+      if (wireframe > 0) ImGui::TextDisabled("Wireframe edges (not solved): %zu", wireframe);
+      ImGui::Text("Loads: %zu   Supported nodes: %zu", mesh->appliedForces.size(), supports);
+      if (mesh->hasResults) {
+        const bool valid = bridge.m_isValid.load();
+        ImGui::TextColored(valid ? ImVec4(0.55f, 0.95f, 0.6f, 1.0f) : ImVec4(1.0f, 0.75f, 0.35f, 1.0f), "%s",
+                           valid ? "Results: solved, energy check passed" : "Results: shown (energy check not passed)");
+      } else {
+        ImGui::TextDisabled("Results: none (run the solver)");
+      }
+    }
+
+    if (!m_status.empty()) {
+      const ImVec4 color = m_statusIsError ? ImVec4(1.0f, 0.45f, 0.45f, 1.0f) : ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
+      ImGui::PushTextWrapPos(0.0f);
+      ImGui::TextColored(color, "%s", m_status.c_str());
+      ImGui::PopTextWrapPos();
+    }
+  }
+
+  void TrussModelEditor::renderNodes(const std::uint32_t selectedNode) {
+    if (!ImGui::CollapsingHeader("Nodes", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    auto& bridge = BRIDGE::buildBridge();
+
+    ImGui::InputScalarN("Position [m]##new_node", ImGuiDataType_Double, m_newNode.data(), 3, nullptr, nullptr, "%.4g");
+    if (ImGui::Button("Add Node", ImVec2(-1.0f, 0.0f))) {
+      std::uint32_t added = 0;
+      editModel(bridge, [&](MeshData& mesh, FixedDOFMap&) {
+        added = static_cast<std::uint32_t>(mesh.trussNodes.size());
+        mesh.trussNodes.emplace_back(added, m_newNode[0], m_newNode[1], m_newNode[2]);
+        return true;
+      });
+      {
+        std::lock_guard lock(bridge.dataMutex);
+        bridge.selectedNodeId = added;
+      }
+      setStatus(std::format("Node {} added", added), false);
+    }
+
+    ImGui::Separator();
+    std::uint32_t typed = selectedNode;
+    ImGui::SetNextItemWidth(120.0f);
+    if (ImGui::InputScalar("Selected node", ImGuiDataType_U32, &typed, nullptr, nullptr, nullptr, ImGuiInputTextFlags_EnterReturnsTrue)) {
+      {
+        std::lock_guard lock(bridge.dataMutex);
+        const bool exists = bridge.activeMesh && typed < bridge.activeMesh->trussNodes.size();
+        bridge.selectedNodeId = exists ? typed : kNone;
+      }
+      bridge.dataVersion.fetch_add(1, std::memory_order_release); // redraw the highlight
+    }
+    if (selectedNode == kNone) {
+      ImGui::TextDisabled("Click a node in the viewport (Nodes: Visible) or type its id.");
+      return;
+    }
+
+    ImGui::InputScalarN("Position [m]##selected_node", ImGuiDataType_Double, m_nodePosition.data(), 3, nullptr, nullptr, "%.4g");
+    if (ImGui::Button("Move Node")) {
+      const bool moved = editModel(bridge, [&](MeshData& mesh, FixedDOFMap&) {
+        if (selectedNode >= mesh.trussNodes.size()) return false;
+        mesh.trussNodes[selectedNode].setLocation(m_nodePosition);
+        return true;
+      });
+      if (moved) setStatus(std::format("Node {} moved", selectedNode), false);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Delete Node")) {
+      const bool deleted = editModel(bridge, [&](MeshData& mesh, FixedDOFMap& fixity) {
+        if (selectedNode >= mesh.trussNodes.size()) return false;
+        deleteNode(mesh, fixity, selectedNode);
+        return true;
+      });
+      if (deleted) {
+        {
+          std::lock_guard lock(bridge.dataMutex);
+          bridge.selectedNodeId = kNone;
+        }
+        m_selectedBar = kNone;
+        m_loadedNode = kNone;
+        setStatus(std::format("Node {} deleted with its bars; later node ids moved down by one", selectedNode), false);
+      }
+    }
+  }
+
+  void TrussModelEditor::renderBars() {
+    if (!ImGui::CollapsingHeader("Bars", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    auto& bridge = BRIDGE::buildBridge();
+
+    materialCombo(bridge, "Material##editor_bar_material", m_materialID);
+    if (ImGui::Button("Open Material Handler", ImVec2(-1.0f, 0.0f)) && onOpenMaterialHandler) onOpenMaterialHandler();
+    ImGui::InputDouble("Area [cm^2]", &m_areaCm2, 0.0, 0.0, "%.4g");
+    if (m_areaCm2 < 0.0) m_areaCm2 = 0.0;
+
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.3f);
+    ImGui::InputScalar("##bar_a", ImGuiDataType_U32, &m_barNodeA);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.45f);
+    ImGui::InputScalar("Node A - B##bar_b", ImGuiDataType_U32, &m_barNodeB);
+
+    // Assigns the chosen material and area; false (with a status) if either is unusable.
+    const auto assign = [&](BRIDGE::RenderElement& element) {
+      const auto index = bridge.findMaterialIndex(m_materialID); // caller holds dataMutex
+      if (!index || !(m_areaCm2 > 0.0)) return false;
+      element.materialID = *index;
+      element.crossSectionArea = m_areaCm2 * kCm2ToM2;
+      element.isWireframe = false;
+      return true;
+    };
+
+    if (ImGui::Button("Add Bar", ImVec2(-1.0f, 0.0f))) {
+      std::string error;
+      const bool added = editModel(bridge, [&](MeshData& mesh, FixedDOFMap&) {
+        const auto count = mesh.trussNodes.size();
+        const auto a = m_barNodeA, b = m_barNodeB;
+        if (a >= count || b >= count) {
+          error = std::format("nodes {} and {} must both exist (the model has {} nodes)", a, b, count);
+          return false;
+        }
+        if (a == b) {
+          error = "a bar needs two different nodes";
+          return false;
+        }
+        const auto& pa = mesh.trussNodes[a].getLocation();
+        const auto& pb = mesh.trussNodes[b].getLocation();
+        if (std::hypot(pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]) <= 0.0) {
+          error = std::format("nodes {} and {} are at the same position", a, b);
+          return false;
+        }
+        const bool duplicate = std::ranges::any_of(mesh.trussElements, [&](const BRIDGE::RenderElement& element) {
+          return !element.isWireframe && ((element.node1 == a && element.node2 == b) || (element.node1 == b && element.node2 == a));
+        });
+        if (duplicate) {
+          error = std::format("a bar between nodes {} and {} already exists", a, b);
+          return false;
+        }
+        BRIDGE::RenderElement element{a, b, 0.0f, false, 0u, 0.0, false};
+        if (!assign(element)) {
+          error = "choose a material and an area greater than 0";
+          return false;
+        }
+        mesh.trussElements.push_back(element);
+        return true;
+      });
+      if (added) {
+        setStatus(std::format("Bar {} - {} added", m_barNodeA, m_barNodeB), false);
+        m_barNodeA = m_barNodeB; // ready for the next bar of a chain
+      } else {
+        setStatus("Bar not added: " + error, true);
+      }
+    }
+
+    const auto mesh = currentMesh(bridge);
+    const std::size_t count = mesh ? mesh->trussElements.size() : 0;
+    if (m_selectedBar != kNone && m_selectedBar >= count) m_selectedBar = kNone;
+
+    ImGui::BeginChild("EditorBarList", ImVec2(0.0f, 160.0f), true);
+    if (mesh) {
+      std::lock_guard lock(bridge.dataMutex); // material names
+      ImGuiListClipper clipper;
+      clipper.Begin(static_cast<int>(count));
+      while (clipper.Step()) {
+        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+          const auto index = static_cast<std::uint32_t>(row);
+          const auto& element = mesh->trussElements[index];
+          std::string label;
+          if (element.isWireframe) {
+            label = std::format("{}: {} - {}  (wireframe edge)", index, element.node1, element.node2);
+          } else {
+            const auto material = element.materialID < bridge.allMaterials.size()
+              ? std::string(bridge.allMaterials[element.materialID].getMaterialType()) : std::string("?");
+            label = std::format("{}: {} - {}  {}  {:.4g} cm^2", index, element.node1, element.node2, material,
+                                element.crossSectionArea / kCm2ToM2);
+          }
+          ImGui::PushID(row);
+          if (ImGui::Selectable(label.c_str(), m_selectedBar == index)) {
+            m_selectedBar = m_selectedBar == index ? kNone : index;
+          }
+          ImGui::PopID();
+        }
+      }
+    }
+    ImGui::EndChild();
+
+    ImGui::BeginDisabled(m_selectedBar == kNone);
+    if (ImGui::Button("Apply to Selected")) {
+      const auto bar = m_selectedBar;
+      const bool applied = editModel(bridge, [&](MeshData& edited, FixedDOFMap&) {
+        return bar < edited.trussElements.size() && assign(edited.trussElements[bar]);
+      });
+      if (applied) setStatus(std::format("Bar {} updated", bar), false);
+      else setStatus("Choose a material and an area greater than 0", true);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Delete Bar")) {
+      const auto bar = m_selectedBar;
+      const bool deleted = editModel(bridge, [&](MeshData& edited, FixedDOFMap&) {
+        if (bar >= edited.trussElements.size()) return false;
+        edited.trussElements.erase(edited.trussElements.begin() + static_cast<std::ptrdiff_t>(bar));
+        return true;
+      });
+      if (deleted) {
+        m_selectedBar = kNone;
+        setStatus(std::format("Bar {} deleted", bar), false);
+      }
+    }
+    ImGui::EndDisabled();
+  }
+
+  void TrussModelEditor::renderWholeModel() {
+    if (!ImGui::CollapsingHeader("Whole Model: Section & Material", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    auto& bridge = BRIDGE::buildBridge();
+    const auto mesh = currentMesh(bridge);
+
+    std::size_t bars = 0, wireframe = 0;
+    if (mesh) {
+      for (const auto& element : mesh->trussElements) {
+        if (element.isWireframe) ++wireframe;
+        else ++bars;
+      }
+    }
+    ImGui::TextWrapped("Sets one material and cross-section on every bar at once (e.g. after importing a file "
+                       "without sections). Single bars can still be changed below.");
+    materialCombo(bridge, "Material##editor_whole_material", m_wholeMaterialID);
+    ImGui::InputDouble("Area [cm^2]##editor_whole_area", &m_wholeAreaCm2, 0.0, 0.0, "%.4g");
+    if (m_wholeAreaCm2 < 0.0) m_wholeAreaCm2 = 0.0;
+    if (wireframe > 0) {
+      ImGui::Checkbox(std::format("Also turn the {} wireframe edges into bars##editor_include_wireframe", wireframe).c_str(),
+                      &m_includeWireframe);
+    }
+
+    ImGui::BeginDisabled(bars == 0 && (wireframe == 0 || !m_includeWireframe));
+    if (ImGui::Button("Apply to Whole Model", ImVec2(-1.0f, 0.0f))) {
+      std::size_t changed = 0;
+      const bool applied = editModel(bridge, [&](MeshData& edited, FixedDOFMap&) {
+        const auto index = bridge.findMaterialIndex(m_wholeMaterialID); // editModel holds dataMutex
+        if (!index || !(m_wholeAreaCm2 > 0.0)) return false;
+        for (auto& element : edited.trussElements) {
+          if (element.isWireframe && !m_includeWireframe) continue;
+          element.materialID = *index;
+          element.crossSectionArea = m_wholeAreaCm2 * kCm2ToM2;
+          element.isWireframe = false;
+          ++changed;
+        }
+        return changed > 0;
+      });
+      if (applied) setStatus(std::format("Material and {:.4g} cm^2 set on {} bars", m_wholeAreaCm2, changed), false);
+      else setStatus("Nothing changed: choose a material and an area greater than 0", true);
+    }
+    ImGui::EndDisabled();
+  }
+
+  void TrussModelEditor::readLibrary() {
+    m_libraryRead = true;
+    m_library.clear();
+    m_libraryDir = anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::TRUSS::LIBRARY::kLibrarySubdir));
+    if (m_libraryDir.empty()) {
+      m_libraryError = std::format("assets/{} not found", FEM::TRUSS::LIBRARY::kLibrarySubdir);
+      anaf::LOG::warn("Built-in truss library: {}", m_libraryError);
+      return;
+    }
+    auto index = FEM::TRUSS::LIBRARY::loadIndex(m_libraryDir / std::filesystem::path(FEM::TRUSS::LIBRARY::kIndexFile));
+    if (!index) {
+      m_libraryError = index.error();
+      anaf::LOG::warn("Built-in truss library: {}", m_libraryError);
+      return;
+    }
+    // Grouped by category in the combo.
+    std::ranges::stable_sort(*index, {}, &FEM::TRUSS::LIBRARY::Entry::category);
+    m_library = std::move(*index);
+    m_libraryError.clear();
+  }
+
+  void TrussModelEditor::renderLibrary() {
+    if (!ImGui::CollapsingHeader("Built-in Models")) return;
+    if (!m_libraryRead) readLibrary();
+    if (m_library.empty()) {
+      ImGui::TextDisabled("%s", m_libraryError.empty() ? "No built-in models" : m_libraryError.c_str());
+      return;
+    }
+    m_librarySelected = std::clamp(m_librarySelected, 0, static_cast<int>(m_library.size()) - 1);
+    const auto& selected = m_library[static_cast<std::size_t>(m_librarySelected)];
+
+    const std::string preview = selected.category + ": " + selected.name;
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##builtin_truss", preview.c_str())) {
+      std::string_view category;
+      for (int i = 0; i < static_cast<int>(m_library.size()); ++i) {
+        const auto& entry = m_library[static_cast<std::size_t>(i)];
+        if (entry.category != category) {
+          category = entry.category;
+          ImGui::SeparatorText(entry.category.c_str());
+        }
+        ImGui::PushID(i);
+        if (ImGui::Selectable(entry.name.c_str(), i == m_librarySelected)) m_librarySelected = i;
+        ImGui::PopID();
+      }
+      ImGui::EndCombo();
+    }
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", selected.description.c_str());
+    ImGui::PopTextWrapPos();
+    if (ImGui::Button("Load Built-in Model", ImVec2(-1.0f, 0.0f)) && onLoadBuiltin) {
+      onLoadBuiltin(FEM::TRUSS::LIBRARY::modelFile(m_libraryDir, selected));
+    }
+    ImGui::TextDisabled("Read-only: loading makes a copy; save changes with File > Export.");
+  }
+
+  void TrussModelEditor::renderSupportsAndLoads(const std::uint32_t selectedNode) {
+    if (!ImGui::CollapsingHeader("Supports & Loads", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (selectedNode == kNone) {
+      ImGui::TextDisabled("Select a node first.");
+      return;
+    }
+    auto& bridge = BRIDGE::buildBridge();
+    ImGui::Text("Node %u", selectedNode);
+
+    ImGui::Checkbox("Fix X##editor_fix_x", &m_fixed[0]);
+    ImGui::SameLine();
+    ImGui::Checkbox("Fix Y##editor_fix_y", &m_fixed[1]);
+    ImGui::SameLine();
+    ImGui::Checkbox("Fix Z##editor_fix_z", &m_fixed[2]);
+    if (ImGui::Button("Apply Support", ImVec2(-1.0f, 0.0f))) {
+      const bool applied = editModel(bridge, [&](MeshData& mesh, FixedDOFMap& fixity) {
+        if (selectedNode >= mesh.trussNodes.size()) return false;
+        if (m_fixed[0] || m_fixed[1] || m_fixed[2]) fixity[selectedNode] = m_fixed;
+        else fixity.erase(selectedNode);
+        mesh.trussNodes[selectedNode].setMovable({!m_fixed[0], !m_fixed[1], !m_fixed[2]});
+        return true;
+      });
+      if (applied) setStatus(std::format("Support of node {} updated", selectedNode), false);
+    }
+
+    ImGui::InputScalarN("Force [N]", ImGuiDataType_Double, m_force.data(), 3, nullptr, nullptr, "%.4g");
+    const auto setLoad = [&](const std::array<double, 3> force) {
+      return editModel(bridge, [&](MeshData& mesh, FixedDOFMap&) {
+        if (selectedNode >= mesh.trussNodes.size()) return false;
+        std::erase_if(mesh.appliedForces, [&](const FEM::TRUSS::ForceApplied& applied) {
+          return applied.getApliedNode() == selectedNode;
+        });
+        if (force[0] != 0.0 || force[1] != 0.0 || force[2] != 0.0) mesh.appliedForces.emplace_back(selectedNode, force);
+        return true;
+      });
+    };
+    if (ImGui::Button("Apply Load")) {
+      if (setLoad(m_force)) setStatus(std::format("Load on node {} updated", selectedNode), false);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Remove Load")) {
+      m_force = {0.0, 0.0, 0.0};
+      if (setLoad(m_force)) setStatus(std::format("Load on node {} removed", selectedNode), false);
+    }
+  }
+
+  void TrussModelEditor::renderSolve() {
+    auto& bridge = BRIDGE::buildBridge();
+    const auto mesh = currentMesh(bridge);
+
+    double scale = mesh ? mesh->deformScale.load() : 1.0;
+    ImGui::SetNextItemWidth(160.0f);
+    if (ImGui::InputDouble("Deformation Scale##editor", &scale, 0.0, 0.0, "%.3f") && mesh) {
+      {
+        std::lock_guard lock(bridge.dataMutex);
+        if (bridge.activeMesh) {
+          auto updated = std::make_shared<MeshData>(*bridge.activeMesh);
+          updated->deformScale = scale;
+          bridge.activeMesh = std::move(updated);
+        }
+      }
+      bridge.dataVersion.fetch_add(1, std::memory_order_release);
+    }
+
+    if (bridge.m_isRunning.load()) {
+      ImGui::ProgressBar(bridge.m_progress.load(), ImVec2(-1.0f, 0.0f));
+      ImGui::BeginDisabled();
+      ImGui::Button("Calculating...", ImVec2(-1.0f, 32.0f));
+      ImGui::EndDisabled();
+    } else {
+      ImGui::BeginDisabled(!mesh);
+      if (ImGui::Button("Run Solver for Truss##editor", ImVec2(-1.0f, 32.0f))) {
+        // Join first: a worker that is still finishing clears m_isRunning on exit.
+        bridge.joinWorker();
+        FixedDOFMap fixity;
+        std::vector<anaf::MATERIAL::Material> materials;
+        std::shared_ptr<const MeshData> model;
+        std::uint64_t generation = 0;
+        {
+          std::lock_guard lock(bridge.dataMutex);
+          model = bridge.activeMesh;
+          fixity = bridge.fixedDOFsByNode;
+          materials = bridge.allMaterials;
+          generation = bridge.modelGeneration.load();
+        }
+        if (!model) {
+          ImGui::EndDisabled();
+          return;
+        }
+        bridge.m_isRunning = true;
+        bridge.m_progress = 0.0f;
+        m_status.clear();
+
+        bridge.workerThread = std::jthread(
+          [&bridge, model = std::move(model), fixity = std::move(fixity), materials = std::move(materials), generation]
+          (std::stop_token st) {
+            try {
+              TRUSS_WORKER::configureOpenMPForWorker();
+              FEM::TRUSS::Truss_Imported_or_Entered solver;
+              if (const auto ready = solver.setModel(bridge, st, *model, fixity, materials); !ready) {
+                anaf::LOG::error("Solver not started: {}", ready.error());
+              } else {
+                solver.setForce(bridge, st, model->appliedForces);
+                solver.setContainer(bridge, st);
+                solver.calculate(bridge, st, materials);
+                if (!st.stop_requested()) {
+                  auto solved = solver.buildResultMesh(*model, materials);
+                  bool published = false;
+                  {
+                    std::lock_guard lock(bridge.dataMutex);
+                    if (bridge.modelGeneration.load() == generation) { // not reset while solving
+                      bridge.activeMesh = std::move(solved);
+                      published = true;
+                    }
+                  }
+                  if (published) bridge.dataVersion.fetch_add(1, std::memory_order_release);
+                }
+              }
+            } catch (const std::exception& exception) {
+              anaf::LOG::error("Solver failed: {}", exception.what());
+            }
+            bridge.m_progress = 1.0f;
+            bridge.m_isRunning = false;
+          });
+      }
+      ImGui::EndDisabled();
+    }
+
+    if (ImGui::Button("Clear Model", ImVec2(-1.0f, 0.0f))) {
+      bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
+      resetState();
+    }
+  }
+
+  void TrussModelEditor::onImGuiRender() {
+    if (!isOpen) return;
+    auto& bridge = BRIDGE::buildBridge();
+
+    std::uint32_t selectedNode = kNone;
+    {
+      std::lock_guard lock(bridge.dataMutex);
+      selectedNode = bridge.selectedNodeId;
+      if (!bridge.activeMesh || selectedNode >= bridge.activeMesh->trussNodes.size()) selectedNode = kNone;
+    }
+    syncSelection(selectedNode);
+
+    ImGui::Begin("Truss(1D) Model Editor", &isOpen);
+    renderSummary();
+    ImGui::Separator();
+
+    // The solve works on a copy; edits made meanwhile would be overwritten by its result.
+    const bool busy = bridge.m_isRunning.load() || bridge.m_isGeneratingPreview.load();
+    ImGui::BeginDisabled(busy);
+    renderLibrary();
+    renderWholeModel();
+    renderNodes(selectedNode);
+    renderBars();
+    renderSupportsAndLoads(selectedNode);
+    ImGui::EndDisabled();
+
+    ImGui::Separator();
+    renderSolve();
+    ImGui::End();
+  }
+
+} // namespace anaf::GUI end

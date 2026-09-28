@@ -181,7 +181,7 @@ namespace FEM::TRUSS::ADAPTER {
           const bool exceeded = materialId < materials.size() && std::abs(s) > materials[materialId].getYieldTensile();
           for (std::size_t k = 0; k + 1 < info.edges.size(); k += 2) {
             mesh.trussElements.push_back({nodes[info.edges[k]], nodes[info.edges[k + 1]], s, exceeded, materialId,
-                                          area ? (*area)[global] : 0.0});
+                                          area ? (*area)[global] : 0.0, false});
           }
           block.type == ElementType::Line2 ? ++bars : ++splitQuadratic;
           continue;
@@ -194,7 +194,7 @@ namespace FEM::TRUSS::ADAPTER {
         }
       }
     }
-    for (const auto& [a, b] : wireframeEdges) mesh.trussElements.push_back({a, b, 0.0f, false, 0u, 0.0});
+    for (const auto& [a, b] : wireframeEdges) mesh.trussElements.push_back({a, b, 0.0f, false, 0u, 0.0, true});
 
     for (const auto& constraint : model.constraints) {
       result.fixity[constraint.node] = constraint.fixed;

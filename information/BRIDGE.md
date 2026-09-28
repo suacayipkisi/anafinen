@@ -40,29 +40,36 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 
 | Field | Type | Written by | Read by | Protection |
 |---|---|---|---|---|
-| `activeMesh` | `shared_ptr<const MeshData>` | Worker (publish), control panel (loads, deform scale, clear) | Viewport, model tree, control panel | `dataMutex` |
+| `activeMesh` | `shared_ptr<const MeshData>` | Worker (publish), control panel (loads, deform scale), model editor (every edit), `resetModel()`, File > Import | Viewport, model tree, both truss panels, File > Export | `dataMutex` |
+| `modelGeneration` | `atomic<uint64_t>` | `resetModel()` | Workers (taken at start, compared before publishing) | atomic; the comparison runs under `dataMutex` |
 | `dataVersion` | `atomic<uint64_t>` | Every publisher, after swapping `activeMesh` | Viewport (reload check) | atomic, `memory_order_release` on increment |
-| `fixedDOFsByNode` | `FixedDOFMap` = `unordered_map<uint32_t, array<bool,3>>` | Control panel ("Apply Fixity", demo, clear) | Control panel (copies it for the worker), preview worker, viewport, model tree | `dataMutex`; the solver worker only sees a copy |
-| `selectedNodeId` | `uint32_t`, `UINT32_MAX` = none | Viewport picking, control panel | Control panel, viewport | `dataMutex` |
+| `fixedDOFsByNode` | `FixedDOFMap` = `unordered_map<uint32_t, array<bool,3>>` | Control panel ("Apply Fixity", demo), model editor ("Apply Support", node delete), File > Import, `resetModel()` | Both truss panels (copy it for the worker), preview worker, viewport, model tree | `dataMutex`; the solver worker only sees a copy |
+| `selectedNodeId` | `uint32_t`, `UINT32_MAX` = none | Viewport picking, both truss panels, `resetModel()` | Both truss panels, viewport | `dataMutex` |
 | `hasTrussPreview` | `bool` | Worker, control panel | Panels | `dataMutex` |
-| `m_isRunning` | `atomic<bool>` | Control panel (set), worker (clear) | Control panel (button state) | atomic |
-| `m_isGeneratingPreview` | `atomic<bool>` | Control panel, preview worker | Control panel | atomic |
-| `m_progress` | `atomic<float>` 0..1 | Worker (`Truss_SQPT` steps) | Control panel progress bar | atomic |
-| `m_isValid`, `m_energyDiff` | atomics | `Truss_SQPT::calculate()` | Panels | atomic (written under `dataMutex`) |
-| `m_objectType` | `atomic<ObjectType>` | - | Model tree | atomic |
-| `workerThread` | `std::jthread` | Control panel | `initgui()` shutdown | GUI thread only |
+| `m_isRunning` | `atomic<bool>` | Truss panels (set), worker (clear), `resetModel()` | Truss panels (button state), File > Import, material removal | atomic |
+| `m_isGeneratingPreview` | `atomic<bool>` | Control panel, preview worker, `resetModel()` | Control panel | atomic |
+| `m_progress` | `atomic<float>` 0..1 | Worker (solver steps) | Progress bars | atomic |
+| `m_isValid`, `m_energyDiff` | atomics | `detail::runStaticSolve()` (both solver classes), `resetModel()` | Panels | atomic (written under `dataMutex`) |
+| `m_objectType` | `atomic<ObjectType>`, starts as `no_type` | `resetModel()` only | Model tree, File > Import (refused for `truss_SQPT`), File menu | atomic; written under `dataMutex` |
+| `workerThread` | `std::jthread` | Truss panels (after `joinWorker()`) | `initgui()` shutdown, `resetModel()` (stop request) | GUI thread only |
 | `allMaterials` | `vector<Material>` | `setStaticInfo()` (built-ins from JSON), `addUserMaterial()`, `removeUserMaterial()` | Control panel (material combo, copies it for the worker), Material Handler, File > Import | `dataMutex`; the solver worker only sees a copy |
 | `m_nextMaterialID` (private) | `uint32_t` | `setStaticInfo()`, `addUserMaterial()`, `loadUserMaterials()` | - | `dataMutex` |
 | `m_userMaterialPath` (private) | `filesystem::path` | `loadUserMaterials()` (startup) | `saveUserMaterials()` | GUI thread only; empty = not persisted |
 
 `ObjectType` is `truss_SQPT`, `truss_imported_or_entered` or `no_type`. `getObjectTypeName()` converts it to a string for the model tree.
 
+| Object type | Model comes from | Panel | Import | Export |
+|---|---|---|---|---|
+| `no_type` (start) | - | none | yes (switches to `truss_imported_or_entered`) | yes, once a model exists |
+| `truss_SQPT` | Grid generator (Generate Preview / Run Solver) | `TrussControlPanel` | **no** (menu item greyed out, Ctrl+O refused) | yes |
+| `truss_imported_or_entered` | File > Import, or node / bar edits | `TrussModelEditor` | yes (replaces the model) | yes |
+
 ## 3. `MeshData`: the published snapshot
 
 | Field | Type | Meaning |
 |---|---|---|
 | `trussNodes` | `vector<FEM::TRUSS::Node>` | ID, location, displacement, movable flags, allowed motion basis |
-| `trussElements` | `vector<RenderElement>` | `node1`, `node2`, `stress` (float, Pa), `isStressExceeded`, `materialID`, `crossSectionArea` (m²) |
+| `trussElements` | `vector<RenderElement>` | `node1`, `node2`, `stress` (float, Pa), `isStressExceeded`, `materialID`, `crossSectionArea` (m²), `isWireframe` (edge of an imported surface / volume element: drawn, never solved) |
 | `appliedForces` | `vector<FEM::TRUSS::ForceApplied>` | Loads to draw as arrows |
 | `deformScale` | `atomic<double>` | Render-only displacement multiplier |
 | `hasResults` | `bool` | Displacements / stresses come from a solve or a result file (controls what export writes) |
@@ -95,19 +102,35 @@ Consequences:
 - Changing one value, for example `deformScale`, copies the whole mesh. This is fine at current sizes but becomes relevant for very large models.
 - `dataMutex` is held only for pointer swaps and small map reads, never during a solve.
 
+### 4.1 Model reset and generations
+
+`resetModel(type)` is the only way the model is dropped. Callers: an object type change in the truss selector, Clear All / Load Demo (`TrussControlPanel`), Clear Model (`TrussModelEditor`), and a finished File > Import.
+
+1. `modelGeneration` is incremented.
+2. `request_stop()` on `workerThread` (no join: a direct factorization cannot be interrupted, and the GUI must not freeze).
+3. `m_isRunning`, `m_isGeneratingPreview` and `m_progress` are cleared.
+4. Under `dataMutex`: `activeMesh = nullptr`, fixity cleared, no selection, `hasTrussPreview = false`, `m_isValid = false`, `m_energyDiff = 0`, `m_objectType = type`.
+5. `dataVersion` is bumped, so the viewport and the model tree redraw the empty model.
+
+The panels clear their own inputs (loads, checkboxes, selected bar) with `resetState()`; `bindAnalysisFlow()` calls both panels' `resetState()` on a type change and after an import.
+
+Every worker takes `modelGeneration` before it starts and publishes only if the value is unchanged, compared under `dataMutex` in the same critical section as the swap. A worker that outlives a reset therefore finishes silently. Before a panel starts a new worker it calls `joinWorker()` (stop + join the previous one), then sets `m_isRunning` / `m_isGeneratingPreview`; otherwise the old worker's exit would clear the new job's flag.
+
 ## 5. Worker lifecycle
 
 | Action (control panel) | Bridge effect |
 |---|---|
 | Generate Preview | `m_isGeneratingPreview = true`. A new worker builds geometry only and publishes it with fixity overlaid. `selectedNodeId = 0`. |
 | Run Solver for Truss | `m_isRunning = true`, `m_progress = 0`. `fixedDOFsByNode` and `allMaterials` are copied under `dataMutex` and moved into the worker. The worker runs the full pipeline ([CALCULATIONS.md](CALCULATIONS.md)) with those copies, overlays the fixity it actually used onto the snapshot nodes, and publishes it. `m_progress = 1`, `m_isRunning = false`. |
-| Load Demo | Stops the running worker. Sets fixed nodes 0, 10, 220, 230 and a demo load. |
-| Clear All | `request_stop()`, resets flags, clears `activeMesh`, fixity, and selection, bumps `dataVersion`. |
-| File > Import (FileIoPanel) | Refused while `m_isRunning` / `m_isGeneratingPreview`. The I/O thread builds the snapshot. The GUI thread then sets `activeMesh`, `fixedDOFsByNode`, `hasTrussPreview`, clears the selection and sets `m_objectType = truss_imported_or_entered` under `dataMutex`, then bumps `dataVersion`. |
+| Load Demo | `resetModel(truss_SQPT)`, then sets fixed nodes 0, 10, 220, 230 and a demo load. |
+| Clear All | `resetModel(truss_SQPT)` and the panel's `resetState()`. |
+| Model editor edit (`TrussModelEditor`) | Disabled while a worker runs. Copies `activeMesh` (or starts an empty one), applies the edit, drops stale results (`hasResults = false`, zero displacements and stresses), publishes under `dataMutex` and bumps `dataVersion`. Node ids stay `0..n-1`: deleting a node removes its bars, load and fixity and moves later ids down by one. |
+| Run Solver for Truss (model editor) | Like the control panel's solve, but the worker gets the `activeMesh` pointer itself and runs `Truss_Imported_or_Entered` ([CALCULATIONS.md](CALCULATIONS.md) section 3.1). An unsolvable model (no bars, bars without area, ...) is logged as "Solver not started: ..." and nothing is published. |
+| File > Import (FileIoPanel) | Refused for `truss_SQPT` and while `m_isRunning` / `m_isGeneratingPreview`. The I/O thread builds the snapshot. The GUI thread discards it if the type was switched to `truss_SQPT` meanwhile; otherwise it calls `resetModel(truss_imported_or_entered)`, sets `activeMesh`, `fixedDOFsByNode` and `hasTrussPreview` under `dataMutex`, then bumps `dataVersion`. |
 | File > Export (FileIoPanel) | Copies the `activeMesh` pointer and `fixedDOFsByNode` under `dataMutex`; conversion and writing run on the I/O thread. |
 | Window close | `initgui()` calls `request_stop()`, then joins by assigning an empty `std::jthread`. |
 
-Assigning a new `std::jthread` to `workerThread` destroys the old one. `std::jthread`'s destructor calls `request_stop()` and joins, so two workers never run at the same time. Long loops in the solver check `stop_token` between steps.
+`joinWorker()` stops and joins the previous worker before a new one is assigned, so two workers never run at the same time. Long loops in the solver check `stop_token` between steps.
 
 ### 5.1 Materials
 
@@ -157,13 +180,15 @@ Without a `loadUserMaterials()` call (the tests), user materials are session-onl
 
 - Copy every mutable bridge container the worker needs under `dataMutex` **before** creating the `std::jthread`, and move the copies into the lambda. Never read `bridge.<container>` from the worker.
 - Atomics (`m_progress`, `m_isRunning`, ...) may be written from the worker directly.
-- Publish results only through the protocol in section 4.
+- Publish results only through the protocol in section 4, and only if `modelGeneration` is still the value taken at start (section 4.1).
+- Call `joinWorker()` before setting `m_isRunning` / `m_isGeneratingPreview` for the new job.
 - `buildBridge()` returns a process-wide singleton. The bridge stays a core type on purpose: a planned CLI executable will build a CLI-side bridge instead of the GUI side. Prefer passing `Gui_Calc_Bridge&` explicitly, as `Truss_SQPT` does.
 
 ## 7. Related source files
 
 - Bridge and `MeshData`: [src/bridge/generalStatus.hpp](../src/bridge/generalStatus.hpp), [src/bridge/generalStatus.cpp](../src/bridge/generalStatus.cpp)
-- Worker creation and publishing: [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp)
+- Worker creation and publishing: [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [src/gui/panels/truss/importedTruss/trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp)
+- Object type switch and panel resets: [src/gui/gui.cpp](../src/gui/gui.cpp) (`bindAnalysisFlow`)
 - Snapshot consumer: [src/gui/panels/viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [src/gui/panels/modelTree.cpp](../src/gui/panels/modelTree.cpp) (copies the pointer under the lock; no deep copy per frame)
 - Import / export publisher: [src/gui/panels/fileIoPanel.cpp](../src/gui/panels/fileIoPanel.cpp)
 - Materials: [src/material/properties.hpp](../src/material/properties.hpp), [src/material/materialLibrary.hpp](../src/material/materialLibrary.hpp), [src/material/materialLibrary.cpp](../src/material/materialLibrary.cpp), [assets/bridge/materialProperties.json](../assets/bridge/materialProperties.json)

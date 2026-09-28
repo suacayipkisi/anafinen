@@ -50,8 +50,13 @@ namespace anaf::GUI {
 
     if (ImGui::BeginMenuBar()) {
       if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("Import Mesh / CAD...", "Ctrl+O")) {
+        const bool importEnabled = !is_import_enabled || is_import_enabled();
+        if (ImGui::MenuItem("Import Mesh / CAD...", "Ctrl+O", false, importEnabled)) {
           if (on_import_mesh) on_import_mesh();
+        }
+        if (!importEnabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+          ImGui::SetTooltip("Not available for the Simple Quadrangle truss (export works).\n"
+                            "Select Analyze > Truss (1D Element) > Imported / Self-Built to import.");
         }
         if (ImGui::MenuItem("Export Model...", "Ctrl+E")) {
           if (on_export_results) on_export_results();
@@ -121,6 +126,7 @@ namespace anaf::GUI {
 
       // Dock windows into respective nodes
       ImGui::DockBuilderDockWindow("Truss(1D) Analysis Set", dock_left_id);
+      ImGui::DockBuilderDockWindow("Truss(1D) Model Editor", dock_left_id);
       ImGui::DockBuilderDockWindow("Model Tree", dock_right_id);
       ImGui::DockBuilderDockWindow("Console", dock_bottom_id);
       ImGui::DockBuilderDockWindow("3D Simulation Viewport", dock_main_id);

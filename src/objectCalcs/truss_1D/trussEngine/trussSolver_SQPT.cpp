@@ -21,7 +21,6 @@
 #include <trussTypes/simpleQuadranglePrismTrussCreate.hpp>
 #include <trussProperties/appliedForce.hpp>
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <format>
@@ -105,66 +104,7 @@ namespace FEM::TRUSS {
     std::stop_token st,
     std::span<anaf::MATERIAL::Material> materials
   ){
-    if (st.stop_requested()) return;
-    const auto& elements = m_truss.getElements();
-    m_container.assembleStiffness(elements, materials);
-    if (st.stop_requested()) return;
-    bridge.m_progress = 0.50f;
-    m_container.considerWeight(elements, materials);
-    if (st.stop_requested()) return;
-    bridge.m_progress = 0.550f;
-    m_container.calculateDisplacements(st);
-    if (st.stop_requested()) return;
-    bridge.m_progress = 0.85f;
-
-    // Node locations stay undeformed: consumers draw location + displacement * deformScale,
-    // so moving the nodes here would apply the displacement twice.
-    double maxDisp = 0.0;
-    for (const auto& node : m_truss.getNodes()) {
-      for (const double component : node.getDisplacement()) {
-        maxDisp = std::max(maxDisp, std::abs(component));
-      }
-    }
-
-    m_container.calculateElementForcesAndStress(materials, {0, -9.80665, 0});
-    bridge.m_progress = 0.90f;
-
-    double maxStress = 0.0;
-    for (auto& element : elements) {
-      maxStress = std::max(maxStress, std::abs(element.getEleStress()));
-    }
-
-    m_container.runValidator(materials);
-    bridge.m_progress = 0.95f;
-    {
-      std::lock_guard lock(bridge.dataMutex);
-      bridge.m_isValid = m_container.getIsCalculationValid();
-      bridge.m_energyDiff = m_container.getEnergyDiff();
-
-      if (m_container.getIsCalculationValid()) {
-        anaf::LOG::success("Solver completed");
-        anaf::LOG::setFloatPrecision(10);
-        anaf::LOG::success(
-          "Calculation is VALID! Energy diff: {}, relative diff: {}",
-          m_container.getEnergyDiff(),
-          m_container.getEnergyRelativeDiff()
-        );
-        anaf::LOG::setFloatPrecision(6);
-        anaf::LOG::info("Max nodal displacement magnitude: {}", maxDisp);
-        anaf::LOG::info("Max element stress magnitude [Pa]: {}", maxStress);
-        anaf::LOG::info("Work done by external forces: {}", m_container.getWorkDone_External());
-        anaf::LOG::info("Stored elastic deformation energy: {}", m_container.getElasticDeformationEnergy_Internal());
-      } else {
-        anaf::LOG::success("Solver completed");
-        anaf::LOG::error(
-          "Calculation is INVALID! Energy diff: {}, relative diff: {}",
-          m_container.getEnergyDiff(),
-          m_container.getEnergyRelativeDiff()
-        );
-        anaf::LOG::info("Work done by external forces: {}", m_container.getWorkDone_External());
-        anaf::LOG::info("Stored elastic deformation energy: {}", m_container.getElasticDeformationEnergy_Internal());
-      }
-    }
+    detail::runStaticSolve(bridge, st, m_container, m_truss.getNodes(), m_truss.getElements(), materials);
   }
   
 } // namespace FEM::TRUSS end

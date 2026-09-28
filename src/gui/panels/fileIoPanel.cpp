@@ -18,14 +18,16 @@
 #include "fileIoPanel.hpp"
 
 #include <bridge/generalStatus.hpp>
+#include <directory/getExecutableDirectory.hpp>
+#include <io/core/pathUtf8.hpp>
 #include <io/meshIo.hpp>
 #include <log/anaf_info.hpp>
+#include <truss_1D/trussTypes/trussLibrary.hpp>
 
 #include <imgui.h>
 
 #include <array>
 #include <format>
-#include <limits>
 
 namespace anaf::GUI {
 
@@ -82,6 +84,16 @@ namespace anaf::GUI {
       return format == FileFormat::Step || format == FileFormat::Iges || format == FileFormat::Brep;
     }
 
+    // Built-in models are never overwritten: nothing may be written into the library folder
+    // (Linux packages install it read-only anyway; portable / source builds do not).
+    bool isInBuiltinLibrary(const std::filesystem::path& path) {
+      const auto library = anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::TRUSS::LIBRARY::kLibrarySubdir));
+      if (library.empty()) return false;
+      std::error_code ec;
+      const auto folder = std::filesystem::weakly_canonical(std::filesystem::absolute(path, ec).parent_path(), ec);
+      return !ec && std::filesystem::equivalent(folder, library, ec) && !ec;
+    }
+
   } // namespace end
 
   FileIoPanel::FileIoPanel() : m_service(std::make_unique<anaf::IO::IoService>()) {
@@ -97,7 +109,20 @@ namespace anaf::GUI {
     m_noticeUntil = std::chrono::steady_clock::now() + std::chrono::seconds(error ? 8 : 4);
   }
 
+  bool FileIoPanel::importAllowed() {
+    return BRIDGE::buildBridge().m_objectType.load() != BRIDGE::ObjectType::truss_SQPT;
+  }
+
+  void FileIoPanel::cancelImport() {
+    if (m_importTask) m_importTask->cancel();
+  }
+
   void FileIoPanel::requestImport() {
+    if (!importAllowed()) {
+      notify("Import is not available for the Simple Quadrangle truss. Choose Analyze > Truss (1D Element) > "
+             "Imported / Self-Built first (export still works).", true);
+      return;
+    }
     if (busy()) {
       notify("A file operation is already in progress", true);
       return;
@@ -109,6 +134,23 @@ namespace anaf::GUI {
     }
     m_dialog = NativeFileDialog::openFile("Import mesh or CAD model", importFilters());
     m_stage = Stage::ChoosingImport;
+  }
+
+  void FileIoPanel::importFile(const std::filesystem::path& path) {
+    if (!importAllowed()) {
+      notify("Import is not available for the Simple Quadrangle truss", true);
+      return;
+    }
+    if (busy()) {
+      notify("A file operation is already in progress", true);
+      return;
+    }
+    if (isCad(path)) {
+      m_pendingImport = path;
+      m_stage = Stage::CadOptions;
+    } else {
+      startImport(path);
+    }
   }
 
   void FileIoPanel::requestExport() {
@@ -129,6 +171,11 @@ namespace anaf::GUI {
 
   void FileIoPanel::startImport(const std::filesystem::path& path) {
     auto& bridge = BRIDGE::buildBridge();
+    if (!importAllowed()) {
+      notify("Import is not available for the Simple Quadrangle truss", true);
+      m_stage = Stage::Idle;
+      return;
+    }
     if (bridge.m_isRunning || bridge.m_isGeneratingPreview) {
       notify("Wait for the running calculation to finish before importing", true);
       m_stage = Stage::Idle;
@@ -157,6 +204,12 @@ namespace anaf::GUI {
   void FileIoPanel::startExport(std::filesystem::path path) {
     const auto& choice = kExportChoices[static_cast<std::size_t>(m_exportFormat)];
     if (path.extension().empty()) path += choice.extension;
+    if (isInBuiltinLibrary(path)) {
+      anaf::LOG::warn("Export refused: '{}' is in the read-only built-in truss library", anaf::IO::pathToUtf8(path));
+      notify("The built-in library is read-only: export to another folder", true);
+      m_stage = Stage::Idle;
+      return;
+    }
 
     auto& bridge = BRIDGE::buildBridge();
     std::shared_ptr<const BRIDGE::MeshData> mesh;
@@ -215,14 +268,19 @@ namespace anaf::GUI {
     auto& bridge = BRIDGE::buildBridge();
     if (m_importTask && m_importTask->ready()) {
       const auto& result = m_importTask->wait();
-      if (result) {
+      if (result && !importAllowed()) {
+        // The type was switched to the generated truss while the file was read.
+        anaf::LOG::warn("{} discarded: the object type changed to {}", m_importTask->description(),
+                        BRIDGE::getObjectTypeName(bridge.m_objectType.load()));
+        notify("Import discarded (object type changed)", true);
+      } else if (result) {
+        // Replaces the whole previous model: stops a running solve and drops its results.
+        bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
         {
           std::lock_guard lock(bridge.dataMutex);
           bridge.activeMesh = result->mesh;
           bridge.fixedDOFsByNode = result->fixity;
           bridge.hasTrussPreview = true;
-          bridge.selectedNodeId = std::numeric_limits<std::uint32_t>::max();
-          bridge.m_objectType = BRIDGE::ObjectType::truss_imported_or_entered;
         }
         bridge.dataVersion.fetch_add(1, std::memory_order_release);
         anaf::LOG::success("{} finished", m_importTask->description());

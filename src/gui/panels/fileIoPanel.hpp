@@ -39,7 +39,15 @@ namespace anaf::GUI {
     ~FileIoPanel() override;
 
     void requestImport();
+    // Imports path without the file chooser (built-in library models).
+    void importFile(const std::filesystem::path& path);
     void requestExport();
+    // Cancels a running import (the object type is about to change).
+    void cancelImport();
+
+    // Import replaces the model with truss_imported_or_entered. A generated truss_SQPT can
+    // only be exported: import is refused while it is the selected type.
+    static bool importAllowed();
 
     std::function<void()> onImported; // e.g. show the model tree
 

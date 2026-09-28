@@ -30,6 +30,7 @@
 #include "panels/fileIoPanel.hpp"
 #include "panels/aboutPanel.hpp"
 #include "panels/truss/trussTypePanel.hpp"
+#include "panels/truss/importedTruss/trussModelEditor.hpp"
 #include <memory>
 
 namespace anaf::GUI{
@@ -44,6 +45,7 @@ namespace anaf::GUI{
     MaterialHandler* matWindow = nullptr;
     FileIoPanel* fileIo = nullptr;
     AboutPanel* about = nullptr;
+    TrussModelEditor* editor = nullptr;
   };
 
   void bindAnalysisFlow(UIPanels panels);
