@@ -19,7 +19,7 @@
 # Builds and tests the project and prints only a short summary: warnings, errors and
 # failed tests. Full logs stay in <build dir>/check-*.log.
 #
-# Usage: tools/check.sh [gcc|clang|mingw|all]...   (default: gcc)
+# Usage: package/tools/check.sh [gcc|clang|mingw|all]...   (default: gcc)
 #   gcc    Linux GCC, build dir "build" (the normal development tree), ctest
 #   clang  Linux Clang, build dir "build-clang", ctest
 #   mingw  Windows cross-build (MinGW), build dir "build-mingw", tests under Wine
@@ -29,7 +29,7 @@
 
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GMSH_SDK_DIR="${GMSH_SDK_DIR:-$HOME/Projects/gmsh-sdk}"
 MINGW_SYSROOT_BIN="/usr/x86_64-w64-mingw32/sys-root/mingw/bin"
 MAX_LINES="${MAX_LINES:-30}"

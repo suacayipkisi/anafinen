@@ -18,3 +18,4 @@ CLAUDE.md
 build-clang/
 build-mingw/
 .claude/settings.local.json
+build-containers/

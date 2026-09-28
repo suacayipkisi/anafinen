@@ -29,6 +29,11 @@ The 128x128 PNG icon is rendered from `assets/icons/anafinen.svg` with
 `rsvg-convert` (librsvg) or, as a fallback, ImageMagick. The scripts install
 the converter. Without one, the package has no PNG icon (CMake warns).
 
+To check the Debian and Arch packages without those systems, run
+`package/tools/container-check.sh debian package` or `package/tools/container-check.sh arch package`
+(podman or docker). The packages land in `build-containers/<distro>/`; see
+`information/BUILD_SYSTEM.md` section 8.1.1.
+
 Known issue on Debian 13: its `libgmsh4.13` aborts inside second-order 3D
 meshing (an Eigen assertion in Gmsh itself), so `anaf_io_tests` aborts there.
 The package builds and installs normally.

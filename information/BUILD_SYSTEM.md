@@ -160,6 +160,35 @@ Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: suite
 
 `package.sh` changes to the repository root first, so it works from any working directory. Tested in containers on 2026-09-28: Debian 13 (GCC 14) and Arch (GCC 16, `gmsh-bin` from the AUR) both build, package and install.
 
+### 8.1.1 Container checks (Debian, Arch)
+
+`package/tools/container-check.sh` repeats the build, test and packaging steps in clean Debian and Arch containers, from any host with podman (preferred) or docker. Nothing is mounted from the repository.
+
+```
+host: git ls-files (tracked + untracked, not ignored; submodules included)
+  │  tar on stdin
+  ▼
+container anafinen-build:<distro>  (image from package/tools/containers/<distro>.Dockerfile)
+  │  package/tools/containers/inside.sh <distro> <mode>, as root → build user "builder"
+  │  test:    package/tools/check.sh gcc
+  │  package: package/package.sh → install the package → ldd, icon, .desktop check
+  │  tar of /out on stdout
+  ▼
+host: build-containers/<distro>/  (check-*.log or package.log + .deb / .pkg.tar.zst)
+```
+
+| What | Where |
+|---|---|
+| Image definitions | `package/tools/containers/debian.Dockerfile` (package list of the Debian branch of `package.sh`), `package/tools/containers/arch.Dockerfile` (`PKGBUILD` depends / makedepends + `gmsh-bin` from the AUR) |
+| Images | `anafinen-build:debian`, `anafinen-build:arch`; built on first use, `--rebuild` pulls the base image again |
+| ccache | named volumes `anafinen-ccache-debian`, `anafinen-ccache-arch` (`/ccache`, set in `/etc/ccache.conf`) |
+| Output | `build-containers/<distro>/` (git-ignored); image build logs in `build-containers/<distro>-image.log` |
+
+1. The working tree is sent as it is, uncommitted changes included; build directories and `.git` are left out.
+2. Distros run one after the other. Source and results go through stdin / stdout, so there is no SELinux relabel (`:Z`) of the repository and no file owned by another user on the host.
+3. `shell` mode opens an interactive shell in `/work` as `builder`; nothing is copied back.
+4. Expected on Debian 13: `anaf_io_tests` aborts in `highOrderNodeOrderingMatchesGmshVtkWriter` (the log may end at an earlier `[ RUN ]` line: stdout is buffered, the abort is not) (the `libgmsh4.13` Eigen assertion, `ARCHITECTURE.md` section 8, item 4), so `test` reports a failure there.
+
 ### 8.2 Dependencies per platform (2026-09-28)
 
 | Platform | Build packages added for `anaf_io` | Runtime extra |
@@ -183,8 +212,8 @@ Without zenity / kdialog on Linux, the application works; only File > Import / E
 
 ```bash
 # Build + test with a short summary (warnings, errors, test results); full logs in <dir>/check-*.log
-tools/check.sh            # Linux GCC in build/
-tools/check.sh all        # + Clang (build-clang/) + MinGW cross-build with Wine tests (build-mingw/)
+package/tools/check.sh            # Linux GCC in build/
+package/tools/check.sh all        # + Clang (build-clang/) + MinGW cross-build with Wine tests (build-mingw/)
 
 # Configure + build (Linux)
 git submodule update --init --recursive
@@ -197,6 +226,12 @@ cmake --build build && (cd build && ctest --output-on-failure)
 
 # Package on the current distro
 ./package/package.sh
+
+# Clean Debian / Arch containers (podman or docker), results in build-containers/<distro>/
+package/tools/container-check.sh                  # both distros: build + tests
+package/tools/container-check.sh arch package     # package, install, ldd / icon check
+package/tools/container-check.sh debian shell     # interactive shell with the working tree in /work
+package/tools/container-check.sh --rebuild all    # rebuild the images (distro updates)
 ```
 
 ## 10. Related files
@@ -207,5 +242,6 @@ cmake --build build && (cd build && ctest --output-on-failure)
 - [cmake/ExternalGui.cmake](../cmake/ExternalGui.cmake)
 - [cmake/Packaging.cmake](../cmake/Packaging.cmake)
 - [package/package.sh](../package/package.sh), [package/PKGBUILD](../package/PKGBUILD), [package/PACKAGE_BUILD.md](../package/PACKAGE_BUILD.md)
+- [package/tools/container-check.sh](../package/tools/container-check.sh), [package/tools/containers/](../package/tools/containers/)
 - [.gitmodules](../.gitmodules)
 - [tests/CMakeLists.txt](../tests/CMakeLists.txt)
