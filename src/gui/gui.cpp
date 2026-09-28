@@ -45,6 +45,7 @@
 #include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
 #include "panels/truss/trussTypePanel.hpp"
 #include "panels/viewportPanel.hpp"
+#include "panels/statusBar.hpp"
 
 #include "linuxCursor.hpp"
 
@@ -116,6 +117,7 @@ namespace anaf::GUI {
 
   std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo) {
     auto dock = panelManager.addPanel<MainDockSpaceHost>(window);
+    panelManager.addPanel<StatusBar>(); // bottom bar: worker state and resource usage
     auto viewport = panelManager.addPanel<ViewportPanel>(fbo);
     auto tree = panelManager.addPanel<ModelTree>();
     auto trussSelector = panelManager.addPanel<TrussSelector>();

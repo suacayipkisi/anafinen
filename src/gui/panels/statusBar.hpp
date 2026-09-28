@@ -17,39 +17,18 @@
 
 #pragma once
 
-#include <log/anaf_info.hpp>
 #include <guiMaterials/iPanel.hpp>
-
-#include <cstddef>
-#include <mutex>
-#include <string>
-#include <vector>
+#include <platform/resourceMonitor.hpp>
 
 namespace anaf::GUI {
 
-  struct LogEntry {
-    anaf::LOG::Level level;
-    std::string text;
-  };
-
-  inline std::vector<LogEntry> g_ui_logs;
-  inline size_t g_ui_log_max_num{10000};
-  inline std::mutex g_log_mutex;
-
-  inline void anafUILogSink(anaf::LOG::Level level, const char* message) {
-    std::lock_guard<std::mutex> lock(g_log_mutex);
-    g_ui_logs.push_back({level, std::string(message)});
-  }
-
-  class LogTerminal : public IPanel {
+  // Bottom bar of the main viewport: worker state on the left, resource usage on the right.
+  // It shrinks the viewport work area, so the dockspace ends above it.
+  class StatusBar : public IPanel {
   private:
-    bool m_autoScroll {true};
-    bool m_wrapLines {true}; // wrap at the panel width; off: one line per entry + horizontal scrollbar
+    PLATFORM::ResourceMonitor m_monitor;
   public:
-    LogTerminal();
-
     void onImGuiRender() override;
-    
   };
 
-} //namespace anaf::GUI end
+} // namespace anaf::GUI end

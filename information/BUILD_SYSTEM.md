@@ -166,7 +166,7 @@ Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: suite
 | Arch / CachyOS | `libpng`, `zlib` in `depends` / `makedepends`, `glm` in `makedepends` (`PKGBUILD`) | `optdepends`: `zenity` or `kdialog` |
 | Debian / Ubuntu | `zlib1g-dev` (`package.sh`, README) | DEB `Recommends: zenity \| kdialog`; `CPACK_PACKAGE_CONTACT` is set (the DEB generator requires a maintainer) |
 | All (0.1.3) | `nlohmann/json`: Fedora `json-devel`, Arch `nlohmann-json` (`makedepends`), Debian `nlohmann-json3-dev`, vcpkg `nlohmann-json` | none (header-only) |
-| Windows (vcpkg) | `libpng`, `glm` added to the README install list (zlib comes with libpng) | none: native dialogs are part of Windows; `ole32`, `comdlg32`, `shell32`, `uuid` are linked |
+| Windows (vcpkg) | `libpng`, `glm` added to the README install list (zlib comes with libpng) | none: native dialogs are part of Windows; `ole32`, `comdlg32`, `shell32`, `uuid`, `psapi` (resource monitor) are linked |
 
 Without zenity / kdialog on Linux, the application works; only File > Import / Export shows "no native file dialog available".
 

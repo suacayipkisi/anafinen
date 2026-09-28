@@ -67,6 +67,7 @@ This document is the entry point for the project documentation. It describes how
 | `FEM::TRUSS::ADAPTER` | `src/objectCalcs/truss_1D/trussIO/` | `MeshModel` ↔ truss snapshot conversion |
 | `anaf::MATERIAL` | `src/material/` | `Material` property record; material library loader and validation (`materialLibrary.*`, in `anaf_core`) |
 | `anaf::LOG` | `src/log/` | Formatted logging with file, stdout and GUI sinks |
+| `anaf::PLATFORM` | `src/platform/` | OS-specific helpers without GUI dependency: `ResourceMonitor` (CPU / RAM usage, Linux and Windows) |
 | `anaf::DIRECTORY` | `src/directory/` | Executable directory lookup; `findAssetPath()` is the single asset search used by fonts, icon and material library; `getUserConfigDirectory()` for per-user data |
 | `anaf::TEST` | `src/test/` | Startup self-check (Eigen determinant) |
 | `anafGen` | `src/gen/` | Hash-based ID generator (not used yet) |
