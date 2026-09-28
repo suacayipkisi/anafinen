@@ -19,6 +19,7 @@
 //   anaf_io_tool dump <file>                      canonical text dump (VTK cell order / numbering)
 //   anaf_io_tool convert <in> <out> [options]     --binary --compress --vtk42 --msh22 --no-tags
 
+#include <io/detail/modelCodec.hpp>
 #include <io/detail/vtkCommon.hpp>
 #include <io/meshIo.hpp>
 
@@ -50,12 +51,15 @@ namespace {
       out += '\n';
       begin = cells.offsets[c];
     }
-    for (const auto& field : model.fields) {
-      const auto& values = field.steps.back();
-      out += std::format("FIELD {} {} {} {}\n", field.location == FieldLocation::Node ? "N" : "E", field.components, values.size(), field.name);
+    // Arrays as a VTK file stores them: one array per mode / load case, global data, TimeValue.
+    const auto flat = anaf::IO::detail::flattenSteps(model, {}, -1);
+    auto print = [&out](const char* location, const int components, const std::vector<double>& values, const std::string& name) {
+      out += std::format("FIELD {} {} {} {}\n", location, components, values.size(), name);
       for (std::size_t i = 0; i < values.size(); ++i) out += std::format("{}{}", values[i], i + 1 == values.size() ? "\n" : " ");
       if (values.empty()) out += '\n';
-    }
+    };
+    for (const auto& array : flat.arrays) print(array.location == FieldLocation::Node ? "N" : "E", array.components, *array.values, array.name);
+    for (const auto& global : flat.globals) print("G", global.components, global.values, global.name);
     for (const auto& warning : model.warnings) out += "WARNING " + warning + "\n";
     std::fwrite(out.data(), 1, out.size(), stdout);
     return 0;

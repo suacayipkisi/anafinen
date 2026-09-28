@@ -31,6 +31,17 @@
 //                    that belongs to several sets is listed once per set with the same tag)
 //   dimension-0 physical groups --> node sets (on read)
 //   node sets, BCs, loads, attributes, fields <-> $NodeData / $ElementData (all steps)
+//   global data, field step kinds and step labels <-> $AnafData (own section, always ASCII;
+//                    Gmsh skips sections it does not know):
+//       $AnafData
+//       1                                  format version
+//       <record count>
+//       GLOBAL <components> <tuples>       then the quoted name on its own line, then the values
+//       STEPS <N|E> <kind> <steps> <0|1>   then the quoted field name, then one quoted label per
+//                                          step when the last flag is 1
+//       Global names and labels escape '\\', '"' and line breaks with a backslash; field names
+//       follow the $NodeData rule ('"' becomes '\'') so that both sections name a field alike.
+//       $EndAnafData
 
 #include "formats.hpp"
 #include "../detail/modelCodec.hpp"
@@ -87,6 +98,33 @@ namespace anaf::IO::formats {
       return it == extra.end() ? std::nullopt : std::optional<int>(it->second);
     }
 
+    // Quoted, backslash-escaped string of $AnafData (see the header).
+    std::string escapedQuoted(std::string_view text) {
+      std::string out = "\"";
+      for (const char c : text) {
+        if (c == '\\' || c == '"') out.push_back('\\');
+        if (c == '\n') out += "\\n";
+        else out.push_back(c);
+      }
+      return out + "\"\n";
+    }
+
+    std::string unescapeQuoted(std::string_view line) {
+      const auto first = line.find('"');
+      const auto last = line.rfind('"');
+      if (first == std::string_view::npos || last <= first) return std::string(line);
+      std::string out;
+      for (std::size_t i = first + 1; i < last; ++i) {
+        if (line[i] == '\\' && i + 1 < last) {
+          ++i;
+          out.push_back(line[i] == 'n' ? '\n' : line[i]);
+        } else {
+          out.push_back(line[i]);
+        }
+      }
+      return out;
+    }
+
     std::string quotedText(std::string_view line) {
       const auto first = line.find('"');
       const auto last = line.rfind('"');
@@ -117,11 +155,13 @@ namespace anaf::IO::formats {
           else if (section == "ELM") readElements1();
           else if (section == "NodeData") readData(FieldLocation::Node, section);
           else if (section == "ElementData") readData(FieldLocation::Element, section);
+          else if (section == "AnafData") readAnafData();
           else skipSection(section);
         }
         if (!m_sawNodes) throw ParseFailure("MSH: no $Nodes section");
         finishSets();
         finishFields();
+        applyAnafData();
         for (const auto& [type, count] : m_skippedTypes) {
           m_model.warnings.push_back(std::format("{} elements of unsupported Gmsh type {} were skipped", count, type));
         }
@@ -502,6 +542,68 @@ namespace anaf::IO::formats {
         expectEnd(section);
       }
 
+      struct StepInfo {
+        StepKind kind{StepKind::Time};
+        std::vector<std::string> labels;
+      };
+
+      std::string quotedLine(const bool escaped) {
+        m_cursor.skipSpace();
+        const auto line = m_cursor.line();
+        return escaped ? unescapeQuoted(line) : quotedText(line);
+      }
+
+      void readAnafData() {
+        const int version = m_cursor.number<int>();
+        if (version != 1) {
+          m_model.warnings.push_back(std::format("MSH: $AnafData version {} is not supported and was skipped", version));
+          skipSection("AnafData");
+          return;
+        }
+        const auto records = m_cursor.number<std::size_t>();
+        for (std::size_t r = 0; r < records; ++r) {
+          const auto kind = m_cursor.token();
+          if (kind == "GLOBAL") {
+            GlobalArray global;
+            global.components = m_cursor.number<int>();
+            const auto tuples = m_cursor.number<std::size_t>();
+            if (global.components < 1) throw ParseFailure("MSH: invalid component count in $AnafData");
+            global.name = quotedLine(true);
+            global.values.resize(tuples * static_cast<std::size_t>(global.components));
+            for (auto& v : global.values) v = m_cursor.number<double>();
+            m_model.globalData.push_back(std::move(global));
+          } else if (kind == "STEPS") {
+            const bool onNodes = m_cursor.token() == "N";
+            const std::string kindName(m_cursor.token());
+            const auto steps = m_cursor.number<std::size_t>();
+            const bool labelled = m_cursor.number<int>() != 0;
+            StepInfo info;
+            const auto stepKind = stepKindFromName(kindName);
+            if (!stepKind) m_model.warnings.push_back("MSH: unknown step kind '" + kindName + "' read as Time");
+            info.kind = stepKind.value_or(StepKind::Time);
+            const std::string name = quotedLine(false);
+            if (labelled) {
+              info.labels.resize(steps);
+              for (auto& label : info.labels) label = quotedLine(true);
+            }
+            m_stepInfo[{name, static_cast<int>(onNodes ? FieldLocation::Node : FieldLocation::Element)}] = std::move(info);
+          } else {
+            throw ParseFailure("MSH: unknown $AnafData record '" + std::string(kind) + "'");
+          }
+        }
+        expectEnd("AnafData");
+      }
+
+      void applyAnafData() {
+        for (auto& field : m_model.fields) {
+          const auto it = m_stepInfo.find({field.name, static_cast<int>(field.location)});
+          if (it == m_stepInfo.end()) continue;
+          field.stepKind = it->second.kind;
+          if (it->second.labels.size() == field.steps.size()) field.stepLabels = it->second.labels;
+          else if (!it->second.labels.empty()) m_model.warnings.push_back(std::format("field '{}': step labels do not match its steps", field.name));
+        }
+      }
+
       // ---------------------------------------------------------- finishing
 
       std::vector<std::size_t> blockOffsets() const {
@@ -600,6 +702,7 @@ namespace anaf::IO::formats {
       std::unordered_map<std::uint64_t, ElementLocation> m_elementByTag;
       std::map<IntPair, std::vector<ElementLocation>> m_physicalMembers;
       std::map<std::pair<std::string, int>, RawField> m_fields;
+      std::map<std::pair<std::string, int>, StepInfo> m_stepInfo;
       std::map<int, std::size_t> m_skippedTypes;
     };
 
@@ -634,6 +737,7 @@ namespace anaf::IO::formats {
             checkCancel(context);
           }
         }
+        anafData();
         return std::move(m_out);
       }
 
@@ -1040,6 +1144,38 @@ namespace anaf::IO::formats {
           if (m_binary) text("\n");
           text(std::format("$End{}\n", section));
         }
+      }
+
+      static std::string quoted(std::string text) {
+        std::ranges::replace(text, '"', '\'');
+        std::ranges::replace(text, '\n', ' ');
+        return "\"" + text + "\"\n";
+      }
+
+      void anafData() {
+        std::size_t records = m_model.globalData.size();
+        for (const auto& field : m_model.fields) {
+          if (field.stepKind != StepKind::Time || !field.stepLabels.empty()) ++records;
+        }
+        if (records == 0) return;
+        text(std::format("$AnafData\n1\n{}\n", records));
+        for (const auto& global : m_model.globalData) {
+          text(std::format("GLOBAL {} {}\n", global.components, global.tuples()));
+          text(escapedQuoted(global.name));
+          const auto components = static_cast<std::size_t>(global.components);
+          for (std::size_t i = 0; i < global.values.size(); ++i) {
+            number(global.values[i]);
+            text((i + 1) % components == 0 ? "\n" : " ");
+          }
+        }
+        for (const auto& field : m_model.fields) {
+          if (field.stepKind == StepKind::Time && field.stepLabels.empty()) continue;
+          text(std::format("STEPS {} {} {} {}\n", field.location == FieldLocation::Node ? "N" : "E", stepKindName(field.stepKind),
+            field.steps.size(), field.stepLabels.empty() ? 0 : 1));
+          text(quoted(field.name));
+          for (const auto& label : field.stepLabels) text(escapedQuoted(label));
+        }
+        text("$EndAnafData\n");
       }
 
       const MeshModel& m_model;

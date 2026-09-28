@@ -44,12 +44,14 @@ namespace anaf::GUI {
       bool allowsCompression;
     };
 
-    constexpr std::array<ExportChoice, 6> kExportChoices{{
+    constexpr std::array<ExportChoice, 7> kExportChoices{{
       {"Gmsh MSH 4.1", "Current Gmsh format: mesh, physical groups, all result steps.", FileFormat::Msh, ".msh",
        anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V5_1, true, false},
       {"Gmsh MSH 2.2", "Legacy Gmsh format, read by most other solvers.", FileFormat::Msh, ".msh",
        anaf::IO::MshVersion::V2_2, anaf::IO::VtkLegacyVersion::V5_1, true, false},
-      {"VTK XML (.vtu)", "ParaView's modern format (one result step).", FileFormat::Vtu, ".vtu",
+      {"VTK XML (.vtu)", "ParaView's modern format (one time step; modes and load cases as arrays).", FileFormat::Vtu, ".vtu",
+       anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V5_1, true, true},
+      {"ParaView collection (.pvd)", "Time series for ParaView: .pvd plus one .vtu per time step in a folder.", FileFormat::Pvd, ".pvd",
        anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V5_1, true, true},
       {"VTK Legacy 5.1 (.vtk)", "Legacy VTK for VTK >= 9 / ParaView >= 5.10 (one result step).", FileFormat::VtkLegacy, ".vtk",
        anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V5_1, true, false},

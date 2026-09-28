@@ -27,10 +27,11 @@ namespace anaf::IO {
 
   namespace {
 
-    const std::array<FormatDescriptor, 6>& formatTable() {
-      static const std::array<FormatDescriptor, 6> table{{
+    const std::array<FormatDescriptor, 7>& formatTable() {
+      static const std::array<FormatDescriptor, 7> table{{
         {FileFormat::Msh, "Gmsh MSH", {".msh"}, true, true},
         {FileFormat::Vtu, "VTK XML Unstructured Grid", {".vtu"}, true, true},
+        {FileFormat::Pvd, "ParaView Collection", {".pvd"}, true, true},
         {FileFormat::VtkLegacy, "VTK Legacy", {".vtk"}, true, true},
         {FileFormat::Step, "STEP", {".step", ".stp"}, true, true},
         {FileFormat::Iges, "IGES", {".iges", ".igs"}, true, false},
@@ -47,6 +48,7 @@ namespace anaf::IO {
       head.resize(static_cast<std::size_t>(file.gcount()));
       if (head.find("$MeshFormat") != std::string::npos) return FileFormat::Msh;
       if (head.find("# vtk DataFile") != std::string::npos) return FileFormat::VtkLegacy;
+      if (head.find("type=\"Collection\"") != std::string::npos) return FileFormat::Pvd;
       if (head.find("<VTKFile") != std::string::npos) return FileFormat::Vtu;
       if (head.find("ISO-10303-21") != std::string::npos) return FileFormat::Step;
       return FileFormat::Auto;
@@ -108,6 +110,7 @@ namespace anaf::IO {
         case FileFormat::Msh: model = formats::readMsh(path, options, context); break;
         case FileFormat::VtkLegacy: model = formats::readVtkLegacy(path, options, context); break;
         case FileFormat::Vtu: model = formats::readVtu(path, options, context); break;
+        case FileFormat::Pvd: model = formats::readPvd(path, options, context); break;
         case FileFormat::Step:
         case FileFormat::Iges:
         case FileFormat::Brep: model = formats::readCad(path, options, context); break;
@@ -139,6 +142,7 @@ namespace anaf::IO {
         case FileFormat::Msh: return formats::writeMsh(path, model, options, context);
         case FileFormat::VtkLegacy: return formats::writeVtkLegacy(path, model, options, context);
         case FileFormat::Vtu: return formats::writeVtu(path, model, options, context);
+        case FileFormat::Pvd: return formats::writePvd(path, model, options, context);
         case FileFormat::Step: return formats::writeStep(path, model, options, context);
         case FileFormat::Iges:
         case FileFormat::Brep:

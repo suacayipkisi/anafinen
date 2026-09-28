@@ -87,6 +87,37 @@ namespace anaf::IO {
     return nullptr;
   }
 
+  GlobalArray* MeshModel::findGlobal(const std::string& name) {
+    for (auto& array : globalData) {
+      if (array.name == name) return &array;
+    }
+    return nullptr;
+  }
+
+  const GlobalArray* MeshModel::findGlobal(const std::string& name) const {
+    for (const auto& array : globalData) {
+      if (array.name == name) return &array;
+    }
+    return nullptr;
+  }
+
+  std::string_view stepKindName(const StepKind kind) noexcept {
+    switch (kind) {
+      case StepKind::Time: return "Time";
+      case StepKind::Frequency: return "Frequency";
+      case StepKind::Mode: return "Mode";
+      case StepKind::LoadCase: return "LoadCase";
+    }
+    return "Time";
+  }
+
+  std::optional<StepKind> stepKindFromName(const std::string_view name) noexcept {
+    for (const auto kind : {StepKind::Time, StepKind::Frequency, StepKind::Mode, StepKind::LoadCase}) {
+      if (stepKindName(kind) == name) return kind;
+    }
+    return std::nullopt;
+  }
+
   std::vector<std::string> MeshModel::validate() const {
     std::vector<std::string> problems;
     const std::size_t nodeTotal = nodes.size();
@@ -117,6 +148,9 @@ namespace anaf::IO {
       const std::size_t entities = field.location == FieldLocation::Node ? nodeTotal : elementTotal;
       if (field.components < 1) problems.push_back(std::format("field '{}': invalid component count", field.name));
       if (field.times.size() != field.steps.size()) problems.push_back(std::format("field '{}': times/steps mismatch", field.name));
+      if (!field.stepLabels.empty() && field.stepLabels.size() != field.steps.size()) {
+        problems.push_back(std::format("field '{}': {} step labels for {} steps", field.name, field.stepLabels.size(), field.steps.size()));
+      }
       for (const auto& step : field.steps) {
         if (step.size() != entities * static_cast<std::size_t>(std::max(field.components, 1))) {
           problems.push_back(std::format("field '{}': step size {} does not match {} entities x {} components",
@@ -128,6 +162,15 @@ namespace anaf::IO {
     for (const auto& [name, values] : elementAttributes) {
       if (values.size() != elementTotal) {
         problems.push_back(std::format("attribute '{}': {} values for {} elements", name, values.size(), elementTotal));
+      }
+    }
+    for (std::size_t g = 0; g < globalData.size(); ++g) {
+      const auto& array = globalData[g];
+      if (array.components < 1 || array.values.size() % static_cast<std::size_t>(std::max(array.components, 1)) != 0) {
+        problems.push_back(std::format("global '{}': {} values do not form {}-component tuples", array.name, array.values.size(), array.components));
+      }
+      for (std::size_t other = 0; other < g; ++other) {
+        if (globalData[other].name == array.name) problems.push_back(std::format("global '{}' appears twice", array.name));
       }
     }
     for (const auto& constraint : constraints) {

@@ -7,7 +7,7 @@ This document describes `anaf_io`, the mesh import/export library:
 - how the GUI (and a future CLI) use it
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28 (step kinds, global data, `.pvd`).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -53,15 +53,37 @@ This document describes `anaf_io`, the mesh import/export library:
 | `nodes` | `vector<Node{tag, position}>` | `tag` is the id from the file; everything else uses the 0-based index |
 | `blocks` | `vector<ElementBlock>` | One block per element type: `tags`, `connectivity` (node indices, **Gmsh local order**), `entityTags` (geometric entity per element) |
 | `sets` | `vector<EntitySet>` | Named node or element sets: `name`, `kind`, `dimension`, `tag` (physical tag), `members` |
-| `fields` | `vector<Field>` | `name`, `location` (node / element), `components`, `times[s]`, `steps[s][entity * components + c]` |
+| `fields` | `vector<Field>` | `name`, `location` (node / element), `components`, `times[s]`, `steps[s][entity * components + c]`, `stepKind`, optional `stepLabels[s]` |
 | `constraints` | `vector<NodeConstraint>` | `fixed[3]` per global axis plus optional `allowedMotion` basis (inclined supports) |
 | `loads` | `vector<NodalLoad>` | Nodal force [N] |
 | `elementAttributes` | `map<string, vector<double>>` | Per-element scalars: `MaterialID`, `CrossSectionArea` [m²], and any future attribute (thickness, …) |
+| `globalData` | `vector<GlobalArray{name, components, values}>` | Model-level arrays that belong to no node or element (natural frequencies, modal masses, …) |
 | `lengthUnit`, `title`, `warnings` | | Metadata; readers append non-fatal issues to `warnings` |
 
 - Global element index: block 0 elements first, then block 1, and so on. Sets, element fields and attributes are indexed by it.
 - `validate()` returns a message for every inconsistency (sizes, indices). Every writer refuses an invalid model; every reader validates its result.
-- Well-known names: `FieldName::Displacement` (node, 3), `FieldName::Stress` (element, Pa, tension > 0), `FieldName::AxialForce`, `Attribute::MaterialId`, `Attribute::CrossSectionArea`.
+- Well-known names: `FieldName::Displacement` (node, 3), `FieldName::Stress` (element, Pa, tension > 0), `FieldName::AxialForce`, `Attribute::MaterialId`, `Attribute::CrossSectionArea`, `GlobalName::NaturalFrequency` (Hz, one tuple per mode).
+
+**Step kinds** (`Field::stepKind`) say what `times[s]` holds:
+
+| `StepKind` | Steps are | `times[s]` |
+|---|---|---|
+| `Time` (default) | a transient or pseudo-time history | time [s] |
+| `Frequency` | a frequency response | excitation frequency [Hz] |
+| `Mode` | eigenmodes; mode number = s + 1 | natural frequency [Hz] |
+| `LoadCase` | independent static load cases | load case number; the name goes to `stepLabels[s]` |
+
+**Where each format keeps steps, kinds, labels and global data:**
+
+| Format | Time history | Modes / frequencies / load cases | Kind + labels | Global data |
+|---|---|---|---|---|
+| MSH | every step in `$NodeData` / `$ElementData` | same | `$AnafData` `STEPS` record | `$AnafData` `GLOBAL` record |
+| VTK / VTU | one step (`timeStep`) + `TimeValue` | one array per step, `<name>_<Kind>_NNN`, and global `<name>_<Kind>_Values` | kind in the array names; labels dropped (warning) | dataset `FIELD` (legacy) / `<FieldData>` (VTU) |
+| `.pvd` | one `.vtu` per time value | inside every `.vtu`, as for VTU | as for VTU | inside every `.vtu` |
+| STEP sidecar | every step | same | `KIND` / `LABEL` lines (version 3) | `GLOBAL` records (version 3) |
+
+- VTK readers group `<name>_<Kind>_NNN` arrays (at least 3 digits) back into one field and consume the matching `_Values` global. A `TimeValue` global becomes the time of every Time field and is removed from `globalData`.
+- Shared helpers: `detail::flattenSteps()` / `detail::unflattenSteps()` in `modelCodec.*`.
 
 ### 3.1 Element types (`io/model/elementType.*`)
 
@@ -107,7 +129,17 @@ On read, the legacy names written by anafinen ≤ 0.1.2 are accepted too: `Fixit
 | 4.0 | ASCII (Gmsh cannot write binary 4.0 either) | – |
 | 4.1 | ASCII + binary | ASCII + binary |
 
-- **Sections read:** `$MeshFormat`, `$PhysicalNames`, `$Entities`, `$Nodes`, `$Elements`, and `$NodeData` / `$ElementData` (every time step). All other sections (`$InterpolationScheme`, `$Periodic`, …) are skipped.
+- **Sections read:** `$MeshFormat`, `$PhysicalNames`, `$Entities`, `$Nodes`, `$Elements`, `$NodeData` / `$ElementData` (every time step) and our own `$AnafData`. All other sections (`$InterpolationScheme`, `$Periodic`, …) are skipped.
+- **`$AnafData`** (always ASCII, also in binary files; Gmsh skips it, tested):
+  ```text
+  $AnafData
+  1                                  format version
+  <record count>
+  GLOBAL <components> <tuples>       + quoted name line + values (one tuple per line)
+  STEPS <N|E> <kind> <steps> <0|1>   + quoted field name line + one quoted label line per step when the flag is 1
+  $EndAnafData
+  ```
+  Global names and labels escape `\`, `"` and line breaks with a backslash. Field names follow the `$NodeData` rule (`"` becomes `'`) so both sections name a field alike. Gmsh's own string tags are not used for this: Gmsh reads the second string tag as an interpolation scheme name.
 - **Physical groups ↔ element sets.** Groups of dimension 0 become node sets. Groups that share a name across dimensions merge into one set.
 - **MSH 2.2 write:** an element that belongs to several sets is listed once per group with the same tag. This is Gmsh's own convention, and the reader merges the duplicates back.
 - **MSH 4.1 write:** one entity per (dimension, source entity, element type, set membership). The source entity tag is kept when that is unambiguous. Gmsh drops elements when one entity mixes element orders, which is why element type is part of the key.
@@ -124,11 +156,11 @@ On read, the legacy names written by anafinen ≤ 0.1.2 are accepted too: `Fixit
 - **Versions:** read 2.0 … 5.1 (5.x `OFFSETS` / `CONNECTIVITY` layout); write 4.2 (classic `CELLS`, readable everywhere) or 5.1.
 - **Encoding:** ASCII and binary. Binary data is big-endian by specification.
 - **Datasets read:** `UNSTRUCTURED_GRID` and `POLYDATA` (`VERTICES`, `LINES`, `POLYGONS`, `TRIANGLE_STRIPS`).
-- **Attributes read:** `SCALARS`, `COLOR_SCALARS`, `VECTORS`, `NORMALS`, `TEXTURE_COORDINATES`, `TENSORS`, `TENSORS6`, `GLOBAL_IDS`, `PEDIGREE_IDS`, `FIELD` arrays. `METADATA` blocks and dataset-level `FIELD` data are skipped.
+- **Attributes read:** `SCALARS`, `COLOR_SCALARS`, `VECTORS`, `NORMALS`, `TEXTURE_COORDINATES`, `TENSORS`, `TENSORS6`, `GLOBAL_IDS`, `PEDIGREE_IDS`, `FIELD` arrays. `METADATA` blocks are skipped. Dataset-level `FIELD` data (before `POINTS`) becomes `globalData`, and is written there too.
 - **Composite cells are split:** poly-vertex → points, poly-line → Line2 segments, triangle strip → triangles, polygon → Tri3 / Quad4 / fan triangles, pixel → Quad4, voxel → Hex8. Cell data is copied to every produced element.
 - **Array names** with whitespace are escaped as `%XX`, like VTK does.
 - **Precision:** an ASCII `float` array is read with float precision, exactly as VTK reads it.
-- **Time steps:** one step per file. The step is chosen with `WriteOptions::timeStep` (default: last), and a warning is added when other steps are dropped.
+- **Time steps:** one time step per file. The step is chosen with `WriteOptions::timeStep` (default: last), and a warning is added when other steps are dropped. `TimeValue` is written when a field has a history or a non-zero time. Modes, frequencies and load cases are all written (see section 3).
 
 ### 4.3 VTK XML `.vtu`: native (`formats/vtuFormat.cpp`)
 
@@ -140,7 +172,19 @@ On read, the legacy names written by anafinen ≤ 0.1.2 are accepted too: `Fixit
   - any number of `<Piece>` elements (merged)
   - VTK 9 `<InformationKey>` children inside `DataArray`s are skipped
 - **Write:** version 1.0, UInt64 headers, little endian, `ascii` or inline `binary`, optional zlib compression.
-- **Not supported:** LZ4 / LZMA compressors; the reader reports a clear error. Only `UnstructuredGrid` files are read.
+- **Global data:** `<UnstructuredGrid><FieldData>` (with `NumberOfTuples`) ↔ `globalData`, including `TimeValue`. `String` arrays are skipped.
+- **Steps:** as legacy VTK (section 4.2).
+
+### 4.3.1 ParaView collection `.pvd` (`formats/vtuFormat.cpp`)
+
+- **Write:** `name.pvd` plus the folder `name/` with `name_0000.vtu`, `name_0001.vtu`, … (`WriteReport::extraFiles` lists them).
+  1. The time values are the sorted union of the times of every Time field with more than one step.
+  2. File k holds each Time field at the step whose time equals time k (fields without that time are left out), every single-step field, and every mode / load case field.
+  3. Each `.vtu` carries its own `TimeValue`, so it also reads correctly on its own.
+  4. `file` paths are relative, UTF-8, with forward slashes (portable between Windows and Linux).
+- **Read:** every `DataSet` with `part="0"`, sorted by `timestep`; each `.vtu` is read with the VTU reader. The first file gives the mesh, sets, BCs and non-Time fields; later files must have the same node and element count. A Time field that is identical in every file folds back into one step (its time becomes the first time value).
+- Progress and cancellation cover all files (`IoContext`), so `IoService` shows "step k of n".
+- Not supported: multi-part collections (`part > 0` is skipped with a warning).- **Not supported:** LZ4 / LZMA compressors; the reader reports a clear error. Only `UnstructuredGrid` files are read.
 
 ### 4.4 CAD: STEP / IGES / BREP through Gmsh + OpenCASCADE (`formats/cadFormat.cpp`)
 
@@ -164,22 +208,27 @@ On read, the legacy names written by anafinen ≤ 0.1.2 are accepted too: `Fixit
 - Other element types are skipped with a warning; STEP is a geometry format.
 - OCC labels STEP lengths in millimetres and scales the coordinates accordingly (0.1 m → `100.`), so CAD tools read the right size.
 
-**Sidecar `<file>.anafFields`, version 2** (everything STEP cannot carry):
+**Sidecar `<file>.anafFields`, version 3** (everything STEP cannot carry):
 ```text
-ANAFINEN_SIDECAR 2
+ANAFINEN_SIDECAR 3
 UNIT m
 NODES <n>
 x y z                                  (all model nodes, shortest round-trip doubles)
 ELEMENTS <m>
 2 <node index> <node index>            (exported line elements, indices into NODES)
 FIELD <N|E> <components> <steps> <name>
+KIND <Time|Frequency|Mode|LoadCase> <0|1>
+LABEL <text>                           (one per step, only when the KIND flag is 1)
 TIME <t>
 <values, one row per node / element>   (fields + codec arrays: BCs, loads, attributes, sets)
+GLOBAL <components> <tuples> <name>
+<values, one tuple per line>
 END
 ```
 - **Matching on read:**
   - Nodes are matched by position: grid hash, tolerance 1e-6 × model size, O(1) per node.
   - Elements are matched by their matched end nodes. Centroids are not used, because crossing X-braces share their midpoint.
+- **Version 2** (anafinen 0.1.3 before step kinds: no `KIND`, `LABEL`, `GLOBAL`) is still read.
 - **Version 1** (anafinen ≤ 0.1.2: `NODES … x y z dx dy dz`, `ELEMENTS … mx my mz material area stress`) is still read, by position.
 
 **Gmsh session (`detail/gmshSession.*`):**
@@ -243,13 +292,15 @@ See [GUI.md](GUI.md) section 2.3. In short:
 
 | Test | What it proves |
 |---|---|
-| `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation |
-| `vtk_reference_check` | Python + official VTK 9.5: 124 files written by VTK in every legacy / XML variant are read exactly as VTK reads them; VTK reads every variant anaf_io writes. Skipped when the Python `vtk` module is missing |
+| `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar (v3: step kinds, labels, globals); step kinds, labels and global data in every format; `TimeValue`; `.pvd` series with a late-starting field, progress and cancellation; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation |
+| `vtk_reference_check` | Python + official VTK 9.5: 124 files written by VTK in every legacy / XML variant are read exactly as VTK reads them; VTK reads every variant anaf_io writes. The grids include field data, `TimeValue` and `_Mode_NNN` arrays. Skipped when the Python `vtk` module is missing |
 | `anaf_truss_io_tests` | The GUI data path without the GUI: solve → snapshot → adapter → every format → adapter → identical snapshot (bit-exact); STEP with X-bracing; wireframe preview; conversion off the calling thread; material library loading, user material add / remove / save (temporary files only, never the real user config); materials matched by name after the list changes (all writable formats); material files under a non-ASCII folder |
 
 ## 10. Known issues and limits
 
-- VTK / VTU store one time step per file. Time series need MSH, or a `.pvd` collection (not written yet).
+- VTK / VTU store one time step per file. Time series need MSH or a `.pvd` collection.
+- Step labels (load case names) are not stored in VTK / VTU / `.pvd`.
+- No complex values (harmonic response with phase) yet.
 - STEP export writes line elements only; the rest of the model is in the sidecar.
 - Gmsh-based CAD import cannot be interrupted inside Gmsh; cancellation waits for the current Gmsh call.
 - Binary MSH 4.1 files cannot be opened by the Gmsh 4.15 build on Fedora (its bug, see 4.1). Our files are valid; use MSH 2.2 or ASCII 4.1 for that Gmsh version.

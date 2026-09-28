@@ -30,6 +30,7 @@ namespace anaf::IO {
     Msh,        // Gmsh MSH 1.0 / 2.x / 4.x
     VtkLegacy,  // legacy VTK 2.0 ... 5.1
     Vtu,        // VTK XML UnstructuredGrid
+    Pvd,        // ParaView collection (.pvd + one .vtu per time step)
     Step,       // ISO 10303-21 (AP203 / AP214 / AP242)
     Iges,       // IGES (read only)
     Brep        // OpenCASCADE BREP (read only)
@@ -60,7 +61,7 @@ namespace anaf::IO {
     MshVersion mshVersion{MshVersion::V4_1};
     VtkLegacyVersion vtkVersion{VtkLegacyVersion::V5_1};
     bool compress{false};          // VTU: zlib-compress binary arrays
-    int timeStep{-1};              // single-step formats (VTK, VTU): step to write, -1 = last
+    int timeStep{-1};              // single-step formats (VTK, VTU): time step to write, -1 = last (.pvd writes all)
     bool writeSidecar{true};       // CAD formats: write `<file>.anafFields` with non-geometric data
     bool writeTags{true};          // VTK / VTU: store original node / element tags as arrays
   };

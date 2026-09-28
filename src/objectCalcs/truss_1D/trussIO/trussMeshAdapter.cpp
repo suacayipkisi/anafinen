@@ -89,7 +89,7 @@ namespace FEM::TRUSS::ADAPTER {
     }
 
     if (mesh.hasResults) {
-      Field displacement{FieldName::Displacement, FieldLocation::Node, 3, {0.0}, {}};
+      Field displacement{FieldName::Displacement, FieldLocation::Node, 3, {0.0}, {}, StepKind::Time, {}};
       std::vector<double> values;
       values.reserve(mesh.trussNodes.size() * 3);
       for (const auto& node : mesh.trussNodes) {
@@ -98,7 +98,7 @@ namespace FEM::TRUSS::ADAPTER {
       }
       displacement.steps.push_back(std::move(values));
       model.fields.push_back(std::move(displacement));
-      model.fields.push_back(Field{FieldName::Stress, FieldLocation::Element, 1, {0.0}, {std::move(stress)}});
+      model.fields.push_back(Field{FieldName::Stress, FieldLocation::Element, 1, {0.0}, {std::move(stress)}, StepKind::Time, {}});
     }
     return model;
   }

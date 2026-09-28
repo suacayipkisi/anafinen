@@ -31,7 +31,9 @@
 namespace anaf::TESTING {
 
   struct CompareOptions {
-    bool singleStep{false};      // expected fields reduced to their last step, times ignored
+    bool singleStep{false};      // expected Time fields reduced to their last step, times ignored
+    bool stepLabels{true};       // compare Field::stepLabels (VTK formats do not store them)
+    bool singleStepTimes{true};  // compare the time of fields with one step (.pvd folds them)
     bool entityTags{true};
     bool setTags{false};
     bool setDimensions{true};
@@ -130,7 +132,11 @@ namespace anaf::TESTING {
         diff(std::format("field '{}' components {} vs {}", field.name, field.components, other->components));
         continue;
       }
-      const std::size_t firstStep = options.singleStep ? field.steps.size() - 1 : 0;
+      if (field.stepKind != other->stepKind) diff(std::format("field '{}' step kind differs", field.name));
+      if (options.stepLabels && field.stepLabels != other->stepLabels) diff(std::format("field '{}' step labels differ", field.name));
+      const bool reduced = options.singleStep && field.stepKind == StepKind::Time;
+      const bool compareTimes = !reduced && (options.singleStepTimes || field.steps.size() > 1);
+      const std::size_t firstStep = reduced ? field.steps.size() - 1 : 0;
       const std::size_t expectedSteps = field.steps.size() - firstStep;
       if (other->steps.size() != expectedSteps) {
         diff(std::format("field '{}' steps {} vs {}", field.name, expectedSteps, other->steps.size()));
@@ -139,7 +145,7 @@ namespace anaf::TESTING {
       for (std::size_t s = 0; s < expectedSteps; ++s) {
         const auto& values = field.steps[firstStep + s];
         const auto& otherValues = other->steps[s];
-        if (!options.singleStep && field.times[firstStep + s] != other->times[s]) diff(std::format("field '{}' time differs", field.name));
+        if (compareTimes && field.times[firstStep + s] != other->times[s]) diff(std::format("field '{}' time differs", field.name));
         const bool onNodes = field.location == FieldLocation::Node;
         const std::size_t entities = onNodes ? expected.nodes.size() : expected.elementCount();
         const auto c = static_cast<std::size_t>(field.components);
@@ -201,6 +207,17 @@ namespace anaf::TESTING {
       }
     }
     if (expected.elementAttributes.size() != actual.elementAttributes.size()) diff("attribute count differs");
+
+    for (const auto& global : expected.globalData) {
+      const auto* other = actual.findGlobal(global.name);
+      if (!other) diff(std::format("global '{}' missing", global.name));
+      else if (other->components != global.components || other->values != global.values) diff(std::format("global '{}' differs", global.name));
+    }
+    if (expected.globalData.size() != actual.globalData.size()) {
+      std::string names;
+      for (const auto& g : actual.globalData) names += g.name + " ";
+      diff(std::format("global count {} vs {} [{}]", expected.globalData.size(), actual.globalData.size(), names));
+    }
     return diffs;
   }
 

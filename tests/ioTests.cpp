@@ -108,7 +108,7 @@ namespace {
     model.sets = {bars, solids, mixed, EntitySet{"Supports", SetKind::Node, -1, -1, {0, 1, 2}}};
 
     auto field = [&](const char* name, const FieldLocation location, const int components, const std::vector<double>& times) {
-      Field f{name, location, components, times, {}};
+      Field f{name, location, components, times, {}, StepKind::Time, {}};
       const std::size_t entities = location == FieldLocation::Node ? nodeTotal : elementTotal;
       for (std::size_t s = 0; s < times.size(); ++s) {
         std::vector<double> values(entities * static_cast<std::size_t>(components));
@@ -123,6 +123,15 @@ namespace {
       field("Temperature", FieldLocation::Node, 1, {0.0}),
       field("Strain", FieldLocation::Element, 6, {0.0}),
       field("Tensor", FieldLocation::Node, 9, {0.0}),
+      field("ModeShape", FieldLocation::Node, 3, {1.5, 4.25, 1.0 / 3.0}),
+      field("CaseStress", FieldLocation::Element, 1, {1.0, 2.0}),
+    };
+    model.fields[5].stepKind = StepKind::Mode;
+    model.fields[6].stepKind = StepKind::LoadCase;
+    model.fields[6].stepLabels = {"Dead load", "Wind \"+X\" gust"};
+    model.globalData = {
+      GlobalArray{GlobalName::NaturalFrequency, 1, {1.5, 4.25, 1.0 / 3.0}},
+      GlobalArray{"Modal Mass", 2, {awkward(1, 9), awkward(2, 9), -0.0, 6.02214076e23}},
     };
 
     const double s = 1.0 / std::sqrt(2.0);
@@ -212,7 +221,7 @@ TEST(vtkLegacyRoundTripAllVersions) {
       options.encoding = encoding;
       mustWrite(path, model, options);
       const auto back = mustRead(path);
-      reportDiffs(compareModels(model, back, CompareOptions{.singleStep = true}), label);
+      reportDiffs(compareModels(model, back, CompareOptions{.singleStep = true, .stepLabels = false}), label);
     }
   }
 }
@@ -228,17 +237,80 @@ TEST(vtuRoundTripAllEncodings) {
     options.compress = variant.compress;
     mustWrite(path, model, options);
     const auto back = mustRead(path);
-    reportDiffs(compareModels(model, back, CompareOptions{.singleStep = true}), variant.label);
+    reportDiffs(compareModels(model, back, CompareOptions{.singleStep = true, .stepLabels = false}), variant.label);
   }
+}
+
+TEST(vtkSingleStepWritesTimeValue) {
+  const auto model = makeSampleModel();
+  for (const auto* name : {"step0.vtu", "step0.vtk"}) {
+    const auto path = workDir() / name;
+    WriteOptions options;
+    options.timeStep = 0;
+    mustWrite(path, model, options);
+    CHECK_MSG(readText(path).find("TimeValue") != std::string::npos, name);
+    const auto back = mustRead(path);
+    const auto* displacement = back.findField("Displacement", FieldLocation::Node);
+    REQUIRE(displacement != nullptr);
+    CHECK_MSG(displacement->times == std::vector<double>{0.5}, name);
+    CHECK_MSG(displacement->steps.front() == model.fields[0].steps.front(), name);
+    CHECK_MSG(back.findGlobal("TimeValue") == nullptr, name);   // consumed into the field times
+    const auto* modes = back.findField("ModeShape", FieldLocation::Node);
+    REQUIRE(modes != nullptr);
+    CHECK_MSG(modes->stepKind == StepKind::Mode && modes->times == model.fields[5].times, name);
+    CHECK_MSG(readText(path).find("ModeShape_Mode_003") != std::string::npos, name);
+  }
+}
+
+TEST(pvdRoundTripKeepsTimeHistory) {
+  auto model = makeSampleModel();
+  // A field whose history starts later: times are the union {0.5, 1, 2}.
+  Field late{"Late", FieldLocation::Node, 1, {1.0, 2.0}, {}, StepKind::Time, {}};
+  late.steps = {std::vector<double>(model.nodes.size(), 1.25), std::vector<double>(model.nodes.size(), -2.5)};
+  model.fields.push_back(late);
+
+  const auto path = workDir() / "series.pvd";
+  float lastProgress = -1.0f;
+  bool monotonic = true;
+  IoContext context;
+  context.onProgress = [&](const float fraction, std::string_view) {
+    monotonic = monotonic && fraction >= lastProgress;
+    lastProgress = fraction;
+  };
+  const auto written = writeMesh(path, model, WriteOptions{.encoding = Encoding::Binary, .compress = true}, context);
+  REQUIRE(written.has_value());
+  CHECK(monotonic && lastProgress == 1.0f);
+  CHECK(written->extraFiles.size() == 3);
+  CHECK(fs::exists(workDir() / "series" / "series_0002.vtu"));
+  const std::string collection = readText(path);
+  CHECK(collection.find("file=\"series/series_0000.vtu\"") != std::string::npos);
+  CHECK(collection.find("timestep=\"0.5\"") != std::string::npos);
+  CHECK(detectFormat(path) == FileFormat::Pvd);
+
+  const auto back = mustRead(path);
+  reportDiffs(compareModels(model, back, CompareOptions{.stepLabels = false, .singleStepTimes = false}), "pvd");
+
+  // A single .vtu of the series is an ordinary VTK file.
+  const auto middle = mustRead(workDir() / "series" / "series_0001.vtu");
+  const auto* lateStep = middle.findField("Late", FieldLocation::Node);
+  REQUIRE(lateStep != nullptr);
+  CHECK(lateStep->times == std::vector<double>{1.0});
+
+  IoContext cancelled;
+  cancelled.isCancelled = [] { return true; };
+  const auto aborted = writeMesh(workDir() / "cancelled.pvd", model, {}, cancelled);
+  CHECK(!aborted.has_value() && aborted.error().code == IoError::Code::Cancelled);
 }
 
 TEST(crossFormatChainPreservesModel) {
   // msh -> vtu -> vtk -> msh: everything except multi-step history survives every hop.
   auto model = makeSampleModel();
   for (auto& field : model.fields) {
+    if (field.stepKind != StepKind::Time) continue; // modes and load cases survive every hop
     field.steps.erase(field.steps.begin(), field.steps.end() - 1);
     field.times = {0.0};
   }
+  model.fields[6].stepLabels.clear(); // VTK formats do not store labels
   mustWrite(workDir() / "chain0.msh", model, {});
   const auto a = mustRead(workDir() / "chain0.msh");
   mustWrite(workDir() / "chain1.vtu", a, WriteOptions{.encoding = Encoding::Binary, .compress = true});
@@ -505,7 +577,10 @@ TEST(stepRoundTripWithSidecar) {
   model.loads = {NodalLoad{4, {0.0, -1e4, 0.0}}};
   std::vector<double> stress(elements);
   for (std::size_t e = 0; e < elements; ++e) stress[e] = (e % 2 ? -1.0 : 1.0) * awkward(e, 4);
-  model.fields = {Field{FieldName::Stress, FieldLocation::Element, 1, {0.0}, {stress}}};
+  model.fields = {Field{FieldName::Stress, FieldLocation::Element, 1, {0.0}, {stress}, StepKind::Time, {}},
+                  Field{"CaseForce", FieldLocation::Node, 1, {1.0, 2.0}, {std::vector<double>(6, 1.0), std::vector<double>(6, 2.0)},
+                        StepKind::LoadCase, {"Dead load", " Snow  (drift) "}}};
+  model.globalData = {GlobalArray{GlobalName::NaturalFrequency, 1, {awkward(1, 2), 12.5}}};
   model.sets = {EntitySet{"Chords", SetKind::Element, 1, -1, {0, 1, 2, 3}}};
 
   const auto path = workDir() / "truss.step";
@@ -544,6 +619,13 @@ TEST(stepRoundTripWithSidecar) {
   CHECK(back.elementAttributes.at(Attribute::CrossSectionArea) == std::vector<double>(elements, 8e-3));
   const auto* chords = back.findSet("Chords", SetKind::Element);
   CHECK(chords && chords->members.size() == 4);
+  const auto* cases = back.findField("CaseForce", FieldLocation::Node);
+  REQUIRE(cases != nullptr);
+  CHECK(cases->stepKind == StepKind::LoadCase);
+  CHECK(cases->times == model.fields[1].times);
+  CHECK(cases->stepLabels == model.fields[1].stepLabels);
+  const auto* frequencies = back.findGlobal(GlobalName::NaturalFrequency);
+  CHECK(frequencies && frequencies->values == model.globalData[0].values);
 }
 
 TEST(cadSolidImportAllKernels) {
@@ -687,7 +769,7 @@ TEST(ioServiceRunsOffTheCallingThread) {
   REQUIRE(exportTask->tryResult()->has_value());
   REQUIRE(importTask->tryResult()->has_value());
   CHECK(importTask->progress() == 1.0f);
-  reportDiffs(compareModels(*model, importTask->wait().value(), CompareOptions{.singleStep = true}), "async");
+  reportDiffs(compareModels(*model, importTask->wait().value(), CompareOptions{.singleStep = true, .stepLabels = false}), "async");
 }
 
 TEST(ioServiceCancellation) {

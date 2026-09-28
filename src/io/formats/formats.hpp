@@ -36,6 +36,10 @@ namespace anaf::IO::formats {
   MeshModel readVtu(const std::filesystem::path& path, const ReadOptions& options, const IoContext& context);
   WriteReport writeVtu(const std::filesystem::path& path, const MeshModel& model, const WriteOptions& options, const IoContext& context);
 
+  // ParaView collection: a .pvd file plus one .vtu per time step (implemented in vtuFormat.cpp).
+  MeshModel readPvd(const std::filesystem::path& path, const ReadOptions& options, const IoContext& context);
+  WriteReport writePvd(const std::filesystem::path& path, const MeshModel& model, const WriteOptions& options, const IoContext& context);
+
   // STEP / IGES / BREP through OpenCASCADE (Gmsh OCC kernel).
   MeshModel readCad(const std::filesystem::path& path, const ReadOptions& options, const IoContext& context);
   WriteReport writeStep(const std::filesystem::path& path, const MeshModel& model, const WriteOptions& options, const IoContext& context);

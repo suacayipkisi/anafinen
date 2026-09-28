@@ -79,6 +79,13 @@ def make_grid(cells, float_points=False):
     add(grid.GetCellData(), "Pressure", vtk.vtkDoubleArray(), 1, len(cells), 5)
     add(grid.GetCellData(), "Flags", vtk.vtkUnsignedCharArray(), 1, len(cells), 6)
     add(grid.GetCellData(), "Strain6", vtk.vtkDoubleArray(), 6, len(cells), 7)
+    # Two eigenmodes in the anaf_io single-file convention, dataset-level field data and TimeValue.
+    add(grid.GetPointData(), "Shape_Mode_001", vtk.vtkDoubleArray(), 3, NODES, 8)
+    add(grid.GetPointData(), "Shape_Mode_002", vtk.vtkDoubleArray(), 3, NODES, 9)
+    add(grid.GetFieldData(), "Shape_Mode_Values", vtk.vtkDoubleArray(), 1, 2, 10)
+    add(grid.GetFieldData(), "NaturalFrequency", vtk.vtkDoubleArray(), 1, 2, 10)
+    add(grid.GetFieldData(), "Matrix2", vtk.vtkDoubleArray(), 2, 3, 11)
+    add(grid.GetFieldData(), "TimeValue", vtk.vtkDoubleArray(), 1, 1, 12)
     return grid
 
 
@@ -93,7 +100,7 @@ def describe_vtk(dataset):
         dataset.GetCellPoints(c, ids)
         cells.append((dataset.GetCellType(c), tuple(ids.GetId(k) for k in range(ids.GetNumberOfIds()))))
     arrays = {}
-    for loc, data in (("N", dataset.GetPointData()), ("E", dataset.GetCellData())):
+    for loc, data in (("N", dataset.GetPointData()), ("E", dataset.GetCellData()), ("G", dataset.GetFieldData())):
         for a in range(data.GetNumberOfArrays()):
             array = data.GetArray(a)
             if array is None:
@@ -161,7 +168,7 @@ def compare(label, reference, actual, expected_cells=None, ignore_arrays=()):
         if act_comps != comps:
             fail(f"{label}: array {name} components {comps} vs {act_comps}")
             continue
-        if loc == "N":
+        if loc in ("N", "G"):
             ok = len(values) == len(act_values) and all(same_float(x, y) for x, y in zip(values, act_values))
         else:
             ok = True

@@ -17,5 +17,6 @@ CLAUDE.md
 *.log
 build-clang/
 build-mingw/
+build-rpm/
 .claude/settings.local.json
 build-containers/

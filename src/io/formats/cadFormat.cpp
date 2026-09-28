@@ -23,6 +23,11 @@
 // Write: STEP. CAD files carry geometry only, so every node becomes a CAD vertex and every
 //        line element a straight CAD edge. Everything else (BCs, loads, attributes, sets,
 //        fields) goes to the sidecar `<file>.anafFields`, matched back by position on read.
+//
+// Sidecar version 3 adds to version 2:
+//   after each "FIELD" header: "KIND <Time|Frequency|Mode|LoadCase> <0|1>", then when the flag
+//                              is 1 one "LABEL <text>" line per step
+//   before "END":              "GLOBAL <components> <tuples> <name>" followed by the values
 
 #include "formats.hpp"
 #include "../detail/gmshSession.hpp"
@@ -54,7 +59,7 @@ namespace anaf::IO::formats {
 
     constexpr std::string_view kSidecarSuffix = ".anafFields";
     constexpr std::string_view kSidecarMagic = "ANAFINEN_SIDECAR";
-    constexpr int kSidecarVersion = 2;
+    constexpr int kSidecarVersion = 3;
 
     void checkCancel(const IoContext& context) {
       if (context.cancelled()) throw detail::CancelledFailure();
@@ -183,6 +188,11 @@ namespace anaf::IO::formats {
       for (const Field* field : fields) {
         const bool onNodes = field->location == FieldLocation::Node;
         out += std::format("FIELD {} {} {} {}\n", onNodes ? "N" : "E", field->components, field->steps.size(), field->name);
+        out += std::format("KIND {} {}\n", stepKindName(field->stepKind), field->stepLabels.empty() ? 0 : 1);
+        for (auto label : field->stepLabels) {
+          std::ranges::replace(label, '\n', ' ');
+          out += "LABEL " + label + "\n";
+        }
         for (std::size_t s = 0; s < field->steps.size(); ++s) {
           out += "TIME ";
           detail::appendNumber(out, s < field->times.size() ? field->times[s] : 0.0);
@@ -198,13 +208,21 @@ namespace anaf::IO::formats {
           }
         }
       }
+      for (const auto& global : model.globalData) {
+        out += std::format("GLOBAL {} {} {}\n", global.components, global.tuples(), global.name);
+        for (std::size_t i = 0; i < global.values.size(); ++i) {
+          detail::appendNumber(out, global.values[i]);
+          out.push_back((i + 1) % static_cast<std::size_t>(global.components) == 0 ? '\n' : ' ');
+        }
+      }
       out += "END\n";
       detail::writeWholeFile(path, out);
     }
 
     // ------------------------------------------------------------ sidecar read
 
-    void readSidecarV2(Cursor& cursor, MeshModel& model) {
+    // Versions 2 and 3 (see the file header for the differences).
+    void readSidecarV2(Cursor& cursor, MeshModel& model, const int version) {
       if (cursor.token() != "UNIT") throw ParseFailure("sidecar: UNIT expected");
       cursor.line();
       if (cursor.token() != "NODES") throw ParseFailure("sidecar: NODES expected");
@@ -257,6 +275,18 @@ namespace anaf::IO::formats {
       while (true) {
         const auto keyword = cursor.token();
         if (keyword.empty() || keyword == "END") break;
+        if (keyword == "GLOBAL" && version >= 3) {
+          GlobalArray global;
+          global.components = cursor.number<int>();
+          const auto tuples = cursor.number<std::size_t>();
+          if (global.components < 1) throw ParseFailure("sidecar: invalid GLOBAL component count");
+          cursor.skipSpace();
+          global.name = std::string(cursor.line());
+          global.values.resize(tuples * static_cast<std::size_t>(global.components));
+          for (auto& v : global.values) v = cursor.number<double>();
+          model.globalData.push_back(std::move(global));
+          continue;
+        }
         if (keyword != "FIELD") throw ParseFailure("sidecar: FIELD expected, got '" + std::string(keyword) + "'");
         Field field;
         const bool onNodes = cursor.token() == "N";
@@ -265,6 +295,22 @@ namespace anaf::IO::formats {
         const auto steps = cursor.number<std::size_t>();
         cursor.skipSpace();
         field.name = std::string(cursor.line());
+        if (version >= 3) {
+          if (cursor.token() != "KIND") throw ParseFailure("sidecar: KIND expected");
+          const auto kind = stepKindFromName(cursor.token());
+          if (!kind) throw ParseFailure("sidecar: unknown step kind");
+          field.stepKind = *kind;
+          if (cursor.number<int>() != 0) {
+            field.stepLabels.resize(steps);
+            for (auto& label : field.stepLabels) {
+              if (cursor.token() != "LABEL") throw ParseFailure("sidecar: LABEL expected");
+              // One separating space after the keyword; the rest of the line is the label.
+              auto rest = cursor.line();
+              if (!rest.empty() && rest.front() == ' ') rest.remove_prefix(1);
+              label = std::string(rest);
+            }
+          }
+        }
         const std::size_t rows = onNodes ? nodeCount : elementCount;
         const std::size_t entities = onNodes ? model.nodes.size() : model.elementCount();
         const auto& map = onNodes ? nodeMap : elementMap;
@@ -324,7 +370,7 @@ namespace anaf::IO::formats {
         }
       }
       auto add = [&](const char* name, const FieldLocation location, const int components, std::vector<double> values) {
-        model.fields.push_back(Field{name, location, components, {0.0}, {std::move(values)}});
+        model.fields.push_back(Field{name, location, components, {0.0}, {std::move(values)}, StepKind::Time, {}});
       };
       if (anyNodes) add(FieldName::Displacement, FieldLocation::Node, 3, std::move(displacement));
       if (anyElements) {
@@ -342,7 +388,7 @@ namespace anaf::IO::formats {
         cursor.token();
         const int version = cursor.number<int>();
         if (version > kSidecarVersion) throw ParseFailure(std::format("sidecar version {} is newer than supported ({})", version, kSidecarVersion));
-        readSidecarV2(cursor, model);
+        readSidecarV2(cursor, model, version);
       } else {
         readSidecarV1(cursor, model);
       }

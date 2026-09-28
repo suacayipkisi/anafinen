@@ -21,7 +21,9 @@
 // Read:  DATASET UNSTRUCTURED_GRID and POLYDATA; POINT_DATA / CELL_DATA with SCALARS,
 //        COLOR_SCALARS, VECTORS, NORMALS, TEXTURE_COORDINATES, TENSORS, TENSORS6,
 //        GLOBAL_IDS, PEDIGREE_IDS and FIELD arrays; METADATA blocks are skipped.
+//        Dataset-level FIELD arrays (before POINTS) become MeshModel::globalData.
 // Write: UNSTRUCTURED_GRID, version 4.2 (classic CELLS) or 5.1 (OFFSETS / CONNECTIVITY).
+//        Global data (and TimeValue) as dataset-level FIELD; steps as in detail::flattenSteps().
 
 #include "formats.hpp"
 #include "../detail/modelCodec.hpp"
@@ -209,6 +211,7 @@ namespace anaf::IO::formats {
     std::vector<std::pair<int, CellList>> polySections;
     std::vector<RawField> rawFields;
     bool onPoints = true;
+    bool inAttributes = false; // after the first POINT_DATA / CELL_DATA
     std::size_t pointCount = 0;
     std::size_t attributeCount = 0;
 
@@ -248,6 +251,7 @@ namespace anaf::IO::formats {
         const auto args = lineArguments(cursor);
         attributeCount = Cursor::parseNumber<std::size_t>(args.at(0));
         onPoints = keyword == "POINT_DATA";
+        inAttributes = true;
       } else if (keyword == "SCALARS") {
         const auto args = lineArguments(cursor);
         if (args.size() < 2) throw ParseFailure("malformed SCALARS header");
@@ -295,7 +299,9 @@ namespace anaf::IO::formats {
           const auto tuples = Cursor::parseNumber<std::size_t>(header2[1]);
           auto values = readArray<double>(cursor, tuples * static_cast<std::size_t>(components), header2[2], binary);
           // Dataset-level FIELD arrays (before POINT_DATA / CELL_DATA) are not attached to entities.
-          if (attributeCount > 0 && tuples == attributeCount) {
+          if (!inAttributes) {
+            model.globalData.push_back(GlobalArray{detail::decodeLegacyName(arrayName), components, std::move(values)});
+          } else if (tuples == attributeCount) {
             rawFields.push_back(RawField{detail::decodeLegacyName(arrayName), onPoints, components, std::move(values)});
           }
         }
@@ -344,6 +350,7 @@ namespace anaf::IO::formats {
       model.fields.push_back(std::move(field));
     }
 
+    detail::unflattenSteps(model);
     detail::decodeModelData(model, detail::CodecOptions{});
     context.progress(1.0f, "done");
     return model;
@@ -391,34 +398,26 @@ namespace anaf::IO::formats {
       std::string m_out;
     };
 
-    void writeAttributes(LegacyWriter& writer, const std::vector<const Field*>& fields, const int timeStep,
-                         std::vector<std::string>& warnings) {
-      std::vector<const Field*> generic;
-      for (const Field* field : fields) {
-        const auto* values = detail::selectStep(*field, timeStep);
-        if (!values) continue;
-        if (field->steps.size() > 1) {
-          warnings.push_back(std::format("field '{}': VTK stores one step; step {} of {} written",
-            field->name, timeStep < 0 ? static_cast<int>(field->steps.size()) - 1 : timeStep, field->steps.size()));
-        }
-        const std::string name = detail::encodeLegacyName(field->name);
-        if (field->components == 1) {
+    void writeAttributes(LegacyWriter& writer, const std::vector<const detail::FlatArray*>& arrays) {
+      std::vector<const detail::FlatArray*> generic;
+      for (const auto* array : arrays) {
+        const std::string name = detail::encodeLegacyName(array->name);
+        if (array->components == 1) {
           writer.text(std::format("SCALARS {} double 1\nLOOKUP_TABLE default\n", name));
-          writer.doubles(*values, 9);
-        } else if (field->components == 3) {
+          writer.doubles(*array->values, 9);
+        } else if (array->components == 3) {
           writer.text(std::format("VECTORS {} double\n", name));
-          writer.doubles(*values, 3);
+          writer.doubles(*array->values, 3);
         } else {
-          generic.push_back(field);
+          generic.push_back(array);
         }
       }
       if (!generic.empty()) {
         writer.text(std::format("FIELD FieldData {}\n", generic.size()));
-        for (const Field* field : generic) {
-          const auto* values = detail::selectStep(*field, timeStep);
-          const std::size_t tuples = values->size() / static_cast<std::size_t>(field->components);
-          writer.text(std::format("{} {} {} double\n", detail::encodeLegacyName(field->name), field->components, tuples));
-          writer.doubles(*values, field->components);
+        for (const auto* array : generic) {
+          const std::size_t tuples = array->values->size() / static_cast<std::size_t>(array->components);
+          writer.text(std::format("{} {} {} double\n", detail::encodeLegacyName(array->name), array->components, tuples));
+          writer.doubles(*array->values, array->components);
         }
       }
     }
@@ -441,6 +440,21 @@ namespace anaf::IO::formats {
     writer.text(std::format("# vtk DataFile Version {}\n{}\n{}\nDATASET UNSTRUCTURED_GRID\n", v51 ? "5.1" : "4.2", title,
       binary ? "BINARY" : "ASCII"));
 
+    const auto encoded = detail::encodeModelData(model, detail::CodecOptions{true, true, options.writeTags});
+    const auto flat = detail::flattenSteps(model, encoded, options.timeStep);
+    report.warnings.insert(report.warnings.end(), flat.warnings.begin(), flat.warnings.end());
+    // Dataset-level field data goes between DATASET and POINTS, where VTK writes it.
+    std::size_t globalCount = 0;
+    for (const auto& global : flat.globals) globalCount += global.tuples() > 0 ? 1 : 0;
+    if (globalCount > 0) {
+      writer.text(std::format("FIELD FieldData {}\n", globalCount));
+      for (const auto& global : flat.globals) {
+        if (global.tuples() == 0) continue;
+        writer.text(std::format("{} {} {} double\n", detail::encodeLegacyName(global.name), global.components, global.tuples()));
+        writer.doubles(global.values, global.components);
+      }
+    }
+
     std::vector<double> coords(model.nodes.size() * 3);
     for (std::size_t i = 0; i < model.nodes.size(); ++i) {
       for (int a = 0; a < 3; ++a) coords[i * 3 + a] = model.nodes[i].position[a];
@@ -462,22 +476,22 @@ namespace anaf::IO::formats {
       writer.integers(std::span<const std::int64_t>(cells.connectivity), 9);
     } else {
       // Classic layout: count followed by the point ids for every cell, 32-bit ints.
-      std::vector<std::int32_t> flat;
-      flat.reserve(cellCount + cells.connectivity.size());
+      std::vector<std::int32_t> classic;
+      classic.reserve(cellCount + cells.connectivity.size());
       std::int64_t begin = 0;
       for (std::size_t c = 0; c < cellCount; ++c) {
-        flat.push_back(static_cast<std::int32_t>(cells.offsets[c] - begin));
-        for (std::int64_t k = begin; k < cells.offsets[c]; ++k) flat.push_back(static_cast<std::int32_t>(cells.connectivity[static_cast<std::size_t>(k)]));
+        classic.push_back(static_cast<std::int32_t>(cells.offsets[c] - begin));
+        for (std::int64_t k = begin; k < cells.offsets[c]; ++k) classic.push_back(static_cast<std::int32_t>(cells.connectivity[static_cast<std::size_t>(k)]));
         begin = cells.offsets[c];
       }
-      writer.text(std::format("CELLS {} {}\n", cellCount, flat.size()));
+      writer.text(std::format("CELLS {} {}\n", cellCount, classic.size()));
       if (binary) {
-        writer.integers(std::span<const std::int32_t>(flat), 1);
+        writer.integers(std::span<const std::int32_t>(classic), 1);
       } else {
         std::size_t pos = 0;
         for (std::size_t c = 0; c < cellCount; ++c) {
-          const auto n = static_cast<std::size_t>(flat[pos]);
-          writer.integers(std::span<const std::int32_t>(flat.data() + pos, n + 1), static_cast<int>(n + 1));
+          const auto n = static_cast<std::size_t>(classic[pos]);
+          writer.integers(std::span<const std::int32_t>(classic.data() + pos, n + 1), static_cast<int>(n + 1));
           pos += n + 1;
         }
       }
@@ -487,19 +501,16 @@ namespace anaf::IO::formats {
     writer.integers(std::span<const std::int32_t>(types), 1);
     context.progress(0.6f, "attributes");
 
-    const auto encoded = detail::encodeModelData(model, detail::CodecOptions{true, true, options.writeTags});
-    std::vector<const Field*> pointFields;
-    std::vector<const Field*> cellFields;
-    for (const auto* group : {&model.fields, &encoded}) {
-      for (const auto& field : *group) (field.location == FieldLocation::Node ? pointFields : cellFields).push_back(&field);
-    }
-    if (!pointFields.empty()) {
+    std::vector<const detail::FlatArray*> pointArrays;
+    std::vector<const detail::FlatArray*> cellArrays;
+    for (const auto& array : flat.arrays) (array.location == FieldLocation::Node ? pointArrays : cellArrays).push_back(&array);
+    if (!pointArrays.empty()) {
       writer.text(std::format("POINT_DATA {}\n", model.nodes.size()));
-      writeAttributes(writer, pointFields, options.timeStep, report.warnings);
+      writeAttributes(writer, pointArrays);
     }
-    if (!cellFields.empty() && cellCount > 0) {
+    if (!cellArrays.empty() && cellCount > 0) {
       writer.text(std::format("CELL_DATA {}\n", cellCount));
-      writeAttributes(writer, cellFields, options.timeStep, report.warnings);
+      writeAttributes(writer, cellArrays);
     }
 
     if (context.cancelled()) throw detail::CancelledFailure();

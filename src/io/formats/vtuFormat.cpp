@@ -20,8 +20,16 @@
 // Read:  file versions 0.1 / 1.0 / 2.x, header_type UInt32 or UInt64, LittleEndian or BigEndian,
 //        DataArray format ascii / binary (base64) / appended (raw or base64), optional
 //        vtkZLibDataCompressor, any number of <Piece> elements (merged).
+//        <UnstructuredGrid><FieldData> becomes MeshModel::globalData.
 // Write: version 1.0, UInt64 headers, little endian, ascii or inline base64, optional zlib.
+//        Global data (and TimeValue) as FieldData; steps as in detail::flattenSteps().
+//
+// ParaView collection (.pvd): one .vtu per time step in the folder "<stem>/" next to the
+// .pvd file. Time fields are split by time value; single-step fields go into every file, and
+// every file carries its own TimeValue so that it also reads correctly on its own.
+// On read, a field that is identical in every file is folded back into one step.
 
+#include "../core/pathUtf8.hpp"
 #include "formats.hpp"
 #include "../detail/modelCodec.hpp"
 #include "../detail/textIo.hpp"
@@ -30,8 +38,10 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <format>
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -393,6 +403,7 @@ namespace anaf::IO::formats {
     XmlParser parser(content);
     const XmlElement root = parser.parseDocument();
     if (root.name != "VTKFile") throw ParseFailure("not a VTK XML file (root element is '" + root.name + "')");
+    if (root.attribute("type") == "Collection") throw ParseFailure("this is a ParaView collection: read it as .pvd");
     if (root.attribute("type") != "UnstructuredGrid") {
       throw ParseFailure("VTK XML type '" + root.attribute("type") + "' is not supported (UnstructuredGrid expected)");
     }
@@ -413,6 +424,17 @@ namespace anaf::IO::formats {
     if (!grid) throw ParseFailure("UnstructuredGrid element missing");
 
     MeshModel model;
+    if (const XmlElement* fieldData = grid->child("FieldData")) {
+      for (const auto& array : fieldData->children) {
+        if (array.name != "DataArray" || array.attribute("type") == "String") continue;
+        GlobalArray global;
+        global.name = array.attribute("Name");
+        global.components = std::max(1, detail::Cursor::parseNumber<int>(array.attribute("NumberOfComponents", "1")));
+        const auto tuples = detail::Cursor::parseNumber<std::size_t>(array.attribute("NumberOfTuples", "0"));
+        global.values = readDataArray<double>(array, layout, tuples * static_cast<std::size_t>(global.components));
+        model.globalData.push_back(std::move(global));
+      }
+    }
     // All pieces are concatenated first, then turned into elements in one pass.
     std::vector<std::int64_t> connectivity, offsets, types;
     struct PendingArray { std::string name; bool onPoints; int components; std::vector<double> values; };
@@ -500,6 +522,7 @@ namespace anaf::IO::formats {
       model.fields.push_back(std::move(field));
     }
 
+    detail::unflattenSteps(model);
     detail::decodeModelData(model, detail::CodecOptions{});
     context.progress(1.0f, "done");
     return model;
@@ -514,9 +537,11 @@ namespace anaf::IO::formats {
       VtuWriter(const bool binary, const bool compress) : m_binary(binary), m_compress(compress) {}
 
       template <typename T>
-      void dataArray(const std::string& name, const char* vtkType, const int components, std::span<const T> values) {
+      void dataArray(const std::string& name, const char* vtkType, const int components, std::span<const T> values,
+                     const bool withTuples = false) {
         m_out += std::format("        <DataArray type=\"{}\" Name=\"{}\"", vtkType, escapeXml(name));
         if (components != 1) m_out += std::format(" NumberOfComponents=\"{}\"", components);
+        if (withTuples) m_out += std::format(" NumberOfTuples=\"{}\"", values.size() / static_cast<std::size_t>(std::max(components, 1)));
         m_out += std::format(" format=\"{}\">\n", m_binary ? "binary" : "ascii");
         if (m_binary) {
           std::string raw;
@@ -576,65 +601,249 @@ namespace anaf::IO::formats {
 
   } // namespace end
 
-  WriteReport writeVtu(const std::filesystem::path& path, const MeshModel& model, const WriteOptions& options, const IoContext& context) {
-    if (const auto problems = model.validate(); !problems.empty()) {
-      throw std::invalid_argument("model is inconsistent: " + problems.front());
-    }
-    WriteReport report;
-    report.path = path.string();
-    const bool binary = options.encoding == Encoding::Binary || options.compress;
-    VtuWriter writer(binary, options.compress);
-    auto& out = writer.buffer();
+  namespace {
 
-    const auto cells = detail::buildVtkCells(model);
-    report.warnings.insert(report.warnings.end(), cells.warnings.begin(), cells.warnings.end());
+    std::string vtuDocument(const MeshModel& model, const detail::FlatData& flat, const WriteOptions& options,
+                            const detail::VtkCells& cells, const IoContext& context) {
+      const bool binary = options.encoding == Encoding::Binary || options.compress;
+      VtuWriter writer(binary, options.compress);
+      auto& out = writer.buffer();
 
-    out += "<?xml version=\"1.0\"?>\n";
-    if (!model.title.empty()) out += std::format("<!-- {} -->\n", escapeXml(model.title));
-    out += "<VTKFile type=\"UnstructuredGrid\" version=\"1.0\" byte_order=\"LittleEndian\" header_type=\"UInt64\"";
-    if (options.compress) out += " compressor=\"vtkZLibDataCompressor\"";
-    out += ">\n  <UnstructuredGrid>\n";
-    out += std::format("    <Piece NumberOfPoints=\"{}\" NumberOfCells=\"{}\">\n", model.nodes.size(), cells.types.size());
+      out += "<?xml version=\"1.0\"?>\n";
+      if (!model.title.empty()) out += std::format("<!-- {} -->\n", escapeXml(model.title));
+      out += "<VTKFile type=\"UnstructuredGrid\" version=\"1.0\" byte_order=\"LittleEndian\" header_type=\"UInt64\"";
+      if (options.compress) out += " compressor=\"vtkZLibDataCompressor\"";
+      out += ">\n  <UnstructuredGrid>\n";
+      if (!flat.globals.empty()) {
+        out += "    <FieldData>\n";
+        for (const auto& global : flat.globals) {
+          writer.dataArray(global.name, "Float64", global.components, std::span<const double>(global.values), true);
+        }
+        out += "    </FieldData>\n";
+      }
+      out += std::format("    <Piece NumberOfPoints=\"{}\" NumberOfCells=\"{}\">\n", model.nodes.size(), cells.types.size());
 
-    const auto encoded = detail::encodeModelData(model, detail::CodecOptions{true, true, options.writeTags});
-    for (const bool onPoints : {true, false}) {
-      bool opened = false;
-      for (const auto* group : {&model.fields, &encoded}) {
-        for (const auto& field : *group) {
-          if ((field.location == FieldLocation::Node) != onPoints) continue;
-          const auto* values = detail::selectStep(field, options.timeStep);
-          if (!values) continue;
+      for (const bool onPoints : {true, false}) {
+        bool opened = false;
+        for (const auto& array : flat.arrays) {
+          if ((array.location == FieldLocation::Node) != onPoints) continue;
           if (!opened) {
             out += onPoints ? "      <PointData>\n" : "      <CellData>\n";
             opened = true;
           }
-          if (field.steps.size() > 1) {
-            report.warnings.push_back(std::format("field '{}': VTU stores one step; {} steps available", field.name, field.steps.size()));
-          }
-          writer.dataArray(field.name, "Float64", field.components, std::span<const double>(*values));
+          writer.dataArray(array.name, "Float64", array.components, std::span<const double>(*array.values));
         }
+        if (opened) out += onPoints ? "      </PointData>\n" : "      </CellData>\n";
+        if (context.cancelled()) throw detail::CancelledFailure();
       }
-      if (opened) out += onPoints ? "      </PointData>\n" : "      </CellData>\n";
-      if (context.cancelled()) throw detail::CancelledFailure();
-    }
-    context.progress(0.5f, "geometry");
+      context.progress(0.5f, "geometry");
 
-    std::vector<double> coords(model.nodes.size() * 3);
-    for (std::size_t i = 0; i < model.nodes.size(); ++i) {
-      for (int a = 0; a < 3; ++a) coords[i * 3 + a] = model.nodes[i].position[a];
+      std::vector<double> coords(model.nodes.size() * 3);
+      for (std::size_t i = 0; i < model.nodes.size(); ++i) {
+        for (int a = 0; a < 3; ++a) coords[i * 3 + a] = model.nodes[i].position[a];
+      }
+      out += "      <Points>\n";
+      writer.dataArray("Points", "Float64", 3, std::span<const double>(coords));
+      out += "      </Points>\n      <Cells>\n";
+      writer.dataArray("connectivity", "Int64", 1, std::span<const std::int64_t>(cells.connectivity));
+      writer.dataArray("offsets", "Int64", 1, std::span<const std::int64_t>(cells.offsets));
+      writer.dataArray("types", "UInt8", 1, std::span<const std::uint8_t>(cells.types));
+      out += "      </Cells>\n    </Piece>\n  </UnstructuredGrid>\n</VTKFile>\n";
+      return std::move(out);
     }
-    out += "      <Points>\n";
-    writer.dataArray("Points", "Float64", 3, std::span<const double>(coords));
-    out += "      </Points>\n      <Cells>\n";
-    writer.dataArray("connectivity", "Int64", 1, std::span<const std::int64_t>(cells.connectivity));
-    writer.dataArray("offsets", "Int64", 1, std::span<const std::int64_t>(cells.offsets));
-    writer.dataArray("types", "UInt8", 1, std::span<const std::uint8_t>(cells.types));
-    out += "      </Cells>\n    </Piece>\n  </UnstructuredGrid>\n</VTKFile>\n";
 
+    void requireValid(const MeshModel& model) {
+      if (const auto problems = model.validate(); !problems.empty()) {
+        throw std::invalid_argument("model is inconsistent: " + problems.front());
+      }
+    }
+
+    // Progress of one sub-file mapped into [begin, end) of the whole operation.
+    IoContext subContext(const IoContext& context, const float begin, const float end, std::string stage) {
+      IoContext sub;
+      sub.isCancelled = context.isCancelled;
+      if (context.onProgress) {
+        sub.onProgress = [&context, begin, end, stage = std::move(stage)](const float fraction, std::string_view) {
+          context.progress(begin + (end - begin) * fraction, stage);
+        };
+      }
+      return sub;
+    }
+
+  } // namespace end
+
+  WriteReport writeVtu(const std::filesystem::path& path, const MeshModel& model, const WriteOptions& options, const IoContext& context) {
+    requireValid(model);
+    WriteReport report;
+    report.path = pathToUtf8(path);
+    const auto cells = detail::buildVtkCells(model);
+    report.warnings.insert(report.warnings.end(), cells.warnings.begin(), cells.warnings.end());
+    const auto encoded = detail::encodeModelData(model, detail::CodecOptions{true, true, options.writeTags});
+    const auto flat = detail::flattenSteps(model, encoded, options.timeStep);
+    report.warnings.insert(report.warnings.end(), flat.warnings.begin(), flat.warnings.end());
+    const std::string out = vtuDocument(model, flat, options, cells, context);
     if (context.cancelled()) throw detail::CancelledFailure();
     detail::writeWholeFile(path, out);
     context.progress(1.0f, "done");
     return report;
+  }
+
+  // ---------------------------------------------------------------- ParaView collection (.pvd)
+
+  WriteReport writePvd(const std::filesystem::path& path, const MeshModel& model, const WriteOptions& options, const IoContext& context) {
+    requireValid(model);
+    WriteReport report;
+    report.path = pathToUtf8(path);
+
+    // Distinct times of every Time field with a history; a model without one is a single step.
+    std::set<double> timeSet;
+    for (const auto& field : model.fields) {
+      if (field.stepKind == StepKind::Time && field.steps.size() > 1) timeSet.insert(field.times.begin(), field.times.end());
+    }
+    if (timeSet.empty()) {
+      double time = 0.0;
+      for (const auto& field : model.fields) {
+        if (field.stepKind == StepKind::Time && !field.times.empty()) {
+          time = field.times.back();
+          break;
+        }
+      }
+      timeSet.insert(time);
+    }
+    const std::vector<double> times(timeSet.begin(), timeSet.end());
+
+    const std::string stem = pathToUtf8(path.stem());
+    const auto folder = path.parent_path() / path.stem();
+    std::filesystem::create_directories(folder);
+    const auto cells = detail::buildVtkCells(model);
+    report.warnings.insert(report.warnings.end(), cells.warnings.begin(), cells.warnings.end());
+    const auto encoded = detail::encodeModelData(model, detail::CodecOptions{true, true, options.writeTags});
+
+    std::string collection = "<?xml version=\"1.0\"?>\n<VTKFile type=\"Collection\" version=\"1.0\" byte_order=\"LittleEndian\" header_type=\"UInt64\">\n  <Collection>\n";
+    for (std::size_t k = 0; k < times.size(); ++k) {
+      const double time = times[k];
+      const auto pick = [time](const Field& field) -> const std::vector<double>* {
+        if (field.steps.size() == 1) return &field.steps.front();
+        for (std::size_t s = 0; s < field.steps.size(); ++s) {
+          if (s < field.times.size() && field.times[s] == time) return &field.steps[s];
+        }
+        return nullptr;
+      };
+      const auto flat = detail::flattenSteps(model, encoded, -1, pick, time);
+      if (k == 0) report.warnings.insert(report.warnings.end(), flat.warnings.begin(), flat.warnings.end());
+      const std::string fileName = std::format("{}_{:04}.vtu", stem, k);
+      const auto stepContext = subContext(context, static_cast<float>(k) / static_cast<float>(times.size()),
+                                          static_cast<float>(k + 1) / static_cast<float>(times.size()),
+                                          std::format("step {} of {}", k + 1, times.size()));
+      const std::string document = vtuDocument(model, flat, options, cells, stepContext);
+      if (context.cancelled()) throw detail::CancelledFailure();
+      const auto stepPath = folder / pathFromUtf8(fileName);
+      detail::writeWholeFile(stepPath, document);
+      report.extraFiles.push_back(pathToUtf8(stepPath));
+
+      std::string timeText;
+      detail::appendNumber(timeText, time);
+      // Forward slashes: the collection must stay readable on every platform.
+      collection += std::format("    <DataSet timestep=\"{}\" group=\"\" part=\"0\" file=\"{}\"/>\n", timeText,
+                                escapeXml(stem + "/" + fileName));
+    }
+    collection += "  </Collection>\n</VTKFile>\n";
+    detail::writeWholeFile(path, collection);
+    context.progress(1.0f, "done");
+    return report;
+  }
+
+  MeshModel readPvd(const std::filesystem::path& path, const ReadOptions& options, const IoContext& context) {
+    const std::string content = detail::readWholeFile(path);
+    XmlParser parser(content);
+    const XmlElement root = parser.parseDocument();
+    if (root.name != "VTKFile" || root.attribute("type") != "Collection") throw ParseFailure("not a ParaView collection (.pvd)");
+    const XmlElement* collection = root.child("Collection");
+    if (!collection) throw ParseFailure("Collection element missing");
+
+    struct Entry { double time; std::filesystem::path file; };
+    std::vector<Entry> entries;
+    std::size_t skippedParts = 0;
+    for (const auto& dataSet : collection->children) {
+      if (dataSet.name != "DataSet") continue;
+      if (detail::Cursor::parseNumber<int>(dataSet.attribute("part", "0")) != 0) {
+        ++skippedParts;
+        continue;
+      }
+      auto file = pathFromUtf8(dataSet.attribute("file"));
+      if (file.is_relative()) file = path.parent_path() / file;
+      entries.push_back(Entry{detail::Cursor::parseNumber<double>(dataSet.attribute("timestep", "0")), std::move(file)});
+    }
+    if (entries.empty()) throw ParseFailure("the collection lists no data sets");
+    std::ranges::stable_sort(entries, {}, &Entry::time);
+
+    MeshModel model;
+    // Time fields per (name, location), one step per file that contains them.
+    struct History { Field field; std::size_t files{0}; bool constant{true}; };
+    std::map<std::pair<std::string, int>, History> histories;
+    std::vector<std::pair<std::string, int>> order;
+    for (std::size_t k = 0; k < entries.size(); ++k) {
+      const auto stepContext = subContext(context, static_cast<float>(k) / static_cast<float>(entries.size()),
+                                          static_cast<float>(k + 1) / static_cast<float>(entries.size()),
+                                          std::format("step {} of {}", k + 1, entries.size()));
+      if (entries[k].file.extension() != ".vtu") {
+        throw ParseFailure("collection entry '" + pathToUtf8(entries[k].file) + "' is not a .vtu file");
+      }
+      MeshModel step = readVtu(entries[k].file, options, stepContext);
+      if (k == 0) {
+        model = std::move(step);
+        std::vector<Field> timeFields;
+        std::erase_if(model.fields, [&](Field& field) {
+          if (field.stepKind != StepKind::Time) return false;
+          timeFields.push_back(std::move(field));
+          return true;
+        });
+        for (auto& field : timeFields) {
+          const std::pair<std::string, int> key{field.name, static_cast<int>(field.location)};
+          field.times = {entries[k].time};
+          histories[key] = History{std::move(field), 1, true};
+          order.push_back(key);
+        }
+        continue;
+      }
+      if (step.nodes.size() != model.nodes.size() || step.elementCount() != model.elementCount()) {
+        throw ParseFailure(std::format("collection step {} has a different mesh ({} nodes, {} elements; {} / {} expected)",
+          k + 1, step.nodes.size(), step.elementCount(), model.nodes.size(), model.elementCount()));
+      }
+      model.warnings.insert(model.warnings.end(), step.warnings.begin(), step.warnings.end());
+      for (auto& field : step.fields) {
+        if (field.stepKind != StepKind::Time || field.steps.empty()) continue;
+        const std::pair<std::string, int> key{field.name, static_cast<int>(field.location)};
+        auto [it, inserted] = histories.try_emplace(key);
+        auto& history = it->second;
+        if (inserted) {
+          history.field = field;
+          history.field.steps.clear();
+          history.field.times.clear();
+          history.constant = false;
+          order.push_back(key);
+        } else if (history.field.components != field.components) {
+          model.warnings.push_back(std::format("field '{}' changes its component count in step {}; step skipped", field.name, k + 1));
+          continue;
+        }
+        history.constant = history.constant && !history.field.steps.empty() && history.field.steps.front() == field.steps.back();
+        history.field.times.push_back(entries[k].time);
+        history.field.steps.push_back(std::move(field.steps.back()));
+        ++history.files;
+      }
+    }
+    for (const auto& key : order) {
+      auto& history = histories.at(key);
+      if (history.constant && history.files == entries.size() && entries.size() > 1) {
+        // Written once per file by writePvd(): a single-step field.
+        history.field.steps.resize(1);
+        history.field.times.resize(1);
+      }
+      model.fields.push_back(std::move(history.field));
+    }
+    if (skippedParts > 0) model.warnings.push_back(std::format("{} data sets with part > 0 were skipped (multi-part collections are not supported)", skippedParts));
+    context.progress(1.0f, "done");
+    return model;
   }
 
 } // namespace anaf::IO::formats end

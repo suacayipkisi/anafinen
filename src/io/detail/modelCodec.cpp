@@ -16,10 +16,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "modelCodec.hpp"
+#include "textIo.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <format>
+#include <map>
 #include <string>
 #include <string_view>
 
@@ -136,6 +139,108 @@ namespace anaf::IO::detail {
     if (field.steps.empty()) return nullptr;
     if (timeStep < 0 || static_cast<std::size_t>(timeStep) >= field.steps.size()) return &field.steps.back();
     return &field.steps[static_cast<std::size_t>(timeStep)];
+  }
+
+  FlatData flattenSteps(const MeshModel& model, const std::vector<Field>& encoded, const int timeStep,
+                        const StepPicker& pick, const std::optional<double> time) {
+    FlatData out;
+    out.globals = model.globalData;
+    std::optional<double> timeValue = time;
+    bool labelsDropped = false;
+    for (const auto* group : {&model.fields, &encoded}) {
+      for (const auto& field : *group) {
+        if (field.steps.empty()) continue;
+        if (field.stepKind == StepKind::Time) {
+          const bool picked = pick && group == &model.fields;
+          const auto* values = picked ? pick(field) : selectStep(field, timeStep);
+          if (!values) continue;
+          const std::size_t step = static_cast<std::size_t>(values - field.steps.data());
+          if (field.steps.size() > 1 && !picked) {
+            out.warnings.push_back(std::format("field '{}': one time step written (step {} of {})", field.name, step + 1, field.steps.size()));
+          }
+          const double stepTime = step < field.times.size() ? field.times[step] : 0.0;
+          if (group == &model.fields && !timeValue && (field.steps.size() > 1 || stepTime != 0.0)) timeValue = stepTime;
+          out.arrays.push_back(FlatArray{field.name, field.location, field.components, values});
+          continue;
+        }
+        const std::string kind(stepKindName(field.stepKind));
+        const int digits = std::max(3, static_cast<int>(std::to_string(field.steps.size()).size()));
+        for (std::size_t s = 0; s < field.steps.size(); ++s) {
+          out.arrays.push_back(FlatArray{std::format("{}_{}_{:0{}}", field.name, kind, s + 1, digits), field.location,
+                                         field.components, &field.steps[s]});
+        }
+        std::vector<double> values(field.steps.size(), 0.0);
+        for (std::size_t s = 0; s < values.size() && s < field.times.size(); ++s) values[s] = field.times[s];
+        out.globals.push_back(GlobalArray{std::format("{}_{}_Values", field.name, kind), 1, std::move(values)});
+        labelsDropped = labelsDropped || !field.stepLabels.empty();
+      }
+    }
+    if (timeValue && !model.findGlobal(std::string(kTimeValue))) {
+      out.globals.push_back(GlobalArray{std::string(kTimeValue), 1, {*timeValue}});
+    }
+    if (labelsDropped) out.warnings.push_back("step labels are not stored in VTK files");
+    return out;
+  }
+
+  void unflattenSteps(MeshModel& model) {
+    struct Group {
+      FieldLocation location;
+      int components;
+      StepKind kind;
+      std::map<std::size_t, std::vector<double>> steps; // mode / case number -> values
+    };
+    std::map<std::pair<std::string, int>, Group> groups; // (base name, kind + location key)
+    std::vector<Field> kept;
+    for (std::size_t i = 0; i < model.fields.size(); ++i) {
+      auto& field = model.fields[i];
+      // "<base>_<Kind>_<digits>"
+      const auto last = field.name.rfind('_');
+      const auto kindSeparator = last == std::string::npos || last == 0 ? std::string::npos : field.name.rfind('_', last - 1);
+      const std::string_view digits = last == std::string::npos ? std::string_view{} : std::string_view(field.name).substr(last + 1);
+      const bool numbered = digits.size() >= 3 && std::ranges::all_of(digits, [](const char c) { return c >= '0' && c <= '9'; });
+      const auto kind = numbered && kindSeparator != std::string::npos && kindSeparator > 0
+        ? stepKindFromName(std::string_view(field.name).substr(kindSeparator + 1, last - kindSeparator - 1)) : std::nullopt;
+      if (!kind || *kind == StepKind::Time || field.steps.size() != 1) {
+        kept.push_back(std::move(field));
+        continue;
+      }
+      const std::string base = field.name.substr(0, kindSeparator);
+      const int key = static_cast<int>(*kind) * 2 + static_cast<int>(field.location);
+      auto [it, inserted] = groups.try_emplace({base, key}, Group{field.location, field.components, *kind, {}});
+      const auto number = Cursor::parseNumber<std::size_t>(digits);
+      if (it->second.components != field.components || it->second.steps.contains(number)) {
+        kept.push_back(std::move(field)); // not part of a consistent group: keep it as it is
+        continue;
+      }
+      it->second.steps.emplace(number, std::move(field.steps.front()));
+    }
+    for (auto& [key, group] : groups) {
+      Field field;
+      field.name = key.first;
+      field.location = group.location;
+      field.components = group.components;
+      field.stepKind = group.kind;
+      const std::string valuesName = std::format("{}_{}_Values", key.first, stepKindName(group.kind));
+      const auto global = std::ranges::find_if(model.globalData, [&](const GlobalArray& a) { return a.name == valuesName; });
+      const bool haveValues = global != model.globalData.end() && global->components == 1 && global->values.size() == group.steps.size();
+      std::size_t s = 0;
+      for (auto& [number, values] : group.steps) {
+        field.times.push_back(haveValues ? global->values[s] : static_cast<double>(number));
+        field.steps.push_back(std::move(values));
+        ++s;
+      }
+      if (haveValues) model.globalData.erase(global);
+      kept.push_back(std::move(field));
+    }
+    model.fields = std::move(kept);
+
+    const auto timeValue = std::ranges::find_if(model.globalData, [](const GlobalArray& a) { return a.name == kTimeValue; });
+    if (timeValue != model.globalData.end() && timeValue->values.size() == 1) {
+      for (auto& field : model.fields) {
+        if (field.stepKind == StepKind::Time) std::ranges::fill(field.times, timeValue->values.front());
+      }
+      model.globalData.erase(timeValue);
+    }
   }
 
   std::vector<Field> encodeModelData(const MeshModel& model, const CodecOptions& options) {

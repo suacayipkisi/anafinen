@@ -34,6 +34,10 @@
 
 #include "../model/meshModel.hpp"
 
+#include <functional>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace anaf::IO::detail {
@@ -52,5 +56,44 @@ namespace anaf::IO::detail {
 
   // Field restricted to one time step (-1 = last), for single-step formats.
   const std::vector<double>* selectStep(const Field& field, int timeStep);
+
+  // ------------------------------------------------------------ single-step formats (VTK, VTU)
+  //
+  // A VTK dataset holds one state. Steps that are not a time history go into the same file:
+  //   Mode / Frequency / LoadCase field "<name>" with n steps
+  //     -> n arrays "<name>_Mode_001" ... (or _Frequency_ / _LoadCase_), 1-based, >= 3 digits
+  //     -> global array "<name>_Mode_Values" (n tuples) with `times`
+  //   Time fields -> the step chosen by WriteOptions::timeStep, plus the ParaView "TimeValue"
+  //     global array (only when a field has a time history or a non-zero time).
+  // Step labels are not stored (they survive in MSH and the CAD sidecar).
+
+  struct FlatArray {
+    std::string name;
+    FieldLocation location{FieldLocation::Node};
+    int components{1};
+    const std::vector<double>* values{nullptr};
+  };
+
+  struct FlatData {
+    std::vector<FlatArray> arrays;       // node / element arrays, in input order
+    std::vector<GlobalArray> globals;    // model.globalData, generated *_Values arrays and TimeValue
+    std::vector<std::string> warnings;
+  };
+
+  // Chooses the step of a Time field in model.fields; nullptr leaves the field out.
+  using StepPicker = std::function<const std::vector<double>*(const Field&)>;
+
+  // Arrays of model.fields followed by `encoded` (encodeModelData() output). Time fields use
+  // `pick` when given, otherwise selectStep(timeStep). `time` replaces the TimeValue derived
+  // from the fields (the .pvd writer passes the time of each file).
+  FlatData flattenSteps(const MeshModel& model, const std::vector<Field>& encoded, int timeStep,
+                        const StepPicker& pick = {}, std::optional<double> time = std::nullopt);
+
+  // Inverse of flattenSteps() for a freshly read model, before decodeModelData(): groups the
+  // "<name>_<Kind>_NNN" arrays back into one field, consumes the matching "_Values" globals
+  // and applies a "TimeValue" global to the time of every Time field.
+  void unflattenSteps(MeshModel& model);
+
+  inline constexpr std::string_view kTimeValue = "TimeValue";
 
 } // namespace anaf::IO::detail end

@@ -25,6 +25,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -67,13 +68,33 @@ namespace anaf::IO {
 
   enum class FieldLocation : std::uint8_t { Node, Element };
 
-  // Result or input field with one or more time steps.
+  // What the steps of a field are, and so what `Field::times` holds.
+  enum class StepKind : std::uint8_t {
+    Time,       // transient / pseudo-time history; times[s] = time (s)
+    Frequency,  // frequency response; times[s] = excitation frequency (Hz)
+    Mode,       // eigenmodes (modal analysis); times[s] = natural frequency (Hz), mode number = s + 1
+    LoadCase    // independent static load cases; times[s] = load case number
+  };
+
+  // Result or input field with one or more steps.
   struct Field {
     std::string name;
     FieldLocation location{FieldLocation::Node};
     int components{1};
-    std::vector<double> times;                // one per step
+    std::vector<double> times;                // one value per step, meaning set by `stepKind`
     std::vector<std::vector<double>> steps;   // steps[s][entity * components + c]
+    StepKind stepKind{StepKind::Time};
+    std::vector<std::string> stepLabels;      // empty, or one label per step (load case names, ...)
+  };
+
+  // Model-level (dataset) array that belongs to no node or element: natural frequencies,
+  // modal masses, solver statistics, ... `values` holds tuples of `components` values.
+  struct GlobalArray {
+    std::string name;
+    int components{1};
+    std::vector<double> values;
+
+    std::size_t tuples() const noexcept { return components > 0 ? values.size() / static_cast<std::size_t>(components) : 0; }
   };
 
   // Kinematic constraint of one node. `fixed[axis] == true` removes that global DOF.
@@ -108,6 +129,14 @@ namespace anaf::IO {
     inline constexpr const char* AxialForce = "AxialForce";     // element, N (tension > 0)
   }
 
+  // Well-known global array names.
+  namespace GlobalName {
+    inline constexpr const char* NaturalFrequency = "NaturalFrequency"; // 1 component per mode, Hz
+  }
+
+  std::string_view stepKindName(StepKind kind) noexcept;              // "Time", "Frequency", "Mode", "LoadCase"
+  std::optional<StepKind> stepKindFromName(std::string_view name) noexcept;
+
   class MeshModel {
   public:
     std::vector<Node> nodes;
@@ -118,6 +147,7 @@ namespace anaf::IO {
     std::vector<NodalLoad> loads;
     // Per-element scalar attributes indexed by global element index (MaterialID, CrossSectionArea, ...).
     std::map<std::string, std::vector<double>> elementAttributes;
+    std::vector<GlobalArray> globalData;
 
     std::string lengthUnit{"m"};
     std::string title;
@@ -139,6 +169,8 @@ namespace anaf::IO {
     Field* findField(const std::string& name, FieldLocation location);
     const Field* findField(const std::string& name, FieldLocation location) const;
     const EntitySet* findSet(const std::string& name, SetKind kind) const;
+    GlobalArray* findGlobal(const std::string& name);
+    const GlobalArray* findGlobal(const std::string& name) const;
 
     // Returns an empty vector when the model is consistent, otherwise one message per problem.
     std::vector<std::string> validate() const;
