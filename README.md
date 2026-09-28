@@ -46,7 +46,7 @@ Parts of this project were developed with the help of an AI coding assistant (An
 - **GUI:** panels such as the model editor, import / export dialogs and status bar
 - **Tests:** the `anaf_io` and truss test suites and the built-in truss library checks
 
-The FEM theory, the solver design and the overall architecture are my own work, based on the books above. All AI-assisted code was reviewed, built and tested before it was committed.
+The FEM theory, the solver design and the overall architecture are my own work, based on the books above. All AI-assisted code was reviewed(or currently under revıew), built and tested before it was committed.
 
 ## Libraries
 - Calculation: Eigen, Spectra, SuiteSparse CHOLMOD
