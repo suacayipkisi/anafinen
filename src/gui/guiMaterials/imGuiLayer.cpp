@@ -15,21 +15,13 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <filesystem>
-#include <string>
-#include <vector>
-#include <glad/gl.h>
-#include <GLFW/glfw3.h>
+#include "imGuiLayer.hpp"
 
 #include <directory/getExecutableDirectory.hpp>
 #include <io/core/pathUtf8.hpp> // ImGui opens files from UTF-8 names
-
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-
-#include "imGuiLayer.hpp"
 #include <log/anaf_info.hpp>
+
+#include <filesystem>
 
 namespace anaf::GUI {
 
@@ -97,11 +89,7 @@ namespace anaf::GUI {
 
     io.IniFilename = nullptr;
 
-    float xscale = 1.0f;
-    float yscale = 1.0f;
-    glfwGetWindowContentScale(window, &xscale, &yscale);
-    constexpr float render_scale = 1.0f;
-
+    constexpr float fontSize = 18.0f;
     const std::filesystem::path ui_font_subpath = std::filesystem::path("fonts") / "Inter" / "ttf" / "Inter-Medium.ttf";
     const std::filesystem::path console_font_subpath = std::filesystem::path("fonts") / "CascadiaCode" / "ttf" / "CascadiaMono.ttf";
 
@@ -109,19 +97,17 @@ namespace anaf::GUI {
     const std::filesystem::path console_font_resolved = anaf::DIRECTORY::findAssetPath(console_font_subpath);
 
     if (!ui_font_resolved.empty()) {
-      font_ui = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(ui_font_resolved).c_str(), 18.0f * render_scale);
+      font_ui = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(ui_font_resolved).c_str(), fontSize);
     } else {
       anaf::LOG::warn("[ImGuiLayer] UI font missing, using fallback.");
       font_ui = io.Fonts->AddFontDefault();
     }
 
     if (!console_font_resolved.empty()) {
-      font_console = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(console_font_resolved).c_str(), 18.0f * render_scale);
+      font_console = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(console_font_resolved).c_str(), fontSize);
     } else {
       font_console = font_ui;
     }
-
-    io.FontGlobalScale = 1.0f / render_scale;
 
     setupSpecialTheme();
 

@@ -31,8 +31,7 @@ namespace FEM::TRUSS {
       m_nodeID(nodeID), m_force(force)
     {}
 
-    inline void updateForce(std::array<double, 3> force){m_force = force;}
-    inline std::uint32_t getApliedNode() const {return m_nodeID;}
+    inline std::uint32_t getAppliedNode() const {return m_nodeID;}
     inline const std::array<double, 3>& getForce() const {return m_force;}
   };
 

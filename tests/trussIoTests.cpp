@@ -69,9 +69,9 @@ namespace {
     const std::vector<FEM::TRUSS::ForceApplied> forces{{20u, {0.0, -12000.0, 0.0}}, {27u, {500.0, 0.0, -250.0}}};
 
     std::stop_source stop;
-    FEM::TRUSS::Truss_SQPT solver{bridge, stop.get_token(), 5, 1, 5, 1.0, 80.0, 1};
+    FEM::TRUSS::Truss_SQPT solver{5, 1, 5, 1.0, 80.0, 1};
     solver.trussSetAndSetFix_SQPT(bridge, stop.get_token(), fixity);
-    solver.trussSetForce_SQRT(bridge, stop.get_token(), forces);
+    solver.trussSetForce_SQPT(bridge, stop.get_token(), forces);
     solver.setContainer(bridge, stop.get_token());
     auto materials = bridge.allMaterials;
     solver.calculate(bridge, stop.get_token(), materials);
@@ -118,7 +118,7 @@ namespace {
     CHECK_MSG(sameFixity, label + " fixity");
     REQUIRE(mesh.appliedForces.size() == expected.appliedForces.size());
     for (std::size_t f = 0; f < expected.appliedForces.size(); ++f) {
-      CHECK_MSG(mesh.appliedForces[f].getApliedNode() == expected.appliedForces[f].getApliedNode(), label);
+      CHECK_MSG(mesh.appliedForces[f].getAppliedNode() == expected.appliedForces[f].getAppliedNode(), label);
       CHECK_MSG(mesh.appliedForces[f].getForce() == expected.appliedForces[f].getForce(), label);
     }
   }
@@ -304,7 +304,7 @@ TEST(selfBuiltTrussMatchesTheHandSolution) {
   }
   CHECK(result.trussElements[2].stress == 0.0f);
   // Vertical deflection of the apex: v = P L / (2 A E sin^2 45deg), downwards.
-  const double modulus = bridge.allMaterials[0].getElasticityModulues();
+  const double modulus = bridge.allMaterials[0].getElasticityModulus();
   const double expectedV = -load * std::sqrt(2.0) / (2.0 * area * modulus * 0.5);
   CHECK(std::abs(result.trussNodes[2].getDisplacement()[1] - expectedV) < 1e-2 * std::abs(expectedV));
   CHECK(result.trussNodes[3].getDisplacement() == (std::array<double, 3>{0.0, 0.0, 0.0}));
@@ -384,7 +384,7 @@ namespace {
       const Eigen::Vector3d d(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
       const double length = d.norm();
       const Eigen::Vector3d c = d / length;
-      const Eigen::Matrix3d block = materials[element.materialID].getElasticityModulues() * element.crossSectionArea / length * (c * c.transpose());
+      const Eigen::Matrix3d block = materials[element.materialID].getElasticityModulus() * element.crossSectionArea / length * (c * c.transpose());
       const Eigen::Index i = 3 * static_cast<Eigen::Index>(element.node1), j = 3 * static_cast<Eigen::Index>(element.node2);
       k.block<3, 3>(i, i) += block;
       k.block<3, 3>(j, j) += block;
@@ -514,7 +514,7 @@ TEST(builtInTrussesAreStableAndSolve) {
 
 namespace {
   MATERIAL::Material renamedCopy(const MATERIAL::Material& m, std::string name) {
-    return {false, std::move(name), m.getElasticityModulues(), m.getShearModulues(), m.getBulkModulus(),
+    return {false, std::move(name), m.getElasticityModulus(), m.getShearModulus(), m.getBulkModulus(),
             m.getYieldTensile(), m.getUltTensile(), m.getYoungModulus(), m.getDensity(), m.getPoisson(),
             m.getDuctility(), 0u};
   }
@@ -529,7 +529,7 @@ TEST(materialLibraryFileIsLoadedWithStableIds) {
     CHECK(bridge.allMaterials[i].getMaterialID() == i);
   }
   // Saved models store these indices: steel 0, aluminum 1 as in anafinen <= 0.1.2.
-  CHECK(bridge.allMaterials[0].getElasticityModulues() == 205.0e9);
+  CHECK(bridge.allMaterials[0].getElasticityModulus() == 205.0e9);
   CHECK(bridge.allMaterials[1].getYieldTensile() == 276.0e6);
 
   const auto gap = workDir() / "materials_gap.json";
@@ -581,7 +581,7 @@ TEST(userMaterialsArePersistedOutsideTheAssets) {
   REQUIRE(loaded.has_value() && loaded->size() == 1);
   CHECK(!(*loaded)[0].getIsBuiltin());
   CHECK((*loaded)[0].getMaterialType() == "Persisted");
-  CHECK((*loaded)[0].getElasticityModulues() == steel.getElasticityModulues());
+  CHECK((*loaded)[0].getElasticityModulus() == steel.getElasticityModulus());
   CHECK((*loaded)[0].getPoisson() == steel.getPoisson());
   CHECK((*loaded)[0].getDuctility() == steel.getDuctility());
   CHECK(!fs::exists(fs::path(path) += ".tmp"));

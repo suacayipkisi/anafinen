@@ -28,14 +28,13 @@ namespace FEM::TRUSS {
 
   class SimpleTruss{
   private:
-    std::array<std::uint32_t, 3> m_cubeNum{1, 1, 1}; // x y z added unit truss cube, cannot be zero none of them
+    std::array<std::uint32_t, 3> m_cubeNum{1, 1, 1}; // unit cubes along x, y, z; none of them may be zero
     std::vector<Node> m_allNodes;
     std::vector<TrussElement_1D> m_allElements;
-    std::uint32_t m_type;
+    std::uint32_t m_type{}; // material index
     double m_cubeEdgeLength{};
     double m_area{};
   public:
-    //SimpleTruss() = default;
     SimpleTruss(
       std::array<std::uint32_t, 3> cubeNum,
       double cubeEdgeLength,

@@ -18,11 +18,9 @@
 #include "viewportRenderer.hpp"
 
 #include <glad/gl.h>
+#include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
-#include <glm/ext/vector_float2.hpp>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <imgui.h>
@@ -246,7 +244,8 @@ namespace anaf::GUI {
       uniform sampler2D u_FontTex;
 
       void main() {
-        float alpha = texture(u_FontTex, vUV).r;
+        // ImGui's atlas is RGBA32: white RGB, glyph coverage in alpha.
+        float alpha = texture(u_FontTex, vUV).a;
         if (alpha < 0.01) discard;
         FragColor = vec4(vColor.rgb, vColor.a * alpha);
         EntityID = -1;
@@ -374,7 +373,7 @@ namespace anaf::GUI {
     m_textBuffer.clear();
   }
 
-  void ViewportRenderer::reserve(size_t lineCount, size_t pointCount) {
+  void ViewportRenderer::reserve(std::size_t lineCount, std::size_t pointCount) {
     m_lineBuffer.reserve(lineCount * 2);
     m_pointBuffer.reserve(pointCount);
   }
@@ -472,4 +471,5 @@ namespace anaf::GUI {
 
     if (depthWasEnabled) glEnable(GL_DEPTH_TEST);
   }
+
 } // namespace anaf::GUI end

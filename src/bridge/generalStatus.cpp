@@ -16,16 +16,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generalStatus.hpp"
-#include "anaf_info.hpp"
-#include "material/materialLibrary.hpp"
-#include "material/properties.hpp"
 #include <directory/getExecutableDirectory.hpp>
 #include <io/core/pathUtf8.hpp>
+#include <log/anaf_info.hpp>
+#include <material/materialLibrary.hpp>
 
 #include <algorithm>
 #include <format>
 #include <limits>
-#include <ranges>
 #include <string_view>
 
 namespace anaf::BRIDGE {
@@ -130,8 +128,8 @@ namespace anaf::BRIDGE {
     allMaterials.emplace_back(
       false,
       std::string(material.getMaterialType()),
-      material.getElasticityModulues(),
-      material.getShearModulues(),
+      material.getElasticityModulus(),
+      material.getShearModulus(),
       material.getBulkModulus(),
       material.getYieldTensile(),
       material.getUltTensile(),
@@ -225,9 +223,7 @@ namespace anaf::BRIDGE {
 
   Gui_Calc_Bridge& buildBridge() {
     static Gui_Calc_Bridge bridge{};
-    
-    Gui_Calc_Bridge& ref = bridge;
-    return ref;
+    return bridge;
   }
-  
+
 } // namespace anaf::BRIDGE end

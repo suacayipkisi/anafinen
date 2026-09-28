@@ -70,8 +70,6 @@ This document is the entry point for the project documentation. It describes how
 | `anaf::LOG` | `src/log/` | Formatted logging with file, stdout and GUI sinks |
 | `anaf::PLATFORM` | `src/platform/` | OS-specific helpers without GUI dependency: `ResourceMonitor` (CPU / RAM usage), `querySystemInfo()` / `queryVideoMemoryGiB()` and the short CPU / GPU name rules (`systemInfo.*`); Linux and Windows |
 | `anaf::DIRECTORY` | `src/directory/` | Executable directory lookup; `findAssetPath()` is the single asset search used by fonts, icon and material library; `getUserConfigDirectory()` for per-user data |
-| `anaf::TEST` | `src/test/` | Startup self-check (Eigen determinant) |
-| `anafGen` | `src/gen/` | Hash-based ID generator (not used yet) |
 | `platform_utils` | `src/gui/linuxCursor.hpp` | Linux cursor theme setup for GLFW |
 
 ## 4. Threads
@@ -89,18 +87,17 @@ Rules:
 - `bridge.resetModel(type)` (object type change, Clear, Load Demo, a new import) bumps `modelGeneration` and requests stop without joining. A worker publishes only if `modelGeneration` still has the value it took at start, so a solve that outlives a reset never brings the old model back ([BRIDGE.md](BRIDGE.md) section 4.1).
 - The worker never mutates a published `MeshData`. It builds a new one and swaps the `shared_ptr` under `dataMutex`.
 - The worker never reads mutable bridge containers directly. `fixedDOFsByNode` and `allMaterials` are copied under `dataMutex` on the GUI thread and moved into the worker lambda.
-- Thread count: `main.cpp` and `configureOpenMPForWorker()` both set OpenMP/Eigen to `cores - 2` when there are more than 4 cores.
+- Thread count: `configureOpenMPForWorker()` (`gui/panels/truss/trussWorker.hpp`) sets OpenMP/Eigen to `cores - 2` when there are more than 4 cores. `main.cpp` calls it once at startup; every worker calls it again because OpenMP thread settings are per thread.
 
 ## 5. Startup sequence
 
-1. `anaf::LOG::setCallback()` routes every log line into the GUI console buffer (`anafUILogSink`).
+1. `anaf::LOG::setCallback(anafUILogSink)` routes every log line into the GUI console buffer.
 2. `anaf::LOG::init("anafinen_run.log")` opens the log file in the working directory.
 3. `main()` builds the bridge singleton (`buildBridge()`) and loads the built-in materials from `assets/bridge/materialProperties.json` (`setStaticInfo()`). This runs after the log init so a missing or broken file is reported. `loadUserMaterials()` then adds the saved user materials from the user config directory ([BRIDGE.md](BRIDGE.md) section 5.1).
 4. OpenMP and Eigen thread counts are configured.
-5. `anaf::TEST::AllStatus` runs the Eigen self-check.
-6. `anaf::GUI::initgui()`:
+5. `anaf::GUI::initgui()`:
    1. Initializes GLFW and creates an OpenGL 4.6 core window.
-   2. Loads GLAD, then ImGui and the fonts.
+   2. Loads GLAD (startup stops with an error if the OpenGL functions cannot be loaded), then ImGui and the fonts.
    3. Creates the `Framebuffer` and registers the panels.
    4. Enters the frame loop.
 
@@ -112,7 +109,7 @@ Rules:
    - Panels, the renderer, and the framebuffer are destroyed while the GL context is still current. `FileIoPanel` destroys its `IoService`, which cancels queued jobs and joins the I/O thread.
 3. `imguiLayer.shutdown()` destroys ImGui backends and context.
 4. `glfwDestroyWindow()` and `glfwTerminate()` run.
-5. `main()` closes the log.
+5. `main()` closes the log and returns 1 if `initgui()` failed.
 6. At static destruction, `GmshSessionManager` finalizes Gmsh if it was ever initialized.
 
 GL objects must never outlive the context; see [GUI.md](GUI.md) section 6.
@@ -136,7 +133,6 @@ Update the documents when any of the following happens:
 
 | # | Issue | Location | Effect |
 |---|---|---|---|
-| 1 | Stub types are declared but not implemented: `Truss`, `TrussBuild`. | `truss.hpp`, `selectTrussType.hpp` | None at run time (not used). |
 | 2 | The Gmsh 4.15 build on Fedora aborts when it opens any binary MSH 4.1 file (its own too). | Gmsh (external) | Only affects opening our binary 4.1 files **in Gmsh**; anafinen reads MSH natively. |
 | 3 | Paths are converted with `path::string()` in code older than 0.1.3: `anaf_io` (error texts, `report.path`, Gmsh calls in `cadFormat.cpp`), `fileIoPanel.cpp`, `nativeFileDialog.cpp` (path from a pfd UTF-8 string). On Windows this is the ANSI code page: MSVC throws and Gmsh / pfd get wrong names for files such as `köprü.msh`. Linux is unaffected. | see list | Fix: `anaf::IO::pathToUtf8()` / `pathFromUtf8()` (`io/core/pathUtf8.hpp`), as the 0.1.3 material and asset code does. |
 | 4 | Debian 13's `libgmsh4.13` (4.13.1+ds1) is built with Eigen assertions on and aborts inside its own second-order 3D meshing (`gmsh::model::mesh::generate` → `MElement::signedInvCondNumRange` → Eigen `invalid matrix product`). | Gmsh (external), Debian package | `anaf_io_tests` aborts in `highOrderNodeOrderingMatchesGmshVtkWriter` on Debian; the other tests pass when run one by one. A CAD import with element order 2 may abort the application on Debian as well. Fedora and Arch are not affected. |
@@ -178,4 +174,5 @@ Update the documents when any of the following happens:
 | Changing the object type left the old model, fixity, selection and panel inputs behind; Clear All / Load Demo only requested stop, so a running solve could publish the old model afterwards | 2026-09-28 | `Gui_Calc_Bridge::resetModel()` + `modelGeneration`; panels have `resetState()`; the fixity checkboxes of `TrussControlPanel` were function statics and are members now. |
 | Energy check reported INVALID on correct solves of models with many inclined bars (e.g. the built-in crane jib, Pratt roof, K-truss) | 2026-09-28 | `TrussElement_1D` stored the direction cosines as `float`, so every stiffness entry `c_i c_j A E / L` carried ~1e-7 relative error, the same size as the validator's threshold. Cosines are `double` now; energy differences dropped from ~1e-3 J to ~1e-10 J. |
 | Imported models without sections had to be fixed bar by bar; no ready-made examples | 2026-09-28 | "Whole Model: Section & Material" in the model editor; 19 built-in, generated and tested trusses in `assets/objects/truss/truss1D` ([CALCULATIONS.md](CALCULATIONS.md) section 3.2). |
+| Unused code: stub types `Truss` / `TrussBuild` (`truss.hpp`, `selectTrussType.hpp`, known issue 1), `anafGen::IdGenerator` (`src/gen/`), the Eigen determinant self-check (`src/test/`), `Material` setters, unused include paths and includes (Spectra, ImGui backends in `main.cpp`) | 2026-09-28 | Removed. Node labels in the viewport sampled the font atlas `.r` channel (always 1 in ImGui 1.92's RGBA32 atlas) and are now drawn from `.a`; element range errors used printf placeholders with `std::format`. |
 | `m_objectType` started as `truss_SQPT` (value-initialized atomic); `TrussSelector::m_trussType` was uninitialized; the model tree never advanced the node number | 2026-09-28 | Starts as `no_type`; selector starts at Simple Quadrangle; counter fixed. |

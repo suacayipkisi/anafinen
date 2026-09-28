@@ -22,6 +22,7 @@
 
 #include <guiMaterials/glHandle.hpp>
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -46,7 +47,6 @@ namespace anaf::GUI {
     glm::vec2 uv;
     glm::vec4 color;
   };
-
 
   // Move-only: every GL object is owned by a GlHandle, so copies are rejected at compile time.
   class ViewportRenderer {
@@ -111,7 +111,7 @@ namespace anaf::GUI {
     void clearBuffers();
     void clearTextBuffer();
 
-    void reserve(size_t lineCount, size_t pointCount);
+    void reserve(std::size_t lineCount, std::size_t pointCount);
 
     void uploadCurrentBuffer();
     void uploadTextBuffer();

@@ -88,13 +88,6 @@ namespace FEM::TRUSS {
         m_isMovable[axis] = residualNorm <= 1e-12;
       }
     }
-    inline void addAllowedMotionDirection(const std::array<double, 3> direction) {
-      if (m_allowedMotionDirections.size() >= 3) throw std::invalid_argument("A 3D node can have at most three independent motion directions");
-      auto directions = m_allowedMotionDirections;
-      directions.push_back(direction);
-      setAllowedMotionDirections(std::move(directions));
-    }
-
     std::uint32_t getNodeID() const {return m_nodeID;}
     const std::array<double, 3>& getLocation() const {return m_Location;}
     double getLocX() const {return m_Location[0];}

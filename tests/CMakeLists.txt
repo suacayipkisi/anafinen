@@ -35,7 +35,6 @@ add_executable(anaf_truss_io_tests
     ${PROJECT_SOURCE_DIR}/src/directory/getExecutableDirectory.cpp
     ${PROJECT_SOURCE_DIR}/src/log/anaf_info.cpp
 )
-target_include_directories(anaf_truss_io_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/log ${PROJECT_SOURCE_DIR}/src/bridge)
 # The bridge finds assets/bridge/materialProperties.json in the source tree.
 target_compile_definitions(anaf_truss_io_tests PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}")
 if(WIN32)

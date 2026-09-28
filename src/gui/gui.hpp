@@ -17,42 +17,10 @@
 
 #pragma once
 
-#include "GLFW/glfw3.h"
+namespace anaf::GUI {
 
-#include "guiMaterials/framebuffer.hpp"
-#include "guiMaterials/iPanel.hpp"
-#include "panels/logTerminal.hpp"
-#include "panels/mainDockSpaceHost.hpp"
-#include "panels/materialHandler.hpp"
-#include "panels/modelTree.hpp"
-#include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
-#include "panels/viewportPanel.hpp"
-#include "panels/fileIoPanel.hpp"
-#include "panels/aboutPanel.hpp"
-#include "panels/truss/trussTypePanel.hpp"
-#include "panels/truss/importedTruss/trussModelEditor.hpp"
-#include <memory>
-
-namespace anaf::GUI{
-
-  struct UIPanels {
-    MainDockSpaceHost* dock = nullptr;
-    ViewportPanel* viewport = nullptr;
-    TrussSelector* selector = nullptr;
-    TrussControlPanel* control = nullptr;
-    ModelTree* tree = nullptr;
-    LogTerminal* log = nullptr;
-    MaterialHandler* matWindow = nullptr;
-    FileIoPanel* fileIo = nullptr;
-    AboutPanel* about = nullptr;
-    TrussModelEditor* editor = nullptr;
-  };
-
-  void bindAnalysisFlow(UIPanels panels);
-  std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo);
-
+  // Creates the window, the ImGui layer and the panels, and runs the frame loop until the
+  // window is closed. Returns 0 on a normal exit, -1 when GLFW / OpenGL cannot start.
   int initgui();
-
-  
 
 } // namespace anaf::GUI end

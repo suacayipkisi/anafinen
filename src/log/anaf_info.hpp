@@ -21,7 +21,6 @@
 #include <format>
 #include <fstream>
 #include <functional>
-#include <iostream>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -70,9 +69,9 @@ namespace anaf::LOG {
       }
     }
 
-  } // namespace detail
+  } // namespace detail end
 
-} // namespace anaf::LOG
+} // namespace anaf::LOG end
 
 template <typename T>
 struct std::formatter<anaf::LOG::detail::FloatArg<T>> {

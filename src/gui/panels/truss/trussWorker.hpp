@@ -17,14 +17,15 @@
 
 #pragma once
 
-// Helpers shared by the truss panels' solver / preview workers.
+// Helpers shared by the truss panels' solver / preview workers (and main() at startup).
 
 #include <Eigen/Core>
 #include <omp.h>
 
 namespace anaf::GUI::TRUSS_WORKER {
 
-  // Leaves two cores to the GUI on machines with more than four.
+  // Leaves two cores to the GUI on machines with more than four. OpenMP thread settings are
+  // per thread, so every worker std::jthread applies them again.
   inline void configureOpenMPForWorker() {
     const int availableThreads = omp_get_num_procs();
     const int threadCount = availableThreads > 4 ? availableThreads - 2 : availableThreads;

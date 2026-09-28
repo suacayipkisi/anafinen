@@ -61,7 +61,3 @@ namespace anaf::GUI {
     ImGui::End();
   }
 } // namespace anaf::GUI end
-
-
-
-

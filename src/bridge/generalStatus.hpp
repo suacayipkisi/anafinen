@@ -17,21 +17,21 @@
 
 #pragma once
 
-#include "material/properties.hpp"
-#include <expected>
-#include <filesystem>
-#include <memory>
-#include <optional>
-#include <string>
-#include <string_view>
+#include <material/properties.hpp>
 #include <truss_1D/trussProperties/appliedForce.hpp>
 #include <truss_1D/trussProperties/node.hpp>
-#include <truss_1D/trussProperties/element.hpp>
 
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <expected>
+#include <filesystem>
+#include <limits>
+#include <memory>
 #include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -104,14 +104,13 @@ namespace anaf::BRIDGE {
       }
       return *this;
     }
-    
   };
 
   struct Gui_Calc_Bridge {
     std::atomic<bool> m_isRunning{false};
     std::atomic<bool> m_isGeneratingPreview{false};
     std::atomic<float> m_progress{0.0f};
-    std::atomic<uint64_t> dataVersion{0};
+    std::atomic<std::uint64_t> dataVersion{0};
     std::mutex dataMutex;
     std::jthread workerThread;
 
@@ -122,7 +121,7 @@ namespace anaf::BRIDGE {
     std::atomic<std::uint64_t> modelGeneration{0};
     std::shared_ptr<const MeshData> activeMesh{nullptr};
     std::atomic<bool> m_isValid{false};
-    std::atomic<double> m_energyDiff;
+    std::atomic<double> m_energyDiff{0.0};
 
     // Elements refer to a material by its index in this vector (RenderElement::materialID,
     // TrussElement_1D::m_type). Built-ins come first in file order, user materials follow.

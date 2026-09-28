@@ -66,13 +66,9 @@ set(ANAF_CORE_SOURCES
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
 target_include_directories(anaf_core PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D/trussEngine
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D/trussProperties
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/objectCalcs/truss_1D/trussTypes
 )
 
 if(ANAFINEN_HAS_CHOLMOD)
@@ -116,7 +112,6 @@ set(ANAFINEN_SOURCES
     src/platform/resourceMonitor.cpp
     src/platform/systemInfo.cpp
     src/gui/fileDialogs/nativeFileDialog.cpp
-    src/test/test.cpp
 )
 
 add_executable(anafinen ${ANAFINEN_SOURCES})
@@ -147,15 +142,7 @@ target_link_libraries(anafinen PRIVATE
 )
 
 target_include_directories(anafinen PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/bridge
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/directory
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/gen
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/log
     ${CMAKE_CURRENT_SOURCE_DIR}/src/gui
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/panels
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/guiMaterials
 )
 
 # Native file chooser (header-only, WTFPL): Windows common dialogs, zenity / kdialog on Linux.

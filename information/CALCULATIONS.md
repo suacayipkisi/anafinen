@@ -18,7 +18,7 @@ Truss_SQPT (trussSolver_SQPT.cpp)                       progress
    |     SimpleTruss::setTruss()  -> nodes + elements
    |     fixity copy              -> Node::setMovable()
    |
-   +-- trussSetForce_SQRT()                               0.25
+   +-- trussSetForce_SQPT()                               0.25
    |     ForceApplied list        -> m_forceVec[3*id + axis]
    |
    +-- setContainer()                                     0.30
@@ -179,7 +179,7 @@ Only the upper triangle of the symmetric global matrix is stored:
 
 Triplets are written in parallel into a preallocated vector (`index * 21`). Eigen's `setFromTriplets` sums the duplicates.
 
-The modulus used is `Material::getElasticityModulues()` (E).
+The modulus used is `Material::getElasticityModulus()` (E).
 
 ## 5. Load vector
 

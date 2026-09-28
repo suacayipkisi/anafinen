@@ -16,12 +16,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "solverPortfolio.hpp"
-#include <log/anaf_info.hpp>
 
 #include <chrono>
 #ifdef ANAFINEN_HAS_CHOLMOD
 #include <Eigen/CholmodSupport>
-#include <Eigen/SparseCholesky>
 #endif
 
 namespace FEM::TRUSS::SOLVER {
@@ -47,9 +45,9 @@ namespace FEM::TRUSS::SOLVER {
     }
     result.available = true;
     result.elapsedSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-  #else
+#else
     result.message = "CHOLMOD is not available in this build";
-  #endif
+#endif
     return result;
   }
 

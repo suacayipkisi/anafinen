@@ -20,6 +20,7 @@
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
+#include <panels/truss/materialCombo.hpp>
 #include <panels/truss/trussWorker.hpp>
 #include <truss_1D/trussEngine/trussSolver.hpp>
 
@@ -103,7 +104,7 @@ namespace anaf::GUI {
 
       std::vector<FEM::TRUSS::ForceApplied> forces;
       for (const auto& force : mesh.appliedForces) {
-        if (force.getApliedNode() != k) forces.emplace_back(shift(force.getApliedNode()), force.getForce());
+        if (force.getAppliedNode() != k) forces.emplace_back(shift(force.getAppliedNode()), force.getForce());
       }
       mesh.appliedForces = std::move(forces);
 
@@ -112,28 +113,6 @@ namespace anaf::GUI {
         if (id != k) shifted[shift(id)] = dofs;
       }
       fixity = std::move(shifted);
-    }
-
-    // Material picker over bridge.allMaterials; keeps materialID valid when the selected
-    // material was removed in the Material Handler.
-    void materialCombo(Gui_Calc_Bridge& bridge, const char* label, std::uint32_t& materialID) {
-      std::lock_guard lock(bridge.dataMutex);
-      if (bridge.allMaterials.empty()) {
-        ImGui::TextDisabled("No materials available");
-        return;
-      }
-      if (!bridge.findMaterialIndex(materialID)) materialID = bridge.allMaterials.front().getMaterialID();
-      const auto& selected = bridge.allMaterials[*bridge.findMaterialIndex(materialID)];
-      if (ImGui::BeginCombo(label, selected.getMaterialType().data())) {
-        for (const auto& material : bridge.allMaterials) {
-          ImGui::PushID(static_cast<int>(material.getMaterialID()));
-          if (ImGui::Selectable(material.getMaterialType().data(), material.getMaterialID() == materialID)) {
-            materialID = material.getMaterialID();
-          }
-          ImGui::PopID();
-        }
-        ImGui::EndCombo();
-      }
     }
 
     std::shared_ptr<const MeshData> currentMesh(Gui_Calc_Bridge& bridge) {
@@ -175,7 +154,7 @@ namespace anaf::GUI {
     if (!bridge.activeMesh || selectedNode >= bridge.activeMesh->trussNodes.size()) return;
     m_nodePosition = bridge.activeMesh->trussNodes[selectedNode].getLocation();
     for (const auto& force : bridge.activeMesh->appliedForces) {
-      if (force.getApliedNode() == selectedNode) m_force = force.getForce();
+      if (force.getAppliedNode() == selectedNode) m_force = force.getForce();
     }
     if (const auto it = bridge.fixedDOFsByNode.find(selectedNode); it != bridge.fixedDOFsByNode.end()) {
       m_fixed = it->second;
@@ -539,7 +518,7 @@ namespace anaf::GUI {
       return editModel(bridge, [&](MeshData& mesh, FixedDOFMap&) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
         std::erase_if(mesh.appliedForces, [&](const FEM::TRUSS::ForceApplied& applied) {
-          return applied.getApliedNode() == selectedNode;
+          return applied.getAppliedNode() == selectedNode;
         });
         if (force[0] != 0.0 || force[1] != 0.0 || force[2] != 0.0) mesh.appliedForces.emplace_back(selectedNode, force);
         return true;

@@ -50,9 +50,9 @@ namespace FEM::TRUSS {
       const std::uint32_t crossRow = std::min(dof1, dof2);
       const std::uint32_t crossCol = std::max(dof1, dof2);
       const double aeOverLength = element.getEleCrossSection()
-        * allMaterials[element.getEleProperties()].getElasticityModulues()
+        * allMaterials[element.getEleProperties()].getElasticityModulus()
         / element.getEleLength();
-      const auto& cosines = element.getEleCosinuses();
+      const auto& cosines = element.getEleCosines();
       std::size_t output = static_cast<std::size_t>(index) * tripletsPerElement;
 
       for (std::size_t row = 0; row < 3; ++row) {
@@ -225,7 +225,7 @@ namespace FEM::TRUSS {
     for (long long index = 0; index < static_cast<long long>(m_allElements.size()); ++index) {
       auto& element = m_allElements[index];
       const auto& nodes = element.getEleNodes();
-      const auto& direction = element.getEleCosinuses();
+      const auto& direction = element.getEleCosines();
       Eigen::Vector<double, 6> displacement;
       for (std::uint8_t axis = 0; axis < 3; ++axis) {
         displacement[axis] = m_resultDisplacements[nodes[0]][axis];
@@ -241,7 +241,7 @@ namespace FEM::TRUSS {
       const auto& material = materials[element.getEleProperties()];
       const double area = element.getEleCrossSection();
       const double length = element.getEleLength();
-      const double force = (elongation / length) * material.getElasticityModulues() * area;
+      const double force = (elongation / length) * material.getElasticityModulus() * area;
       const double stress = force / area;
       const double gravityStress = 0.5 * material.getDensity() * length
         * std::abs(gravityVector.dot(axis));
@@ -259,7 +259,7 @@ namespace FEM::TRUSS {
     #pragma omp parallel for schedule(static) reduction(+:internalEnergy)
     for (long long index = 0; index < static_cast<long long>(m_allElements.size()); ++index) {
       const auto& element = m_allElements[index];
-      const double stiffness = materials[element.getEleProperties()].getElasticityModulues()
+      const double stiffness = materials[element.getEleProperties()].getElasticityModulus()
         * element.getEleCrossSection() / element.getEleLength();
       const double elongation = element.getEleElongation();
       internalEnergy += 0.5 * stiffness * elongation * elongation;

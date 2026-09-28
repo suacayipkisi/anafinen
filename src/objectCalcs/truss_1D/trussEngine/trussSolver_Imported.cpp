@@ -17,7 +17,6 @@
 
 #include "trussSolver.hpp"
 #include <log/anaf_info.hpp>
-#include <bridge/generalStatus.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -132,7 +131,7 @@ namespace FEM::TRUSS {
 
     std::size_t skipped = 0;
     for (const auto& load : force) {
-      const std::uint32_t nodeId = load.getApliedNode();
+      const std::uint32_t nodeId = load.getAppliedNode();
       if (nodeId >= m_nodes.size()) {
         ++skipped;
         continue;

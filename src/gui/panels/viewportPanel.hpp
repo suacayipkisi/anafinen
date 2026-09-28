@@ -26,19 +26,15 @@
 
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float3.hpp>
+
+#include <cstdint>
 #include <memory>
 
 namespace anaf::GUI{
 
   struct Truss_1D_GUI_PROPERTIES {
-    //size_t m_lastNodeCount{0};
-    //size_t m_lastElementCount{0};
     bool m_meshNeedsUpdate{true};
-    uint64_t m_lastRenderedVersion{0};
-  };
-
-  struct Truss_3D_GUI_PROPERTIES {
-
+    std::uint64_t m_lastRenderedVersion{0};
   };
 
   class ViewportPanel : public IPanel {
@@ -46,7 +42,6 @@ namespace anaf::GUI{
     std::shared_ptr<Framebuffer> m_fbo_ ;
     std::unique_ptr<ViewportRenderer> m_renderer_;
 
-    bool m_viewportFocused_ {false};
     bool m_viewportHovered_ {false};
 
     float m_rotationYaw {0.9f};
@@ -68,7 +63,7 @@ namespace anaf::GUI{
     void resetCamera();
     void handleCameraInput();
     void buildSceneBatches();
-    void renderOverlay2D(const ImVec2& origin, const ImVec2& size, const glm::mat4& viewProj);
+    void renderOverlay2D(const ImVec2& origin, const ImVec2& size);
 
   public:
     explicit ViewportPanel(std::shared_ptr<Framebuffer> fbo);
@@ -77,8 +72,6 @@ namespace anaf::GUI{
     void renderSceneOpenGL();
     void onImGuiRender() override;
 
-    bool isFocused() const { return m_viewportFocused_; }
-    bool isHovered() const { return m_viewportHovered_; }
     // Frames the camera on the next mesh that is loaded (e.g. after an import).
     void requestFit() { m_fitRequested_ = true; }
     glm::mat4 getViewProjectionMatrix() const;

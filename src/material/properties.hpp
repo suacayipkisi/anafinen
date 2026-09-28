@@ -28,7 +28,7 @@ namespace anaf::MATERIAL {
   private:
     bool m_isBuiltin{false};
     
-    std::uint32_t m_materialID;
+    std::uint32_t m_materialID{};
 
     float m_ductility{}; // elongation at break, fraction (0.25 = 25 %)
     float m_poissonsRatio{}; // unitless
@@ -42,7 +42,7 @@ namespace anaf::MATERIAL {
 
     double m_elasticityModulus{}; // Pa, used by the solver
 
-    std::string m_materialType{};
+    std::string m_materialType;
   public:
     Material(
       bool isBuiltin,
@@ -73,38 +73,6 @@ namespace anaf::MATERIAL {
       m_materialType(std::move(name))
     {}
 
-    // if all properties not determined we can determine later
-    inline void setDuctility(const float ductility) {
-      if(m_ductility == 0) m_ductility = ductility;
-    }
-    inline void setPoisson(const float poissons) {
-      if(m_poissonsRatio == 0) m_poissonsRatio = poissons;
-    }
-    inline void setDensity(const double density) {
-      if(m_density == 0) m_density = density;
-    }
-    inline void setYoungModulus(const double youngModulus) {
-      if(m_youngModulus == 0) m_youngModulus = youngModulus;
-    }
-    inline void setUltTensile(const double ultimateTensileStrength) {
-      if(m_ultimateTensileStrength == 0) m_ultimateTensileStrength = ultimateTensileStrength;
-    }
-    inline void setYieldTensile(const double yieldTensileStrength)  {
-      if(m_yieldTensileStrength == 0) m_yieldTensileStrength = yieldTensileStrength;
-    }
-    inline void setBulkModulus(const double bulkModulus) {
-      if(m_bulkModulus == 0) m_bulkModulus = bulkModulus;
-    }
-    inline void setShearModulues(const double shearModulus) {
-      if(m_shearModulus == 0) m_shearModulus = shearModulus;
-    }
-    inline void setElasticityModulues(const double elasticityModulus) {
-      if(m_elasticityModulus == 0) m_elasticityModulus = elasticityModulus;
-    }
-    inline void setMaterialType(const std::string type) {
-      if(m_materialType.empty()) m_materialType = type;
-    }
-
     inline bool getIsBuiltin() const {return m_isBuiltin;}
     inline std::uint32_t getMaterialID() const {return m_materialID;}
     inline float getDuctility() const {return m_ductility;}
@@ -114,8 +82,8 @@ namespace anaf::MATERIAL {
     inline double getUltTensile() const {return m_ultimateTensileStrength;}
     inline double getYieldTensile() const {return m_yieldTensileStrength;}
     inline double getBulkModulus() const {return m_bulkModulus;}
-    inline double getShearModulues() const {return m_shearModulus;}
-    inline double getElasticityModulues() const {return m_elasticityModulus;}
+    inline double getShearModulus() const {return m_shearModulus;}
+    inline double getElasticityModulus() const {return m_elasticityModulus;}
     inline std::string_view getMaterialType() const {return m_materialType;}
   };
 

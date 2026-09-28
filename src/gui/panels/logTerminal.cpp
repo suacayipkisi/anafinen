@@ -21,25 +21,13 @@
 #include <guiMaterials/imGuiLayer.hpp>
 
 #include "imgui.h"
+#include <GLFW/glfw3.h>
+
 #include <cstddef>
 #include <mutex>
 #include <string>
-#include <vector>
-#include <string_view>
-
 
 namespace anaf::GUI {
-
-  LogTerminal::LogTerminal() {
-    anaf::LOG::setCallback([](anaf::LOG::Level level, std::string_view message) {
-      std::lock_guard<std::mutex> lock(g_log_mutex);
-      g_ui_logs.push_back({level, std::string(message)});
-
-      if (g_ui_logs.size() > g_ui_log_max_num) {
-        g_ui_logs.erase(g_ui_logs.begin());
-      }
-    });
-  }
 
   void LogTerminal::onImGuiRender() {
     ImGui::PushFont(ImGuiLayer::font_console);
@@ -52,7 +40,8 @@ namespace anaf::GUI {
     }
 
     {
-      // Sinks push from worker threads, so trimming needs the lock too.
+      // Sinks push from worker threads, so trimming needs the lock too. Needed when the
+      // limit was lowered in the console: the sink drops only one entry per new line.
       std::lock_guard<std::mutex> lock(g_log_mutex);
       if (g_ui_logs.size() > g_ui_log_max_num) {
         const auto excess = static_cast<std::ptrdiff_t>(g_ui_logs.size() - g_ui_log_max_num);

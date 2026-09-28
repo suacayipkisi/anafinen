@@ -134,9 +134,9 @@ namespace anaf::MATERIAL {
     // Names are written into mesh files (MSH physical names are double-quoted, VTK / sidecar are line based).
     const auto forbidden = [](const unsigned char c) { return c < 0x20 || c == 0x7f || c == '"'; };
     if (std::ranges::any_of(name, forbidden)) return std::unexpected("name must not contain quotes or control characters");
-    if (!positive(material.getElasticityModulues())) return std::unexpected("elasticity modulus must be > 0");
+    if (!positive(material.getElasticityModulus())) return std::unexpected("elasticity modulus must be > 0");
     if (!positive(material.getYoungModulus())) return std::unexpected("Young's modulus must be > 0");
-    if (!positive(material.getShearModulues())) return std::unexpected("shear modulus must be > 0");
+    if (!positive(material.getShearModulus())) return std::unexpected("shear modulus must be > 0");
     if (!positive(material.getBulkModulus())) return std::unexpected("bulk modulus must be > 0");
     if (!positive(material.getYieldTensile())) return std::unexpected("yield strength must be > 0");
     if (!positive(material.getUltTensile())) return std::unexpected("ultimate strength must be > 0");
@@ -173,9 +173,9 @@ namespace anaf::MATERIAL {
       if (material.getIsBuiltin()) continue;
       list.push_back({
         {"name", std::string(material.getMaterialType())},
-        {"elasticityModulus", material.getElasticityModulues()},
+        {"elasticityModulus", material.getElasticityModulus()},
         {"youngModulus", material.getYoungModulus()},
-        {"shearModulus", material.getShearModulues()},
+        {"shearModulus", material.getShearModulus()},
         {"bulkModulus", material.getBulkModulus()},
         {"yieldTensileStrength", material.getYieldTensile()},
         {"ultimateTensileStrength", material.getUltTensile()},

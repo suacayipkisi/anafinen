@@ -83,7 +83,7 @@ namespace FEM::TRUSS::ADAPTER {
       if (const auto it = indexById.find(id); it != indexById.end()) model.constraints.push_back(NodeConstraint{it->second, fixed, {}, {}, {}});
     }
     for (const auto& force : mesh.appliedForces) {
-      if (const auto it = indexById.find(force.getApliedNode()); it != indexById.end()) {
+      if (const auto it = indexById.find(force.getAppliedNode()); it != indexById.end()) {
         model.loads.push_back(NodalLoad{it->second, force.getForce(), {}});
       }
     }

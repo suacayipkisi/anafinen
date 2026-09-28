@@ -26,28 +26,29 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
-#include <string>
+#include <thread>
 #include <vector>
 
-#include <log/anaf_info.hpp>
 #include <bridge/generalStatus.hpp>
-
 #include <directory/getExecutableDirectory.hpp>
+#include <log/anaf_info.hpp>
 
 #include "guiMaterials/framebuffer.hpp"
 #include "guiMaterials/imGuiLayer.hpp"
 #include "guiMaterials/iPanel.hpp"
 
-#include "materialHandler.hpp"
+#include "panels/aboutPanel.hpp"
+#include "panels/fileIoPanel.hpp"
 #include "panels/logTerminal.hpp"
 #include "panels/mainDockSpaceHost.hpp"
+#include "panels/materialHandler.hpp"
 #include "panels/modelTree.hpp"
+#include "panels/truss/importedTruss/trussModelEditor.hpp"
 #include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
 #include "panels/truss/trussTypePanel.hpp"
 #include "panels/viewportPanel.hpp"
 
 #include "linuxCursor.hpp"
-
 
 namespace anaf::GUI {
 
@@ -87,91 +88,102 @@ namespace anaf::GUI {
       glfwSetWindowIcon(window, 1, &glfw_icon);
       png_image_free(&image);
     }
-  }
 
-  void bindAnalysisFlow(UIPanels panels) {
-    panels.dock->on_select_analyze_structure = [panels](AnalyzeStructureType type) {
-      if (type == Truss_1D) {
-        panels.selector->isOpen = true;
-      }
+    struct UIPanels {
+      MainDockSpaceHost* dock = nullptr;
+      ViewportPanel* viewport = nullptr;
+      TrussSelector* selector = nullptr;
+      TrussControlPanel* control = nullptr;
+      ModelTree* tree = nullptr;
+      MaterialHandler* matWindow = nullptr;
+      FileIoPanel* fileIo = nullptr;
+      AboutPanel* about = nullptr;
+      TrussModelEditor* editor = nullptr;
     };
 
-    // Only a change of type resets: selecting the current type again just reopens its panel.
-    panels.selector->onSelected = [panels](TrussTypes type) {
-      const auto objectType = type == simpleQuadranglePrism
-        ? anaf::BRIDGE::ObjectType::truss_SQPT
-        : anaf::BRIDGE::ObjectType::truss_imported_or_entered;
-      auto& bridge = anaf::BRIDGE::buildBridge();
-      if (bridge.m_objectType.load() != objectType) {
-        panels.fileIo->cancelImport();
-        bridge.resetModel(objectType);
+    void bindAnalysisFlow(UIPanels panels) {
+      panels.dock->on_select_analyze_structure = [panels](AnalyzeStructureType type) {
+        if (type == Truss_1D) {
+          panels.selector->isOpen = true;
+        }
+      };
+
+      // Only a change of type resets: selecting the current type again just reopens its panel.
+      panels.selector->onSelected = [panels](TrussTypes type) {
+        const auto objectType = type == simpleQuadranglePrism
+          ? anaf::BRIDGE::ObjectType::truss_SQPT
+          : anaf::BRIDGE::ObjectType::truss_imported_or_entered;
+        auto& bridge = anaf::BRIDGE::buildBridge();
+        if (bridge.m_objectType.load() != objectType) {
+          panels.fileIo->cancelImport();
+          bridge.resetModel(objectType);
+          panels.control->resetState();
+          panels.editor->resetState();
+        }
+        panels.control->isOpen = (type == simpleQuadranglePrism);
+        panels.editor->isOpen = (type == nodeEntered);
+        panels.tree->isOpen = true;
+      };
+
+      panels.control->onOpenMaterialHandler = [panels] {
+        panels.matWindow->isOpen = true;
+      };
+      panels.editor->onOpenMaterialHandler = [panels] {
+        panels.matWindow->isOpen = true;
+      };
+      panels.editor->onRequestImport = [panels] { panels.fileIo->requestImport(); };
+      panels.editor->onLoadBuiltin = [panels](const std::filesystem::path& path) { panels.fileIo->importFile(path); };
+
+      panels.dock->on_show_about = [panels] { panels.about->isOpen = true; };
+      panels.dock->on_import_mesh = [panels] { panels.fileIo->requestImport(); };
+      panels.dock->on_export_results = [panels] { panels.fileIo->requestExport(); };
+      panels.dock->is_import_enabled = [] { return FileIoPanel::importAllowed(); };
+      // The import itself reset the bridge to truss_imported_or_entered (FileIoPanel::pollTasks).
+      panels.fileIo->onImported = [panels] {
         panels.control->resetState();
         panels.editor->resetState();
-      }
-      panels.control->isOpen = (type == simpleQuadranglePrism);
-      panels.editor->isOpen = (type == nodeEntered);
-      panels.tree->isOpen = true;
-    };
+        panels.control->isOpen = false;
+        panels.editor->isOpen = true;
+        panels.tree->isOpen = true;
+        panels.viewport->requestFit();
+      };
+    }
 
-    panels.control->onOpenMaterialHandler = [panels] {
-      panels.matWindow->isOpen = true;
-    };
-    panels.editor->onOpenMaterialHandler = [panels] {
-      panels.matWindow->isOpen = true;
-    };
-    panels.editor->onRequestImport = [panels] { panels.fileIo->requestImport(); };
-    panels.editor->onLoadBuiltin = [panels](const std::filesystem::path& path) { panels.fileIo->importFile(path); };
+    std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, const std::shared_ptr<Framebuffer>& fbo) {
+      auto dock = panelManager.addPanel<MainDockSpaceHost>(window);
+      auto viewport = panelManager.addPanel<ViewportPanel>(fbo);
+      auto tree = panelManager.addPanel<ModelTree>();
+      auto trussSelector = panelManager.addPanel<TrussSelector>();
+      auto trussControl = panelManager.addPanel<TrussControlPanel>();
+      panelManager.addPanel<LogTerminal>();
+      auto matWindow = panelManager.addPanel<MaterialHandler>();
+      auto fileIo = panelManager.addPanel<FileIoPanel>();
+      auto about = panelManager.addPanel<AboutPanel>();
+      auto editor = panelManager.addPanel<TrussModelEditor>();
 
-    panels.dock->on_show_about = [panels] { panels.about->isOpen = true; };
-    panels.dock->on_import_mesh = [panels] { panels.fileIo->requestImport(); };
-    panels.dock->on_export_results = [panels] { panels.fileIo->requestExport(); };
-    panels.dock->is_import_enabled = [] { return FileIoPanel::importAllowed(); };
-    // The import itself reset the bridge to truss_imported_or_entered (FileIoPanel::pollTasks).
-    panels.fileIo->onImported = [panels] {
-      panels.control->resetState();
-      panels.editor->resetState();
-      panels.control->isOpen = false;
-      panels.editor->isOpen = true;
-      panels.tree->isOpen = true;
-      panels.viewport->requestFit();
-    };
-  }
+      UIPanels panels{
+        dock.get(),
+        viewport.get(),
+        trussSelector.get(),
+        trussControl.get(),
+        tree.get(),
+        matWindow.get(),
+        fileIo.get(),
+        about.get(),
+        editor.get()
+      };
 
-  std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, std::shared_ptr<Framebuffer>& fbo) {
-    auto dock = panelManager.addPanel<MainDockSpaceHost>(window);
-    auto viewport = panelManager.addPanel<ViewportPanel>(fbo);
-    auto tree = panelManager.addPanel<ModelTree>();
-    auto trussSelector = panelManager.addPanel<TrussSelector>();
-    auto trussControl = panelManager.addPanel<TrussControlPanel>();
-    auto log = panelManager.addPanel<LogTerminal>();
-    auto matWindow = panelManager.addPanel<MaterialHandler>();
-    auto fileIo = panelManager.addPanel<FileIoPanel>();
-    auto about = panelManager.addPanel<AboutPanel>();
-    auto editor = panelManager.addPanel<TrussModelEditor>();
+      trussSelector->isOpen = false;
+      trussControl->isOpen = false;
+      editor->isOpen = false;
+      tree->isOpen = false;
+      matWindow->isOpen = false;
 
-    UIPanels panels{
-      dock.get(),
-      viewport.get(),
-      trussSelector.get(),
-      trussControl.get(),
-      tree.get(),
-      log.get(),
-      matWindow.get(),
-      fileIo.get(),
-      about.get(),
-      editor.get()
-    };
+      bindAnalysisFlow(panels);
 
-    trussSelector->isOpen = false;
-    trussControl->isOpen = false;
-    editor->isOpen = false;
-    tree->isOpen = false;
-    matWindow->isOpen = false;
-
-    bindAnalysisFlow(panels);
-
-    return viewport;
-  }
+      return viewport;
+    }
+  } // namespace end
 
   int initgui(){
 #ifdef __linux__
@@ -198,9 +210,9 @@ namespace anaf::GUI {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 #ifdef __linux__
-  glfwWindowHintString(GLFW_WAYLAND_APP_ID, "anafinen");
-  glfwWindowHintString(GLFW_X11_CLASS_NAME, "anafinen");
-  glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "anafinen");
+    glfwWindowHintString(GLFW_WAYLAND_APP_ID, "anafinen");
+    glfwWindowHintString(GLFW_X11_CLASS_NAME, "anafinen");
+    glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "anafinen");
 #endif
     GLFWwindow* window = glfwCreateWindow(1600, 900, "Anafinen", nullptr, nullptr);
 
@@ -213,9 +225,13 @@ namespace anaf::GUI {
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
     setWindowIcon(window);
-    gladLoadGL((GLADloadfunc)glfwGetProcAddress);
+    if (gladLoadGL(glfwGetProcAddress) == 0) {
+      anaf::LOG::error("Failed to load the OpenGL 4.6 functions");
+      glfwDestroyWindow(window);
+      glfwTerminate();
+      return -1;
+    }
 
-    //core system initialization
     ImGuiLayer imguiLayer;
     imguiLayer.init(window);
 
@@ -224,11 +240,9 @@ namespace anaf::GUI {
     {
       auto fbo = std::make_shared<Framebuffer>(1280, 720);
 
-      // register UI panels
       PanelManager panelManager;
       auto viewport = openPanels(panelManager, window, fbo);
 
-      // game loop
       while (!glfwWindowShouldClose(window)){
         glfwPollEvents();
 
@@ -236,8 +250,8 @@ namespace anaf::GUI {
           viewport->renderSceneOpenGL();
         }
 
-        //clear default framebuffer and render imgui panels
-        int w, h;
+        // Clear the default framebuffer, then draw the ImGui panels over it.
+        int w = 0, h = 0;
         glfwGetFramebufferSize(window, &w, &h);
         glViewport(0, 0, w, h);
         glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
@@ -249,7 +263,6 @@ namespace anaf::GUI {
         imguiLayer.endFrame();
 
         glfwSwapBuffers(window);
-
       }
 
       auto& calculationBridge = anaf::BRIDGE::buildBridge();

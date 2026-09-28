@@ -42,9 +42,9 @@ namespace anaf::GUI {
     std::function<void()> on_show_about;
     std::function<bool()> is_import_enabled; // greys out File > Import when it returns false
 
-    MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
+    explicit MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
 
     void onImGuiRender() override;
   };
 
-} // namespace anaf:GUI end
+} // namespace anaf::GUI end

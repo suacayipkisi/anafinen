@@ -38,7 +38,7 @@ namespace anaf::GUI {
     // Switches the object type (see bindAnalysisFlow): the bridge model and the panels are
     // reset when the type changes, so nothing of the previous model is left behind.
     std::function<void(TrussTypes)> onSelected;
-    
+
     void onImGuiRender() override;
   };
 } // namespace anaf::GUI end

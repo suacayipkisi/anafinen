@@ -16,7 +16,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "viewportPanel.hpp"
-#include <atomic>
 #include <bridge/generalStatus.hpp>
 
 #include "imgui.h"
@@ -27,10 +26,16 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <limits>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace anaf::GUI {
 
@@ -73,11 +78,6 @@ namespace anaf::GUI {
     if (m_viewportHovered_ && ImGui::IsKeyPressed(ImGuiKey_R)) {
       resetCamera();
     }
-
-    // if (ImGui::IsKeyPressed(ImGuiKey_LeftCtrl) || ImGui::IsKeyPressed(ImGuiKey_RightCtrl)) {
-    //   m_showNodes = !m_showNodes;
-    //   truss_1d_gui_prop.m_meshNeedsUpdate = true;
-    // }
 
     if (m_viewportHovered_ && io.MouseWheel != 0.0f) {
       m_cameraDistance = std::clamp(m_cameraDistance * (1.0f - io.MouseWheel * 0.15f), 0.5f, 500.0f);
@@ -252,7 +252,7 @@ namespace anaf::GUI {
     const glm::vec4 forceGlowColor(1.0f, 0.3f, 0.3f, 0.35f);
 
     for (const auto& force : mesh.appliedForces) {
-      const uint32_t targetId = force.getApliedNode();
+      const uint32_t targetId = force.getAppliedNode();
       if (targetId > maxNodeId) continue;
 
       const auto forceVec = force.getForce();
@@ -360,10 +360,7 @@ namespace anaf::GUI {
     m_fbo_->unbind();
   }
 
-  void ViewportPanel::renderOverlay2D(const ImVec2& origin, const ImVec2& size, const glm::mat4& viewProj) {
-    //auto& bridge = BRIDGE::buildBridge();
-    (void)viewProj;
-
+  void ViewportPanel::renderOverlay2D(const ImVec2& origin, const ImVec2& size) {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     const auto currentMesh = m_currentMesh;
 
@@ -416,11 +413,6 @@ namespace anaf::GUI {
       m_showNodes = !m_showNodes;
       truss_1d_gui_prop.m_meshNeedsUpdate = true;
     }
-    // drawList->AddText(
-    //   ImVec2(origin.x + 4.0f, origin.y + 4.0f),
-    //   IM_COL32(180, 180, 180, 255),
-    //   m_showNodes ? "Nodes: Visible (Press CTRL to hide)" : "Nodes: Hidden (Press CTRL to show)"
-    // );
 
     // FPS Monitor
     {
@@ -450,77 +442,45 @@ namespace anaf::GUI {
         return IM_COL32(static_cast<int>(r * 255.0f), static_cast<int>(g * 255.0f), static_cast<int>(b * 255.0f), 255);
       };
 
-      // Stress Bar
-      const double maxStress = m_cachedMaxStress;
-      const double maxDisp = m_cachedMaxDisp;
-
-      const float startX = origin.x + 20.0f;
-      const float startY = origin.y + size.y - barHeight - 25.0f;
-      const float startYDisp = startY - 220.0f;
-
-      // draw stress legend
-      drawList->AddRectFilled(
-        ImVec2(startX - 8.0f, startY - 24.0f), 
-        ImVec2(startX + barWidth + 80.0f, startY + barHeight + 14.0f), 
-        IM_COL32(15, 17, 22, 220), 
-        4.0f
-      );
-      drawList->AddText(ImVec2(startX, startY - 20.0f), IM_COL32(230, 230, 230, 255), "|Stress| (MPa)");
-
-      const float stepHeight = barHeight / static_cast<float>(colorSteps);
-      for (int i = 0; i < colorSteps; ++i) {
-        const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
-        const float tBottom = 1.0f - static_cast<float>(i + 1) / static_cast<float>(colorSteps);
-        drawList->AddRectFilledMultiColor(
-          ImVec2(startX, startY + static_cast<float>(i) * stepHeight),
-          ImVec2(startX + barWidth, startY + static_cast<float>(i + 1) * stepHeight),
-          getJetColor(tTop), getJetColor(tTop), getJetColor(tBottom), getJetColor(tBottom)
-        );
-      }
-      drawList->AddRect(ImVec2(startX, startY), ImVec2(startX + barWidth, startY + barHeight), IM_COL32(200, 200, 200, 180));
-
-      char txtMax[32], txtMid[32], txtMin[32];
-      std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxStress / 1.0e6);
-      std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxStress * 0.5 / 1.0e6);
-      std::snprintf(txtMin, sizeof(txtMin), "%.2e", 0.0);
-
-      drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY - 2.0f), IM_COL32(230, 230, 230, 255), txtMax);
-      drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY + barHeight * 0.5f - 6.0f), IM_COL32(200, 200, 200, 255), txtMid);
-      drawList->AddText(ImVec2(startX + barWidth + 6.0f, startY + barHeight - 10.0f), IM_COL32(230, 230, 230, 255), txtMin);
-
-      // draw disp legend
-      if(m_showNodes) {
-          drawList->AddRectFilled(
-          ImVec2(startX - 8.0f, startYDisp - 24.0f), 
-          ImVec2(startX + barWidth + 80.0f, startYDisp + barHeight + 14.0f), 
+      // Legend box, jet gradient (max at the top) and max / mid / 0 labels; top is the bar's top edge.
+      auto drawColorbar = [&](const float startX, const float top, const char* title, const double maxValue) {
+        drawList->AddRectFilled(
+          ImVec2(startX - 8.0f, top - 24.0f),
+          ImVec2(startX + barWidth + 80.0f, top + barHeight + 14.0f),
           IM_COL32(15, 17, 22, 220),
           4.0f
         );
-        drawList->AddText(ImVec2(startX, startYDisp - 20.0f), IM_COL32(230, 230, 230, 255), "Disp (mm)");
+        drawList->AddText(ImVec2(startX, top - 20.0f), IM_COL32(230, 230, 230, 255), title);
 
-        const float stepHeightDisp = barHeight / static_cast<float>(colorSteps);
+        const float stepHeight = barHeight / static_cast<float>(colorSteps);
         for (int i = 0; i < colorSteps; ++i) {
           const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
           const float tBottom = 1.0f - static_cast<float>(i + 1) / static_cast<float>(colorSteps);
           drawList->AddRectFilledMultiColor(
-            ImVec2(startX, startYDisp + static_cast<float>(i) * stepHeightDisp),
-            ImVec2(startX + barWidth, startYDisp + static_cast<float>(i + 1) * stepHeightDisp),
+            ImVec2(startX, top + static_cast<float>(i) * stepHeight),
+            ImVec2(startX + barWidth, top + static_cast<float>(i + 1) * stepHeight),
             getJetColor(tTop), getJetColor(tTop), getJetColor(tBottom), getJetColor(tBottom)
           );
         }
-        drawList->AddRect(ImVec2(startX, startYDisp), ImVec2(startX + barWidth, startYDisp + barHeight), IM_COL32(200, 200, 200, 180));
+        drawList->AddRect(ImVec2(startX, top), ImVec2(startX + barWidth, top + barHeight), IM_COL32(200, 200, 200, 180));
 
-        char txtMaxDisp[32], txtMidDisp[32], txtMinDisp[32];
-        std::snprintf(txtMaxDisp, sizeof(txtMaxDisp), "%.2e", maxDisp * 1000.0);
-        std::snprintf(txtMidDisp, sizeof(txtMidDisp), "%.2e", maxDisp * 0.5 * 1000.0);
-        std::snprintf(txtMinDisp, sizeof(txtMinDisp), "%.2e", 0.0);
+        char txtMax[32], txtMid[32], txtMin[32];
+        std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxValue);
+        std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxValue * 0.5);
+        std::snprintf(txtMin, sizeof(txtMin), "%.2e", 0.0);
 
-        drawList->AddText(ImVec2(startX + barWidth + 6.0f, startYDisp - 2.0f), IM_COL32(230, 230, 230, 255), txtMaxDisp);
-        drawList->AddText(ImVec2(startX + barWidth + 6.0f, startYDisp + barHeight * 0.5f - 6.0f), IM_COL32(200, 200, 200, 255), txtMidDisp);
-        drawList->AddText(ImVec2(startX + barWidth + 6.0f, startYDisp + barHeight - 10.0f), IM_COL32(230, 230, 230, 255), txtMinDisp);
+        drawList->AddText(ImVec2(startX + barWidth + 6.0f, top - 2.0f), IM_COL32(230, 230, 230, 255), txtMax);
+        drawList->AddText(ImVec2(startX + barWidth + 6.0f, top + barHeight * 0.5f - 6.0f), IM_COL32(200, 200, 200, 255), txtMid);
+        drawList->AddText(ImVec2(startX + barWidth + 6.0f, top + barHeight - 10.0f), IM_COL32(230, 230, 230, 255), txtMin);
+      };
+
+      const float startX = origin.x + 20.0f;
+      const float startY = origin.y + size.y - barHeight - 25.0f;
+      drawColorbar(startX, startY, "|Stress| (MPa)", m_cachedMaxStress / 1.0e6);
+      if (m_showNodes) {
+        drawColorbar(startX, startY - 220.0f, "Disp (mm)", m_cachedMaxDisp * 1000.0);
       }
     }
-
   }
 
   void ViewportPanel::onImGuiRender() {
@@ -532,8 +492,6 @@ namespace anaf::GUI {
     }
 
     ImGui::Begin("3D Simulation Viewport", &isOpen, flags);
-
-    m_viewportFocused_ = ImGui::IsWindowFocused();
 
     const ImVec2 availSize = ImGui::GetContentRegionAvail();
     const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -577,7 +535,7 @@ namespace anaf::GUI {
     }
 
     handleCameraInput();
-    renderOverlay2D(origin, availSize, getViewProjectionMatrix());
+    renderOverlay2D(origin, availSize);
 
     ImGui::End();
     ImGui::PopStyleVar();

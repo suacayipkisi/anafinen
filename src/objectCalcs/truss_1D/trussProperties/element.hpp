@@ -21,7 +21,6 @@
 #include "node.hpp"
 #include <log/anaf_info.hpp>
 
-#include <cstddef>
 #include <cstdint>
 #include <array>
 #include <cmath>
@@ -30,19 +29,17 @@
 
 namespace FEM::TRUSS {
 
-  // initializing 1D element in 3D space
-  // 2 nodes, one size_dimention
+  // 1D bar element in 3D space: two nodes, axial stiffness only.
   class TrussElement_1D{
   private:
-    std::uint32_t m_type;
+    std::uint32_t m_type{}; // material index into the material list
     double m_length{};
     double m_crossSectionArea{};
     double m_elongation{};
     double m_axialForce{}; // N, tension > 0, compression < 0
     double m_stress{}; // Pa, tension > 0, compression < 0
-    std::array<double, 3> m_cosinuses{}; // double: float products put ~1e-7 relative error into K
+    std::array<double, 3> m_cosines{}; // double: float products put ~1e-7 relative error into K
     std::array<std::uint32_t, 2> m_nodes{};
-  protected:
   public:
     TrussElement_1D() = default;
     TrussElement_1D(
@@ -56,10 +53,8 @@ namespace FEM::TRUSS {
       m_crossSectionArea(area),
       m_nodes({node_1, node_2})
     {
-      // if area and nodes are not given, destroy element
-
       if (area <= 0.0) {
-        anaf::LOG::error("Destroying invalid element: area must be positive (got {}), material{}, nodes[{}, {}]", 
+        anaf::LOG::error("Destroying invalid element: area must be positive (got {}), material {}, nodes [{}, {}]",
             area, type, node_1, node_2);
         throw std::invalid_argument("Element cross sectional area must be greater than 0");
       }
@@ -70,24 +65,19 @@ namespace FEM::TRUSS {
       }
 
       if (node_1 >= allNodes.size() || node_2 >= allNodes.size()) {
-        anaf::LOG::error("Node index out of range: n1=%u, n2=%u, total_nodes=%zu", node_1, node_2, allNodes.size());
+        anaf::LOG::error("Node index out of range: n1={}, n2={}, total_nodes={}", node_1, node_2, allNodes.size());
         throw std::out_of_range("Node index is outside the node span");
-      }//destroyment finish
-      
-      //calculate second degree element info
-      double dx = allNodes[node_2].getLocX() - allNodes[node_1].getLocX();
-      double dy = allNodes[node_2].getLocY() - allNodes[node_1].getLocY();
-      double dz = allNodes[node_2].getLocZ() - allNodes[node_1].getLocZ();
+      }
+
+      const double dx = allNodes[node_2].getLocX() - allNodes[node_1].getLocX();
+      const double dy = allNodes[node_2].getLocY() - allNodes[node_1].getLocY();
+      const double dz = allNodes[node_2].getLocZ() - allNodes[node_1].getLocZ();
       m_length = std::sqrt(dx * dx + dy * dy + dz * dz);
       if (m_length <= 0.0) {
         throw std::invalid_argument("Element length must be greater than zero");
       }
-      std::array<double, 3> loc1{allNodes[node_1].getLocation()};
-      std::array<double, 3> loc2{allNodes[node_2].getLocation()};
-      for (std::size_t i{0}; i < 3; ++i){
-        m_cosinuses[i] = (loc2[i] - loc1[i]) / m_length;
-      }
-    } // TrussElement_1D(.......) Contructor end
+      m_cosines = {dx / m_length, dy / m_length, dz / m_length};
+    }
 
     // calculated properties of element
     inline void setEleElongation(const double elongation) {m_elongation = elongation;}
@@ -100,7 +90,7 @@ namespace FEM::TRUSS {
     inline double getEleAxialForces() const {return m_axialForce;}
     inline double getEleStress() const {return m_stress;}
     inline std::uint32_t getEleProperties() const {return m_type;}
-    inline const std::array<double, 3>& getEleCosinuses() const {return m_cosinuses;}
+    inline const std::array<double, 3>& getEleCosines() const {return m_cosines;}
     inline const std::array<std::uint32_t, 2>& getEleNodes() const {return m_nodes;}
 
   };

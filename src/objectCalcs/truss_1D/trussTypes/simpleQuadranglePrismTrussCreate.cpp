@@ -15,19 +15,18 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <log/anaf_info.hpp>
 #include "simpleQuadranglePrismTrussCreate.hpp"
-#include "../trussProperties/element.hpp"
+#include <log/anaf_info.hpp>
 
+#include <cstddef>
 #include <cstdint>
-#include <vector>
-#include <omp.h>
 #include <span>
+#include <vector>
 
 namespace FEM::TRUSS {
 
   void SimpleTruss::setTruss(){
-    // determien node dun in every dimention(x y z directions)
+    // node count in every direction (x, y, z)
     const std::uint32_t nx = m_cubeNum[0];
     const std::uint32_t ny = m_cubeNum[1];
     const std::uint32_t nz = m_cubeNum[2];
@@ -96,7 +95,7 @@ namespace FEM::TRUSS {
       }
     }
 
-    // parallel to Y-directiom
+    // parallel to Y-direction
     #pragma omp parallel for collapse(3) schedule(static)
     for (long long k = 0; k < nz_nodes; ++k) {
       for (std::uint32_t j = 0; j < ny; ++j) {

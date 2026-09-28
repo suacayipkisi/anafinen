@@ -17,13 +17,15 @@
 
 #include "materialHandler.hpp"
 
-#include "generalStatus.hpp"
-#include "imgui.h"
+#include <bridge/generalStatus.hpp>
 #include <log/anaf_info.hpp>
+
+#include "imgui.h"
 
 #include <cstdint>
 #include <mutex>
 #include <optional>
+#include <string>
 
 namespace anaf::GUI {
 
@@ -131,9 +133,9 @@ namespace anaf::GUI {
           if (material.getIsBuiltin()) ImGui::TextDisabled("Built-in");
           else ImGui::TextUnformatted("User");
           ImGui::TableNextColumn();
-          ImGui::Text("%.2f", material.getElasticityModulues() / kGiga);
+          ImGui::Text("%.2f", material.getElasticityModulus() / kGiga);
           ImGui::TableNextColumn();
-          ImGui::Text("%.2f", material.getShearModulues() / kGiga);
+          ImGui::Text("%.2f", material.getShearModulus() / kGiga);
           ImGui::TableNextColumn();
           ImGui::Text("%.2f", material.getBulkModulus() / kGiga);
           ImGui::TableNextColumn();

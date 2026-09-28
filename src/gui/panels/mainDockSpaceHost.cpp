@@ -17,12 +17,8 @@
 
 #include "mainDockSpaceHost.hpp"
 
-#include <GLFW/glfw3.h>
-
 #include "imgui.h"
-#include "imgui_internal.h"
-
-#include <functional>
+#include "imgui_internal.h" // DockBuilder API
 
 namespace anaf::GUI {
 

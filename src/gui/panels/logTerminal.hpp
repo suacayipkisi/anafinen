@@ -21,9 +21,10 @@
 #include <guiMaterials/iPanel.hpp>
 #include "statusBar.hpp"
 
-#include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace anaf::GUI {
@@ -34,12 +35,16 @@ namespace anaf::GUI {
   };
 
   inline std::vector<LogEntry> g_ui_logs;
-  inline size_t g_ui_log_max_num{10000};
+  inline std::uint32_t g_ui_log_max_num{10000}; // edited as ImGuiDataType_U32 in the console
   inline std::mutex g_log_mutex;
 
-  inline void anafUILogSink(anaf::LOG::Level level, const char* message) {
+  // anaf::LOG callback, installed in main() before the GUI exists so startup lines are kept.
+  inline void anafUILogSink(anaf::LOG::Level level, std::string_view message) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
     g_ui_logs.push_back({level, std::string(message)});
+    if (g_ui_logs.size() > g_ui_log_max_num) {
+      g_ui_logs.erase(g_ui_logs.begin());
+    }
   }
 
   class LogTerminal : public IPanel {
@@ -48,10 +53,8 @@ namespace anaf::GUI {
     bool m_wrapLines {true}; // wrap at the panel width; off: one line per entry + horizontal scrollbar
     StatusBar m_statusBar;    // footer: worker state, hardware, resource usage
   public:
-    LogTerminal();
-
     void onImGuiRender() override;
-    
+
   };
 
 } //namespace anaf::GUI end

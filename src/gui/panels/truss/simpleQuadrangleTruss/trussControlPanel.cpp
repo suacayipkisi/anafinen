@@ -19,19 +19,22 @@
 
 #include "imgui.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <stop_token>
 #include <thread>
 
-#include <truss_1D/trussEngine/trussSolver.hpp>
 #include <bridge/generalStatus.hpp>
+#include <log/anaf_info.hpp>
+#include <panels/truss/materialCombo.hpp>
 #include <panels/truss/trussWorker.hpp>
+#include <truss_1D/trussEngine/trussSolver.hpp>
 
 namespace anaf::GUI {
 
@@ -50,20 +53,15 @@ namespace anaf::GUI {
       return true;
     }
 
-    void ensureDemoTrussCase(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t forceNodeId) {
+    // Corner supports of the 10x1x10 demo grid (self weight only). Called right after
+    // resetModel(), so there is no snapshot yet: Generate Preview builds it. Caller holds dataMutex.
+    void ensureDemoTrussCase(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t selectedNode) {
       bridge.fixedDOFsByNode.clear();
       bridge.fixedDOFsByNode[0u] = {true, true, true};
       bridge.fixedDOFsByNode[10u] = {true, true, true};
       bridge.fixedDOFsByNode[220u] = {true, true, true};
       bridge.fixedDOFsByNode[230u] = {true, true, true};
-
-      bridge.selectedNodeId = forceNodeId;
-      if (bridge.activeMesh) {
-        auto updatedMesh = std::make_shared<BRIDGE::MeshData>(*bridge.activeMesh);
-        updatedMesh->appliedForces.clear();
-        updatedMesh->appliedForces.emplace_back(forceNodeId, std::array<double, 3>{0.0, 10000.0, 0.0});
-        bridge.activeMesh = std::move(updatedMesh);
-      }
+      bridge.selectedNodeId = selectedNode;
     }
   }
 
@@ -140,35 +138,11 @@ namespace anaf::GUI {
       ImGui::Text("Material Type");
       ImGui::TableSetColumnIndex(1);
       ImGui::SetNextItemWidth(-FLT_MIN);
-      {
-        std::lock_guard lock(bridge.dataMutex);
-        if (bridge.allMaterials.empty()) {
-          ImGui::TextDisabled("No materials available");
-        }
-        else {
-          // The selected material may have been removed in the Material Handler.
-          if (!bridge.findMaterialIndex(m_materialID)) {
-            m_materialID = bridge.allMaterials.front().getMaterialID();
-          }
-          const auto& selected = bridge.allMaterials[*bridge.findMaterialIndex(m_materialID)];
-
-          if (ImGui::BeginCombo("##Material TypeCombo", selected.getMaterialType().data())) {
-            for (const auto& material : bridge.allMaterials) {
-              ImGui::PushID(static_cast<int>(material.getMaterialID()));
-              if (ImGui::Selectable(material.getMaterialType().data(), material.getMaterialID() == m_materialID)) {
-                m_materialID = material.getMaterialID();
-              }
-              ImGui::PopID();
-            }
-            ImGui::EndCombo();
-          }
-        }
-      }
+      materialCombo(bridge, "##Material TypeCombo", m_materialID);
 
       ImGui::EndTable();
     }
     
-    // add materialHandler window
     if (ImGui::Button("Open Material Handler", ImVec2(-1.0f, 0.0f)) && onOpenMaterialHandler) {
       onOpenMaterialHandler();
     }
@@ -202,25 +176,14 @@ namespace anaf::GUI {
 
     if (ImGui::Button("Load Demo (10x1x10 self weight)")) {
       bridge.resetModel(BRIDGE::ObjectType::truss_SQPT);
-      resetState();
+      resetState(); // the demo grid, section and load node are the panel defaults
+      m_forceVector = {0.0, 0.0, 0.0};
 
-      m_cubeNumX = 10;
-      m_cubeNumY = 1;
-      m_cubeNumZ = 10;
       {
         std::lock_guard lock(bridge.dataMutex);
         if (!bridge.allMaterials.empty()) {
           m_materialID = bridge.allMaterials[bridge.allMaterials.size() > 1 ? 1 : 0].getMaterialID();
         }
-      }
-      m_cubeEdgeLength = 1.0;
-      m_crossSectionalArea = 80.0;
-      m_forceNodeId = 126;
-      m_forceVector = {0.0, 0.0, 0.0};
-      m_appliedForces.clear();
-
-      {
-        std::lock_guard lock(bridge.dataMutex);
         ensureDemoTrussCase(bridge, m_forceNodeId);
       }
       bridge.dataVersion.fetch_add(1, std::memory_order_release);
@@ -232,8 +195,6 @@ namespace anaf::GUI {
       ImGui::EndDisabled();
     }
     else if (ImGui::Button("Generate Preview", ImVec2(-1, 32)) && resolveMaterialIndex(bridge, m_materialID, materialIndex)) {
-      anaf::LOG::core("Press 'ctrl' to toggle node visibility");
-
       bridge.joinWorker();
       bridge.m_isGeneratingPreview = true;
       bridge.workerThread = std::jthread(
@@ -315,7 +276,7 @@ namespace anaf::GUI {
     if (ImGui::Button("Apply Load to Selected Node")) {
       m_appliedForces.erase(
         std::remove_if(m_appliedForces.begin(), m_appliedForces.end(),
-          [&](const FEM::TRUSS::ForceApplied& f) { return f.getApliedNode() == m_forceNodeId; }),
+          [&](const FEM::TRUSS::ForceApplied& f) { return f.getAppliedNode() == m_forceNodeId; }),
         m_appliedForces.end());
       m_appliedForces.emplace_back(m_forceNodeId, m_forceVector);
 
@@ -357,7 +318,7 @@ namespace anaf::GUI {
       }
       m_lastFixNode = currentSelectedNode;
     }
-  
+
     ImGui::SetNextItemWidth(160.0f);
     double currentScale = 1.0;
     {
@@ -418,8 +379,6 @@ namespace anaf::GUI {
             configureOpenMPForWorker();
 
             FEM::TRUSS::Truss_SQPT solver{
-              bridge,
-              st,
               cubeNumX,
               cubeNumY,
               cubeNumZ,
@@ -427,11 +386,10 @@ namespace anaf::GUI {
               crossSectionalArea,
               type
             };
-            
+
             solver.trussSetAndSetFix_SQPT(bridge, st, fixedDOFs);
-            solver.trussSetForce_SQRT(bridge, st, forcesToApply);
+            solver.trussSetForce_SQPT(bridge, st, forcesToApply);
             solver.setContainer(bridge, st);
-            
             solver.calculate(bridge, st, allMaterials);
             if (st.stop_requested()) {
               bridge.m_progress = 0.0f;
@@ -504,7 +462,7 @@ namespace anaf::GUI {
       m_forceNodeId = 0;
       m_forceVector = {0.0, 0.0, 0.0};
     }
-    
+
     ImGui::End();
   }
 

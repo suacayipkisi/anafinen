@@ -219,7 +219,5 @@ namespace anaf::IO::detail {
   std::string base64Encode(std::string_view bytes);
   // Decodes `text`, ignoring whitespace. Stops at the end or at the first padding group.
   std::string base64Decode(std::string_view text);
-  // Decodes exactly enough input characters to produce `byteCount` bytes; returns chars consumed.
-  std::size_t base64DecodePrefix(std::string_view text, std::size_t byteCount, std::string& out);
 
 } // namespace anaf::IO::detail end

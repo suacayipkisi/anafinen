@@ -93,4 +93,4 @@ namespace anaf::LOG {
 #endif
   }
 
-} // namespace anaf::LOG::detail
+} // namespace anaf::LOG end

@@ -18,8 +18,9 @@
 #include "solverPortfolio.hpp"
 #include <log/anaf_info.hpp>
 
-#include <Eigen/Sparse>
-#include <Eigen/LU>
+#include <Eigen/LU> // MatrixXd::inverse()
+#include <Eigen/SparseCore>
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -104,11 +105,11 @@ namespace FEM::TRUSS::SOLVER {
     applyPreconditioner(residual, direction);
     double rho = residual.dot(direction);
 
-        for (Eigen::Index iteration = 0;
-          !stopToken.stop_requested()
-          && iteration < maxIterations
-          && residualNormSquared >= threshold
-          && forceNormSquared > 0.0;
+    for (Eigen::Index iteration = 0;
+         !stopToken.stop_requested()
+         && iteration < maxIterations
+         && residualNormSquared >= threshold
+         && forceNormSquared > 0.0;
          ++iteration) {
       product.noalias() = matrix * direction;
       const double denominator = direction.dot(product);

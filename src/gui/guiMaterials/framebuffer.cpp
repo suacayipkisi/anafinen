@@ -15,14 +15,11 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "framebuffer.hpp"
+#include <log/anaf_info.hpp>
+
 #include <algorithm>
 #include <cstdint>
-
-#include <glad/gl.h>
-#include <GLFW/glfw3.h>
-
-#include <log/anaf_info.hpp>
-#include "framebuffer.hpp"
 
 namespace anaf::GUI {
 
@@ -64,7 +61,7 @@ namespace anaf::GUI {
     glNamedFramebufferDrawBuffers(m_fbo_.get(), 2, drawBuffers);
 
     if (glCheckNamedFramebufferStatus(m_fbo_.get(), GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-      anaf::LOG::error("ERROR: Resolve framebuffer is not complete!");
+      anaf::LOG::error("Resolve framebuffer is not complete");
     }
 
     // MSAA FBO: actual render target, smooths line/edge aliasing via multisampling.
@@ -86,7 +83,7 @@ namespace anaf::GUI {
     glNamedFramebufferDrawBuffers(m_msaa_fbo_.get(), 2, drawBuffers);
 
     if (glCheckNamedFramebufferStatus(m_msaa_fbo_.get(), GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-      anaf::LOG::error("ERROR: MSAA framebuffer is not complete!");
+      anaf::LOG::error("MSAA framebuffer is not complete");
     }
   }
 

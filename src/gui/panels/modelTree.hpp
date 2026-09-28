@@ -17,15 +17,16 @@
 
 #pragma once
 
-#include "generalStatus.hpp"
+#include <bridge/generalStatus.hpp>
 #include <guiMaterials/iPanel.hpp>
 
 namespace anaf::GUI {
 
   class ModelTree : public IPanel {
   private:
-    bool createModelTree_truss_SQPT(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
-    bool createModelTree_truss_imported_or_entered(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
+    // Boundary conditions, overstressed bars and nodal displacements of the active snapshot.
+    // Every object type publishes the same MeshData, so one tree serves all of them.
+    void renderMeshTree(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
   public:
     void onImGuiRender() override;
   };

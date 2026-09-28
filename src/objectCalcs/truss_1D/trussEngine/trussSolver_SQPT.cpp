@@ -17,9 +17,6 @@
 
 #include "trussSolver.hpp"
 #include <log/anaf_info.hpp>
-#include <bridge/generalStatus.hpp>
-#include <trussTypes/simpleQuadranglePrismTrussCreate.hpp>
-#include <trussProperties/appliedForce.hpp>
 
 #include <array>
 #include <cstddef>
@@ -40,7 +37,8 @@ namespace FEM::TRUSS {
 
     auto& nodes = m_truss.getNodes();
     #pragma omp parallel for schedule(static)
-    for (auto& node : nodes) {
+    for (long long index = 0; index < static_cast<long long>(nodes.size()); ++index) {
+      auto& node = nodes[index];
       const auto it = fixedDOFsByNode.find(node.getNodeID());
       if (it != fixedDOFsByNode.end()) {
         node.setMovable({ !it->second[0], !it->second[1], !it->second[2] });
@@ -60,17 +58,17 @@ namespace FEM::TRUSS {
     bridge.m_progress = 0.20f;
   }
 
-  void Truss_SQPT::trussSetForce_SQRT(
+  void Truss_SQPT::trussSetForce_SQPT(
     anaf::BRIDGE::Gui_Calc_Bridge& bridge,
     std::stop_token st,
-    std::vector<ForceApplied> force
+    const std::vector<ForceApplied>& force
   ) {
     if (st.stop_requested()) return;
     m_forceVec.assign(m_truss.getNodeNum() * 3, 0.0);
 
-    for (std::size_t i = 0; i < force.size(); ++i) {
-      const std::uint32_t nodeId = force[i].getApliedNode();
-      const std::array<double, 3> currentNodeForce = force[i].getForce();
+    for (const auto& load : force) {
+      const std::uint32_t nodeId = load.getAppliedNode();
+      const std::array<double, 3>& currentNodeForce = load.getForce();
 
       if (nodeId >= m_truss.getNodeNum()) {
         continue;
@@ -102,9 +100,9 @@ namespace FEM::TRUSS {
   void Truss_SQPT::calculate(
     anaf::BRIDGE::Gui_Calc_Bridge& bridge,
     std::stop_token st,
-    std::span<anaf::MATERIAL::Material> materials
+    std::span<const anaf::MATERIAL::Material> materials
   ){
     detail::runStaticSolve(bridge, st, m_container, m_truss.getNodes(), m_truss.getElements(), materials);
   }
-  
+
 } // namespace FEM::TRUSS end

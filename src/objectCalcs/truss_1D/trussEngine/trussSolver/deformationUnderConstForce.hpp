@@ -20,21 +20,24 @@
 #include <trussProperties/element.hpp>
 #include <trussProperties/node.hpp>
 
+#include <material/properties.hpp>
+
+#include <Eigen/Core>
 #include <Eigen/SparseCore>
+#include <array>
 #include <span>
 #include <stop_token>
 #include <vector>
-#include <array>
 
 namespace FEM::TRUSS {
 
   class Truss_1D_Container{
   private:
-    bool m_isCalculationValid;
-    double m_energyDiff;
-    double m_energyRelativeDiff;
-    double m_workDone_external;
-    double m_elasticDeformationEnergy_internal;
+    bool m_isCalculationValid{false};
+    double m_energyDiff{};
+    double m_energyRelativeDiff{};
+    double m_workDone_external{};
+    double m_elasticDeformationEnergy_internal{};
 
     std::span<double> m_forceVec;
     std::span<Node> m_allNodes;
@@ -43,17 +46,6 @@ namespace FEM::TRUSS {
     std::vector<Eigen::Triplet<double>> m_globalStiffnessMatrix;
     std::vector<std::array<double, 3>> m_resultDisplacements;
   public:
-    Truss_1D_Container() = default;
-    Truss_1D_Container(
-      std::span<double> forceVec,
-      std::span<Node> allNodes,
-      std::span<TrussElement_1D> allElements
-    ): 
-      m_forceVec(forceVec),
-      m_allNodes(allNodes),
-      m_allElements(allElements)
-    {}
-
     void set(
       std::span<double> forceVec,
       std::span<Node> allNodes,

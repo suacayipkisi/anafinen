@@ -75,13 +75,13 @@ Object type switch: selecting the type that is already active only reopens its p
 ### 2.1 ImGui layer (`guiMaterials/imGuiLayer.*`)
 
 - Config flags: keyboard navigation and docking enabled.
-- Fonts: `Inter-Medium.ttf` for the UI and `CascadiaMono.ttf` for the console, both 18 px times the render scale. Falls back to the ImGui default font when the files are missing.
+- Fonts: `Inter-Medium.ttf` for the UI and `CascadiaMono.ttf` for the console, both 18 px. Falls back to the ImGui default font when the files are missing.
 - Custom theme: `setupSpecialTheme()`.
 - OpenGL backend initialized with `#version 460`.
 
 ### 2.2 Log sink
 
-`anaf::LOG::setCallback()` sends every formatted line to `anafUILogSink()`, which appends to `g_ui_logs` under `g_log_mutex`. Worker threads can therefore log safely, and the console panel reads the buffer on the GUI thread.
+`main()` installs `anafUILogSink()` with `anaf::LOG::setCallback()` before the GUI exists, so startup lines are kept. The sink appends to `g_ui_logs` under `g_log_mutex` and drops the oldest entry above `g_ui_log_max_num` ("Max Output" in the console). Worker threads can therefore log safely, and the console panel reads the buffer on the GUI thread.
 
 ### 2.3 File import / export (`FileIoPanel`)
 
@@ -175,7 +175,7 @@ Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (
 |---|---|---|
 | `scene` | `u_MVP * pos`, passes color, flat entity ID, `gl_PointSize` | `location 0`: color, `location 1`: entity ID |
 | `grid` | world position to fragment | Anti-aliased procedural grid in the XZ plane (`fract` + `fwidth`), axis gap around X/Z axes; entity ID = -1 |
-| `text` | NDC passthrough | Samples ImGui's font atlas (`.r` = coverage); entity ID = -1 |
+| `text` | NDC passthrough | Samples ImGui's font atlas (RGBA32, `.a` = coverage); entity ID = -1 |
 
 `buildProgram()` checks compile and link status and logs the driver's info log through `anaf::LOG::error`. A failing program leaves an empty handle, and the batch then draws nothing.
 

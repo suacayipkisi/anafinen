@@ -18,6 +18,7 @@
 #include "aboutPanel.hpp"
 
 #include <directory/getExecutableDirectory.hpp>
+#include <io/core/pathUtf8.hpp>
 
 #include <imgui.h>
 
@@ -36,7 +37,7 @@ namespace anaf::GUI {
         anaf::DIRECTORY::getExecutableDirectory() / name,
         std::filesystem::path("/usr/share/doc/anafinen") / name,
 #ifdef MAIN_DIR
-        std::filesystem::path(MAIN_DIR) / name,
+        anaf::IO::pathFromUtf8(MAIN_DIR) / name,
 #endif
         std::filesystem::path(name),
       };

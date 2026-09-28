@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "iPanel.hpp"
+#include <guiMaterials/iPanel.hpp>
 
 #include <array>
 #include <string>

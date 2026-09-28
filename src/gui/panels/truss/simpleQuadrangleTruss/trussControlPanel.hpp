@@ -44,14 +44,12 @@ namespace anaf::GUI {
     std::uint32_t m_lastFixNode{std::numeric_limits<std::uint32_t>::max()};
   public:
     ~TrussControlPanel() override = default;
-    std::function<void()> onCalculated;
     std::function<void()> onOpenMaterialHandler;
 
     // Back to the default inputs (loads, fixity checkboxes, grid). The model itself lives in
     // the bridge and is cleared with Gui_Calc_Bridge::resetModel().
     void resetState();
     void onImGuiRender() override;
-    
   };
 
 } // namespace anaf::GUI end

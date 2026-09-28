@@ -96,23 +96,4 @@ namespace anaf::IO::detail {
     return out;
   }
 
-  std::size_t base64DecodePrefix(const std::string_view text, const std::size_t byteCount, std::string& out) {
-    // Base64 output is produced in 4-character groups of 3 bytes; a separately encoded
-    // prefix of `byteCount` bytes therefore occupies ceil(byteCount / 3) groups.
-    const std::size_t groupsNeeded = (byteCount + 2) / 3;
-    std::size_t consumed = 0;
-    std::size_t groupChars = 0;
-    std::string encoded;
-    encoded.reserve(groupsNeeded * 4);
-    while (consumed < text.size() && groupChars < groupsNeeded * 4) {
-      const char c = text[consumed++];
-      if (isSpace(c)) continue;
-      encoded.push_back(c);
-      ++groupChars;
-    }
-    if (groupChars < groupsNeeded * 4) throw ParseFailure("truncated base64 header");
-    out = base64Decode(encoded);
-    return consumed;
-  }
-
 } // namespace anaf::IO::detail end

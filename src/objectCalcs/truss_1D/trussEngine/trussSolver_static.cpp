@@ -17,7 +17,6 @@
 
 #include "trussSolver.hpp"
 #include <log/anaf_info.hpp>
-#include <bridge/generalStatus.hpp>
 
 #include <algorithm>
 #include <cmath>
