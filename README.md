@@ -39,6 +39,15 @@ As you can understand I'm making this project for educational purposes
 - Matrix Computations 4th edition
 - Mechanical Vibrations 5th edition Rao
 
+## AI Assistance
+
+Parts of this project were developed with the help of an AI coding assistant (Anthropic's Claude), mainly for:
+- **File handling:** the `anaf_io` library (MSH / VTK / VTU / STEP / IGES / BREP import and export, async I/O)
+- **GUI:** panels such as the model editor, import / export dialogs and status bar
+- **Tests:** the `anaf_io` and truss test suites and the built-in truss library checks
+
+The FEM theory, the solver design and the overall architecture are my own work, based on the books above. All AI-assisted code was reviewed, built and tested before it was committed.
+
 ## Libraries
 - Calculation: Eigen, Spectra, SuiteSparse CHOLMOD
 - Visualisation and GUI: OpenGL, GLAD, GLFW, ImGUI, ImGuizmo, ImPlot, glm, portable-file-dialogs
