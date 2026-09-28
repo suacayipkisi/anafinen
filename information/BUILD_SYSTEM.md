@@ -180,6 +180,10 @@ Without zenity / kdialog on Linux, the application works; only File > Import / E
 ## 9. Common commands
 
 ```bash
+# Build + test with a short summary (warnings, errors, test results); full logs in <dir>/check-*.log
+tools/check.sh            # Linux GCC in build/
+tools/check.sh all        # + Clang (build-clang/) + MinGW cross-build with Wine tests (build-mingw/)
+
 # Configure + build (Linux)
 git submodule update --init --recursive
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release

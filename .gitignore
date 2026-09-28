@@ -15,3 +15,6 @@ CLAUDE.md
 
 .clangd
 *.log
+build-clang/
+build-mingw/
+.claude/settings.local.json
