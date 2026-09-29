@@ -55,6 +55,8 @@ namespace FEM::TRUSS::SOLVER {
     Eigen::VectorXd& displacement
   );
 
+  // remapTable holds, at 3 * node + k, the reduced DOF of the k-th allowed direction of
+  // that node (-1 when unused); Block-CG uses it for its node-block Jacobi preconditioner.
   Result solveBlockCG(
     const Eigen::SparseMatrix<double>& upperMatrix,
     const Eigen::VectorXd& force,

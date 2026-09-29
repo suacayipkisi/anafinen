@@ -87,7 +87,8 @@ namespace FEM::TRUSS{
     Truss_Imported_or_Entered() = default;
 
     // Builds the solver nodes and bars and applies the fixity (a worker-owned copy, as for
-    // Truss_SQPT). Wireframe edges are skipped. Nodes that no bar uses are held fixed, so a
+    // Truss_SQPT). A node of mesh with an inclined support keeps its allowed directions
+    // instead of the axis fixity. Wireframe edges are skipped. Nodes that no bar uses are held fixed, so a
     // stray node does not make the stiffness matrix singular. Returns why the model cannot
     // be solved (no bars, bars without area, unknown material, zero-length bar, ...).
     std::expected<void, std::string> setModel(

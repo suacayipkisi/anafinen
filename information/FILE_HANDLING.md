@@ -9,7 +9,7 @@ This document describes `anaf_io`, the mesh import/export library:
 For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28 (step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-29 (inclined supports solved and exported by the truss adapter; step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -315,7 +315,7 @@ See [GUI.md](GUI.md) section 2.3. In short:
 |---|---|
 | `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar (v3: step kinds, labels, globals, thermal BCs, amplitudes, damping); prescribed displacements, thermal BCs, amplitudes, initial conditions and damping in every format, checked in the file text too; amplitude interpolation; `validate()` of broken references; step kinds, labels and global data in every format; `TimeValue`; `.pvd` series with a late-starting field, progress and cancellation; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation |
 | `vtk_reference_check` | Python + official VTK 9.5: 124 files written by VTK in every legacy / XML variant are read exactly as VTK reads them; VTK reads every variant anaf_io writes. The grids include field data, `TimeValue` and `_Mode_NNN` arrays. Skipped when the Python `vtk` module is missing |
-| `anaf_truss_io_tests` | The GUI data path without the GUI: solve → snapshot → adapter → every format → adapter → identical snapshot (bit-exact); STEP with X-bracing; wireframe preview; conversion off the calling thread; material library loading, user material add / remove / save (temporary files only, never the real user config); materials matched by name after the list changes (all writable formats); material files under a non-ASCII folder |
+| `anaf_truss_io_tests` | The GUI data path without the GUI: solve → snapshot → adapter → every format → adapter → identical snapshot (bit-exact); inclined supports through MSH and the solver; STEP with X-bracing; wireframe preview; conversion off the calling thread; material library loading, user material add / remove / save (temporary files only, never the real user config); materials matched by name after the list changes (all writable formats); material files under a non-ASCII folder |
 
 ## 10. Known issues and limits
 

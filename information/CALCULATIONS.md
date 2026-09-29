@@ -3,7 +3,7 @@
 This document describes the finite element calculation for 3D truss structures built from 1D two-node bar elements. It covers the data types, the math, the solver portfolio, and the energy validator.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-29.
 > Implemented: static displacement under nodal loads + self-weight.
 > Not implemented yet: mass matrix, modal analysis (Spectra), beam/frame elements, CST.
 
@@ -29,7 +29,7 @@ Truss_SQPT (trussSolver_SQPT.cpp)                       progress
          +-- assembleStiffness()       upper-triangle triplets     0.50
          +-- considerWeight()          -rho*A*L*g split to nodes    0.55
          +-- calculateDisplacements()
-         |     remove fixed DOFs -> reduced K, f
+         |     u = T q (allowed directions) -> T^T K T, T^T f
          |     SOLVER::solveSelected()  (referee)                   0.85
          |     scatter back to nodes
          +-- max |displacement| for the log (node locations stay undeformed)
@@ -63,7 +63,8 @@ The element constructor rejects invalid input by throwing `std::invalid_argument
 
 - `setMovable({x, y, z})`: `true` means the DOF is free. It rebuilds the allowed-motion basis from the free axes.
 - `setAllowedMotionDirections()` accepts arbitrary directions, orthonormalizes them with Gram-Schmidt, and derives `m_isMovable` from them. An axis is movable only if it lies in the span of the basis.
-- The solver currently uses only `m_isMovable`, i.e. axis-aligned fixity. The allowed-motion basis (inclined supports) is stored and round-tripped through VTK, but it is not yet applied in the stiffness system.
+- The solver works on the allowed-motion basis, not on `m_isMovable` (section 6). For an inclined support `m_isMovable` is only a summary: an axis counts as movable only when it lies fully in the span, so a roller along (1, 1, 0) reports x and y as fixed.
+- `hasInclinedSupport()` is true when a basis vector is not a global axis. `Truss_Imported_or_Entered::setModel()` keeps such a node's basis instead of the axis fixity map, and `ADAPTER::toMeshModel()` writes it as `NodeConstraint::allowedMotion`.
 
 ## 3. Mesh generation: simple quadrangle prism truss
 
@@ -189,11 +190,15 @@ The modulus used is `Material::getElasticityModulus()` (E).
 
 ## 6. Boundary conditions and the reduced system
 
-1. `isFixed[dof] = !movable[axis]`.
-2. `remapTable[dof]` maps each free DOF to its compact index, and each fixed DOF to `-1`.
-3. Triplets touching a fixed row or column are dropped. The kept triplets are compacted in parallel: per-thread count, prefix sum, parallel scatter.
-4. A reduced `SparseMatrix` (upper triangle only) and a reduced force vector are built.
-5. After the solve, the displacements are scattered back to full size. Fixed DOFs get 0, and every node's `m_displacement` is set.
+Each node owns one reduced DOF `q_k` per allowed-motion direction `b_k` (orthonormal, 0 to 3 of them). The global displacements follow from `u = T q`, with `T(3 n + axis, k) = b_k[axis]`, and the reduced system is `(Tᵀ K T) q = Tᵀ f` (inclined supports, Logan ch. 3). For supports along the global axes `T` only selects columns, so this is the classic fixed-DOF removal with the same matrix.
+
+1. Reduced DOFs are numbered node by node. `nodeDofSlots[3 n + k]` is the reduced DOF of direction k of node n (`-1` when unused); Block-CG uses it for its node blocks.
+2. Every global DOF gets its links `(reduced DOF, b_k[axis])`, one for an axis-aligned node and up to three for an inclined one.
+3. Each stored upper triplet `K(i, j)` and its mirror `K(j, i)` are expanded over the links of i and j; only upper-triangle entries of `Tᵀ K T` are kept. This is done in parallel: per-thread count, prefix sum, parallel scatter.
+4. A reduced `SparseMatrix` (upper triangle only) and `Tᵀ f` are built.
+5. After the solve, `u_n = Σ_k b_k q_k` gives every node's `m_displacement`; fully fixed nodes get 0.
+
+`anaf_truss_io_tests` (`inclinedSupportsMatchTheRotatedModel`) turns a triangle truss about the gravity axis so that its roller and in-plane supports become inclined, sends it through an MSH file, and checks that the displacements turn with the model and the stresses stay the same.
 
 Supports are homogeneous (zero prescribed displacement). Reaction forces are not computed yet.
 
@@ -270,13 +275,12 @@ The result is written to `bridge.m_isValid` and `bridge.m_energyDiff` and logged
 ## 11. Known issues
 
 - Reaction forces are not computed.
-- Allowed-motion directions (inclined supports) are stored but not applied in the solve.
 
 ## 12. Planned (not in code yet)
 
 - Consistent/lumped mass matrix and the generalized eigenproblem `K φ = ω² M φ` with Spectra `SymGEigsShiftSolver` (shift-invert).
 - 2D/3D beam/frame elements (Euler-Bernoulli, Timoshenko) and 2D CST.
-- Imported BCs beyond `fixed` and `force` (prescribed displacements, inclined supports, amplitudes, thermal loads) are read by `anaf_io` but not used by either truss solver.
+- Imported BCs beyond `fixed`, `allowedMotion` and `force` (prescribed displacements, amplitudes, thermal loads) are read by `anaf_io` but not used by either truss solver.
 
 ## 13. Related source files
 

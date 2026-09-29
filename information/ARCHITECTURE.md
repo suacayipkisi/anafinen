@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-29.
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -144,6 +144,7 @@ Update the documents when any of the following happens:
 
 | Issue | Fixed on | Fix |
 |---|---|---|
+| Inclined supports (allowed-motion basis) were stored but not solved: the solver used only the axis flags, so a roller on an inclined rail was locked in every axis its rail is not parallel to, and the basis was lost in `setModel()` and on export | 2026-09-29 | The container solves `(Tᵀ K T) q = Tᵀ f` over the allowed directions; `setModel()` and `toMeshModel()` keep the basis ([CALCULATIONS.md](CALCULATIONS.md) section 6). |
 | Displacement drawn twice (`location += displacement` in `calculate()`) | 2026-09-27 | Node locations stay undeformed. The displacement is stored only in `m_displacement`. |
 | Worker read `fixedDOFsByNode` / `allMaterials` without `dataMutex` | 2026-09-27 | The GUI thread copies both under the lock and moves the copies into the worker. The solver takes the fixity map as an argument. |
 | Default gravity `{0, -9,80665, 0}` | 2026-09-27 | Now `{0.0, -9.80665, 0.0}`. The old value was a latent compile error: Eigen's static assert fires as soon as the default is used. |

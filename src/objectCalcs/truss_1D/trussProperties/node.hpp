@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -97,6 +98,13 @@ namespace FEM::TRUSS {
     const std::array<double, 3>& getDisplacement() const {return m_displacement;}
     const std::array<bool, 3>& getMovable() const {return m_isMovable;}
     const std::vector<std::array<double, 3>>& getAllowedMotionDirections() const {return m_allowedMotionDirections;}
+    // True when an allowed direction is not a global axis, i.e. getMovable() alone does not
+    // describe the support.
+    bool hasInclinedSupport() const {
+      return std::ranges::any_of(m_allowedMotionDirections, [](const std::array<double, 3>& direction) {
+        return std::ranges::count(direction, 0.0) != 2;
+      });
+    }
   };
 
 } // namespace FEM::TRUSS end

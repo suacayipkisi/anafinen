@@ -107,6 +107,11 @@ namespace FEM::TRUSS {
         ++isolated;
         continue;
       }
+      if (const auto& source = mesh.trussNodes[id]; source.hasInclinedSupport()) {
+        node.setAllowedMotionDirections(source.getAllowedMotionDirections());
+        ++fixedNodes;
+        continue;
+      }
       const auto it = fixedDOFsByNode.find(id);
       if (it != fixedDOFsByNode.end() && (it->second[0] || it->second[1] || it->second[2])) {
         node.setMovable({!it->second[0], !it->second[1], !it->second[2]});

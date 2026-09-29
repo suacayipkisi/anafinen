@@ -42,6 +42,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <numbers>
 #include <set>
 #include <stop_token>
 #include <string>
@@ -308,6 +309,87 @@ TEST(selfBuiltTrussMatchesTheHandSolution) {
   const double expectedV = -load * std::sqrt(2.0) / (2.0 * area * modulus * 0.5);
   CHECK(std::abs(result.trussNodes[2].getDisplacement()[1] - expectedV) < 1e-2 * std::abs(expectedV));
   CHECK(result.trussNodes[3].getDisplacement() == (std::array<double, 3>{0.0, 0.0, 0.0}));
+}
+
+TEST(inclinedSupportsMatchTheRotatedModel) {
+  // Triangle truss in the xy plane: pin at node 0, roller along x at node 1, node 2 moves in
+  // the plane. Turning the whole model about the gravity axis y leaves self weight unchanged
+  // but makes the roller and the plane inclined supports; the displacements must turn with it.
+  auto& bridge = BRIDGE::buildBridge();
+  if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
+  const double angle = 30.0 * std::numbers::pi / 180.0;
+  const auto rotate = [c = std::cos(angle), s = std::sin(angle)](const std::array<double, 3>& v) {
+    return std::array<double, 3>{c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]};
+  };
+  const std::vector<std::array<double, 3>> positions{{0.0, 0.0, 0.0}, {2.0, 0.0, 0.0}, {1.0, 1.0, 0.0}};
+  const std::array<double, 3> load{3.0e4, -1.0e5, 0.0};
+  const double area = 1e-4;
+
+  BRIDGE::MeshData axisAligned;
+  axisAligned.trussElements = {{0u, 1u, 0.0f, false, 0u, area, false}, {0u, 2u, 0.0f, false, 0u, area, false},
+                               {1u, 2u, 0.0f, false, 0u, area, false}};
+  BRIDGE::MeshData inclined = axisAligned;
+  for (std::uint32_t i = 0; i < positions.size(); ++i) {
+    const auto& p = positions[i];
+    axisAligned.trussNodes.emplace_back(i, p[0], p[1], p[2]);
+    const auto r = rotate(p);
+    inclined.trussNodes.emplace_back(i, r[0], r[1], r[2]);
+  }
+  axisAligned.appliedForces = {{2u, load}};
+  inclined.appliedForces = {{2u, rotate(load)}};
+  const BRIDGE::FixedDOFMap axisFixity{{0u, {true, true, true}}, {1u, {false, true, true}}, {2u, {false, false, true}}};
+  for (const auto& [id, fixed] : axisFixity) axisAligned.trussNodes[id].setMovable({!fixed[0], !fixed[1], !fixed[2]});
+  inclined.trussNodes[0].setMovable({false, false, false});
+  inclined.trussNodes[1].setAllowedMotionDirections({rotate({1.0, 0.0, 0.0})});
+  inclined.trussNodes[2].setAllowedMotionDirections({rotate({1.0, 0.0, 0.0}), {0.0, 1.0, 0.0}});
+  CHECK(inclined.trussNodes[1].hasInclinedSupport());
+  CHECK(!axisAligned.trussNodes[1].hasInclinedSupport());
+  BRIDGE::FixedDOFMap inclinedFixity;
+  for (const auto& node : inclined.trussNodes) {
+    const auto& movable = node.getMovable();
+    if (!(movable[0] && movable[1] && movable[2])) inclinedFixity[node.getNodeID()] = {!movable[0], !movable[1], !movable[2]};
+  }
+
+  // The inclined model goes through a file, as File > Export / Import delivers it.
+  const auto path = workDir() / "inclined.msh";
+  REQUIRE(IO::writeMesh(path, FEM::TRUSS::ADAPTER::toMeshModel(inclined, inclinedFixity, bridge.allMaterials), {}).has_value());
+  const auto read = IO::readMesh(path);
+  REQUIRE(read.has_value());
+  const auto imported = FEM::TRUSS::ADAPTER::toMeshData(*read, bridge.allMaterials);
+  REQUIRE(imported.mesh->trussNodes.size() == 3);
+  CHECK(imported.mesh->trussNodes[1].hasInclinedSupport());
+  CHECK(imported.mesh->trussNodes[2].hasInclinedSupport());
+
+  const auto reference = solveImported(axisAligned, axisFixity);
+  REQUIRE(reference.has_value());
+  const auto solved = solveImported(*imported.mesh, imported.fixity);
+  if (!solved) std::printf("      %s\n", solved.error().c_str());
+  REQUIRE(solved.has_value());
+  CHECK(bridge.m_isValid.load());
+
+  double maxDisp = 0.0, dispError = 0.0;
+  for (std::size_t i = 0; i < positions.size(); ++i) {
+    const auto expected = rotate((*reference)->trussNodes[i].getDisplacement());
+    const auto& actual = (*solved)->trussNodes[i].getDisplacement();
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+      maxDisp = std::max(maxDisp, std::abs(expected[axis]));
+      dispError = std::max(dispError, std::abs(actual[axis] - expected[axis]));
+    }
+  }
+  CHECK(maxDisp > 0.0);
+  CHECK(dispError <= 1e-9 * maxDisp);
+  // Node 1 moves only along its inclined rail.
+  const auto& railMotion = (*solved)->trussNodes[1].getDisplacement();
+  const auto rail = rotate({1.0, 0.0, 0.0});
+  const double along = railMotion[0] * rail[0] + railMotion[1] * rail[1] + railMotion[2] * rail[2];
+  CHECK(std::abs(along) > 0.0);
+  for (std::size_t axis = 0; axis < 3; ++axis) CHECK(std::abs(railMotion[axis] - along * rail[axis]) <= 1e-12 * std::abs(along));
+
+  for (std::size_t e = 0; e < 3; ++e) {
+    const double expected = (*reference)->trussElements[e].stress;
+    CHECK(expected != 0.0);
+    CHECK(std::abs(static_cast<double>((*solved)->trussElements[e].stress) - expected) <= 1e-5 * std::abs(expected));
+  }
 }
 
 TEST(importedTrussRejectsUnsolvableModels) {

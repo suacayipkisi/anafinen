@@ -3,7 +3,7 @@
 This document describes how mesh data for the Simple Quadrangle Prism Truss is created, stored, passed through the solver, and finally displayed in the viewport.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-29.
 > Part of the documentation set indexed in [ARCHITECTURE.md](ARCHITECTURE.md). Module details: [CALCULATIONS.md](CALCULATIONS.md), [BRIDGE.md](BRIDGE.md), [GUI.md](GUI.md).
 
 ## 1. Overall flow
@@ -74,7 +74,7 @@ The following diagram uses a terminal-style layout to show the main data path:
             v
          +------------------------+
          | solveDisplacements()   |
-         | remove fixed DOFs      |
+         | reduce to allowed DOFs |
          | solve sparse system    |
          +------------+-----------+
             |
@@ -121,8 +121,8 @@ The following diagram uses a terminal-style layout to show the main data path:
 | Boundary conditions | `Gui_Calc_Bridge` | `fixedDOFsByNode` | Stores `nodeId -> {fixedX, fixedY, fixedZ}` and becomes `Node::setMovable` state before solving. |
 | Applied loads | Panel and snapshot | `m_appliedForces`, `MeshData::appliedForces` | Stores user loads by node and later feeds the global DOF vector. |
 | Global force vector | `Truss_SQPT` and container span | `m_forceVec` | Uses `index = 3 * nodeId + axis` for X/Y/Z DOFs; element weight is added here. |
-| Global stiffness data | `Truss_1D_Container` | `m_globalStiffnessMatrix` | Created as 36 Eigen triplets per element. |
-| Reduced system | Local variables in `calculateDisplacements()` | `reducedStiffnessMatrix`, `reducedForceVec` | Solver system after fixed DOFs are removed. |
+| Global stiffness data | `Truss_1D_Container` | `m_globalStiffnessMatrix` | Created as 21 upper-triangle Eigen triplets per element. |
+| Reduced system | Local variables in `calculateDisplacements()` | `reducedStiffnessMatrix`, `reducedForceVec` | Solver system over the allowed motion directions (`Tᵀ K T`, `Tᵀ f`). |
 | Displacement results | Container and nodes | `m_resultDisplacements`, `Node::m_displacement` | Written to nodes after solving and then copied into the GUI snapshot. |
 | Element results | Element objects | elongation, axial force, stress | Used by `calculateElementForcesAndStress()` and viewport stress coloring. |
 | Validation results | Bridge and container | `m_isValid`, `m_energyDiff`, energy/work fields | Compares internal elastic energy with external work. |
@@ -138,7 +138,7 @@ The following diagram uses a terminal-style layout to show the main data path:
 6. `setContainer()` binds the container to the `m_truss` vectors through `std::span`. The container does not own the nodes or elements.
 7. `assembleStiffness()` creates global stiffness-matrix triplets from the elements.
 8. `considerWeight()` adds element weights to the global force vector.
-9. `calculateDisplacements()` removes fixed DOFs, solves the sparse system, and writes displacements to the nodes.
+9. `calculateDisplacements()` reduces the system to the allowed motion directions of each node (fixed DOFs drop out, inclined supports are rotated in), solves it, and writes displacements to the nodes.
 10. Node locations stay undeformed; the displacement lives only in `Node::m_displacement`. Element elongation, axial force, and stress are calculated.
 11. `runValidator()` performs the energy check and writes status values to the bridge.
 12. Nodes and elements are copied into a new `MeshData` snapshot and published through `bridge.activeMesh`.

@@ -117,19 +117,54 @@ namespace FEM::TRUSS {
     const std::uint32_t totalDofs = nodeCount * 3;
     m_resultDisplacements.resize(nodeCount);
 
-    std::vector<bool> isFixed(totalDofs, false);
+    // Every node owns one reduced DOF per allowed motion direction b_k (orthonormal). With
+    // u = T q, T(3 n + axis, k) = b_k[axis], the reduced system is (T^T K T) q = T^T f.
+    // For supports along the global axes T only selects columns, which is the classic
+    // fixed-DOF removal; inclined supports (Logan, 5th ed., ch. 3) need the full product.
+    struct DofLink {
+      std::int32_t reduced;
+      double factor;
+    };
+    std::vector<std::array<DofLink, 3>> links(totalDofs);
+    std::vector<std::uint8_t> linkCount(totalDofs, 0);
+    // Reduced DOF of direction k of node n at 3 n + k, -1 when unused (Block-CG node blocks).
+    std::vector<std::int32_t> nodeDofSlots(totalDofs, -1);
+    std::int32_t activeDofCount = 0;
+    std::uint32_t inclinedNodes = 0;
     for (std::uint32_t node = 0; node < nodeCount; ++node) {
-      const auto& movable = m_allNodes[node].getMovable();
-      for (std::uint32_t axis = 0; axis < 3; ++axis) {
-        isFixed[3 * node + axis] = !movable[axis];
+      const auto& directions = m_allNodes[node].getAllowedMotionDirections();
+      if (m_allNodes[node].hasInclinedSupport()) ++inclinedNodes;
+      for (std::size_t k = 0; k < directions.size(); ++k) {
+        const std::int32_t reduced = activeDofCount++;
+        nodeDofSlots[3 * node + k] = reduced;
+        for (std::uint32_t axis = 0; axis < 3; ++axis) {
+          if (directions[k][axis] == 0.0) continue;
+          const std::uint32_t dof = 3 * node + axis;
+          links[dof][linkCount[dof]++] = {reduced, directions[k][axis]};
+        }
       }
     }
+    if (inclinedNodes > 0) anaf::LOG::info("Inclined supports on {} nodes", inclinedNodes);
 
-    std::vector<std::int32_t> remapTable(totalDofs, -1);
-    std::uint32_t activeDofCount = 0;
-    for (std::uint32_t dof = 0; dof < totalDofs; ++dof) {
-      if (!isFixed[dof]) remapTable[dof] = static_cast<std::int32_t>(activeDofCount++);
-    }
+    // Calls emit(p, q, value) for every upper-triangle entry of T^T K T that the stored upper
+    // entry K(i, j) and its mirror K(j, i) produce.
+    const auto forEachReduced = [&](const Eigen::Triplet<double>& triplet, auto&& emit) {
+      const auto visit = [&](const std::uint32_t row, const std::uint32_t col) {
+        for (std::uint8_t a = 0; a < linkCount[row]; ++a) {
+          for (std::uint8_t b = 0; b < linkCount[col]; ++b) {
+            const auto& rowLink = links[row][a];
+            const auto& colLink = links[col][b];
+            if (rowLink.reduced <= colLink.reduced) {
+              emit(rowLink.reduced, colLink.reduced, rowLink.factor * colLink.factor * triplet.value());
+            }
+          }
+        }
+      };
+      const auto row = static_cast<std::uint32_t>(triplet.row());
+      const auto col = static_cast<std::uint32_t>(triplet.col());
+      visit(row, col);
+      if (row != col) visit(col, row);
+    };
 
     const int threadCount = omp_get_max_threads();
     std::vector<std::size_t> validCounts(threadCount, 0);
@@ -138,8 +173,9 @@ namespace FEM::TRUSS {
       const int thread = omp_get_thread_num();
       #pragma omp for schedule(static)
       for (long long index = 0; index < static_cast<long long>(m_globalStiffnessMatrix.size()); ++index) {
-        const auto& triplet = m_globalStiffnessMatrix[index];
-        if (!isFixed[triplet.row()] && !isFixed[triplet.col()]) ++validCounts[thread];
+        forEachReduced(m_globalStiffnessMatrix[index], [&](std::int32_t, std::int32_t, double) {
+          ++validCounts[thread];
+        });
       }
     }
 
@@ -155,12 +191,9 @@ namespace FEM::TRUSS {
       std::size_t output = offsets[thread];
       #pragma omp for schedule(static)
       for (long long index = 0; index < static_cast<long long>(m_globalStiffnessMatrix.size()); ++index) {
-        const auto& triplet = m_globalStiffnessMatrix[index];
-        if (!isFixed[triplet.row()] && !isFixed[triplet.col()]) {
-          reducedTriplets[output++] = {
-            remapTable[triplet.row()], remapTable[triplet.col()], triplet.value()
-          };
-        }
+        forEachReduced(m_globalStiffnessMatrix[index], [&](const std::int32_t row, const std::int32_t col, const double value) {
+          reducedTriplets[output++] = {row, col, value};
+        });
       }
     }
 
@@ -175,8 +208,13 @@ namespace FEM::TRUSS {
 
     Eigen::VectorXd reducedForce(activeDofCount);
     #pragma omp parallel for schedule(static)
-    for (long long dof = 0; dof < totalDofs; ++dof) {
-      if (!isFixed[dof]) reducedForce[remapTable[dof]] = m_forceVec[dof];
+    for (long long node = 0; node < nodeCount; ++node) {
+      const auto& directions = m_allNodes[node].getAllowedMotionDirections();
+      for (std::size_t k = 0; k < directions.size(); ++k) {
+        reducedForce[nodeDofSlots[3 * node + k]] = directions[k][0] * m_forceVec[3 * node]
+          + directions[k][1] * m_forceVec[3 * node + 1]
+          + directions[k][2] * m_forceVec[3 * node + 2];
+      }
     }
 
     Eigen::VectorXd reducedDisplacements(activeDofCount);
@@ -184,7 +222,7 @@ namespace FEM::TRUSS {
       reducedStiffnessMatrix,
       reducedForce,
       nodeCount,
-      remapTable,
+      nodeDofSlots,
       stopToken,
       reducedDisplacements
     );
@@ -199,19 +237,14 @@ namespace FEM::TRUSS {
       return;
     }
 
-    Eigen::VectorXd fullDisplacements = Eigen::VectorXd::Zero(totalDofs);
-    #pragma omp parallel for schedule(static)
-    for (long long dof = 0; dof < totalDofs; ++dof) {
-      if (!isFixed[dof]) fullDisplacements[dof] = reducedDisplacements[remapTable[dof]];
-    }
-
     #pragma omp parallel for schedule(static)
     for (long long node = 0; node < nodeCount; ++node) {
-      const std::array<double, 3> displacement{
-        fullDisplacements[3 * node],
-        fullDisplacements[3 * node + 1],
-        fullDisplacements[3 * node + 2]
-      };
+      const auto& directions = m_allNodes[node].getAllowedMotionDirections();
+      std::array<double, 3> displacement{};
+      for (std::size_t k = 0; k < directions.size(); ++k) {
+        const double amount = reducedDisplacements[nodeDofSlots[3 * node + k]];
+        for (std::size_t axis = 0; axis < 3; ++axis) displacement[axis] += directions[k][axis] * amount;
+      }
       m_resultDisplacements[node] = displacement;
       m_allNodes[node].setDisplacements(displacement);
     }
