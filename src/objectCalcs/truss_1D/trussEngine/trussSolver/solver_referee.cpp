@@ -32,11 +32,11 @@
 
 namespace FEM::TRUSS::SOLVER {
 
-  const char* toString(const Kind kind) noexcept {
-    switch (kind) {
-      case Kind::Cholmod: return "CHOLMOD sparse Cholesky";
-      case Kind::SimplicialLDLT: return "Eigen SimplicialLDLT";
-      case Kind::BlockCG: return "OpenMP Block-CG";
+  const char* toString(const Type type) noexcept {
+    switch (type) {
+      case Type::Cholmod: return "CHOLMOD sparse Cholesky";
+      case Type::SimplicialLDLT: return "Eigen SimplicialLDLT";
+      case Type::BlockCG: return "OpenMP Block-CG";
     }
     return "Unknown";
   }
@@ -145,7 +145,7 @@ namespace FEM::TRUSS::SOLVER {
 
     anaf::LOG::info(
       "Solver referee result: {}, available {}, converged {}, residual {}, iterations {}, elapsed {} seconds{}{}",
-      toString(result.kind), result.available, result.converged,
+      toString(result.type), result.available, result.converged,
       result.relativeResidual, result.iterations, result.elapsedSeconds,
       result.message.empty() ? "" : ", reason: ", result.message
     );

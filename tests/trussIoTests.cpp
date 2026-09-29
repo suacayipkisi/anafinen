@@ -497,7 +497,7 @@ TEST(builtInTrussLibraryMatchesTheGenerator) {
   const auto entries = FEM::TRUSS::LIBRARY::writeLibrary(generated);
   if (!entries) std::printf("      %s\n", entries.error().c_str());
   REQUIRE(entries.has_value());
-  CHECK(entries->size() >= 10 && entries->size() <= 20);
+  CHECK(entries->size() >= 10 && entries->size() <= 30);
 
   const auto indexFile = libraryDir() / fs::path(FEM::TRUSS::LIBRARY::kIndexFile);
   CHECK_MSG(readBytes(indexFile) == readBytes(generated / fs::path(FEM::TRUSS::LIBRARY::kIndexFile)), "index.json is stale");
@@ -541,7 +541,7 @@ TEST(builtInTrussLibraryMatchesTheGenerator) {
   CHECK(index->size() == entries->size());
   std::set<std::string> categories;
   for (const auto& entry : *index) categories.insert(entry.category);
-  CHECK(categories == (std::set<std::string>{"Bridge", "Roof", "Stadium", "Tower & Platform"}));
+  CHECK(categories == (std::set<std::string>{"Aircraft", "Bridge", "Roof", "Stadium", "Tower & Platform"}));
 }
 
 TEST(builtInTrussesAreStableAndSolve) {
@@ -683,13 +683,14 @@ TEST(materialsAreMatchedByNameWhenTheListChanges) {
   // Export time: built-ins + one user material used by every other bar.
   std::vector<MATERIAL::Material> atExport(builtins.begin(), builtins.end());
   atExport.push_back(renamedCopy(builtins[0], "Copper C110 (annealed)"));
+  const auto userIndex = static_cast<std::uint32_t>(atExport.size() - 1);
   auto mesh = std::make_shared<BRIDGE::MeshData>(*snapshot);
-  for (std::size_t e = 0; e < mesh->trussElements.size(); e += 2) mesh->trussElements[e].materialID = 2;
+  for (std::size_t e = 0; e < mesh->trussElements.size(); e += 2) mesh->trussElements[e].materialID = userIndex;
 
   // Import time: a new built-in was inserted before aluminum, the user material name differs in case.
   const std::vector<MATERIAL::Material> atImport{
     builtins[0], renamedCopy(builtins[0], "New Built-in"), builtins[1], renamedCopy(builtins[0], "copper c110 (ANNEALED)")};
-  const std::map<std::uint32_t, std::uint32_t> expectedIndex{{0u, 0u}, {1u, 2u}, {2u, 3u}};
+  const std::map<std::uint32_t, std::uint32_t> expectedIndex{{0u, 0u}, {1u, 2u}, {userIndex, 3u}};
 
   const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*mesh, fixity, atExport);
   for (const char* file : {"names.msh", "names22.msh", "names.vtk", "names.vtu", "names.step"}) {

@@ -115,6 +115,30 @@
       "name": "Crane jib (triangular lattice)",
       "category": "Tower & Platform",
       "description": "24 m cantilever jib with a triangular 1.6 m x 2.2 m section, 8 bays, laced on all three faces, fixed (pinned chords) at the mast. 30 kN hook load at the tip. Steel, chords 60 cm^2, lacing 12 cm^2."
+    },
+    {
+      "id": "aircraft_tube_fuselage",
+      "name": "Welded steel-tube fuselage",
+      "category": "Aircraft",
+      "description": "Light two-seat fuselage (Piper Cub style), 5.9 m from firewall to tail post, 0.75 x 1.15 m cabin tapering to the tail, Warren-braced sides, top and bottom. Held at the four wing spar fittings on the upper longerons. 3.8 g pull-up: engine 4.1 kN, occupants 6.7 kN, baggage, 1.8 kN tail load. 4130 tube, longerons 0.94 cm^2 (1\" x 0.049\"), lacing 0.72 cm^2 (3/4\" x 0.049\")."
+    },
+    {
+      "id": "aircraft_engine_mount",
+      "name": "Engine mount (welded tube)",
+      "category": "Aircraft",
+      "description": "Four-point welded 4130 engine mount, 0.6 x 0.6 m firewall pattern to a 0.4 x 0.3 m engine bed 0.5 m forward: straight legs and V tubes, braced bed ring. Firewall fittings pinned. The engine CG sits 0.35 m ahead of the bed on four stiff links (crankcase). 110 kg at 3.8 g (4.1 kN) plus 2.2 kN thrust. Tubes 0.72 cm^2 (3/4\" x 0.049\")."
+    },
+    {
+      "id": "aircraft_strut_braced_wing",
+      "name": "Strut-braced high wing",
+      "category": "Aircraft",
+      "description": "Half wing of a light high-wing aircraft, 5 m semi-span, 1.6 m chord, truss spars 19 cm (front) and 13 cm (rear) deep, ribs every 25 cm with drag / anti-drag bracing in both skins. Root fittings pinned; a V lift strut runs from a pinned fuselage fitting to both spars at 3 m. 3.8 g: 10 kN lift in a Schrenk distribution, 70 / 30 % front / rear spar. Aluminum 6061-T6, spar caps 4 cm^2, webs and ribs 1.2 cm^2, struts 3 cm^2."
+    },
+    {
+      "id": "aircraft_biplane_wing_cell",
+      "name": "Biplane wing cell (two-bay)",
+      "category": "Aircraft",
+      "description": "Half wing cell of a WWI-era two-bay biplane: 4.6 m, 1.5 m chord and gap, 0.3 m stagger. Interplane struts and flying wires make a Pratt-like truss in the front and rear spar planes; drag wires cross in both wings. Spar roots pinned at the cabane and fuselage. 660 kg at 4.5 g: 14.6 kN lift, 55 / 45 % upper / lower wing. Steel: spars 6 cm^2, struts and ribs 4 cm^2, wires 0.8 cm^2."
     }
   ]
 }

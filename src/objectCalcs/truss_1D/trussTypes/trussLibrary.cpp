@@ -704,6 +704,216 @@ namespace FEM::TRUSS::LIBRARY {
               toModel(std::move(d), kSteel, "Crane jib")};
     }
 
+    // ---- aircraft --------------------------------------------------------------------------------
+
+    // Face k of a box girder joins corner k and corner k + 1 of every station. Rising: corner k
+    // of station s to corner k + 1 of station s + 1; Falling: the other diagonal; Warren*:
+    // alternating, starting with that direction; Cross: both.
+    enum class Brace { Rising, Falling, WarrenRising, WarrenFalling, Cross };
+
+    struct BoxGirder {
+      std::vector<std::array<Point, 4>> stations;
+      std::array<Brace, 4> faces{};
+      double chordArea{};  // cm^2, corner to corner along the girder
+      double frameArea{};  // cm^2, station frames (bulkheads, ribs, interplane struts)
+      double braceArea{};  // cm^2, face diagonals (lacing, wires)
+      bool rootFrame{true}; // false: station 0 is fully supported, its frame carries nothing
+    };
+
+    // Stations of four corners, chords along the corners, a triangulated frame at every station
+    // and one diagonal (or two) in every face of every bay: each bay is a closed triangulated
+    // polyhedron, so the girder is a stable space truss. Returns the node ids per station.
+    std::vector<std::array<std::uint32_t, 4>> boxGirder(Draft& d, const BoxGirder& g) {
+      std::vector<std::array<std::uint32_t, 4>> id;
+      for (const auto& corners : g.stations) {
+        std::array<std::uint32_t, 4> station{};
+        for (std::size_t c = 0; c < 4; ++c) station[c] = d.node(corners[c][0], corners[c][1], corners[c][2]);
+        id.push_back(station);
+      }
+      for (std::size_t s = 0; s < id.size(); ++s) {
+        if (s > 0 || g.rootFrame) {
+          for (std::size_t c = 0; c < 4; ++c) d.bar(id[s][c], id[s][(c + 1) % 4], g.frameArea);
+          d.bar(id[s][0], id[s][2], g.frameArea);
+        }
+        if (s + 1 == id.size()) continue;
+        for (std::size_t c = 0; c < 4; ++c) {
+          const std::size_t next = (c + 1) % 4;
+          d.bar(id[s][c], id[s + 1][c], g.chordArea);
+          const bool even = s % 2 == 0;
+          const auto brace = g.faces[c];
+          const bool rising = brace == Brace::Rising || brace == Brace::Cross || (brace == Brace::WarrenRising && even)
+                              || (brace == Brace::WarrenFalling && !even);
+          const bool falling = brace == Brace::Falling || brace == Brace::Cross || (brace == Brace::WarrenFalling && even)
+                               || (brace == Brace::WarrenRising && !even);
+          if (rising) d.bar(id[s][c], id[s + 1][next], g.braceArea);
+          if (falling) d.bar(id[s][next], id[s + 1][c], g.braceArea);
+        }
+      }
+      return id;
+    }
+
+    LibraryTruss tubeFuselage() {
+      // x aft from the firewall, y up, z to the right. Corners: 0 lower left, 1 upper left,
+      // 2 upper right, 3 lower right. Constant cabin section up to x = 1.8 m, then the bottom
+      // longerons rise and the top longerons drop towards the tail post.
+      constexpr std::array<double, 10> xs{0.0, 0.6, 1.2, 1.8, 2.4, 3.1, 3.8, 4.5, 5.2, 5.9};
+      BoxGirder g;
+      for (const double x : xs) {
+        const double t = std::max(0.0, (x - 1.8) / (5.9 - 1.8));
+        const double half = 0.375 + (0.075 - 0.375) * t;
+        const double bottom = 0.55 * t, top = 1.15 - 0.2 * t;
+        g.stations.push_back({Point{x, bottom, -half}, Point{x, top, -half}, Point{x, top, half}, Point{x, bottom, half}});
+      }
+      g.faces = {Brace::WarrenRising, Brace::WarrenRising, Brace::WarrenFalling, Brace::WarrenRising}; // sides mirrored
+      g.chordArea = 0.94; // 1" x 0.049" tube
+      g.frameArea = 0.72; // 3/4" x 0.049"
+      g.braceArea = 0.72;
+      Draft d;
+      const auto st = boxGirder(d, g);
+      for (const std::size_t s : {1u, 2u}) { // wing spar fittings on the upper longerons
+        d.pin(st[s][1]);
+        d.pin(st[s][2]);
+      }
+      // 3.8 g pull-up (normal category limit): inertia loads act downwards.
+      for (const auto n : st[0]) d.load(n, {0.0, -1.03 * kKN, 0.0});   // engine + mount, 110 kg
+      for (const std::size_t s : {1u, 2u, 3u}) {                        // two occupants + seats, 180 kg
+        d.load(st[s][0], {0.0, -1.12 * kKN, 0.0});
+        d.load(st[s][3], {0.0, -1.12 * kKN, 0.0});
+      }
+      d.load(st[4][0], {0.0, -0.37 * kKN, 0.0}); // baggage, 20 kg
+      d.load(st[4][3], {0.0, -0.37 * kKN, 0.0});
+      d.load(st[9][1], {0.0, -0.9 * kKN, 0.0});  // tail group weight + balancing tail download
+      d.load(st[9][2], {0.0, -0.9 * kKN, 0.0});
+      return {{"aircraft_tube_fuselage", "Welded steel-tube fuselage", "Aircraft",
+               "Light two-seat fuselage (Piper Cub style), 5.9 m from firewall to tail post, 0.75 x 1.15 m "
+               "cabin tapering to the tail, Warren-braced sides, top and bottom. Held at the four wing spar "
+               "fittings on the upper longerons. 3.8 g pull-up: engine 4.1 kN, occupants 6.7 kN, baggage, 1.8 kN "
+               "tail load. 4130 tube, longerons 0.94 cm^2 (1\" x 0.049\"), lacing 0.72 cm^2 (3/4\" x 0.049\")."},
+              toModel(std::move(d), kSteel, "Steel tube fuselage")};
+    }
+
+    LibraryTruss engineMount() {
+      // Firewall at x = 0 (pinned), engine bed ring 0.5 m forward (x < 0), engine CG 0.35 m ahead
+      // of the bed, tied to the four bed points by stiff links standing in for the crankcase.
+      Draft d;
+      std::array<std::uint32_t, 4> wall{}, bed{};
+      constexpr std::array<std::array<double, 2>, 4> wallYZ{{{0.3, -0.3}, {0.9, -0.3}, {0.9, 0.3}, {0.3, 0.3}}};
+      constexpr std::array<std::array<double, 2>, 4> bedYZ{{{0.45, -0.2}, {0.75, -0.2}, {0.75, 0.2}, {0.45, 0.2}}};
+      for (std::size_t c = 0; c < 4; ++c) {
+        wall[c] = d.node(0.0, wallYZ[c][0], wallYZ[c][1]);
+        bed[c] = d.node(-0.5, bedYZ[c][0], bedYZ[c][1]);
+        d.pin(wall[c]);
+      }
+      constexpr double tube = 0.72; // 3/4" x 0.049"
+      for (std::size_t c = 0; c < 4; ++c) {
+        const std::size_t next = (c + 1) % 4;
+        d.bar(wall[c], bed[c], tube);    // straight legs
+        d.bar(wall[next], bed[c], tube); // V with the neighbouring leg
+        d.bar(bed[c], bed[next], tube);  // bed ring
+      }
+      d.bar(bed[0], bed[2], tube);
+      const auto cg = d.node(-0.85, 0.6, 0.0);
+      for (const auto n : bed) d.bar(cg, n, 20.0);
+      // 110 kg engine at 3.8 g plus 2.2 kN take-off thrust, forward along -x.
+      d.load(cg, {-2.2 * kKN, -4.1 * kKN, 0.0});
+      return {{"aircraft_engine_mount", "Engine mount (welded tube)", "Aircraft",
+               "Four-point welded 4130 engine mount, 0.6 x 0.6 m firewall pattern to a 0.4 x 0.3 m engine bed "
+               "0.5 m forward: straight legs and V tubes, braced bed ring. Firewall fittings pinned. The engine "
+               "CG sits 0.35 m ahead of the bed on four stiff links (crankcase). 110 kg at 3.8 g (4.1 kN) plus "
+               "2.2 kN thrust. Tubes 0.72 cm^2 (3/4\" x 0.049\")."},
+              toModel(std::move(d), kSteel, "Engine mount")};
+    }
+
+    LibraryTruss strutBracedWing() {
+      // Half wing: x chordwise (aft), y up, z spanwise from the fuselage side. Corners: 0 front
+      // spar bottom, 1 front spar top, 2 rear spar top, 3 rear spar bottom. Truss spars (faces 0
+      // and 2), drag trusses in the upper and lower surfaces (faces 1 and 3), a rib at every station.
+      constexpr double semiSpan = 5.0;
+      constexpr std::uint32_t bays = 20;
+      BoxGirder g;
+      for (std::uint32_t s = 0; s <= bays; ++s) {
+        const double z = semiSpan * s / bays;
+        g.stations.push_back({Point{0.4, 0.0, z}, Point{0.4, 0.19, z}, Point{1.2, 0.15, z}, Point{1.2, 0.02, z}});
+      }
+      g.faces = {Brace::WarrenRising, Brace::Cross, Brace::WarrenFalling, Brace::Cross};
+      g.chordArea = 4.0;
+      g.frameArea = 1.2;
+      g.braceArea = 1.2;
+      g.rootFrame = false;
+      Draft d;
+      const auto st = boxGirder(d, g);
+      for (const auto n : st[0]) d.pin(n); // spar root fittings
+
+      // Lift strut pair (V strut) from one fuselage fitting to both spars at 60 % semi-span.
+      constexpr std::uint32_t strutStation = 12;
+      const auto fitting = d.node(0.8, -1.1, 0.0);
+      d.pin(fitting);
+      d.bar(fitting, st[strutStation][0], 3.0);
+      d.bar(fitting, st[strutStation][3], 3.0);
+
+      // Schrenk lift distribution (mean of planform and ellipse), 10 kN per half wing on the
+      // ribs, 70 % on the front spar and 30 % on the rear spar.
+      constexpr double lift = 10.0;
+      std::vector<double> weight(bays + 1, 0.0);
+      double sum = 0.0;
+      for (std::uint32_t s = 1; s <= bays; ++s) {
+        const double eta = static_cast<double>(s) / bays;
+        weight[s] = (s == bays ? 0.5 : 1.0) * 0.5 * (1.0 + 4.0 / kPi * std::sqrt(1.0 - eta * eta));
+        sum += weight[s];
+      }
+      for (std::uint32_t s = 1; s <= bays; ++s) {
+        const double station = lift * kKN * weight[s] / sum;
+        d.load(st[s][1], {0.0, 0.7 * station, 0.0});
+        d.load(st[s][2], {0.0, 0.3 * station, 0.0});
+      }
+      return {{"aircraft_strut_braced_wing", "Strut-braced high wing", "Aircraft",
+               "Half wing of a light high-wing aircraft, 5 m semi-span, 1.6 m chord, truss spars 19 cm (front) "
+               "and 13 cm (rear) deep, ribs every 25 cm with drag / anti-drag bracing in both skins. Root "
+               "fittings pinned; a V lift strut runs from a pinned fuselage fitting to both spars at 3 m. 3.8 g: "
+               "10 kN lift in a Schrenk distribution, 70 / 30 % front / rear spar. Aluminum 6061-T6, spar caps "
+               "4 cm^2, webs and ribs 1.2 cm^2, struts 3 cm^2."},
+              toModel(std::move(d), kAluminum, "Strut-braced wing")};
+    }
+
+    LibraryTruss biplaneWingCell() {
+      // Two-bay biplane cell, half span: x chordwise (aft), y up, z spanwise. Corners: 0 lower
+      // front spar, 1 upper front spar, 2 upper rear spar, 3 lower rear spar. The front and rear
+      // planes are the classic wire-braced truss: interplane struts (frames) and flying wires
+      // running from the lower wing up and outboard; landing wires are slack under positive g
+      // and left out. Drag and anti-drag wires cross in both wing planes.
+      constexpr std::array<double, 3> zs{0.0, 2.3, 4.6};
+      constexpr double chord = 1.5, gap = 1.5, stagger = 0.3;
+      BoxGirder g;
+      for (const double z : zs) {
+        g.stations.push_back({Point{0.3 + stagger, 0.0, z}, Point{0.3, gap, z}, Point{0.3 + 0.6 * chord, gap, z},
+                              Point{0.3 + stagger + 0.6 * chord, 0.0, z}});
+      }
+      g.faces = {Brace::Rising, Brace::Cross, Brace::Falling, Brace::Cross};
+      g.chordArea = 6.0; // spars
+      g.frameArea = 4.0; // interplane struts and compression ribs
+      g.braceArea = 0.8; // doubled streamline wires
+      g.rootFrame = false;
+      Draft d;
+      const auto st = boxGirder(d, g);
+      for (const auto n : st[0]) d.pin(n); // cabane (upper) and fuselage (lower) spar roots
+
+      // 660 kg at 4.5 g: 14.6 kN per half cell; inner struts take half, outer struts a quarter.
+      // Upper wing 55 %, lower 45 %; front spar 65 %, rear 35 %.
+      for (const auto& [s, share] : {std::pair{std::size_t{1}, 7.3}, {std::size_t{2}, 3.65}}) {
+        d.load(st[s][1], {0.0, share * 0.55 * 0.65 * kKN, 0.0});
+        d.load(st[s][2], {0.0, share * 0.55 * 0.35 * kKN, 0.0});
+        d.load(st[s][0], {0.0, share * 0.45 * 0.65 * kKN, 0.0});
+        d.load(st[s][3], {0.0, share * 0.45 * 0.35 * kKN, 0.0});
+      }
+      return {{"aircraft_biplane_wing_cell", "Biplane wing cell (two-bay)", "Aircraft",
+               "Half wing cell of a WWI-era two-bay biplane: 4.6 m, 1.5 m chord and gap, 0.3 m stagger. "
+               "Interplane struts and flying wires make a Pratt-like truss in the front and rear spar planes; "
+               "drag wires cross in both wings. Spar roots pinned at the cabane and fuselage. 660 kg at 4.5 g: "
+               "14.6 kN lift, 55 / 45 % upper / lower wing. Steel: spars 6 cm^2, struts and ribs 4 cm^2, "
+               "wires 0.8 cm^2."},
+              toModel(std::move(d), kSteel, "Biplane wing cell")};
+    }
+
   } // namespace end
 
   std::vector<LibraryTruss> buildLibrary() {
@@ -711,7 +921,8 @@ namespace FEM::TRUSS::LIBRARY {
     for (auto* build : {kingPostRoof, queenPostRoof, finkRoof, howeRoof, prattRoof, scissorsRoof, bowstringRoof,
                         prattBridge, howeBridge, warrenBridge, kTrussBridge, parkerBridge,
                         grandstandCantilever, spaceFrameRoof, schwedlerDome, geodesicDome,
-                        transmissionTower, offshoreJacket, craneJib}) {
+                        transmissionTower, offshoreJacket, craneJib,
+                        tubeFuselage, engineMount, strutBracedWing, biplaneWingCell}) {
       library.push_back(build());
     }
     return library;

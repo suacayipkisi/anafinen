@@ -132,11 +132,13 @@ namespace FEM::TRUSS {
     std::int32_t activeDofCount = 0;
     std::uint32_t inclinedNodes = 0;
     for (std::uint32_t node = 0; node < nodeCount; ++node) {
-      const auto& directions = m_allNodes[node].getAllowedMotionDirections();
+      const auto& directions = m_allNodes[node].getAllowedMotionDirections(); // b_k
       if (m_allNodes[node].hasInclinedSupport()) ++inclinedNodes;
-      for (std::size_t k = 0; k < directions.size(); ++k) {
+      for (std::size_t k = 0; k < directions.size(); ++k) { // one reduced DOF per orthonormal direction b_k
         const std::int32_t reduced = activeDofCount++;
         nodeDofSlots[3 * node + k] = reduced;
+
+        // Link every global x / y / z DOF to this reduced DOF with the direction cosine b_k[axis].
         for (std::uint32_t axis = 0; axis < 3; ++axis) {
           if (directions[k][axis] == 0.0) continue;
           const std::uint32_t dof = 3 * node + axis;
@@ -230,7 +232,7 @@ namespace FEM::TRUSS {
     if (!solverResult.converged) {
       anaf::LOG::error(
         "Stiffness solve failed using {}: {}",
-        SOLVER::toString(solverResult.kind), solverResult.message
+        SOLVER::toString(solverResult.type), solverResult.message
       );
       m_resultDisplacements.assign(nodeCount, {0.0, 0.0, 0.0});
       for (auto& node : m_allNodes) node.setDisplacements({0.0, 0.0, 0.0});

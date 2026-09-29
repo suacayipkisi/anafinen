@@ -136,6 +136,8 @@ trussLibrary.cpp  buildLibrary()  --- anaf_truss_library_tool --->  assets/objec
 
 Planar trusses (roofs, bridges, the grandstand) are made spatial by `extrude()`: copies of the plane truss are tied by a strut at every node and a brace in every face swept by a member (purlins + roof bracing, floor beams + wind bracing), which is a stable space truss. Pin at one end (x, y, z), roller at the other (y).
 
+The fuselage and both wings are built by `boxGirder()`: stations of four corners joined by chords, a triangulated frame at every station and one diagonal (or a cross) in every face of every bay, so each bay is a closed triangulated polyhedron. The brace direction is chosen per face (`Brace::Rising`, `Falling`, `WarrenRising`, `WarrenFalling`, `Cross`); the biplane uses it to put only the flying wires in the strut planes (landing wires are slack under positive g and a linear truss would load them in compression).
+
 | Category | Id | Model |
 |---|---|---|
 | Roof | `roof_king_post` | King post, span 8 m |
@@ -157,6 +159,10 @@ Planar trusses (roofs, bridges, the grandstand) are made spatial by `extrude()`:
 | Tower & Platform | `tower_transmission` | 30 m transmission tower with cross-arms |
 | Tower & Platform | `platform_offshore_jacket` | 40 m four-leg offshore jacket |
 | Tower & Platform | `tower_crane_jib` | 24 m triangular crane jib |
+| Aircraft | `aircraft_tube_fuselage` | 5.9 m welded 4130 tube fuselage (Warren), 3.8 g |
+| Aircraft | `aircraft_engine_mount` | Four-point welded engine mount, engine CG on stiff links |
+| Aircraft | `aircraft_strut_braced_wing` | 5 m strut-braced half wing, truss spars, Schrenk lift (aluminum) |
+| Aircraft | `aircraft_biplane_wing_cell` | Two-bay biplane wing cell: struts, flying wires, drag wires |
 
 Dimensions, loads and sections of each model are in its `description` (shown in the GUI).
 
@@ -225,7 +231,7 @@ dofs <= 400,000 ?
 | `solveSimplicialLDLT` | `solver_simplicial.cpp` | Eigen `SimplicialLDLT<..., Upper>` | Always available |
 | `solveBlockCG` | `solver_iterative.cpp` | Preconditioned CG, 3x3 per-node block-Jacobi preconditioner | Tolerance 1e-8, max 50,000 iterations, logs every 200, honors `stop_token` |
 
-Every result is a `Result` record: `kind`, `available`, `converged`, `iterations`, `relativeResidual = ‖f − K u‖ / ‖f‖`, `elapsedSeconds`, `message`. The referee also logs a hardware summary: CPU model, thread counts, and free/total RAM on Linux.
+Every result is a `Result` record: `type` (`SOLVER::Type`), `available`, `converged`, `iterations`, `relativeResidual = ‖f − K u‖ / ‖f‖`, `elapsedSeconds`, `message`. The referee also logs a hardware summary: CPU model, thread counts, and free/total RAM on Linux.
 
 If the solve is rejected, every displacement is set to zero and an error is logged. The pipeline continues, so the validator then runs on a zero solution.
 

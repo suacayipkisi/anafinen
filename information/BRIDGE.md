@@ -3,7 +3,7 @@
 This document describes `anaf::BRIDGE`, the shared state between the GUI thread and the calculation worker. It covers what the bridge stores, who reads and writes each field, and which synchronization rule protects it.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
+> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-29.
 
 ## 1. Overall flow
 
@@ -148,6 +148,19 @@ Loading (`setStaticInfo()`, called by `main()` after the log is initialized):
 3. On success `allMaterials` is replaced under `dataMutex` and `m_nextMaterialID = n`. On failure an error is logged and the list stays empty; Preview / Solve then log "No material selected" instead of starting.
 
 JSON units are SI: Pa for moduli and strengths, kg/m³ for density, ductility as a fraction. `youngModulus` is optional and defaults to `elasticityModulus`. Mesh files identify materials by name ([FILE_HANDLING.md](FILE_HANDLING.md) section 3), so new built-ins may go anywhere in the file. Keep IDs 0 (steel) and 1 (aluminum) for files from anafinen ≤ 0.1.2, which only carry the index. Names: at most 120 bytes of UTF-8, no `"` and no control characters (they are written into MSH physical names and line-based formats).
+
+Built-in set (20 materials, typical handbook values: ASM, MatWeb, EN / ASTM minimums; the file's `units.notes` repeats the assumptions):
+
+| IDs | Group | Materials |
+|---|---|---|
+| 0, 1 | Original built-ins (fixed IDs) | Structural Steel (AISI 4130), Aluminum 6061-T6 |
+| 2 .. 9 | Steel | S235, S355 (EN 10025), ASTM A36, ASTM A992, AISI 1020 (hot rolled), stainless AISI 304 / 316 (annealed), prestressing strand ASTM A416 (1860 MPa) |
+| 10 .. 13 | Aluminum | 2024-T3, 5083-H116, 6063-T6, 7075-T6 |
+| 14 .. 17 | Other metals | Titanium Grade 2, Ti-6Al-4V (Grade 5), Magnesium AZ31B-H24, Copper C11000 (annealed) |
+| 18, 19 | Wood (12 % moisture, along the grain) | Douglas Fir, Sitka Spruce |
+
+- Metals: G = E / (2 (1 + ν)) and K = E / (3 (1 − 2 ν)), so the constants are consistent for an isotropic material.
+- Wood is orthotropic; a truss bar only needs the properties along the grain. `yieldTensileStrength` holds the compression strength parallel to the grain (the lower one, so the yield flag in the viewport is conservative), `ultimateTensileStrength` the tension strength parallel to the grain, and `shearModulus` G_LR. K is only a placeholder that passes validation; the solver never uses G or K.
 
 Adding (`addUserMaterial()`):
 

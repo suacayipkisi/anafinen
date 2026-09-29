@@ -51,6 +51,7 @@ target_link_libraries(anaf_io
 
 set(ANAF_CORE_SOURCES
     src/material/materialLibrary.cpp
+    src/objectCalcs/truss_1D/trussProperties/node.cpp
     src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
     src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
     src/objectCalcs/truss_1D/trussTypes/trussLibrary.cpp

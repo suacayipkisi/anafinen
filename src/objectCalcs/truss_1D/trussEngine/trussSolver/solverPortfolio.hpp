@@ -27,14 +27,14 @@
 
 namespace FEM::TRUSS::SOLVER {
 
-  enum class Kind {
+  enum class Type {
     Cholmod,
     SimplicialLDLT,
     BlockCG
   };
 
   struct Result {
-    Kind kind{};
+    Type type{};
     bool available{false};
     bool converged{false};
     Eigen::Index iterations{0};
@@ -75,6 +75,6 @@ namespace FEM::TRUSS::SOLVER {
     Eigen::VectorXd& displacement
   );
 
-  const char* toString(Kind kind) noexcept;
+  const char* toString(Type type) noexcept;
 
 } // namespace FEM::TRUSS::SOLVER

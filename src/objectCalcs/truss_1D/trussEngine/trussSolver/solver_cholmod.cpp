@@ -30,7 +30,7 @@ namespace FEM::TRUSS::SOLVER {
     [[maybe_unused]] const Eigen::VectorXd& force,
     [[maybe_unused]] Eigen::VectorXd& displacement
   ) {
-    Result result{.kind = Kind::Cholmod};
+    Result result{.type = Type::Cholmod};
 #ifdef ANAFINEN_HAS_CHOLMOD
     const auto start = std::chrono::steady_clock::now();
     Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<double>, Eigen::Upper> solver;

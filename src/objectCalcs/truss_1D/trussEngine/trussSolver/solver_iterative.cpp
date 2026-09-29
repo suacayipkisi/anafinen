@@ -37,7 +37,7 @@ namespace FEM::TRUSS::SOLVER {
     const std::stop_token stopToken,
     Eigen::VectorXd& displacement
   ) {
-    Result result{.kind = Kind::BlockCG};
+    Result result{.type = Type::BlockCG};
     const auto start = std::chrono::steady_clock::now();
     const Eigen::Index activeDofs = force.size();
     constexpr Eigen::Index maxIterations = 50'000;
