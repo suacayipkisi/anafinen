@@ -19,6 +19,7 @@ build-clang/
 build-mingw/
 build-rpm/
 .claude/settings.local.json
+REVIEW_GUIDE.md
 build-containers/
 
 # Locally built release packages (kept on disk, never pushed)
