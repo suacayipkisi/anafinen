@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-28.
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-28.
 
 ## 1. Overall flow
 
@@ -172,7 +172,7 @@ Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: suite
 | `package/package.sh` | Fedora | Installs build deps with `dnf`, Release build, `cpack -G RPM` |
 | `package/package.sh` | Arch / CachyOS | Stops with a hint when `gmsh` is not installed (AUR only: `gmsh` or `gmsh-bin`), then `makepkg --syncdeps --noconfirm --force` in `package/` using `package/PKGBUILD` |
 | `package/package.sh` | Debian / Ubuntu | Installs deps with `apt`, Release build, `cpack -G DEB` |
-| VS Code task | Windows | `cpack -G ZIP` from the configured build dir (see `package/PACKAGE_BUILD.md`) |
+| `package/package-windows.ps1` | Windows | Loads the MSVC x64 environment, Release build in `build/package-release`, `cpack -G ZIP` (also run by the VS Code task; see `package/PACKAGE_BUILD.md`) |
 
 `package.sh` changes to the repository root first, so it works from any working directory. Tested in containers on 2026-09-28: Debian 13 (GCC 14) and Arch (GCC 16, `gmsh-bin` from the AUR) both build, package and install.
 

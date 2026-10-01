@@ -9,7 +9,7 @@ This document describes `anaf_io`, the mesh import/export library:
 For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-29 (inclined supports solved and exported by the truss adapter; step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-29 (inclined supports solved and exported by the truss adapter; step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow

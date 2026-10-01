@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-29.
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-29.
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map

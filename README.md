@@ -6,15 +6,16 @@
 
 ---
 
-## 📦 Downloads (v0.1.2-alpha)
+## 📦 Downloads (v0.1.3-alpha)
 
 Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases).
 
 | Platform | File | Quick Run / Install Command |
 | --- | --- | --- |
-| **Windows** (10/11 x64 Portable) | [`anafinen-0.1.1-windows-x86_64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.1-alpha/anafinen-0.1.1-windows-x86_64-alpha.zip) | Extract `.zip` and **run as administrator** `bin/anafinen.exe` |
-| **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.1.2-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.2-alpha/anafinen-0.1.2-alpha.rpm) | `sudo dnf install ./anafinen-0.1.2-alpha.rpm` |
-| **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.1.1_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.1-alpha/anafinen-0.1.1_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.1.1_alpha-1-x86_64.pkg.tar.zst` |
+| **Windows** (10/11 x64 Portable) | [`anafinen-0.1.3-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.3-alpha/anafinen-0.1.3-windows-AMD64-alpha.zip) | Extract the `.zip` into a folder you can write to (not `Program Files`) and run `anafinen.exe`. Needs the [Microsoft Visual C++ 2015-2022 Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe) |
+| **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.1.3-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.3-alpha/anafinen-0.1.3-alpha.rpm) | `sudo dnf install ./anafinen-0.1.3-alpha.rpm` |
+| **Linux** (Debian / Ubuntu / DEB-based) | [`anafinen-0.1.3-alpha.deb`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.3-alpha/anafinen-0.1.3-alpha.deb) | `sudo apt install ./anafinen-0.1.3-alpha.deb` |
+| **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.1.3_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.3-alpha/anafinen-0.1.3_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.1.3_alpha-1-x86_64.pkg.tar.zst` (needs `gmsh` or `gmsh-bin` from the AUR) |
 
 ---
 
@@ -22,9 +23,9 @@ Pre-compiled binary releases for Windows and Linux are available under [GitHub R
 
 Look `information/` foler for documentation, project progress and so on.  
 
-Currently project is at phase 1 and 2 together. (0.1.3-alpha in development, latest release 0.1.2-alpha)  
-Next version release date: approximately first week of the october 2026
-Next version feature aim: phase 1 and 2 finished.
+Latest release: 0.1.3-alpha (October 2026).  
+Phase 1 works for 3D trusses: static displacement, axial force and stress under nodal loads and self-weight, inclined supports, built-in and imported / self-built trusses, mesh import / export (MSH, VTK, VTU, STEP, IGES, BREP).  
+Phase 2 (modal analysis) is not implemented yet. Next steps: GUI design, a command-line (CLI) mode and solver updates, then beam elements and modal analysis.
 - Displacement Under Applied Force (phase-1)
 - Modal Analysis (phase-2)
 - Heat Tranfer (phase-3)
@@ -187,20 +188,13 @@ Mesh engine:
 - Try to install with vcpkg, if not install(probably) download from this link:  
 - https://gmsh.info/bin/Windows/?C=M;O=D  
 - When I last checked(2 sep 2026), "gmsh-4.15.2-Windows64-sdk.zip" was the latest. Dont install git versions.  
-- Extract .zip into C:\libs\gmsh-sdk
-- be sure you can find files at:
-- - "C:\libs\gmsh-sdk\bin" 
-- - "C:\libs\gmsh-sdk\include" 
-- - "C:\libs\gmsh-sdk\lib" 
-- - "C:\libs\gmsh-sdk\share"
-- - "C:\libs\gmsh-sdk\README.md" 
-- If you set location different, you might have some problems.
-- I can see that pushing you to an exact location might be wrong, also if you extracted gmsh in another location you can change [CMakeLists.txt](CMakeLists.txt) for setting your own location instead of rearranging file locations.
+- Extract the `.zip` anywhere, for example `C:\libs\gmsh-sdk` (the folder must contain `bin`, `include`, `lib` and `share`).
+- CMake finds the SDK and vcpkg on its own, on any drive: `GMSH_SDK_DIR` / `VCPKG_ROOT` environment variables, `vcpkg` on `PATH`, then folders such as `<drive>:\libs\gmsh-sdk`, `<drive>:\gmsh-*-Windows64-sdk` and `<drive>:\vcpkg`. The configure log prints what it found (`Gmsh SDK auto-detected: ...`). For any other location set `GMSH_SDK_DIR` (environment variable or `-DGMSH_SDK_DIR=...`). Details: [information/BUILD_SYSTEM.md](information/BUILD_SYSTEM.md) section 5.2.
 
 ### Finally Open Visual Studio
 
-- Open from top menu Project -> CMake Settings  
-- Paste this into CMake toolchain file: "C:/Users/<your username>/vcpkg/scripts/buildsystems/vcpkg.cmake" then press ctrl+s
+- Open the folder as a CMake project and select an **x64** configuration (a 32-bit kit stops at configure time with a message).
+- The vcpkg toolchain is detected automatically. Only for an unusual location, open Project -> CMake Settings and set the CMake toolchain file to `<your vcpkg folder>/scripts/buildsystems/vcpkg.cmake`, then press ctrl+s.
 - Be sure you see "Build Succesful"
 
 ### Start to Build
@@ -208,6 +202,14 @@ Mesh engine:
 - Pres ctrl+shift+b to start build.
 - After build press f5 to open debug mode or ctrl+f5 to open normally.
 - DONE!
+
+## Packaging
+
+- Linux: `./package/package.sh` picks RPM (Fedora), pacman (Arch / CachyOS) or DEB (Debian / Ubuntu) by itself.
+- Debian and Arch packages can also be built in clean containers (podman or docker): `package/tools/container-check.sh all package`. The packages land in `build-containers/<distro>/`.
+- Windows: `package/package-windows.ps1` builds a Release binary and the portable `.zip` (CPack).
+
+See [package/PACKAGE_BUILD.md](package/PACKAGE_BUILD.md) for details.
 
 
 ## Licensing & Third Party Library and Font Licenses

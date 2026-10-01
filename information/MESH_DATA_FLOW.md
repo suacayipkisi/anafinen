@@ -3,7 +3,7 @@
 This document describes how mesh data for the Simple Quadrangle Prism Truss is created, stored, passed through the solver, and finally displayed in the viewport.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` working tree (unreleased), 2026-09-29.
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-29.
 > Part of the documentation set indexed in [ARCHITECTURE.md](ARCHITECTURE.md). Module details: [CALCULATIONS.md](CALCULATIONS.md), [BRIDGE.md](BRIDGE.md), [GUI.md](GUI.md).
 
 ## 1. Overall flow

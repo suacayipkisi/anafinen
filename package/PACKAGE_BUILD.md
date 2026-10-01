@@ -32,7 +32,12 @@ the converter. Without one, the package has no PNG icon (CMake warns).
 To check the Debian and Arch packages without those systems, run
 `package/tools/container-check.sh debian package` or `package/tools/container-check.sh arch package`
 (podman or docker). The packages land in `build-containers/<distro>/`; see
-`information/BUILD_SYSTEM.md` section 8.1.1.
+`information/BUILD_SYSTEM.md` section 8.1.1. To build both and collect them for a release:
+
+```bash
+package/tools/container-check.sh all package && \
+  cp build-containers/debian/*.deb build-containers/arch/anafinen-[0-9]*.pkg.tar.zst package/early-release-packages/
+```
 
 Known issue on Debian 13: its `libgmsh4.13` aborts inside second-order 3D
 meshing (an Eigen assertion in Gmsh itself), so `anaf_io_tests` aborts there.
