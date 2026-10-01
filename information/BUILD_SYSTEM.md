@@ -160,7 +160,7 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 | Platform | Install layout | CPack generator | Package name |
 |---|---|---|---|
 | Linux | `bin/anafinen`, `share/anafinen/assets` (without the `.desktop` file), `share/applications/anafinen.desktop`, hicolor icons (SVG + 128px PNG) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
-| Windows | Flat: `anafinen.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES` | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
+| Windows | Flat: `anafinen.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES`, app-local MSVC runtime (`InstallRequiredSystemLibraries` + `libomp140.x86_64.dll` from the MSVC redist directory, so no Visual C++ Redistributable is needed; added after the 0.1.3 release) | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
 | Windows (MinGW cross) | Same + MinGW runtime DLLs from the Fedora sysroot (`RUNTIME_DEPENDENCIES` is skipped: not supported when cross-compiling) | `ZIP` | same |
 
 Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: suitesparse` when CHOLMOD is enabled.
