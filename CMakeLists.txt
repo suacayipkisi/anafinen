@@ -4,7 +4,19 @@ if(POLICY CMP0207)
     cmake_policy(SET CMP0207 NEW)
 endif()
 
+# Windows: locate the vcpkg toolchain (and define the Gmsh SDK lookup) on any drive.
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LocateWindowsSdks.cmake")
+
 project(anafinen VERSION 0.1.3 LANGUAGES C CXX)
+
+# A 32-bit compiler (e.g. the VS Code kit "amd64_x86", Hostx64/x86/cl.exe) cannot link the 64-bit
+# vcpkg packages; find_package would only report an unrelated "version not compatible" error.
+if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+    message(FATAL_ERROR "anafinen builds 64-bit only, but the compiler targets 32-bit x86:\n"
+        "  ${CMAKE_CXX_COMPILER}\n"
+        "Select the x64 compiler (VS Code: \"CMake: Select a Kit\" -> \"... - amd64\", or run vcvars64.bat), "
+        "then delete the CMake cache of this build directory.")
+endif()
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE FALSE)
@@ -117,6 +129,25 @@ set(ANAFINEN_SOURCES
 
 add_executable(anafinen ${ANAFINEN_SOURCES})
 
+# Embed the application icon into the .exe (Explorer, taskbar, shortcuts); the window icon
+# itself is set at run time from assets/icons/anafinen.png.
+if(WIN32)
+    target_sources(anafinen PRIVATE src/anafinen.rc)
+endif()
+
+# GUI subsystem on Windows: no console window opens with the application. Debug keeps the console
+# for the anaf_info log (std::cout). main() stays the entry point, so no WinMain is needed.
+if(WIN32)
+    if(MSVC)
+        target_link_options(anafinen PRIVATE
+            "/SUBSYSTEM:$<IF:$<CONFIG:Debug>,CONSOLE,WINDOWS>"
+            "/ENTRY:mainCRTStartup"
+        )
+    else()
+        target_link_options(anafinen PRIVATE "$<$<NOT:$<CONFIG:Debug>>:-mwindows>")
+    endif()
+endif()
+
 target_compile_definitions(anafinen PRIVATE
     ANAF_GUI
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
@@ -197,8 +228,8 @@ endif()
 if(WIN32 AND NOT CMAKE_CROSSCOMPILING)
     install(TARGETS anafinen
         RUNTIME_DEPENDENCIES
-            DIRECTORIES 
-                "C:/vcpkg/installed/x64-windows/bin"
+            DIRECTORIES
+                "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
             PRE_EXCLUDE_REGEXES
                 "api-ms-win-.*"
                 "ext-ms-win-.*"

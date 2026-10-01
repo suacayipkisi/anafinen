@@ -40,46 +40,60 @@ The package builds and installs normally.
 
 ## Packaging for Windows
 
-open in vscode: .vscode/tasks.json
+Requirements: Visual Studio 2022 (or Build Tools) with the C++ x64 tools, CMake, Ninja,
+vcpkg and the Gmsh SDK.
+
+vcpkg and the Gmsh SDK may live on any drive: CMake finds them on its own
+(`VCPKG_ROOT` / `GMSH_SDK_DIR` environment variables, `vcpkg` on `PATH`, then
+`<drive>:/vcpkg`, `<drive>:/libs/gmsh-sdk`, `<drive>:/gmsh-*-Windows64-sdk`, ... on every drive;
+see `information/BUILD_SYSTEM.md` section 5.2). A minimal `.vscode/settings.json` is enough:
+```json
+{
+  "cmake.generator": "Ninja",
+  "cmake.configureSettings": { "VCPKG_TARGET_TRIPLET": "x64-windows" },
+  "cmake.buildDirectory": "${workspaceFolder}/build/${buildType}"
+}
+```
+Only for an unusual location add `"CMAKE_TOOLCHAIN_FILE": "<vcpkg>/scripts/buildsystems/vcpkg.cmake"`
+and/or `"GMSH_SDK_DIR": "<sdk>"` to `cmake.configureSettings` (or set the environment variables);
+the packaging script passes them on as well.
+
+`.vscode/` is not tracked; put this task into `.vscode/tasks.json`:
 ```json
 {
   "version": "2.0.0",
   "tasks": [
     {
       "label": "CPack: Create ZIP Package",
-      "type": "shell",
-      "command": "cpack",
-      "args": [
-        "--config",
-        "${command:cmake.buildDirectory}/CPackConfig.cmake",
-        "-G",
-        "ZIP",
-        "-B",
-        "${command:cmake.buildDirectory}"
-      ],
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/package/package-windows.ps1"],
+      "options": { "cwd": "${workspaceFolder}" },
       "group": "build",
-      "dependsOn": ["CMake: build"],
+      "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "clear": true },
       "problemMatcher": []
     }
   ]
 }
 ```
-open vscode user settings.json: 
-- press ctrl+shift+p
-- Preferences: Open User Settings (JSON) then add this
-```json
-{
-  "cmake.generator": "Ninja",
-  "cmake.configureSettings": {
-    "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake",
-    "GMSH_SDK_DIR": "C:/libs/gmsh-sdk",
-    "VCPKG_TARGET_TRIPLET": "x64-windows"
-  }
-}
-```
-create package: 
+
+create package:
 - press ctrl+shift+p
 - Tasks: Run Task
-- CPack: Create ZIP Package  
+- CPack: Create ZIP Package
 
-it wil create .zip in build/ file.
+`"type": "process"` starts PowerShell directly, independent of the terminal's default shell
+(no quoting or path rewriting by Git Bash or cmd). A first Release build takes a few
+minutes; the output appears in the task's own terminal panel.
+
+or from a terminal:
+```powershell
+powershell -ExecutionPolicy Bypass -File package/package-windows.ps1
+```
+
+The script loads the MSVC environment itself, always builds **Release** in
+`build/package-release` (independent of the variant selected in VS Code) and writes
+`build/package-release/anafinen-<version>-windows-AMD64-alpha.zip`. A Debug build must not be
+packaged: it needs the debug CRT (`ucrtbased.dll`, `VCRUNTIME140D.dll`), which exists only
+where Visual Studio is installed. The target machine needs the
+Microsoft Visual C++ 2015-2022 Redistributable (x64), which also provides `libomp140.x86_64.dll`.

@@ -27,16 +27,10 @@ if(TARGET SuiteSparse::CHOLMOD)
     set(CHOLMOD_LIBRARIES SuiteSparse::CHOLMOD)
     message(STATUS "CHOLMOD found via CMake Config: SuiteSparse::CHOLMOD")
 else()
-    find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h 
-        PATHS "C:/vcpkg/installed/x64-windows/include" 
-        PATH_SUFFIXES suitesparse
-    )
-    find_library(CHOLMOD_LIB NAMES cholmod 
-        PATHS "C:/vcpkg/installed/x64-windows/lib"
-    )
-    find_library(SUITESPARSE_CONFIG_LIB NAMES suitesparseconfig 
-        PATHS "C:/vcpkg/installed/x64-windows/lib"
-    )
+    # The vcpkg toolchain already puts installed/<triplet> on CMAKE_PREFIX_PATH.
+    find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h PATH_SUFFIXES suitesparse)
+    find_library(CHOLMOD_LIB NAMES cholmod)
+    find_library(SUITESPARSE_CONFIG_LIB NAMES suitesparseconfig)
 
     if(CHOLMOD_INCLUDE_DIR AND CHOLMOD_LIB)
         set(ANAFINEN_HAS_CHOLMOD ON)
@@ -60,12 +54,20 @@ endif()
 # rsvg-convert (librsvg) is preferred: ImageMagick without an rsvg delegate (e.g. Debian) falls back to
 # its internal MSVG renderer, which draws only the icon background and still exits with 0.
 find_program(ANAFINEN_SVG_RENDERER NAMES rsvg-convert)
-find_program(ANAFINEN_IMAGE_CONVERTER NAMES magick convert)
+# On Windows "convert" is System32\convert.exe (the FAT -> NTFS converter), never ImageMagick.
+if(WIN32)
+    if(ANAFINEN_IMAGE_CONVERTER MATCHES "[Ss]ystem32")
+        unset(ANAFINEN_IMAGE_CONVERTER CACHE)   # drop a stale hit cached by an older configure
+    endif()
+    find_program(ANAFINEN_IMAGE_CONVERTER NAMES magick)
+else()
+    find_program(ANAFINEN_IMAGE_CONVERTER NAMES magick convert)
+endif()
 set(ANAFINEN_GENERATED_ASSETS_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-assets")
 file(MAKE_DIRECTORY "${ANAFINEN_GENERATED_ASSETS_DIR}/icons")
 
-# ANAFINEN_ICON_PNG is empty when no PNG could be made; the install rules and the POST_BUILD
-# copy skip the icon then (the window starts without an icon, the SVG is still installed).
+# ANAFINEN_ICON_PNG falls back to the committed, pre-rendered assets/icons/anafinen.png when no
+# converter is available (the usual case on Windows).
 set(ANAFINEN_ICON_PNG "")
 set(_anafinen_icon_png "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png")
 
@@ -87,15 +89,17 @@ if(DEFINED ANAFINEN_ICON_CONVERSION_RESULT AND ANAFINEN_ICON_CONVERSION_RESULT E
 endif()
 
 if(NOT ANAFINEN_ICON_PNG)
-    # Never ship a stale PNG from an earlier configure, nor the SVG under a .png name.
+    # Never ship a stale PNG from an earlier configure.
     file(REMOVE "${_anafinen_icon_png}")
-    message(WARNING "Neither rsvg-convert nor ImageMagick (magick / convert) could convert assets/icons/anafinen.svg; "
-                    "the build and packages have no PNG application icon. Install librsvg (rsvg-convert).")
+    set(ANAFINEN_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.png")
+    message(STATUS "No rsvg-convert / ImageMagick could convert assets/icons/anafinen.svg; "
+                   "using the pre-rendered assets/icons/anafinen.png")
 endif()
 
 # Gmsh SDK integration
 if(WIN32)
-    set(GMSH_SDK_DIR "C:/libs/gmsh-sdk" CACHE PATH "Path to Gmsh SDK on Windows")
+    set(GMSH_SDK_DIR "" CACHE PATH "Path to Gmsh SDK on Windows (auto-detected when empty)")
+    anafinen_locate_gmsh_sdk()
     find_path(GMSH_INCLUDE_DIR NAMES "gmsh.h" HINTS "${GMSH_SDK_DIR}/include" NO_DEFAULT_PATH)
 
     find_library(GMSH_LIBRARY NAMES gmsh.dll gmsh HINTS "${GMSH_SDK_DIR}/lib" NO_DEFAULT_PATH)

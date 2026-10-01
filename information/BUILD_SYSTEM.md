@@ -87,11 +87,11 @@ Third-party include directories are marked `SYSTEM` (`imgui_suite`, `glad_local`
 | OpenMP | `find_package(OpenMP REQUIRED)` | yes | MSVC uses `/openmp:llvm` instead of the imported target |
 | OpenGL, ZLIB, PNG | `find_package(... REQUIRED)` | yes | Windows fallback creates `OpenGL::GL` -> `opengl32` |
 | SuiteSparse CHOLMOD | see section 5.1 | no | Sets `ANAFINEN_HAS_CHOLMOD` |
-| Gmsh SDK | `find_path` / `find_library` | yes | Windows: `GMSH_SDK_DIR` (default `C:/libs/gmsh-sdk`), also resolves `GMSH_DLL` |
+| Gmsh SDK | `find_path` / `find_library` | yes | Windows: `GMSH_SDK_DIR`; when empty or without `include/gmsh.h` it is auto-detected (section 5.2), also resolves `GMSH_DLL` |
 | Spectra | submodule `external/spectra`, else `find_package(Spectra)` | no | Header-only; imported as `spectra_local` |
 | glm | `find_package(glm CONFIG)`, else header search | yes | - |
 | nlohmann/json | `find_package(nlohmann_json 3.11 CONFIG)`, else `FetchContent` of the v3.12.0 release tarball (SHA-256 pinned) | yes | Header-only, linked PRIVATE into `anaf_core` for the material library. The fetch covers the MinGW cross-build sysroot. |
-| librsvg / ImageMagick | `find_program(rsvg-convert)`, else `find_program(magick convert)` | no | Converts `assets/icons/anafinen.svg` to a 128x128 PNG at configure time (`ANAFINEN_ICON_PNG`). `rsvg-convert` is preferred: Debian's ImageMagick has no rsvg delegate, and its internal MSVG renderer draws only the background while still exiting with 0. Without a converter there is no PNG: a configure warning, the PNG install rules and the POST_BUILD copy are skipped, and the window starts without an icon. (Before 0.1.3 the SVG was copied under the `.png` name, which shipped a broken hicolor icon.) |
+| librsvg / ImageMagick | `find_program(rsvg-convert)`, else `find_program(magick convert)` (only `magick` on Windows, where `convert` is `System32\convert.exe`) | no | Converts `assets/icons/anafinen.svg` to a 128x128 PNG at configure time (`ANAFINEN_ICON_PNG`). `rsvg-convert` is preferred: Debian's ImageMagick has no rsvg delegate, and its internal MSVG renderer draws only the background while still exiting with 0. Without a converter the committed, pre-rendered `assets/icons/anafinen.png` is used. On Windows `src/anafinen.rc` also embeds `assets/icons/anafinen.ico` (16-256 px) into the `.exe`; regenerate both files when the SVG changes. (Before 0.1.3 the SVG was copied under the `.png` name, which shipped a broken hicolor icon.) |
 | portable-file-dialogs | vendored header `external/portable-file-dialogs/` (commit `c12ea8c`, WTFPL) | yes | Native file chooser. Linux runtime needs `zenity`, `kdialog`, `matedialog` or `qarma` |
 | Python 3 + `vtk` module | `find_package(Python3)` + `import vtk` probe | no | Enables the `vtk_reference_check` test |
 
@@ -105,7 +105,7 @@ find_package(SuiteSparse CONFIG QUIET)
       no
       v
 find_path(cholmod.h, suffix suitesparse) + find_library(cholmod, suitesparseconfig)
-      |      (also searches C:/vcpkg/installed/x64-windows)
+      |      (the vcpkg toolchain puts installed/<triplet> on CMAKE_PREFIX_PATH)
       +-- found --> CHOLMOD_LIBRARIES = <cholmod>;<suitesparseconfig>
       +-- not found --> ANAFINEN_HAS_CHOLMOD OFF (Eigen solvers only)
 ```
@@ -118,6 +118,21 @@ Test without CHOLMOD on a machine that has it:
 ```bash
 cmake -S . -B build-nocholmod -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_IGNORE_PATH=/usr/include/suitesparse
 ```
+
+### 5.2 Windows SDK locations (`cmake/LocateWindowsSdks.cmake`)
+
+No drive or directory is hard-coded; every developer can keep vcpkg and the Gmsh SDK anywhere.
+The module is included before `project()` and scans `%USERPROFILE%` and every existing drive `C:` .. `Z:`.
+
+| What | Used when | Order (first valid wins) | Valid when |
+|---|---|---|---|
+| `CMAKE_TOOLCHAIN_FILE` (vcpkg) | not set, host is Windows, not an MSYS2 shell, `ANAFINEN_AUTO_VCPKG=ON` | `VCPKG_ROOT` env, `vcpkg.exe` on `PATH`, `<root>/{vcpkg,dev/vcpkg,tools/vcpkg,src/vcpkg,libs/vcpkg}` | `scripts/buildsystems/vcpkg.cmake` and `installed/` exist (skips the empty vcpkg bundled with Visual Studio) |
+| `GMSH_SDK_DIR` | empty or without `include/gmsh.h` | `GMSH_SDK_DIR` env, `external/gmsh-sdk`, `<root>/{libs/gmsh-sdk,libs/gmsh*sdk*,gmsh*sdk*,dev/gmsh*sdk*,tools/gmsh*sdk*,sdk/gmsh*sdk*}` | `include/gmsh.h` exists |
+
+The result is cached and printed (`vcpkg toolchain auto-detected: ...`, `Gmsh SDK auto-detected: ...`);
+other Gmsh SDKs found are listed too. An explicit `-D` value, a VS Code `cmake.configureSettings` entry
+or the environment variable always takes precedence. Delete the cache entry (or the build directory)
+to re-run the detection.
 
 ## 6. GUI dependencies (`cmake/ExternalGui.cmake`)
 
