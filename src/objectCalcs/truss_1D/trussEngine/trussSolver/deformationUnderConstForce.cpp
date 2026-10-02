@@ -96,9 +96,9 @@ namespace FEM::TRUSS {
       const auto& nodes = element.getEleNodes();
       const std::uint32_t dof1 = 3 * nodes[0] + 1;
       const std::uint32_t dof2 = 3 * nodes[1] + 1;
-      #pragma omp atomic update
+      #pragma omp atomic
       m_forceVec[dof1] += weight / 2.0;
-      #pragma omp atomic update
+      #pragma omp atomic
       m_forceVec[dof2] += weight / 2.0;
     }
   }

@@ -101,8 +101,8 @@ The script loads the MSVC environment itself, always builds **Release** in
 `build/package-release/anafinen-<version>-windows-AMD64-alpha.zip`. A Debug build must not be
 packaged: it needs the debug CRT (`ucrtbased.dll`, `VCRUNTIME140D.dll`), which exists only
 where Visual Studio is installed. The ZIP carries the MSVC runtime next to `anafinen.exe`
-(app-local: `vcruntime140*.dll`, `msvcp140*.dll` through `InstallRequiredSystemLibraries`, and
-`libomp140.x86_64.dll` for `/openmp:llvm` from the MSVC redist directory), so the target machine
-does not need the Visual C++ Redistributable. If configure warns that `libomp140.x86_64.dll` was
-not found, the ZIP still needs the Redistributable (x64). To check a ZIP, open it on a clean
+(app-local: `vcruntime140*.dll`, `msvcp140*.dll` and the `/openmp` runtime `vcomp140.dll`, all
+through `InstallRequiredSystemLibraries`), so the target machine does not need the Visual C++
+Redistributable. MSVC builds use `/openmp`, not `/openmp:llvm`: the LLVM runtime
+`libomp140.x86_64.dll` ships only under `debug_nonredist` and may not be redistributed. To check a ZIP, open it on a clean
 Windows (VM or Windows Sandbox) where the Redistributable is not installed.

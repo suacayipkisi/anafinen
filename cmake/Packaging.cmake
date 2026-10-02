@@ -28,26 +28,8 @@ if(WIN32)
     # resolve to System32 on the build machine. The UCRT is part of Windows 10/11.
     if(MSVC)
         set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+        set(CMAKE_INSTALL_OPENMP_LIBRARIES ON) # vcomp140.dll for /openmp
         include(InstallRequiredSystemLibraries) # vcruntime140*.dll, msvcp140*.dll
-
-        # /openmp:llvm needs libomp140.x86_64.dll, which InstallRequiredSystemLibraries
-        # does not cover (CMAKE_INSTALL_OPENMP_LIBRARIES only handles vcomp140.dll).
-        set(ANAFINEN_MSVC_REDIST_ROOTS "${MSVC_REDIST_DIR}" "$ENV{VCToolsRedistDir}")
-        set(ANAFINEN_LIBOMP_DLL "")
-        foreach(redist_root IN LISTS ANAFINEN_MSVC_REDIST_ROOTS)
-            if(redist_root AND NOT ANAFINEN_LIBOMP_DLL)
-                file(TO_CMAKE_PATH "${redist_root}" redist_root)
-                file(GLOB ANAFINEN_LIBOMP_DLL "${redist_root}/x64/Microsoft.VC*.OpenMP.LLVM/libomp140.x86_64.dll")
-            endif()
-        endforeach()
-        if(ANAFINEN_LIBOMP_DLL)
-            list(GET ANAFINEN_LIBOMP_DLL 0 ANAFINEN_LIBOMP_DLL)
-            message(STATUS "OpenMP runtime for the package: ${ANAFINEN_LIBOMP_DLL}")
-            install(FILES "${ANAFINEN_LIBOMP_DLL}" DESTINATION .)
-        else()
-            message(WARNING "libomp140.x86_64.dll not found in the MSVC redist directory; "
-                "the ZIP will need the Visual C++ Redistributable on the target machine.")
-        endif()
     endif()
 
     # use MinGW DLL if croscompile on linux

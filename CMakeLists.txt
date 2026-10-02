@@ -160,8 +160,8 @@ target_compile_definitions(anafinen PRIVATE
 )
 
 if(MSVC)
-    target_compile_options(anaf_core PUBLIC /openmp:llvm)
-    target_compile_options(anafinen PUBLIC /openmp:llvm)
+    target_compile_options(anaf_core PUBLIC /openmp)
+    target_compile_options(anafinen PUBLIC /openmp)
 else()
     target_link_libraries(anaf_core PUBLIC OpenMP::OpenMP_CXX)
 endif()
