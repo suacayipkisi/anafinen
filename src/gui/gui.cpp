@@ -22,10 +22,12 @@
 
 #include <png.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -87,6 +89,28 @@ namespace anaf::GUI {
       };
       glfwSetWindowIcon(window, 1, &glfw_icon);
       png_image_free(&image);
+    }
+
+    // Which window system GLFW picked. On Linux it can differ from the session: under a
+    // Wayland session GLFW falls back to X11 (XWayland) when its Wayland backend is missing.
+    void logWindowSystem() {
+      std::string_view platform = "unknown";
+#if GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 4)
+      switch (glfwGetPlatform()) {
+        case GLFW_PLATFORM_WAYLAND: platform = "Wayland"; break;
+        case GLFW_PLATFORM_X11: platform = "X11"; break;
+        case GLFW_PLATFORM_WIN32: platform = "Win32"; break;
+        case GLFW_PLATFORM_COCOA: platform = "Cocoa"; break;
+        case GLFW_PLATFORM_NULL: platform = "none (headless)"; break;
+        default: break;
+      }
+#endif
+#ifdef __linux__
+      const char* session = std::getenv("XDG_SESSION_TYPE");
+      anaf::LOG::info("Window system: {} (session type: {})", platform, session && *session ? session : "unknown");
+#else
+      anaf::LOG::info("Window system: {}", platform);
+#endif
     }
 
     struct UIPanels {
@@ -188,6 +212,7 @@ namespace anaf::GUI {
       anaf::LOG::error("Failed to initialize GLFW");
       return -1;
     }
+    logWindowSystem();
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);

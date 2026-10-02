@@ -20,10 +20,21 @@
 #include <bridge/generalStatus.hpp>
 #include <guiMaterials/iPanel.hpp>
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
 namespace anaf::GUI {
 
   class ModelTree : public IPanel {
   private:
+    // Filtered rows of the snapshot shown last, rebuilt only when the snapshot changes; the
+    // lists are drawn with ImGuiListClipper, so only the visible rows cost anything.
+    std::shared_ptr<const anaf::BRIDGE::MeshData> m_indexedMesh;
+    std::vector<std::uint32_t> m_supportedNodes;   // node indices with a support
+    std::vector<std::uint32_t> m_overstressedBars; // bar indices with |stress| > yield
+
+
     // Boundary conditions, overstressed bars and nodal displacements of the active snapshot.
     // Every object type publishes the same MeshData, so one tree serves all of them.
     void renderMeshTree(anaf::BRIDGE::Gui_Calc_Bridge& bridge);

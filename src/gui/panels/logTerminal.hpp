@@ -22,10 +22,10 @@
 #include "statusBar.hpp"
 
 #include <cstdint>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace anaf::GUI {
 
@@ -34,7 +34,7 @@ namespace anaf::GUI {
     std::string text;
   };
 
-  inline std::vector<LogEntry> g_ui_logs;
+  inline std::deque<LogEntry> g_ui_logs; // deque: dropping the oldest line at the limit is O(1)
   inline std::uint32_t g_ui_log_max_num{10000}; // edited as ImGuiDataType_U32 in the console
   inline std::mutex g_log_mutex;
 
@@ -43,7 +43,7 @@ namespace anaf::GUI {
     std::lock_guard<std::mutex> lock(g_log_mutex);
     g_ui_logs.push_back({level, std::string(message)});
     if (g_ui_logs.size() > g_ui_log_max_num) {
-      g_ui_logs.erase(g_ui_logs.begin());
+      g_ui_logs.pop_front();
     }
   }
 

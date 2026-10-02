@@ -91,7 +91,7 @@ namespace anaf::GUI {
     if (m_wrapLines) ImGui::PushTextWrapPos(0.0f);
     {
       std::lock_guard<std::mutex> lock(g_log_mutex);
-      for (std::size_t i{0}; i < g_ui_logs.size(); ++i) {
+      const auto drawLine = [](const std::size_t i) {
         const auto& log = g_ui_logs[i];
 
         ImGui::PushID(static_cast<int>(i));
@@ -117,6 +117,17 @@ namespace anaf::GUI {
         }
 
         ImGui::PopID();
+      };
+      if (m_wrapLines) {
+        // Wrapped lines differ in height, which ImGuiListClipper cannot skip; every line is laid out.
+        for (std::size_t i = 0; i < g_ui_logs.size(); ++i) drawLine(i);
+      } else {
+        // One row per line: only the visible rows are drawn.
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(g_ui_logs.size()));
+        while (clipper.Step()) {
+          for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) drawLine(static_cast<std::size_t>(row));
+        }
       }
     }
     if (m_wrapLines) ImGui::PopTextWrapPos();
