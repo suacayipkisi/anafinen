@@ -103,7 +103,7 @@ namespace FEM::TRUSS {
     }
   }
 
-  void Truss_1D_Container::calculateDisplacements(const std::stop_token stopToken) {
+  bool Truss_1D_Container::calculateDisplacements(const std::stop_token stopToken) {
     #pragma omp parallel
     {
       #pragma omp single
@@ -236,7 +236,7 @@ namespace FEM::TRUSS {
       );
       m_resultDisplacements.assign(nodeCount, {0.0, 0.0, 0.0});
       for (auto& node : m_allNodes) node.setDisplacements({0.0, 0.0, 0.0});
-      return;
+      return false;
     }
 
     #pragma omp parallel for schedule(static)
@@ -250,6 +250,7 @@ namespace FEM::TRUSS {
       m_resultDisplacements[node] = displacement;
       m_allNodes[node].setDisplacements(displacement);
     }
+    return true;
   }
 
   void Truss_1D_Container::calculateElementForcesAndStress(

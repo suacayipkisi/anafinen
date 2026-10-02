@@ -19,12 +19,9 @@
 
 #include <chrono>
 #include <ctime>
+#include <iostream>
 #include <mutex>
 #include <string>
-
-#ifdef ANAF_CLI
-#include <iostream>
-#endif
 
 namespace {
   inline void portableLocalTime(const std::time_t* timer, std::tm* buf) {
@@ -73,10 +70,9 @@ namespace anaf::LOG {
     auto& ctx = getContext();
     std::lock_guard<std::mutex> lock(ctx.mtx);
 
-    // Terminal output
-#ifdef ANAF_CLI
-    std::cout << std::format("[{}] {}{}{}{} {}\n", timeStr, COLOR_BOLD, tagColor, tag, COLOR_RESET, formattedMessage);
-#endif
+    if (ctx.consoleOutput) {
+      std::cout << std::format("[{}] {}{}{}{} {}\n", timeStr, COLOR_BOLD, tagColor, tag, COLOR_RESET, formattedMessage);
+    }
 
     // File output
     if (ctx.logFile.is_open()) {
@@ -84,13 +80,9 @@ namespace anaf::LOG {
       ctx.logFile.flush();
     }
 
-#ifdef ANAF_GUI
-    // UI callback dispatch
     if (ctx.callback) {
-      const std::string uiFormatted = std::format("[{}] {} {}", timeStr, tag, formattedMessage);
-      ctx.callback(level, uiFormatted);
+      ctx.callback(level, std::format("[{}] {} {}", timeStr, tag, formattedMessage));
     }
-#endif
   }
 
 } // namespace anaf::LOG end

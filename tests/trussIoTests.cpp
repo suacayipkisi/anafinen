@@ -20,6 +20,7 @@
 
 #include "testSupport.hpp"
 
+#include <bridge/generalStatus.hpp>
 #include <io/meshIo.hpp>
 #include <material/materialLibrary.hpp>
 #include <io/core/pathUtf8.hpp>
@@ -85,21 +86,10 @@ namespace {
 
   // Runs the one solve pipeline exactly like TRUSS_WORKER::startSolve() (both truss panels),
   // with fixity added to the supports already on the nodes.
-  std::expected<std::shared_ptr<BRIDGE::MeshData>, std::string> solveImported(const BRIDGE::MeshData& source,
-                                                                              const Fixity& fixity = {}) {
-    auto& bridge = BRIDGE::buildBridge();
-    const auto materials = bridge.allMaterials;
+  std::expected<FEM::TRUSS::StaticResult, std::string> solveImported(const BRIDGE::MeshData& source, const Fixity& fixity = {}) {
     BRIDGE::MeshData mesh = source;
     applyFixity(mesh, fixity);
-    std::stop_source stop;
-    FEM::TRUSS::Truss_Imported_or_Entered solver;
-    if (auto ready = solver.setModel(bridge, stop.get_token(), mesh, materials); !ready) {
-      return std::unexpected(ready.error());
-    }
-    solver.setForce(bridge, stop.get_token(), mesh.appliedForces);
-    solver.setContainer(bridge, stop.get_token());
-    solver.calculate(bridge, stop.get_token(), materials);
-    return solver.buildResultMesh(mesh, materials);
+    return FEM::TRUSS::solveStatic(mesh, BRIDGE::buildBridge().allMaterials);
   }
 
   // The generated 5 x 1 x 5 grid, solved like the Simple Quadrangle panel does it.
@@ -113,7 +103,8 @@ namespace {
     applyFixity(*grid, fixity);
     auto solved = solveImported(*grid);
     REQUIRE(solved.has_value());
-    return *solved;
+    REQUIRE(solved->energyCheckPassed);
+    return solved->mesh;
   }
 
   void compareSnapshots(const BRIDGE::MeshData& expected, const Fixity& expectedFixity,
@@ -167,7 +158,6 @@ TEST(invalidGridParametersAreRefusedBeforeBuilding) {
 TEST(solvedTrussSurvivesEveryWritableFormat) {
   Fixity fixity;
   const auto snapshot = solvedSnapshot(fixity);
-  REQUIRE(BRIDGE::buildBridge().m_isValid.load());
   const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, BRIDGE::buildBridge().allMaterials);
   CHECK(model.validate().empty());
 
@@ -272,8 +262,8 @@ TEST(importedTrussSolvesLikeTheGeneratedOne) {
   const auto solved = solveImported(*imported.mesh);
   if (!solved) std::printf("      %s\n", solved.error().c_str());
   REQUIRE(solved.has_value());
-  CHECK(BRIDGE::buildBridge().m_isValid.load());
-  const auto& result = **solved;
+  CHECK(solved->energyCheckPassed);
+  const auto& result = *solved->mesh;
   CHECK(result.hasResults);
   REQUIRE(result.trussNodes.size() == generated->trussNodes.size());
   REQUIRE(result.trussElements.size() == generated->trussElements.size());
@@ -316,7 +306,7 @@ TEST(selfBuiltTrussMatchesTheHandSolution) {
   const auto solved = solveImported(mesh, fixity);
   if (!solved) std::printf("      %s\n", solved.error().c_str());
   REQUIRE(solved.has_value());
-  const auto& result = **solved;
+  const auto& result = *solved->mesh;
 
   // Axial stress of each bar (self weight adds a small term; steel over 1.41 m is ~5e4 Pa).
   const double expectedStress = -load / (2.0 * std::sqrt(0.5)) / area;
@@ -415,12 +405,12 @@ TEST(inclinedSupportsMatchTheRotatedModel) {
   const auto solved = solveImported(*imported.mesh);
   if (!solved) std::printf("      %s\n", solved.error().c_str());
   REQUIRE(solved.has_value());
-  CHECK(bridge.m_isValid.load());
+  CHECK(solved->energyCheckPassed);
 
   double maxDisp = 0.0, dispError = 0.0;
   for (std::size_t i = 0; i < positions.size(); ++i) {
-    const auto expected = rotate((*reference)->trussNodes[i].getDisplacement());
-    const auto& actual = (*solved)->trussNodes[i].getDisplacement();
+    const auto expected = rotate(reference->mesh->trussNodes[i].getDisplacement());
+    const auto& actual = solved->mesh->trussNodes[i].getDisplacement();
     for (std::size_t axis = 0; axis < 3; ++axis) {
       maxDisp = std::max(maxDisp, std::abs(expected[axis]));
       dispError = std::max(dispError, std::abs(actual[axis] - expected[axis]));
@@ -429,16 +419,16 @@ TEST(inclinedSupportsMatchTheRotatedModel) {
   CHECK(maxDisp > 0.0);
   CHECK(dispError <= 1e-9 * maxDisp);
   // Node 1 moves only along its inclined rail.
-  const auto& railMotion = (*solved)->trussNodes[1].getDisplacement();
+  const auto& railMotion = solved->mesh->trussNodes[1].getDisplacement();
   const auto rail = rotate({1.0, 0.0, 0.0});
   const double along = railMotion[0] * rail[0] + railMotion[1] * rail[1] + railMotion[2] * rail[2];
   CHECK(std::abs(along) > 0.0);
   for (std::size_t axis = 0; axis < 3; ++axis) CHECK(std::abs(railMotion[axis] - along * rail[axis]) <= 1e-12 * std::abs(along));
 
   for (std::size_t e = 0; e < 3; ++e) {
-    const double expected = (*reference)->trussElements[e].stress;
+    const double expected = reference->mesh->trussElements[e].stress;
     CHECK(expected != 0.0);
-    CHECK(std::abs(static_cast<double>((*solved)->trussElements[e].stress) - expected) <= 1e-5 * std::abs(expected));
+    CHECK(std::abs(static_cast<double>(solved->mesh->trussElements[e].stress) - expected) <= 1e-5 * std::abs(expected));
   }
 }
 
@@ -633,11 +623,11 @@ TEST(builtInTrussesAreStableAndSolve) {
     const auto solved = solveImported(*imported.mesh);
     if (!solved) std::printf("      %s: %s\n", entry.id.c_str(), solved.error().c_str());
     REQUIRE(solved.has_value());
-    CHECK_MSG(bridge.m_isValid.load(), entry.id + " energy check");
+    CHECK_MSG(solved->energyCheckPassed, entry.id + " energy check");
 
     std::array<double, 3> low{1e300, 1e300, 1e300}, high{-1e300, -1e300, -1e300};
     double maxDisp = 0.0, maxStress = 0.0, yieldRatio = 0.0;
-    for (const auto& node : (*solved)->trussNodes) {
+    for (const auto& node : solved->mesh->trussNodes) {
       const auto& d = node.getDisplacement();
       maxDisp = std::max(maxDisp, std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]));
       for (std::size_t axis = 0; axis < 3; ++axis) {
@@ -645,14 +635,14 @@ TEST(builtInTrussesAreStableAndSolve) {
         high[axis] = std::max(high[axis], node.getLocation()[axis]);
       }
     }
-    for (const auto& element : (*solved)->trussElements) {
+    for (const auto& element : solved->mesh->trussElements) {
       maxStress = std::max(maxStress, std::abs(static_cast<double>(element.stress)));
       yieldRatio = std::max(yieldRatio, std::abs(static_cast<double>(element.stress)) / bridge.allMaterials[element.materialID].getYieldTensile());
     }
     const double extent = std::max({high[0] - low[0], high[1] - low[1], high[2] - low[2]});
     std::printf("      %-32s %4zu nodes %4zu bars  max disp %8.2f mm (L/%.0f)  max |stress| %7.1f MPa (%.0f %% of yield)  cond %.1e  energy diff %.2e J\n",
                 entry.id.c_str(), imported.mesh->trussNodes.size(), imported.mesh->trussElements.size(), maxDisp * 1e3,
-                extent / maxDisp, maxStress / 1e6, yieldRatio * 100.0, ratio, bridge.m_energyDiff.load());
+                extent / maxDisp, maxStress / 1e6, yieldRatio * 100.0, ratio, solved->energyDiff);
     // Ready-made examples are designed to be reasonable: elastic and stiff (deflection below L/250).
     CHECK_MSG(std::isfinite(maxDisp) && maxDisp > 0.0 && maxDisp < extent / 250.0, entry.id + " deflection");
     CHECK_MSG(yieldRatio < 1.0, entry.id + " yields");

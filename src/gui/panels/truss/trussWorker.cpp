@@ -48,27 +48,24 @@ namespace anaf::GUI::TRUSS_WORKER {
         try {
           configureOpenMPForWorker();
           const auto model = source();
-          FEM::TRUSS::Truss_Imported_or_Entered solver;
           if (!model) {
             anaf::LOG::error("Solver not started: {}", model.error());
-          } else if (const auto ready = solver.setModel(bridge, st, **model, materials); !ready) {
-            anaf::LOG::error("Solver not started: {}", ready.error());
+          } else if (auto solved = FEM::TRUSS::solveStatic(**model, materials, st, [&bridge](const float fraction) {
+                       bridge.m_progress = fraction;
+                     }); !solved) {
+            if (!st.stop_requested()) anaf::LOG::error("Solver failed: {}", solved.error());
           } else {
-            solver.setForce(bridge, st, (*model)->appliedForces);
-            solver.setContainer(bridge, st);
-            solver.calculate(bridge, st, materials);
-            if (!st.stop_requested()) {
-              auto solved = solver.buildResultMesh(**model, materials);
-              bool published = false;
-              {
-                std::lock_guard lock(bridge.dataMutex);
-                if (bridge.modelGeneration.load() == generation) { // not reset while solving
-                  bridge.activeMesh = std::move(solved);
-                  published = true;
-                }
+            bool published = false;
+            {
+              std::lock_guard lock(bridge.dataMutex);
+              if (bridge.modelGeneration.load() == generation) { // not reset while solving
+                bridge.activeMesh = std::move(solved->mesh);
+                bridge.m_isValid = solved->energyCheckPassed;
+                bridge.m_energyDiff = solved->energyDiff;
+                published = true;
               }
-              if (published) bridge.dataVersion.fetch_add(1, std::memory_order_release);
             }
+            if (published) bridge.dataVersion.fetch_add(1, std::memory_order_release);
           }
         } catch (const std::exception& exception) {
           anaf::LOG::error("Solver failed: {}", exception.what());

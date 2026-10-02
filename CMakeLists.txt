@@ -62,6 +62,8 @@ target_link_libraries(anaf_io
 )
 
 set(ANAF_CORE_SOURCES
+    src/log/anaf_info.cpp
+    src/directory/getExecutableDirectory.cpp
     src/material/materialLibrary.cpp
     src/objectCalcs/truss_1D/trussProperties/node.cpp
     src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
@@ -72,8 +74,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_simplicial.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_iterative.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_referee.cpp
-    src/objectCalcs/truss_1D/trussEngine/trussSolver_static.cpp
-    src/objectCalcs/truss_1D/trussEngine/trussSolver_Imported.cpp
+    src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
@@ -95,6 +96,12 @@ endif()
 
 target_link_libraries(anaf_core PRIVATE nlohmann_json::nlohmann_json)
 
+# findAssetPath() falls back to the source tree (development builds, tests).
+target_compile_definitions(anaf_core PRIVATE MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+if(WIN32)
+    target_link_libraries(anaf_core PUBLIC shell32 ole32 uuid) # getUserConfigDirectory()
+endif()
+
 target_link_libraries(anaf_core PUBLIC
     anaf_io
     Eigen3::Eigen
@@ -104,8 +111,6 @@ target_link_libraries(anaf_core PUBLIC
 set(ANAFINEN_SOURCES
     src/main.cpp
     src/bridge/generalStatus.cpp
-    src/directory/getExecutableDirectory.cpp
-    src/log/anaf_info.cpp
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
     src/gui/guiMaterials/framebuffer.cpp
@@ -149,7 +154,6 @@ if(WIN32)
 endif()
 
 target_compile_definitions(anafinen PRIVATE
-    ANAF_GUI
     MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     ANAFINEN_VERSION="${PROJECT_VERSION}-alpha"
     GLFW_INCLUDE_NONE

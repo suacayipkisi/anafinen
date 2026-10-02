@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-28.
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-02.
 
 ## 1. Overall flow
 
@@ -46,13 +46,12 @@ CMakeLists.txt
 |---|---|---|---|
 | `project_warnings_and_optimizations` | INTERFACE | Release flags and defines | - |
 | `anaf_io` | STATIC | `src/io/*` (model, formats, service) | Gmsh, ZLIB (both PRIVATE) |
-| `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`) | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE) |
+| `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`), `src/material/materialLibrary.cpp`, `src/log/anaf_info.cpp`, `src/directory/getExecutableDirectory.cpp`. Self-contained: a front end links it and calls `solveStatic()` (no bridge or GUI code). `MAIN_DIR` (PRIVATE) for the source-tree asset fallback. | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE), nlohmann_json (PRIVATE); Windows: shell32, ole32, uuid (user config folder) |
 | `glad_local` | STATIC | `external/glad/src/gl.c` | - |
 | `imgui_suite` | STATIC | ImGui core + GLFW/OpenGL3 backends + ImGuizmo + ImPlot | glad, GLFW, OpenGL |
-| `anafinen` | EXECUTABLE | `main.cpp`, bridge, log, directory, GUI, test | `anaf_core`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG; Windows: ole32, comdlg32, shell32, uuid (file dialogs) |
+| `anafinen` | EXECUTABLE | `main.cpp`, bridge, GUI, platform | `anaf_core`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG; Windows: ole32, comdlg32, shell32, uuid (file dialogs) |
 
-Compile definitions on `anafinen`:
-- `ANAF_GUI`
+Compile definitions on `anafinen` (there is no `ANAF_GUI` / `ANAF_CLI` macro: the log picks its sinks at run time, `anaf::LOG::setCallback()` / `setConsoleOutput()`):
 - `GLFW_INCLUDE_NONE`: GLAD provides the GL headers.
 - `MAIN_DIR="<source dir>"`: used as an asset search fallback in development builds.
 

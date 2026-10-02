@@ -48,9 +48,9 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `m_isRunning` | `atomic<bool>` | Truss panels (set), worker (clear), `resetModel()` | Truss panels (button state), File > Import, material removal | atomic |
 | `m_isGeneratingPreview` | `atomic<bool>` | Control panel, preview worker, `resetModel()` | Control panel | atomic |
 | `m_progress` | `atomic<float>` 0..1 | Worker (solver steps) | Progress bars | atomic |
-| `m_isValid`, `m_energyDiff` | atomics | `detail::runStaticSolve()`, `resetModel()` | Panels | atomic (written under `dataMutex`) |
+| `m_isValid`, `m_energyDiff` | atomics | `TRUSS_WORKER::startSolve()` (from the `StaticResult`, when it publishes), `resetModel()` | Panels | atomic (written under `dataMutex`) |
 | `deformScale` | `atomic<double>` | Both truss panels ("Deformation Scale", then `dataVersion` bump), `resetModel()` (back to 1) | Viewport (with each snapshot reload) | atomic |
-| `m_objectType` | `atomic<ObjectType>`, starts as `no_type` | `resetModel()` only | Model tree, File > Import (refused for `truss_SQPT`), File menu | atomic; written under `dataMutex` |
+| `m_objectType` | `atomic<ObjectType>`, starts as `no_type` | `resetModel()` only | Model tree, truss selector | atomic; written under `dataMutex` |
 | `workerThread` | `std::jthread` | Truss panels (after `joinWorker()`) | `initgui()` shutdown, `resetModel()` (stop request) | GUI thread only |
 | `allMaterials` | `vector<Material>` | `setStaticInfo()` (built-ins from JSON), `addUserMaterial()`, `removeUserMaterial()` | Control panel (material combo, copies it for the worker), Material Handler, File > Import | `dataMutex`; the solver worker only sees a copy |
 | `m_nextMaterialID` (private) | `uint32_t` | `setStaticInfo()`, `addUserMaterial()`, `loadUserMaterials()` | - | `dataMutex` |
@@ -64,9 +64,11 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `truss_SQPT` | Grid generator (Generate Preview / Run Solver) | `TrussControlPanel` | yes (switches to `truss_imported_or_entered`) | yes |
 | `truss_imported_or_entered` | File > Import, or node / bar edits | `TrussModelEditor` | yes (replaces the model) | yes |
 
-Both types solve the same way: `TRUSS_WORKER::startSolve()` runs `Truss_Imported_or_Entered` on the snapshot ([CALCULATIONS.md](CALCULATIONS.md) section 1). An import that finishes after the model was reset (type change, Clear) is discarded by its `modelGeneration`.
+Both types solve the same way: `TRUSS_WORKER::startSolve()` runs `FEM::TRUSS::solveStatic()` on the snapshot ([CALCULATIONS.md](CALCULATIONS.md) section 1). An import that finishes after the model was reset (type change, Clear) is discarded by its `modelGeneration`.
 
 ## 3. `MeshData`: the published snapshot
+
+Defined in the FEM core (`src/objectCalcs/truss_1D/trussProperties/meshData.hpp`, `FEM::TRUSS::MeshData`); the bridge header aliases it as `anaf::BRIDGE::MeshData` / `RenderElement`.
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -197,7 +199,7 @@ Without a `loadUserMaterials()` call (the tests), user materials are session-onl
 - Atomics (`m_progress`, `m_isRunning`, ...) may be written from the worker directly.
 - Publish results only through the protocol in section 4, and only if `modelGeneration` is still the value taken at start (section 4.1).
 - Call `joinWorker()` before setting `m_isRunning` / `m_isGeneratingPreview` for the new job.
-- `buildBridge()` returns a process-wide singleton. The bridge stays a core type on purpose: a planned CLI executable will build a CLI-side bridge instead of the GUI side. Prefer passing `Gui_Calc_Bridge&` explicitly, as `Truss_Imported_or_Entered` does. New solve jobs go through `TRUSS_WORKER::startSolve()`, which already follows these rules.
+- `buildBridge()` returns a process-wide singleton. The bridge is GUI-side only (since 2026-10-02 the FEM core has no bridge dependency; `MeshData` lives in `anaf_core` and `anaf::BRIDGE::MeshData` is an alias). A CLI needs no bridge: it calls `FEM::TRUSS::solveStatic()` directly. New GUI solve jobs go through `TRUSS_WORKER::startSolve()`, which already follows these rules.
 
 ## 7. Related source files
 

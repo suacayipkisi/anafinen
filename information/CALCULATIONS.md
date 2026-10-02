@@ -9,28 +9,23 @@ This document describes the finite element calculation for 3D truss structures b
 
 ## 1. Overall flow
 
-One orchestrator solves every model: `Truss_Imported_or_Entered` takes a `MeshData` snapshot, whatever made it (the Simple Quadrangle generator `buildSimpleTruss()`, a built-in library model, File > Import or the model editor). Both truss panels start it through `TRUSS_WORKER::startSolve()` (`src/gui/panels/truss/trussWorker.cpp`), which copies the fixity and the material list, builds the model on the worker thread and publishes the result unless the model was reset meanwhile.
+One function solves every model: `FEM::TRUSS::solveStatic(mesh, materials, stop_token, progress)` (`trussEngine/trussSolver.hpp`) takes a `MeshData` snapshot, whatever made it (the Simple Quadrangle generator `buildSimpleTruss()`, a built-in library model, File > Import or the model editor), and returns a `StaticResult` (solved copy + energy check) or the reason it cannot solve. It has no GUI types: the GUI calls it from `TRUSS_WORKER::startSolve()` (`src/gui/panels/truss/trussWorker.cpp`), which copies the material list, builds the model on the worker thread, forwards the progress to `bridge.m_progress` and publishes the result and the energy check unless the model was reset meanwhile; a CLI or a test calls it directly.
 
 ```text
-TRUSS_WORKER::startSolve(source)                         progress
+solveStatic(mesh, materials, st, progress)  (trussSolver.cpp)      progress
    |
-   +-- source()                    snapshot (SQPT: buildSimpleTruss() + loads)
-   +-- Truss_Imported_or_Entered (trussSolver_Imported.cpp)
-         +-- setModel(snapshot, materials copy)               0.20
-         +-- setForce(snapshot loads) -> m_forceVec[3*id + axis]  0.25
-         +-- setContainer()   Truss_1D_Container gets std::span views  0.30
-         +-- calculate() = detail::runStaticSolve()
-         |     +-- assembleStiffness()       upper-triangle triplets     0.50
-         |     +-- considerWeight()          -rho*A*L*g split to nodes    0.55
-         |     +-- calculateDisplacements()
-         |     |     u = T q (allowed directions) -> T^T K T, T^T f
-         |     |     SOLVER::solveSelected()  (referee)                   0.85
-         |     |     scatter back to nodes
-         |     +-- max |displacement| for the log (node locations stay undeformed)
-         |     +-- calculateElementForcesAndStress()                      0.90
-         |     +-- runValidator()   energy check                          0.95
-         |     +-- write m_isValid / m_energyDiff to bridge
-         +-- buildResultMesh(snapshot)   result snapshot, published by startSolve
+   +-- buildSolverModel()   snapshot -> Node / TrussElement_1D, supports, loads   0.30
+   +-- Truss_1D_Container
+   |     +-- assembleStiffness()       upper-triangle triplets     0.50
+   |     +-- considerWeight()          -rho*A*L*g split to nodes    0.55
+   |     +-- calculateDisplacements()  false: solve failed / stopped
+   |     |     u = T q (allowed directions) -> T^T K T, T^T f
+   |     |     SOLVER::solveSelected()  (referee)                   0.85
+   |     |     scatter back to nodes
+   |     +-- calculateElementForcesAndStress()                      0.90
+   |     +-- runValidator()   energy check                          0.95
+   +-- logResult()   energy, max |u| (vector magnitude), max |stress|
+   +-- solved copy of the snapshot -> StaticResult                  1.00
 ```
 
 ## 2. Data types
@@ -42,7 +37,8 @@ TRUSS_WORKER::startSolve(source)                         progress
 | `ForceApplied` | `trussProperties/appliedForce.hpp` | Node ID + force vector [N] |
 | `Material` | `material/properties.hpp` | E, G, K, yield/ultimate strength, density, Poisson, ductility, ID, built-in flag. Built-ins are loaded from `assets/bridge/materialProperties.json` ([BRIDGE.md](BRIDGE.md) section 5.1). |
 | `Truss_1D_Container` | `trussEngine/trussSolver/deformationUnderConstForce.hpp` | Non-owning spans over force vector, nodes, elements; triplets; results; energy values |
-| `Truss_Imported_or_Entered` | `trussEngine/trussSolver.hpp` | Orchestrates one solve of any snapshot (section 3.1) |
+| `MeshData`, `RenderElement` | `trussProperties/meshData.hpp` | The model / snapshot: nodes (with supports), bars, loads, `hasResults` (`anaf::BRIDGE` keeps aliases) |
+| `StaticResult` | `trussEngine/trussSolver.hpp` | Result of `solveStatic()`: solved snapshot copy, energy check |
 
 Units are SI throughout: m, m², N, Pa, kg/m³. The GUI enters the cross-section in cm²; the Simple Quadrangle panel and the model editor multiply by `1e-4` (snapshots store m²). `Material` has both `m_elasticityModulus` and `m_youngModulus`; the solver uses `m_elasticityModulus`.
 
@@ -58,7 +54,7 @@ The element constructor rejects invalid input by throwing `std::invalid_argument
 - `setAllowedMotionDirections()` accepts arbitrary directions, orthonormalizes them with Gram-Schmidt (`FEM::TRUSS::orthonormalize()`, which throws on zero or dependent vectors, relative tolerance 1e-9), and derives `m_isMovable` from them. An axis is movable only if it lies in the span of the basis.
 - `FEM::TRUSS::orthogonalComplement()` gives the perpendicular directions of a basis (each step takes the global axis with the largest part outside the span). The model editor uses it to turn restrained directions into the allowed motion.
 - The solver works on the allowed-motion basis, not on `m_isMovable` (section 6). For an inclined support `m_isMovable` is only a summary: an axis counts as movable only when it lies fully in the span, so a roller along (1, 1, 0) reports x and y as fixed.
-- `hasInclinedSupport()` is true when a basis vector is not a global axis. `isSupported()` is true when fewer than three directions are allowed. The node is the only place a support is stored (there is no separate fixity map since 2026-10-02): `Truss_Imported_or_Entered::setModel()` copies every node's basis, and `ADAPTER::toMeshModel()` writes a `NodeConstraint` for every supported node (an inclined one with `allowedMotion`).
+- `hasInclinedSupport()` is true when a basis vector is not a global axis. `isSupported()` is true when fewer than three directions are allowed. The node is the only place a support is stored (there is no separate fixity map since 2026-10-02): `solveStatic()` copies every node's basis, and `ADAPTER::toMeshModel()` writes a `NodeConstraint` for every supported node (an inclined one with `allowedMotion`).
 
 ## 3. Mesh generation: simple quadrangle prism truss
 
@@ -77,29 +73,23 @@ The element constructor rejects invalid input by throwing `std::invalid_argument
 | XZ face diagonals | `2 nx (ny+1) nz` |
 | YZ face diagonals | `2 (nx+1) ny nz` |
 
-### 3.1 Solving a snapshot (`Truss_Imported_or_Entered`)
+### 3.1 Solving a snapshot (`solveStatic()`)
 
-The input is a `MeshData` snapshot: generated (section 3), a library model (section 3.2), imported, or entered in the model editor. The static solve itself is `detail::runStaticSolve()` (`trussSolver_static.cpp`).
+The input is a `MeshData` snapshot: generated (section 3), a library model (section 3.2), imported, or entered in the model editor. `buildSolverModel()` (inside `trussSolver.cpp`) turns it into solver objects:
 
 ```text
-Truss_Imported_or_Entered (trussSolver_Imported.cpp)       progress
-   |
-   +-- setModel(snapshot, materials copy)                   0.20
-   |     nodes: ids must equal positions 0..n-1
-   |     bars:  every RenderElement except isWireframe
-   |            -> TrussElement_1D(materialID, area, node1, node2)
-   |     nodes used by no bar -> all DOFs fixed (warning)
-   |     snapshot node support -> setAllowedMotionDirections()
-   |
-   +-- setForce(snapshot loads)                             0.25
-   +-- setContainer()                                       0.30
-   +-- calculate()  = detail::runStaticSolve()              0.50 .. 0.95
-   +-- buildResultMesh(snapshot)
-         copy of the snapshot; displacement on every node, stress on the
-         solved bars; wireframe edges keep stress 0; hasResults = true
+buildSolverModel(snapshot, materials)
+   nodes: ids must equal positions 0..n-1
+   bars:  every RenderElement except isWireframe
+          -> TrussElement_1D(materialID, area, node1, node2)
+   nodes used by no bar  -> all DOFs fixed (warning)
+   snapshot node support -> setAllowedMotionDirections()
+   loads -> force vector [3 * id + axis]
 ```
 
-`setModel()` returns an error text instead of solving when:
+The result is a copy of the snapshot: displacement on every node, stress on the solved bars, wireframe edges keep stress 0, `hasResults = true`.
+
+`solveStatic()` returns an error text instead of a result when:
 
 | Condition | Why |
 |---|---|
@@ -109,7 +99,7 @@ Truss_Imported_or_Entered (trussSolver_Imported.cpp)       progress
 | A node id differs from its position | Element node indices address the node vector directly |
 | A bar references a missing node, both ends are the same node, or its length is 0 | The `TrussElement_1D` constructor would throw |
 
-A structure that is still a mechanism (for example too few supports) reaches the referee and fails there, as in section 7.
+A structure that is still a mechanism (for example too few supports) reaches the referee and fails there, as in section 7; `calculateDisplacements()` then returns false and `solveStatic()` reports the failed solve (before 2026-10-02 the zero displacements went on to the energy check, which passed trivially). A stop request returns "cancelled".
 
 Verified by `anaf_truss_io_tests`: a solved generated grid written to MSH, read back and solved again matches the first result, and a two-bar truss matches the hand solution σ = −P / (2 A sin 45°), v = P L / (2 A E sin² 45°).
 
@@ -293,7 +283,7 @@ The result is written to `bridge.m_isValid` and `bridge.m_energyDiff` and logged
 
 ## 13. Related source files
 
-- Orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp), [trussSolver_Imported.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_Imported.cpp), [trussSolver_static.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_static.cpp) (shared static solve)
+- Orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp), [trussSolver.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp); model types: [trussProperties/meshData.hpp](../src/objectCalcs/truss_1D/trussProperties/meshData.hpp)
 - Container: [deformationUnderConstForce.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp)
 - Solvers: [solverPortfolio.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solverPortfolio.hpp), [solver_referee.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_referee.cpp), [solver_cholmod.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_cholmod.cpp), [solver_simplicial.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_simplicial.cpp), [solver_iterative.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_iterative.cpp)
 - Types: [node.hpp](../src/objectCalcs/truss_1D/trussProperties/node.hpp), [element.hpp](../src/objectCalcs/truss_1D/trussProperties/element.hpp), [appliedForce.hpp](../src/objectCalcs/truss_1D/trussProperties/appliedForce.hpp), [properties.hpp](../src/material/properties.hpp)

@@ -66,7 +66,8 @@ namespace FEM::TRUSS {
       std::span<const anaf::MATERIAL::Material> allMaterials
     );
 
-    void calculateDisplacements(std::stop_token stopToken = {});
+    // False when the solve failed or was stopped; the displacements are then zero.
+    bool calculateDisplacements(std::stop_token stopToken = {});
     void calculateElementForcesAndStress(
       const std::span<const anaf::MATERIAL::Material> allMaterials, 
       const Eigen::Vector3d gravityVector = {0.0, -9.80665, 0.0}

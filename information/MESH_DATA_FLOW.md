@@ -32,14 +32,14 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
                               |                             |
                               v                             |
             +------------------------------------+         |
-            | Truss_Imported_or_Entered          |         |
-            |  setModel: snapshot -> Node /      |         |
+            | FEM::TRUSS::solveStatic()          |         |
+            |  buildSolverModel: snapshot ->     |         |
             |    TrussElement_1D, node supports  |         |
             |  setForce: loads -> m_forceVec     |         |
             |  Truss_1D_Container: K triplets,   |         |
             |    self weight, T^T K T q = T^T f, |         |
             |    stress, energy check            |         |
-            |  buildResultMesh: result snapshot  |         |
+            |  -> StaticResult (solved copy)      |         |
             +------------------+-----------------+         |
                                |                           |
                                +-- publish (same model generation) --> activeMesh
@@ -59,12 +59,12 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
 
 | Data | Main owner | Storage field | Role in the lifecycle |
 |---|---|---|---|
-| Mesh nodes | snapshot, solver copy | `MeshData::trussNodes`, `Truss_Imported_or_Entered::m_nodes` | Node IDs, original positions, movable state / inclined basis, displacements. |
+| Mesh nodes | snapshot, solver copy | `MeshData::trussNodes`, `SolverModel::nodes` (inside `solveStatic()`) | Node IDs, original positions, movable state / inclined basis, displacements. |
 | Mesh elements | snapshot, solver copy | `MeshData::trussElements` (`RenderElement`), `m_elements` (`TrussElement_1D`) | Node IDs, area, material, stress; the solver copy adds length, direction cosines, elongation and force. |
 | GUI mesh snapshot | `Gui_Calc_Bridge` | `activeMesh` | Shared publication point for preview or solver results. |
 | Supports | snapshot nodes | `Node::m_allowedMotionDirections` (+ `m_isMovable` summary) | The only place a support is stored: axis fixity or an inclined basis. Editors change it on a snapshot copy; the Simple Quadrangle panel keeps its supports as input (`m_supports`) and puts them on every grid it builds. |
 | Applied loads | Panel and snapshot | `m_appliedForces`, `MeshData::appliedForces` | Stores user loads by node and later feeds the global DOF vector. |
-| Global force vector | `Truss_Imported_or_Entered` and container span | `m_forceVec` | Uses `index = 3 * nodeId + axis` for X/Y/Z DOFs; element weight is added here. |
+| Global force vector | `SolverModel::force` and container span | `m_forceVec` | Uses `index = 3 * nodeId + axis` for X/Y/Z DOFs; element weight is added here. |
 | Global stiffness data | `Truss_1D_Container` | `m_globalStiffnessMatrix` | Created as 21 upper-triangle Eigen triplets per element. |
 | Reduced system | Local variables in `calculateDisplacements()` | `reducedStiffnessMatrix`, `reducedForceVec` | Solver system over the allowed motion directions (`Tᵀ K T`, `Tᵀ f`). |
 | Displacement results | Container and nodes | `m_resultDisplacements`, `Node::m_displacement` | Written to nodes after solving and then copied into the GUI snapshot. |
@@ -76,7 +76,7 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
 
 1. A source makes the snapshot: the Simple Quadrangle panel calls `buildSimpleTruss()` on the worker and adds its loads; the model editor passes the active snapshot.
 2. `TRUSS_WORKER::startSolve()` copies the material list under `dataMutex`, notes `modelGeneration` and starts the worker.
-3. `setModel()` turns the snapshot into solver nodes and bars; each node keeps the allowed motion of its snapshot node (its support).
+3. `solveStatic()` (`buildSolverModel()`) turns the snapshot into solver nodes and bars; each node keeps the allowed motion of its snapshot node (its support).
 4. `ForceApplied` records are written to `m_forceVec[3 * nodeId + axis]`.
 5. `setContainer()` binds the container to the solver vectors through `std::span`. The container does not own the nodes or elements.
 6. `assembleStiffness()` creates global stiffness-matrix triplets from the elements.
@@ -84,7 +84,7 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
 8. `calculateDisplacements()` reduces the system to the allowed motion directions of each node (fixed DOFs drop out, inclined supports are rotated in), solves it, and writes displacements to the nodes.
 9. Node locations stay undeformed; the displacement lives only in `Node::m_displacement`. Element elongation, axial force, and stress are calculated.
 10. `runValidator()` performs the energy check and writes status values to the bridge.
-11. `buildResultMesh()` copies the snapshot with displacements and stresses; it is published through `bridge.activeMesh` if the model was not reset meanwhile.
+11. `solveStatic()` returns a copy of the snapshot with displacements and stresses plus the energy check (`StaticResult`); `startSolve()` publishes it through `bridge.activeMesh` (and `m_isValid` / `m_energyDiff`) if the model was not reset meanwhile.
 12. `dataVersion` is incremented. The viewport reads the new snapshot and draws elements, nodes, supports and force arrows.
 
 ## 4. Difference between preview and solver
@@ -94,7 +94,7 @@ Preview (Simple Quadrangle only):
   buildSimpleTruss() -> MeshData (nodes + bars + loads) -> activeMesh -> Viewport
 
 Solve (every model):
-  source() -> Truss_Imported_or_Entered -> result MeshData -> activeMesh -> Viewport
+  source() -> solveStatic() -> StaticResult.mesh -> activeMesh -> Viewport
 ```
 
 The preview contains the geometry and the loads. The solve rebuilds the grid from the panel inputs (so a changed input is used without a new preview) and adds displacements and stresses.
@@ -122,8 +122,9 @@ Import:  file --readMesh--> anaf::IO::MeshModel --ADAPTER::toMeshData--> new Mes
 ## 7. Related source files
 
 - GUI and worker flow: [src/gui/panels/truss/trussWorker.cpp](../src/gui/panels/truss/trussWorker.cpp), [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [src/gui/panels/truss/importedTruss/trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp)
-- Bridge and `MeshData`: [src/bridge/generalStatus.hpp](../src/bridge/generalStatus.hpp)
-- Solver orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver_Imported.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_Imported.cpp), [trussSolver_static.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_static.cpp)
+- Bridge: [src/bridge/generalStatus.hpp](../src/bridge/generalStatus.hpp)
+- Solver entry point: [src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp)
+- Model types: [src/objectCalcs/truss_1D/trussProperties/meshData.hpp](../src/objectCalcs/truss_1D/trussProperties/meshData.hpp)
 - Solver class: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp)
 - Container calculations: [src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp)
 - Container data fields: [src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp)

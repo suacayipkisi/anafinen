@@ -94,10 +94,13 @@ namespace anaf::LOG {
   inline constexpr std::string_view COLOR_BLUE   = "\033[34m";
   inline constexpr std::string_view COLOR_CYAN   = "\033[36m";
 
+  // Sinks: the log file (init()), the callback (GUI console) and colored stdout (a CLI). The
+  // log lives in anaf_core, so the front end picks its sinks at run time, not by macro.
   struct LoggerContext {
     std::mutex mtx;
     std::ofstream logFile;
     std::function<void(Level, std::string_view)> callback = nullptr;
+    bool consoleOutput{false};
   };
 
   inline LoggerContext& getContext() noexcept {
@@ -110,6 +113,11 @@ namespace anaf::LOG {
   inline void setCallback(std::function<void(Level, std::string_view)> cb) {
     std::lock_guard<std::mutex> lock(getContext().mtx);
     getContext().callback = std::move(cb);
+  }
+
+  inline void setConsoleOutput(const bool enabled) {
+    std::lock_guard<std::mutex> lock(getContext().mtx);
+    getContext().consoleOutput = enabled;
   }
 
   inline bool init(const std::string& filepath) {

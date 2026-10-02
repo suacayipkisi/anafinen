@@ -18,9 +18,9 @@
 #pragma once
 
 // Conversion between the format-neutral anaf::IO::MeshModel and the truss snapshot
-// (anaf::BRIDGE::MeshData) used by the solver pipeline and the viewport.
+// (FEM::TRUSS::MeshData) used by the solver pipeline and the viewport.
 
-#include <bridge/generalStatus.hpp>
+#include <truss_1D/trussProperties/meshData.hpp>
 #include <io/model/meshModel.hpp>
 #include <material/properties.hpp>
 
@@ -42,10 +42,10 @@ namespace FEM::TRUSS::ADAPTER {
   // Snapshot -> model (for export). Supports come from the nodes (Node::isSupported());
   // results are included when the snapshot carries them (MeshData::hasResults). materials:
   // the list the snapshot's materialID values index into (bridge.allMaterials).
-  anaf::IO::MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, std::span<const anaf::MATERIAL::Material> materials);
+  anaf::IO::MeshModel toMeshModel(const FEM::TRUSS::MeshData& mesh, std::span<const anaf::MATERIAL::Material> materials);
 
   struct ImportedTruss {
-    std::shared_ptr<anaf::BRIDGE::MeshData> mesh; // supports are set on its nodes
+    std::shared_ptr<FEM::TRUSS::MeshData> mesh; // supports are set on its nodes
     std::vector<std::string> notes; // user-facing remarks (e.g. elements shown as wireframe)
   };
 

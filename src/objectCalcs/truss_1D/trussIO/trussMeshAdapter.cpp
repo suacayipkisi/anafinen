@@ -33,7 +33,7 @@ namespace FEM::TRUSS::ADAPTER {
 
   using namespace anaf::IO;
 
-  MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, const std::span<const anaf::MATERIAL::Material> materials) {
+  MeshModel toMeshModel(const FEM::TRUSS::MeshData& mesh, const std::span<const anaf::MATERIAL::Material> materials) {
     MeshModel model;
     model.title = "anafinen truss";
 
@@ -108,7 +108,7 @@ namespace FEM::TRUSS::ADAPTER {
 
   ImportedTruss toMeshData(const MeshModel& model, const std::span<const anaf::MATERIAL::Material> materials) {
     ImportedTruss result;
-    result.mesh = std::make_shared<anaf::BRIDGE::MeshData>();
+    result.mesh = std::make_shared<FEM::TRUSS::MeshData>();
     auto& mesh = *result.mesh;
 
     const Field* displacement = model.findField(FieldName::Displacement, FieldLocation::Node);

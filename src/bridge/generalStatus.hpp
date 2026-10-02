@@ -18,8 +18,7 @@
 #pragma once
 
 #include <material/properties.hpp>
-#include <truss_1D/trussProperties/appliedForce.hpp>
-#include <truss_1D/trussProperties/node.hpp>
+#include <truss_1D/trussProperties/meshData.hpp>
 
 #include <atomic>
 #include <cstdint>
@@ -43,24 +42,9 @@ namespace anaf::BRIDGE {
 
   std::string_view getObjectTypeName(ObjectType obj);
 
-  struct RenderElement {
-    std::uint32_t node1{};
-    std::uint32_t node2{};
-    float stress{};               // Pa, tension > 0
-    bool isStressExceeded{false};
-    std::uint32_t materialID{};   // index into Gui_Calc_Bridge::allMaterials
-    double crossSectionArea{};    // m^2
-    bool isWireframe{false};      // edge of an imported surface / volume element: drawn, never solved
-  };
-
-  struct MeshData {
-
-    // truss (1_D element) deformation under constant applied force
-    std::vector<FEM::TRUSS::Node> trussNodes;
-    std::vector<RenderElement> trussElements;
-    std::vector<FEM::TRUSS::ForceApplied> appliedForces;
-    bool hasResults{false}; // displacements / stresses come from a solve (or a result file)
-  };
+  // The model types live in the FEM core (anaf_core), so a CLI can use them without the GUI bridge.
+  using RenderElement = FEM::TRUSS::RenderElement;
+  using MeshData = FEM::TRUSS::MeshData;
 
   struct Gui_Calc_Bridge {
     std::atomic<bool> m_isRunning{false};

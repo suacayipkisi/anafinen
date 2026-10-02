@@ -25,7 +25,7 @@
 
 namespace FEM::TRUSS {
 
-  std::expected<anaf::BRIDGE::MeshData, std::string> buildSimpleTruss(
+  std::expected<FEM::TRUSS::MeshData, std::string> buildSimpleTruss(
     const std::array<std::uint32_t, 3> cubeNum,
     const double edgeLength,
     const double areaM2,
@@ -51,7 +51,7 @@ namespace FEM::TRUSS {
     const std::uint32_t layer = rowX * (ny + 1);
     const auto id = [&](const std::uint32_t i, const std::uint32_t j, const std::uint32_t k) { return i + j * rowX + k * layer; };
 
-    anaf::BRIDGE::MeshData mesh;
+    FEM::TRUSS::MeshData mesh;
     mesh.trussNodes.reserve(static_cast<std::size_t>(nodeCount));
     for (std::uint32_t k = 0; k <= nz; ++k) {
       for (std::uint32_t j = 0; j <= ny; ++j) {

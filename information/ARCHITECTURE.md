@@ -52,9 +52,8 @@ This document is the entry point for the project documentation. It describes how
 
 - `anaf_io` is the file layer shared by every front end: GUI now, CLI later, and the tests. It does not know about any solver.
 - `anaf_core` holds the FEM code and the solver-specific adapters.
-- `anafinen` adds the GUI, the bridge, the log, and the entry point.
-
-`anaf_core` also includes `bridge/generalStatus.hpp` (`Truss_Imported_or_Entered` takes the bridge by reference). This is intentional until the CLI executable exists; see section 8.1.
+- `anaf_core` is self-contained (since 2026-10-02): the model types (`MeshData`), `solveStatic()`, the material library, the log and the asset lookup. A front end links it and needs nothing from the GUI.
+- `anafinen` adds the GUI, the bridge (`Gui_Calc_Bridge`: snapshot publication, worker, materials for the panels) and the entry point.
 
 ## 3. Namespaces
 
@@ -138,12 +137,13 @@ Update the documents when any of the following happens:
 
 ### 8.1 Deferred by design
 
-- `anaf_core` includes `bridge/generalStatus.hpp` (`Truss_Imported_or_Entered` takes `Gui_Calc_Bridge&`) and calls `anaf::LOG`. Their sources (`generalStatus.cpp`, `anaf_info.cpp`, and `getExecutableDirectory.cpp` for the material library lookup) are compiled into the GUI executable only, so `anaf_core` cannot be linked on its own yet; `anaf_truss_io_tests` adds these files explicitly. The material library loader itself (`materialLibrary.cpp`) is already in `anaf_core` and has no GUI or log dependency. This is intentional for now. A pure CLI executable is planned for a later phase; at that point the bridge gets a CLI-side counterpart and the core is built against that instead of the GUI side.
+- The CLI executable itself does not exist yet. Its prerequisite is done (2026-10-02): `anaf_core` links on its own and `FEM::TRUSS::solveStatic()` takes no GUI type, so a CLI is `main()` + argument parsing + `anaf_io` + `solveStatic()` (with `anaf::LOG::setConsoleOutput(true)`).
 
 ### 8.2 Fixed
 
 | Issue | Fixed on | Fix |
 |---|---|---|
+| `anaf_core` could not be linked on its own: the solver took `Gui_Calc_Bridge&`, and the log / asset lookup sources were compiled into the GUI executable (tests added them by hand) | 2026-10-02 | `FEM::TRUSS::solveStatic()` with a progress callback and a `StaticResult`; `MeshData` / `RenderElement` moved to `trussProperties/meshData.hpp` (bridge aliases); log and directory sources in `anaf_core`; the log's `ANAF_GUI` / `ANAF_CLI` macros replaced by a run-time console switch. A failed stiffness solve is an error now instead of zero displacements with a trivially passing energy check, and the logged max displacement is the vector magnitude (was the largest component). |
 | Inclined supports (allowed-motion basis) were stored but not solved: the solver used only the axis flags, so a roller on an inclined rail was locked in every axis its rail is not parallel to, and the basis was lost in `setModel()` and on export | 2026-09-29 | The container solves `(Tᵀ K T) q = Tᵀ f` over the allowed directions; `setModel()` and `toMeshModel()` keep the basis ([CALCULATIONS.md](CALCULATIONS.md) section 6). |
 | Displacement drawn twice (`location += displacement` in `calculate()`) | 2026-09-27 | Node locations stay undeformed. The displacement is stored only in `m_displacement`. |
 | Worker read `fixedDOFsByNode` / `allMaterials` without `dataMutex` | 2026-09-27 | The GUI thread copies both under the lock and moves the copies into the worker. The solver takes the fixity map as an argument. |

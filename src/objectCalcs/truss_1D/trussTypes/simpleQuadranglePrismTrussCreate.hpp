@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <bridge/generalStatus.hpp>
+#include <truss_1D/trussProperties/meshData.hpp>
 
 #include <array>
 #include <cstdint>
@@ -32,7 +32,7 @@ namespace FEM::TRUSS {
   // materialIndex (into the material list) and areaM2. The snapshot has no supports, loads
   // or results; it is solved like any other model by Truss_Imported_or_Entered.
   // Fails on a zero cube number, length or area, and on grids too large for 32-bit ids.
-  std::expected<anaf::BRIDGE::MeshData, std::string> buildSimpleTruss(
+  std::expected<FEM::TRUSS::MeshData, std::string> buildSimpleTruss(
     std::array<std::uint32_t, 3> cubeNum,
     double edgeLength,
     double areaM2,
