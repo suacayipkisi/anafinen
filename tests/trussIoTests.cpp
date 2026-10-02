@@ -464,7 +464,6 @@ TEST(resetModelLeavesNothingBehind) {
     std::lock_guard lock(bridge.dataMutex);
     bridge.activeMesh = mesh;
     bridge.selectedNodeId = 0u;
-    bridge.hasTrussPreview = true;
   }
   bridge.m_objectType = BRIDGE::ObjectType::truss_SQPT;
   bridge.deformScale = 50.0;
@@ -475,7 +474,6 @@ TEST(resetModelLeavesNothingBehind) {
   CHECK(bridge.m_objectType.load() == BRIDGE::ObjectType::truss_imported_or_entered);
   CHECK(bridge.activeMesh == nullptr);
   CHECK(bridge.selectedNodeId == std::numeric_limits<std::uint32_t>::max());
-  CHECK(!bridge.hasTrussPreview);
   CHECK(bridge.deformScale.load() == 1.0);
   CHECK(!bridge.m_isRunning.load() && !bridge.m_isGeneratingPreview.load());
   CHECK(bridge.modelGeneration.load() != generation); // workers started before cannot publish

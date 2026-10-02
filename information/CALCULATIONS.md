@@ -33,7 +33,7 @@ solveStatic(mesh, materials, st, progress)  (trussSolver.cpp)      progress
 | Type | File | Holds |
 |---|---|---|
 | `Node` | `trussProperties/node.hpp` | `m_nodeID` (0-based), `m_Location[3]`, `m_displacement[3]`, `m_isMovable[3]`, `m_allowedMotionDirections` (orthonormal basis, up to 3 vectors) |
-| `TrussElement_1D` | `trussProperties/element.hpp` | Material index (`m_type`), area, two node IDs; computed length and direction cosines (`double`: in `float` the stiffness entries carried ~1e-7 relative error and the energy check failed); results: elongation, axial force, stress |
+| `TrussElement_1D` | `trussProperties/element.hpp` | Material index (`m_type`), area, two node IDs; computed length and direction cosines (`double`: in `float` the stiffness entries carried ~1e-7 relative error and the energy check failed); results: elongation, stress (the axial force is σ A; it was stored but never read and is not kept since 2026-10-02) |
 | `ForceApplied` | `trussProperties/appliedForce.hpp` | Node ID + force vector [N] |
 | `Material` | `material/properties.hpp` | E, G, K, yield/ultimate strength, density, Poisson, ductility, ID, built-in flag. Built-ins are loaded from `assets/bridge/materialProperties.json` ([BRIDGE.md](BRIDGE.md) section 5.1). |
 | `Truss_1D_Container` | `trussEngine/trussSolver/deformationUnderConstForce.hpp` | Non-owning spans over force vector, nodes, elements; triplets; results; energy values |
@@ -240,7 +240,7 @@ gravity add σ_g = 0.5 ρ L |g · c|          (self-weight contribution along th
 stored:     axialForce = N + sign(N) σ_g A,  stress = σ + sign(σ) σ_g      (sign = std::copysign)
 ```
 
-Sign convention: **tension > 0, compression < 0** for both stress and axial force. `σ_g` is an engineering approximation that raises the magnitude in the direction of the FE result, so `|stress|` is the peak-magnitude envelope. Consumers that need a magnitude use `std::abs`: yield check, viewport color, log maximum.
+Sign convention: **tension > 0, compression < 0** for stress (and so for the axial force σ A). `σ_g` is an engineering approximation that raises the magnitude in the direction of the FE result, so `|stress|` is the peak-magnitude envelope. Consumers that need a magnitude use `std::abs`: yield check, viewport color, log maximum.
 
 Verified with a single-cube test: a downward load on a top node gives compression in the vertical bar below it, and an upward load gives tension.
 

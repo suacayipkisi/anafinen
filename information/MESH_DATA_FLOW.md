@@ -68,7 +68,7 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
 | Global stiffness data | `Truss_1D_Container` | `m_globalStiffnessMatrix` | Created as 21 upper-triangle Eigen triplets per element. |
 | Reduced system | Local variables in `calculateDisplacements()` | `reducedStiffnessMatrix`, `reducedForceVec` | Solver system over the allowed motion directions (`Tᵀ K T`, `Tᵀ f`). |
 | Displacement results | Container and nodes | `m_resultDisplacements`, `Node::m_displacement` | Written to nodes after solving and then copied into the GUI snapshot. |
-| Element results | Element objects | elongation, axial force, stress | Used by `calculateElementForcesAndStress()` and viewport stress coloring. |
+| Element results | Element objects | elongation, stress | Used by `calculateElementForcesAndStress()` and viewport stress coloring. |
 | Validation results | Bridge and container | `m_isValid`, `m_energyDiff`, energy/work fields | Compares internal elastic energy with external work. |
 | Render mesh | `ViewportPanel` | `m_currentMesh` | Local read-side snapshot used to draw the active mesh. |
 
@@ -82,7 +82,7 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
 6. `assembleStiffness()` creates global stiffness-matrix triplets from the elements.
 7. `considerWeight()` adds element weights to the global force vector.
 8. `calculateDisplacements()` reduces the system to the allowed motion directions of each node (fixed DOFs drop out, inclined supports are rotated in), solves it, and writes displacements to the nodes.
-9. Node locations stay undeformed; the displacement lives only in `Node::m_displacement`. Element elongation, axial force, and stress are calculated.
+9. Node locations stay undeformed; the displacement lives only in `Node::m_displacement`. Element elongation and stress are calculated.
 10. `runValidator()` performs the energy check and writes status values to the bridge.
 11. `solveStatic()` returns a copy of the snapshot with displacements and stresses plus the energy check (`StaticResult`); `startSolve()` publishes it through `bridge.activeMesh` (and `m_isValid` / `m_energyDiff`) if the model was not reset meanwhile.
 12. `dataVersion` is incremented. The viewport reads the new snapshot and draws elements, nodes, supports and force arrows.

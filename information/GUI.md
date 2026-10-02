@@ -43,7 +43,7 @@ The 3D scene is drawn **before** the ImGui frame, into an offscreen framebuffer.
 - Panels do not know each other. `bindAnalysisFlow()` in `gui.cpp` wires them together with `std::function` callbacks:
 
 ```text
-MainDockSpaceHost --on_select_analyze_structure(Truss_1D)--> TrussSelector.isOpen = true
+MainDockSpaceHost --on_select_truss()-----------------------> TrussSelector.isOpen = true
 TrussSelector     --onSelected(type)-----------------------> type changed? FileIoPanel.cancelImport(),
                                                               bridge.resetModel(type), both truss panels resetState();
                                                               TrussControlPanel / TrussModelEditor .isOpen by type,
@@ -239,7 +239,7 @@ Drawn by `renderOverlay2D()` on top of the image:
 
 ## 4. Window and platform details
 
-- On Linux, GLFW uses `GLFW_ANY_PLATFORM` (Wayland or X11). The app ID and X11 class are `anafinen`, matching `anafinen.desktop`. `platform_utils::setupSystemCursor()` reads the GNOME cursor theme and size through `gsettings` and exports them as `XCURSOR_THEME` / `XCURSOR_SIZE`.
+- On Linux, GLFW picks the platform itself (Wayland or X11; no init hint, no retry). The app ID and X11 class are `anafinen`, matching `anafinen.desktop`. `platform_utils::setupSystemCursor()` reads the GNOME cursor theme and size through `gsettings` and exports them as `XCURSOR_THEME` / `XCURSOR_SIZE`.
 - On Windows, the `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` exports request the discrete GPU.
 - The window icon is loaded with libpng from the first existing asset path (see [BUILD_SYSTEM.md](BUILD_SYSTEM.md) section 7).
 - VSync is on (`glfwSwapInterval(1)`).
@@ -258,7 +258,7 @@ Drawn by `renderOverlay2D()` on top of the image:
 - GL-owning objects must be destroyed while the context is current. Keep them inside the scope in `initgui()` that ends before `imguiLayer.shutdown()` / `glfwDestroyWindow()`.
 - Only the GUI thread may call GL or ImGui.
 - Do not use legacy or fixed-function GL (`glBegin`, `glMatrixMode`, client arrays).
-- ImGuizmo and ImPlot are linked but not used yet.
+- ImGuizmo and ImPlot are built and linked but not used yet (kept for planned gizmo / plot panels).
 
 ## 7. Related source files
 

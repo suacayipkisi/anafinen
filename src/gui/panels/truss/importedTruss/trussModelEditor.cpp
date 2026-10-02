@@ -69,7 +69,6 @@ namespace anaf::GUI {
         if (!edit(*mesh)) return false;
         dropResults(*mesh);
         bridge.activeMesh = std::move(mesh);
-        bridge.hasTrussPreview = true;
         bridge.m_isValid = false;
       }
       bridge.dataVersion.fetch_add(1, std::memory_order_release);

@@ -36,7 +36,6 @@ namespace FEM::TRUSS {
     double m_length{};
     double m_crossSectionArea{};
     double m_elongation{};
-    double m_axialForce{}; // N, tension > 0, compression < 0
     double m_stress{}; // Pa, tension > 0, compression < 0
     std::array<double, 3> m_cosines{}; // double: float products put ~1e-7 relative error into K
     std::array<std::uint32_t, 2> m_nodes{};
@@ -81,13 +80,11 @@ namespace FEM::TRUSS {
 
     // calculated properties of element
     inline void setEleElongation(const double elongation) {m_elongation = elongation;}
-    inline void setEleAxialForce(const double axialForce) {m_axialForce = axialForce;}
     inline void setEleStress(const double stress) {m_stress = stress;}
 
     inline double getEleLength() const {return m_length;}
     inline double getEleCrossSection() const {return m_crossSectionArea;}
     inline double getEleElongation() const {return m_elongation;}
-    inline double getEleAxialForces() const {return m_axialForce;}
     inline double getEleStress() const {return m_stress;}
     inline std::uint32_t getEleProperties() const {return m_type;}
     inline const std::array<double, 3>& getEleCosines() const {return m_cosines;}

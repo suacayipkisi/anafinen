@@ -60,16 +60,7 @@ namespace anaf::GUI {
       }
 
       if (ImGui::BeginMenu("Analyze")) {
-        if (ImGui::MenuItem("Truss (1D Element)")) {
-          if (on_select_analyze_structure) {
-            on_select_analyze_structure(Truss_1D);
-          }
-        }
-        if (ImGui::MenuItem("(coming soon)Truss (3D Element)")) {
-          if (on_select_analyze_structure) {
-            on_select_analyze_structure(Truss_3D);
-          }
-        }
+        if (ImGui::MenuItem("Truss (1D Element)") && on_select_truss) on_select_truss();
         ImGui::EndMenu();
       }
 
@@ -80,12 +71,6 @@ namespace anaf::GUI {
         ImGui::EndMenu();
       }
 
-      // if (ImGui::BeginMenu("Solver")) {
-      //     if (ImGui::MenuItem("Run Modal Analysis (Spectra)...")) {
-      //         if (on_run_solver) on_run_solver();
-      //     }
-      //     ImGui::EndMenu();
-      //}
       ImGui::EndMenuBar();
     }
 

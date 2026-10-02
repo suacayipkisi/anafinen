@@ -102,11 +102,7 @@ namespace anaf::GUI {
     };
 
     void bindAnalysisFlow(UIPanels panels) {
-      panels.dock->on_select_analyze_structure = [panels](AnalyzeStructureType type) {
-        if (type == Truss_1D) {
-          panels.selector->isOpen = true;
-        }
-      };
+      panels.dock->on_select_truss = [panels] { panels.selector->isOpen = true; };
 
       // Only a change of type resets: selecting the current type again just reopens its panel.
       panels.selector->onSelected = [panels](TrussTypes type) {
@@ -185,18 +181,12 @@ namespace anaf::GUI {
   } // namespace end
 
   int initgui(){
-#ifdef __linux__
     platform_utils::setupSystemCursor();
-    glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
-#endif
 
-    if(!glfwInit()){
+    // GLFW picks the platform itself (Wayland or X11 on Linux); a retry would change nothing.
+    if (!glfwInit()) {
       anaf::LOG::error("Failed to initialize GLFW");
-      glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
-      if (!glfwInit()) {
-        anaf::LOG::error("Fatal: GLFW initialization failed completely");
-        return -1;
-      }
+      return -1;
     }
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);

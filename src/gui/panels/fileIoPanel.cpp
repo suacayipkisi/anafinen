@@ -259,7 +259,6 @@ namespace anaf::GUI {
         {
           std::lock_guard lock(bridge.dataMutex);
           bridge.activeMesh = result->mesh;
-          bridge.hasTrussPreview = true;
         }
         bridge.dataVersion.fetch_add(1, std::memory_order_release);
         anaf::LOG::success("{} finished", m_importTask->description());

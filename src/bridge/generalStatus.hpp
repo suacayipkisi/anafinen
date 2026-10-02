@@ -73,7 +73,6 @@ namespace anaf::BRIDGE {
     std::vector<anaf::MATERIAL::Material> allMaterials;
 
     std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};
-    bool hasTrussPreview{false};
 
     // Drops the whole model (snapshot with its supports and loads, selection, solve status)
     // and switches to type.

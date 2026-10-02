@@ -21,7 +21,7 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | Gui_Calc_Bridge  (process-wide singleton: buildBridge())           v                  |
 |                                                                                       |
 |  dataMutex ---- guards --> activeMesh, selectedNodeId,                                |
-|                            hasTrussPreview, allMaterials                              |
+|                            allMaterials                                               |
 |  atomics ------------------> m_isRunning, m_isGeneratingPreview, m_progress,          |
 |                              dataVersion, m_isValid, m_energyDiff, m_objectType       |
 |  workerThread (std::jthread)                                                          |
@@ -44,7 +44,6 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `modelGeneration` | `atomic<uint64_t>` | `resetModel()` | Workers (taken at start, compared before publishing) | atomic; the comparison runs under `dataMutex` |
 | `dataVersion` | `atomic<uint64_t>` | Every publisher, after swapping `activeMesh` | Viewport (reload check) | atomic, `memory_order_release` on increment |
 | `selectedNodeId` | `uint32_t`, `UINT32_MAX` = none | Viewport picking, both truss panels, `resetModel()` | Both truss panels, viewport | `dataMutex` |
-| `hasTrussPreview` | `bool` | Worker, control panel | Panels | `dataMutex` |
 | `m_isRunning` | `atomic<bool>` | Truss panels (set), worker (clear), `resetModel()` | Truss panels (button state), File > Import, material removal | atomic |
 | `m_isGeneratingPreview` | `atomic<bool>` | Control panel, preview worker, `resetModel()` | Control panel | atomic |
 | `m_progress` | `atomic<float>` 0..1 | Worker (solver steps) | Progress bars | atomic |
@@ -112,7 +111,7 @@ Consequences:
 1. `modelGeneration` is incremented.
 2. `request_stop()` on `workerThread` (no join: a direct factorization cannot be interrupted, and the GUI must not freeze).
 3. `m_isRunning`, `m_isGeneratingPreview` and `m_progress` are cleared.
-4. Under `dataMutex`: `activeMesh = nullptr`, fixity cleared, no selection, `hasTrussPreview = false`, `m_isValid = false`, `m_energyDiff = 0`, `m_objectType = type`.
+4. Under `dataMutex`: `activeMesh = nullptr` (supports and loads go with it), no selection, `m_isValid = false`, `m_energyDiff = 0`, `deformScale = 1`, `m_objectType = type`.
 5. `dataVersion` is bumped, so the viewport and the model tree redraw the empty model.
 
 The panels clear their own inputs (loads, checkboxes, selected bar) with `resetState()`; `bindAnalysisFlow()` calls both panels' `resetState()` on a type change and after an import.
@@ -130,7 +129,7 @@ Every worker takes `modelGeneration` before it starts and publishes only if the 
 | Clear All | `resetModel(truss_SQPT)` and the panel's `resetState()`. |
 | Model editor edit (`TrussModelEditor`) | Disabled while a worker runs. Copies `activeMesh` (or starts an empty one), applies the edit, drops stale results (`hasResults = false`, zero displacements and stresses), publishes under `dataMutex` and bumps `dataVersion`. Node ids stay `0..n-1`: deleting a node removes its bars, load and support and moves later ids down by one. |
 | Run Solver for Truss (model editor) | `TRUSS_WORKER::startSolve()` with the `activeMesh` pointer as the model ([CALCULATIONS.md](CALCULATIONS.md) section 3.1). An unsolvable model (no bars, bars without area, ...) is logged as "Solver not started: ..." and nothing is published. |
-| File > Import (FileIoPanel) | Refused while `m_isRunning` / `m_isGeneratingPreview`. The I/O thread builds the snapshot (supports on its nodes). The GUI thread discards it if `modelGeneration` changed meanwhile; otherwise it calls `resetModel(truss_imported_or_entered)`, sets `activeMesh` and `hasTrussPreview` under `dataMutex`, then bumps `dataVersion`. |
+| File > Import (FileIoPanel) | Refused while `m_isRunning` / `m_isGeneratingPreview`. The I/O thread builds the snapshot (supports on its nodes). The GUI thread discards it if `modelGeneration` changed meanwhile; otherwise it calls `resetModel(truss_imported_or_entered)`, sets `activeMesh` under `dataMutex`, then bumps `dataVersion`. |
 | File > Export (FileIoPanel) | Copies the `activeMesh` pointer and `allMaterials` under `dataMutex`; conversion and writing run on the I/O thread. |
 | Window close | `initgui()` calls `request_stop()`, then joins by assigning an empty `std::jthread`. |
 

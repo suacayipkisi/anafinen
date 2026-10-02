@@ -25,20 +25,14 @@
 
 namespace anaf::GUI {
 
-  enum AnalyzeStructureType {
-    Truss_1D,
-    Truss_3D
-  };
-
   class MainDockSpaceHost : public IPanel {
   private:
     GLFWwindow* m_window_;
 
   public:
-    std::function<void(AnalyzeStructureType)> on_select_analyze_structure;
+    std::function<void()> on_select_truss; // Analyze > Truss (1D Element)
     std::function<void()> on_import_mesh;
     std::function<void()> on_export_results;
-    std::function<void()> on_run_solver;
     std::function<void()> on_show_about;
 
     explicit MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}

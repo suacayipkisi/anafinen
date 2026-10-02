@@ -246,14 +246,12 @@ namespace anaf::GUI {
                 return; // the model was reset while the preview was built
               }
               bridge.activeMesh = std::move(newMesh);
-              bridge.hasTrussPreview = true;
               bridge.selectedNodeId = 0u;
             }
             bridge.dataVersion.fetch_add(1, std::memory_order_release);
           } catch (const std::exception&) {
             std::lock_guard lock(bridge.dataMutex);
             bridge.activeMesh = nullptr;
-            bridge.hasTrussPreview = false;
             bridge.dataVersion.fetch_add(1, std::memory_order_release);
           }
 
