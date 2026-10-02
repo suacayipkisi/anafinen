@@ -35,12 +35,12 @@ solveStatic(mesh, materials, st, progress)  (trussSolver.cpp)      progress
 | `Node` | `trussProperties/node.hpp` | `m_nodeID` (0-based), `m_Location[3]`, `m_displacement[3]`, `m_isMovable[3]`, `m_allowedMotionDirections` (orthonormal basis, up to 3 vectors) |
 | `TrussElement_1D` | `trussProperties/element.hpp` | Material index (`m_type`), area, two node IDs; computed length and direction cosines (`double`: in `float` the stiffness entries carried ~1e-7 relative error and the energy check failed); results: elongation, stress (the axial force is σ A; it was stored but never read and is not kept since 2026-10-02) |
 | `ForceApplied` | `trussProperties/appliedForce.hpp` | Node ID + force vector [N] |
-| `Material` | `material/properties.hpp` | E, G, K, yield/ultimate strength, density, Poisson, ductility, ID, built-in flag. Built-ins are loaded from `assets/bridge/materialProperties.json` ([BRIDGE.md](BRIDGE.md) section 5.1). |
+| `Material` | `material/properties.hpp` | `MaterialProperties` (name, E, G, K, yield / ultimate strength, density, Poisson, ductility; all `double`), stable ID, built-in flag. Built-ins are loaded from `assets/bridge/materialProperties.json` ([BRIDGE.md](BRIDGE.md) section 5.1). |
 | `Truss_1D_Container` | `trussEngine/trussSolver/deformationUnderConstForce.hpp` | Non-owning spans over force vector, nodes, elements; triplets; results; energy values |
 | `MeshData`, `RenderElement` | `trussProperties/meshData.hpp` | The model / snapshot: nodes (with supports), bars, loads, `hasResults` (`anaf::BRIDGE` keeps aliases) |
 | `StaticResult` | `trussEngine/trussSolver.hpp` | Result of `solveStatic()`: solved snapshot copy, energy check |
 
-Units are SI throughout: m, m², N, Pa, kg/m³. The GUI enters the cross-section in cm²; the Simple Quadrangle panel and the model editor multiply by `1e-4` (snapshots store m²). `Material` has both `m_elasticityModulus` and `m_youngModulus`; the solver uses `m_elasticityModulus`.
+Units are SI throughout: m, m², N, Pa, kg/m³. The GUI enters the cross-section in cm²; the Simple Quadrangle panel and the model editor multiply by `1e-4` (snapshots store m²). `Material` wraps a `MaterialProperties` aggregate (filled with designated initializers) plus the built-in flag and the stable ID; the solver uses `elasticityModulus` (E).
 
 The element constructor rejects invalid input by throwing `std::invalid_argument` / `std::out_of_range`:
 - area ≤ 0

@@ -649,9 +649,9 @@ TEST(builtInTrussesAreStableAndSolve) {
 
 namespace {
   MATERIAL::Material renamedCopy(const MATERIAL::Material& m, std::string name) {
-    return {false, std::move(name), m.getElasticityModulus(), m.getShearModulus(), m.getBulkModulus(),
-            m.getYieldTensile(), m.getUltTensile(), m.getYoungModulus(), m.getDensity(), m.getPoisson(),
-            m.getDuctility(), 0u};
+    auto properties = m.getProperties();
+    properties.name = std::move(name);
+    return MATERIAL::Material{std::move(properties)};
   }
 } // namespace end
 
@@ -720,6 +720,16 @@ TEST(userMaterialsArePersistedOutsideTheAssets) {
   CHECK((*loaded)[0].getPoisson() == steel.getPoisson());
   CHECK((*loaded)[0].getDuctility() == steel.getDuctility());
   CHECK(!fs::exists(fs::path(path) += ".tmp"));
+  CHECK(readBytes(path).find("youngModulus") == std::string::npos); // E is written once
+
+  // A file from anafinen <= 0.1.3 also carries "youngModulus" (the same E); it still loads.
+  const auto legacy = workDir() / "legacyUserMaterials.json";
+  std::ofstream(legacy) << R"({"schemaVersion": 1, "materials": [{"name": "Old", "elasticityModulus": 2e11,
+    "youngModulus": 2e11, "shearModulus": 7.7e10, "bulkModulus": 1.6e11, "yieldTensileStrength": 2.5e8,
+    "ultimateTensileStrength": 4e8, "density": 7850, "poissonsRatio": 0.3, "ductility": 0.2}]})";
+  const auto old = MATERIAL::loadUserMaterialFile(legacy);
+  REQUIRE(old.has_value() && old->size() == 1);
+  CHECK((*old)[0].getElasticityModulus() == 2e11 && (*old)[0].getPoisson() == 0.3);
 
   // A missing file is an empty list; a broken one is an error.
   CHECK(MATERIAL::loadUserMaterialFile(workDir() / "none.json").value().empty());

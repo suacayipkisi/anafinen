@@ -43,15 +43,6 @@ namespace anaf::GUI {
       ImGui::InputDouble(id, value, 0.0, 0.0, format);
     }
 
-    void labeledInput(const char* label, const char* id, float* value, const char* format) {
-      ImGui::TableNextRow();
-      ImGui::TableSetColumnIndex(0);
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted(label);
-      ImGui::TableSetColumnIndex(1);
-      ImGui::SetNextItemWidth(-FLT_MIN);
-      ImGui::InputFloat(id, value, 0.0f, 0.0f, format);
-    }
   } // namespace end
 
   void MaterialHandler::setStatus(std::string message, const bool isError) {
@@ -147,7 +138,7 @@ namespace anaf::GUI {
           ImGui::TableNextColumn();
           ImGui::Text("%.3f", material.getPoisson());
           ImGui::TableNextColumn();
-          ImGui::Text("%.1f", material.getDuctility() * 100.0f);
+          ImGui::Text("%.1f", material.getDuctility() * 100.0);
 
           ImGui::TableNextColumn();
           if (!material.getIsBuiltin() && ImGui::SmallButton("Delete")) {
@@ -206,21 +197,18 @@ namespace anaf::GUI {
       name.erase(0, name.find_first_not_of(" \t"));
       name.erase(name.find_last_not_of(" \t") + 1);
 
-      const double elasticityModulus = m_draft.elasticityModulusGPa * kGiga;
-      const anaf::MATERIAL::Material material{
-        false,
-        std::move(name),
-        elasticityModulus,
-        m_draft.shearModulusGPa * kGiga,
-        m_draft.bulkModulusGPa * kGiga,
-        m_draft.yieldStrengthMPa * kMega,
-        m_draft.ultimateStrengthMPa * kMega,
-        elasticityModulus, // Young's modulus: the same E for a bar
-        m_draft.density,
-        m_draft.poissonsRatio,
-        m_draft.ductilityPercent / 100.0f,
-        0u // assigned by the bridge
-      };
+      // Built-in flag and ID are assigned by the bridge.
+      const anaf::MATERIAL::Material material{anaf::MATERIAL::MaterialProperties{
+        .name = std::move(name),
+        .elasticityModulus = m_draft.elasticityModulusGPa * kGiga,
+        .shearModulus = m_draft.shearModulusGPa * kGiga,
+        .bulkModulus = m_draft.bulkModulusGPa * kGiga,
+        .yieldTensileStrength = m_draft.yieldStrengthMPa * kMega,
+        .ultimateTensileStrength = m_draft.ultimateStrengthMPa * kMega,
+        .density = m_draft.density,
+        .poissonsRatio = m_draft.poissonsRatio,
+        .ductility = m_draft.ductilityPercent / 100.0,
+      }};
 
       if (const auto added = bridge.addUserMaterial(material); added) {
         setStatus("Material '" + std::string(material.getMaterialType()) + "' added.", false);

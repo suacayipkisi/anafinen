@@ -24,67 +24,47 @@
 
 namespace anaf::MATERIAL {
 
-  class Material{
+  // Physical values of one material, SI units. Filled with designated initializers, e.g.
+  // MaterialProperties{.name = "S355", .elasticityModulus = 210e9, ...}.
+  // G and K are stored, not derived from E and nu: the wood entries are orthotropic
+  // (G = G_LR along the grain), where the isotropic relations do not hold.
+  struct MaterialProperties {
+    std::string name;
+    double elasticityModulus{};       // E, Pa: the axial stiffness of a bar
+    double shearModulus{};            // G, Pa
+    double bulkModulus{};             // K, Pa
+    double yieldTensileStrength{};    // Pa
+    double ultimateTensileStrength{}; // Pa
+    double density{};                 // kg/m^3
+    double poissonsRatio{};           // -
+    double ductility{};               // elongation at break, fraction (0.25 = 25 %)
+  };
+
+  class Material {
   private:
+    MaterialProperties m_properties;
     bool m_isBuiltin{false};
-    
-    std::uint32_t m_materialID{};
+    std::uint32_t m_materialID{}; // stable ID, never reused (built-ins: 0..n-1 from the library file)
 
-    float m_ductility{}; // elongation at break, fraction (0.25 = 25 %)
-    float m_poissonsRatio{}; // unitless
-
-    double m_density{}; // kg/m^3
-    double m_youngModulus{}; // Pa (only axial)
-    double m_ultimateTensileStrength{}; // Pa
-    double m_yieldTensileStrength{}; // Pa
-    double m_bulkModulus{}; // Pa (all side force)
-    double m_shearModulus{}; // Pa
-
-    double m_elasticityModulus{}; // Pa, used by the solver
-
-    std::string m_materialType;
   public:
-    Material(
-      bool isBuiltin,
-      std::string name,
-      const double elasticityModulusE,
-      const double shearModulusG,
-      const double bulkModulusK,
-      const double yieldTensileStrength,
-      const double ultimateTensileStrength,
-      const double youngModulus,
-      const double density,
-      const float poissonsRatio,
-      const float ductility,
-      const std::uint32_t materialID
-    ):
-      // Declaration order (-Wreorder); the parameter order is the public API.
+    explicit Material(MaterialProperties properties, const bool isBuiltin = false, const std::uint32_t materialID = 0) :
+      m_properties(std::move(properties)),
       m_isBuiltin(isBuiltin),
-      m_materialID(materialID),
-      m_ductility(ductility),
-      m_poissonsRatio(poissonsRatio),
-      m_density(density),
-      m_youngModulus(youngModulus),
-      m_ultimateTensileStrength(ultimateTensileStrength),
-      m_yieldTensileStrength(yieldTensileStrength),
-      m_bulkModulus(bulkModulusK),
-      m_shearModulus(shearModulusG),
-      m_elasticityModulus(elasticityModulusE),
-      m_materialType(std::move(name))
+      m_materialID(materialID)
     {}
 
-    inline bool getIsBuiltin() const {return m_isBuiltin;}
-    inline std::uint32_t getMaterialID() const {return m_materialID;}
-    inline float getDuctility() const {return m_ductility;}
-    inline float getPoisson() const {return m_poissonsRatio;}
-    inline double getDensity() const {return m_density;}
-    inline double getYoungModulus() const {return m_youngModulus;}
-    inline double getUltTensile() const {return m_ultimateTensileStrength;}
-    inline double getYieldTensile() const {return m_yieldTensileStrength;}
-    inline double getBulkModulus() const {return m_bulkModulus;}
-    inline double getShearModulus() const {return m_shearModulus;}
-    inline double getElasticityModulus() const {return m_elasticityModulus;}
-    inline std::string_view getMaterialType() const {return m_materialType;}
+    const MaterialProperties& getProperties() const {return m_properties;}
+    bool getIsBuiltin() const {return m_isBuiltin;}
+    std::uint32_t getMaterialID() const {return m_materialID;}
+    std::string_view getMaterialType() const {return m_properties.name;}
+    double getElasticityModulus() const {return m_properties.elasticityModulus;}
+    double getShearModulus() const {return m_properties.shearModulus;}
+    double getBulkModulus() const {return m_properties.bulkModulus;}
+    double getYieldTensile() const {return m_properties.yieldTensileStrength;}
+    double getUltTensile() const {return m_properties.ultimateTensileStrength;}
+    double getDensity() const {return m_properties.density;}
+    double getPoisson() const {return m_properties.poissonsRatio;}
+    double getDuctility() const {return m_properties.ductility;}
   };
 
 } // namespace anaf::MATERIAL end

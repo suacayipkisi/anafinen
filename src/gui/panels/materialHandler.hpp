@@ -36,8 +36,8 @@ namespace anaf::GUI {
       double yieldStrengthMPa{};
       double ultimateStrengthMPa{};
       double density{};
-      float poissonsRatio{0.3f};
-      float ductilityPercent{};
+      double poissonsRatio{0.3};
+      double ductilityPercent{};
     };
 
     Draft m_draft{};

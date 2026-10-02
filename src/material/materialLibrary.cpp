@@ -22,7 +22,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <charconv>
 #include <cmath>
 #include <format>
 #include <fstream>
@@ -42,15 +41,6 @@ namespace anaf::MATERIAL {
 
     constexpr int kSchemaVersion = 1;
 
-    // Shortest decimal form of the float (0.3f is written as 0.3, not 0.30000001192092896).
-    // std::from_chars, unlike std::stod, never depends on the C locale (decimal comma).
-    double floatForJson(const float value) {
-      const std::string text = std::format("{}", value);
-      double result = value;
-      std::from_chars(text.data(), text.data() + text.size(), result);
-      return result;
-    }
-
     Material parseMaterial(const json& entry, const bool isBuiltin) {
       if (!entry.is_object()) throw std::runtime_error("entry is not an object");
 
@@ -63,22 +53,20 @@ namespace anaf::MATERIAL {
       const auto name = entry.find("name");
       if (name == entry.end() || !name->is_string()) throw std::runtime_error("'name' is missing or not a string");
 
-      const double elasticityModulus = requireNumber(entry, "elasticityModulus");
-      // Optional: the solver only uses the elasticity modulus, both are E for a truss bar.
-      const double youngModulus = entry.contains("youngModulus") ? requireNumber(entry, "youngModulus") : elasticityModulus;
-
+      // A "youngModulus" written by anafinen <= 0.1.3 is the same E and is ignored.
       return Material{
+        MaterialProperties{
+          .name = name->get<std::string>(),
+          .elasticityModulus = requireNumber(entry, "elasticityModulus"),
+          .shearModulus = requireNumber(entry, "shearModulus"),
+          .bulkModulus = requireNumber(entry, "bulkModulus"),
+          .yieldTensileStrength = requireNumber(entry, "yieldTensileStrength"),
+          .ultimateTensileStrength = requireNumber(entry, "ultimateTensileStrength"),
+          .density = requireNumber(entry, "density"),
+          .poissonsRatio = requireNumber(entry, "poissonsRatio"),
+          .ductility = requireNumber(entry, "ductility"),
+        },
         isBuiltin,
-        name->get<std::string>(),
-        elasticityModulus,
-        requireNumber(entry, "shearModulus"),
-        requireNumber(entry, "bulkModulus"),
-        requireNumber(entry, "yieldTensileStrength"),
-        requireNumber(entry, "ultimateTensileStrength"),
-        youngModulus,
-        requireNumber(entry, "density"),
-        static_cast<float>(requireNumber(entry, "poissonsRatio")),
-        static_cast<float>(requireNumber(entry, "ductility")),
         materialID
       };
     }
@@ -135,15 +123,14 @@ namespace anaf::MATERIAL {
     const auto forbidden = [](const unsigned char c) { return c < 0x20 || c == 0x7f || c == '"'; };
     if (std::ranges::any_of(name, forbidden)) return std::unexpected("name must not contain quotes or control characters");
     if (!positive(material.getElasticityModulus())) return std::unexpected("elasticity modulus must be > 0");
-    if (!positive(material.getYoungModulus())) return std::unexpected("Young's modulus must be > 0");
     if (!positive(material.getShearModulus())) return std::unexpected("shear modulus must be > 0");
     if (!positive(material.getBulkModulus())) return std::unexpected("bulk modulus must be > 0");
     if (!positive(material.getYieldTensile())) return std::unexpected("yield strength must be > 0");
     if (!positive(material.getUltTensile())) return std::unexpected("ultimate strength must be > 0");
     if (material.getUltTensile() < material.getYieldTensile()) return std::unexpected("ultimate strength must be >= yield strength");
     if (!positive(material.getDensity())) return std::unexpected("density must be > 0");
-    if (!(material.getPoisson() > -1.0f && material.getPoisson() < 0.5f)) return std::unexpected("Poisson's ratio must be in (-1, 0.5)");
-    if (!(std::isfinite(material.getDuctility()) && material.getDuctility() >= 0.0f)) return std::unexpected("ductility must be >= 0");
+    if (!(material.getPoisson() > -1.0 && material.getPoisson() < 0.5)) return std::unexpected("Poisson's ratio must be in (-1, 0.5)");
+    if (!(std::isfinite(material.getDuctility()) && material.getDuctility() >= 0.0)) return std::unexpected("ductility must be >= 0");
     return {};
   }
 
@@ -174,14 +161,13 @@ namespace anaf::MATERIAL {
       list.push_back({
         {"name", std::string(material.getMaterialType())},
         {"elasticityModulus", material.getElasticityModulus()},
-        {"youngModulus", material.getYoungModulus()},
         {"shearModulus", material.getShearModulus()},
         {"bulkModulus", material.getBulkModulus()},
         {"yieldTensileStrength", material.getYieldTensile()},
         {"ultimateTensileStrength", material.getUltTensile()},
         {"density", material.getDensity()},
-        {"poissonsRatio", floatForJson(material.getPoisson())},
-        {"ductility", floatForJson(material.getDuctility())}
+        {"poissonsRatio", material.getPoisson()},
+        {"ductility", material.getDuctility()}
       });
     }
     const json root = {{"schemaVersion", kSchemaVersion}, {"materials", std::move(list)}};

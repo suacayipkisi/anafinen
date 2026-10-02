@@ -124,20 +124,7 @@ namespace anaf::BRIDGE {
 
   std::uint32_t Gui_Calc_Bridge::appendUserMaterialLocked(const anaf::MATERIAL::Material& material) {
     const std::uint32_t id = m_nextMaterialID++;
-    allMaterials.emplace_back(
-      false,
-      std::string(material.getMaterialType()),
-      material.getElasticityModulus(),
-      material.getShearModulus(),
-      material.getBulkModulus(),
-      material.getYieldTensile(),
-      material.getUltTensile(),
-      material.getYoungModulus(),
-      material.getDensity(),
-      material.getPoisson(),
-      material.getDuctility(),
-      id
-    );
+    allMaterials.emplace_back(material.getProperties(), false, id);
     return id;
   }
 
