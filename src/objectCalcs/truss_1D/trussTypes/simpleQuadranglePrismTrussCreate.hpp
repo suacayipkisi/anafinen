@@ -22,6 +22,8 @@
 
 #include <cstdint>
 #include <array>
+#include <expected>
+#include <string>
 #include <vector>
 
 namespace FEM::TRUSS {
@@ -47,7 +49,10 @@ namespace FEM::TRUSS {
       m_area(area)
     {}
 
-    void setTruss();
+    // Checks the parameters first and builds nothing when they are invalid: the element
+    // constructor throws on a zero area or length, and an exception thrown inside the OpenMP
+    // loops below would call std::terminate instead of reaching the caller.
+    std::expected<void, std::string> setTruss();
 
     std::vector<Node>& getNodes() { return m_allNodes; }
     const std::vector<Node>& getNodes() const { return m_allNodes; }

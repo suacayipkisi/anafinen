@@ -19,13 +19,33 @@
 #include <log/anaf_info.hpp>
 
 #include <cstddef>
+#include <cmath>
 #include <cstdint>
+#include <format>
+#include <limits>
 #include <span>
 #include <vector>
 
 namespace FEM::TRUSS {
 
-  void SimpleTruss::setTruss(){
+  std::expected<void, std::string> SimpleTruss::setTruss(){
+    m_allNodes.clear();
+    m_allElements.clear();
+    if (m_cubeNum[0] == 0 || m_cubeNum[1] == 0 || m_cubeNum[2] == 0) {
+      return std::unexpected("cube numbers must be at least 1");
+    }
+    if (!(std::isfinite(m_cubeEdgeLength) && m_cubeEdgeLength > 0.0)) {
+      return std::unexpected(std::format("element length must be > 0 (got {})", m_cubeEdgeLength));
+    }
+    if (!(std::isfinite(m_area) && m_area > 0.0)) {
+      return std::unexpected(std::format("cross-section area must be > 0 (got {} m^2)", m_area));
+    }
+    // Node ids are 32-bit and the stiffness triplets index DOFs (3 per node) with int.
+    const double nodeCount = (m_cubeNum[0] + 1.0) * (m_cubeNum[1] + 1.0) * (m_cubeNum[2] + 1.0);
+    if (3.0 * nodeCount > static_cast<double>(std::numeric_limits<int>::max())) {
+      return std::unexpected(std::format("{:.0f} nodes are too many", nodeCount));
+    }
+
     // node count in every direction (x, y, z)
     const std::uint32_t nx = m_cubeNum[0];
     const std::uint32_t ny = m_cubeNum[1];
@@ -183,7 +203,7 @@ namespace FEM::TRUSS {
     }
 
     anaf::LOG::success("All elements for simple truss created. ElementNum: {}", totalElements);
-
+    return {};
   } // end: setTruss()
 
 } // namespace FEM::TRUSS end

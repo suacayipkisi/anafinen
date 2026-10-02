@@ -211,7 +211,11 @@ namespace anaf::GUI {
             configureOpenMPForWorker();
             // Same units as the solver (cm^2 in the panel, m^2 in the model).
             FEM::TRUSS::SimpleTruss preview{{cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type};
-            preview.setTruss();
+            if (const auto built = preview.setTruss(); !built) {
+              anaf::LOG::error("Preview not generated: {}", built.error());
+              bridge.m_isGeneratingPreview = false;
+              return;
+            }
             if (st.stop_requested()) {
               bridge.m_isGeneratingPreview = false;
               return;
@@ -387,7 +391,12 @@ namespace anaf::GUI {
               type
             };
 
-            solver.trussSetAndSetFix_SQPT(bridge, st, fixedDOFs);
+            if (const auto built = solver.trussSetAndSetFix_SQPT(bridge, st, fixedDOFs); !built) {
+              anaf::LOG::error("Solver not started: {}", built.error());
+              bridge.m_progress = 0.0f;
+              bridge.m_isRunning = false;
+              return;
+            }
             solver.trussSetForce_SQPT(bridge, st, forcesToApply);
             solver.setContainer(bridge, st);
             solver.calculate(bridge, st, allMaterials);

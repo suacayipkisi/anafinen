@@ -27,13 +27,13 @@
 
 namespace FEM::TRUSS {
 
-  void Truss_SQPT::trussSetAndSetFix_SQPT(
+  std::expected<void, std::string> Truss_SQPT::trussSetAndSetFix_SQPT(
     anaf::BRIDGE::Gui_Calc_Bridge& bridge,
     std::stop_token st,
     const anaf::BRIDGE::FixedDOFMap& fixedDOFsByNode
   ) {
-    if (st.stop_requested()) return;
-    m_truss.setTruss();
+    if (st.stop_requested()) return {};
+    if (auto built = m_truss.setTruss(); !built) return built;
 
     auto& nodes = m_truss.getNodes();
     #pragma omp parallel for schedule(static)
@@ -56,6 +56,7 @@ namespace FEM::TRUSS {
     }
     anaf::LOG::info("Fixed nodes [{}]", fixInfo);
     bridge.m_progress = 0.20f;
+    return {};
   }
 
   void Truss_SQPT::trussSetForce_SQPT(

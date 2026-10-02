@@ -49,6 +49,7 @@
 #include <stop_token>
 #include <string>
 #include <thread>
+#include <tuple>
 
 using namespace anaf;
 namespace fs = std::filesystem;
@@ -73,7 +74,7 @@ namespace {
 
     std::stop_source stop;
     FEM::TRUSS::Truss_SQPT solver{5, 1, 5, 1.0, 80.0, 1};
-    solver.trussSetAndSetFix_SQPT(bridge, stop.get_token(), fixity);
+    REQUIRE(solver.trussSetAndSetFix_SQPT(bridge, stop.get_token(), fixity).has_value());
     solver.trussSetForce_SQPT(bridge, stop.get_token(), forces);
     solver.setContainer(bridge, stop.get_token());
     auto materials = bridge.allMaterials;
@@ -127,6 +128,21 @@ namespace {
   }
 
 } // namespace end
+
+TEST(invalidGridParametersAreRefusedBeforeBuilding) {
+  // A zero area or length used to throw inside the OpenMP loops (std::terminate).
+  for (const auto& [cubes, length, area] : {std::tuple{std::array<std::uint32_t, 3>{2, 1, 2}, 1.0, 0.0},
+                                           {std::array<std::uint32_t, 3>{2, 1, 2}, 0.0, 8e-3},
+                                           {std::array<std::uint32_t, 3>{2, 0, 2}, 1.0, 8e-3},
+                                           {std::array<std::uint32_t, 3>{2, 1, 2}, std::nan(""), 8e-3}}) {
+    FEM::TRUSS::SimpleTruss truss{cubes, length, area, 0};
+    CHECK(!truss.setTruss().has_value());
+    CHECK(truss.getNodes().empty() && truss.getElements().empty());
+  }
+  FEM::TRUSS::SimpleTruss valid{{2, 1, 2}, 1.0, 8e-3, 0};
+  REQUIRE(valid.setTruss().has_value());
+  CHECK(valid.getNodes().size() == 18);
+}
 
 TEST(solvedTrussSurvivesEveryWritableFormat) {
   BRIDGE::FixedDOFMap fixity;

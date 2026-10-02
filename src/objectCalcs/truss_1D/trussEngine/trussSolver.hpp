@@ -54,8 +54,9 @@ namespace FEM::TRUSS{
     {}
 
     // fixedDOFsByNode must be a copy owned by the worker, not bridge.fixedDOFsByNode:
-    // the GUI thread may modify the bridge map while the solve runs.
-    void trussSetAndSetFix_SQPT(
+    // the GUI thread may modify the bridge map while the solve runs. Returns why the grid
+    // cannot be built (zero area, length or cube number).
+    std::expected<void, std::string> trussSetAndSetFix_SQPT(
       anaf::BRIDGE::Gui_Calc_Bridge& bridge,
       std::stop_token st,
       const anaf::BRIDGE::FixedDOFMap& fixedDOFsByNode
