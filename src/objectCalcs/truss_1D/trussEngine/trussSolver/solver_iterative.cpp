@@ -135,7 +135,7 @@ namespace FEM::TRUSS::SOLVER {
 
       if (result.iterations % logInterval == 0) {
         anaf::LOG::info(
-          "Block-CG progress: {} / {} iterations, estimated error {}, elapsed {} seconds",
+          "Block-CG progress: {} / {} iterations, estimated error {:.3e}, elapsed {:.2f} seconds",
           result.iterations, maxIterations,
           std::sqrt(residualNormSquared / forceNormSquared),
           std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()

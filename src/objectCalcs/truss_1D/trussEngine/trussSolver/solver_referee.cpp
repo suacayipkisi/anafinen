@@ -58,7 +58,7 @@ namespace FEM::TRUSS::SOLVER {
       static const auto system = anaf::PLATFORM::querySystemInfo(); // does not change while running
       const auto memory = anaf::PLATFORM::queryMemory().value_or(anaf::PLATFORM::MemoryStatus{});
       anaf::LOG::info(
-        "Hardware: CPU '{}', {} hardware threads, OpenMP {} / {} threads, Eigen {} threads, RAM available / total {} / {} GiB",
+        "Hardware: CPU '{}', {} hardware threads, OpenMP {} / {} threads, Eigen {} threads, RAM available / total {:.1f} / {:.1f} GiB",
         system.cpuName, system.threads, omp_get_max_threads(), omp_get_num_procs(), Eigen::nbThreads(),
         memory.availableGiB, memory.totalGiB
       );
@@ -109,7 +109,7 @@ namespace FEM::TRUSS::SOLVER {
     }
 
     anaf::LOG::info(
-      "Solver referee result: {}, available {}, converged {}, residual {}, iterations {}, elapsed {} seconds{}{}",
+      "Solver referee result: {}, available {}, converged {}, residual {:.3e}, iterations {}, elapsed {:.3f} seconds{}{}",
       toString(result.type), result.available, result.converged,
       result.relativeResidual, result.iterations, result.elapsedSeconds,
       result.message.empty() ? "" : ", reason: ", result.message

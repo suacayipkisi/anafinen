@@ -40,7 +40,6 @@ int main() {
     anaf::LOG::error("Failed to open log file!");
     return 1;
   }
-  anaf::LOG::setFloatPrecision(6); // decimal digits shown for all logged floating-point values
   anaf::LOG::core("Initializing ANAFINEN Workspace (C++23)...");
   anaf::LOG::core("{}", anaf::GUI::kCopyrightNotice);
   anaf::LOG::core("{}", anaf::GUI::kShortLegalNotice);

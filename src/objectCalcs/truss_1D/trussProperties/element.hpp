@@ -53,13 +53,13 @@ namespace FEM::TRUSS {
       m_nodes({node_1, node_2})
     {
       if (area <= 0.0) {
-        anaf::LOG::error("Destroying invalid element: area must be positive (got {}), material {}, nodes [{}, {}]",
+        anaf::LOG::error("Invalid element: area must be positive (got {:.6g}), material {}, nodes [{}, {}]",
             area, type, node_1, node_2);
         throw std::invalid_argument("Element cross sectional area must be greater than 0");
       }
 
       if (node_1 == node_2) {
-        anaf::LOG::error("Destroying invalid element: node indices cannot be identical ({} == {})", node_1, node_2);
+        anaf::LOG::error("Invalid element: node indices cannot be identical ({} == {})", node_1, node_2);
         throw std::invalid_argument("An element's nodes cannot be same");
       }
 

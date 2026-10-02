@@ -144,19 +144,18 @@ namespace FEM::TRUSS {
       for (const auto& element : model.elements) maxStress = std::max(maxStress, std::abs(element.getEleStress()));
 
       anaf::LOG::success("Solver completed");
-      anaf::LOG::setFloatPrecision(10);
+      // Exponent notation: the energy differences are round-off sized (1e-15 .. 1e-8 J).
       if (container.getIsCalculationValid()) {
-        anaf::LOG::success("Calculation is VALID! Energy diff: {}, relative diff: {}", container.getEnergyDiff(),
+        anaf::LOG::success("Calculation is VALID! Energy diff: {:.3e} J, relative diff: {:.3e}", container.getEnergyDiff(),
                            container.getEnergyRelativeDiff());
       } else {
-        anaf::LOG::error("Calculation is INVALID! Energy diff: {}, relative diff: {}", container.getEnergyDiff(),
+        anaf::LOG::error("Calculation is INVALID! Energy diff: {:.3e} J, relative diff: {:.3e}", container.getEnergyDiff(),
                          container.getEnergyRelativeDiff());
       }
-      anaf::LOG::setFloatPrecision(6);
-      anaf::LOG::info("Max nodal displacement magnitude: {}", maxDisp);
-      anaf::LOG::info("Max element stress magnitude [Pa]: {}", maxStress);
-      anaf::LOG::info("Work done by external forces: {}", container.getWorkDone_External());
-      anaf::LOG::info("Stored elastic deformation energy: {}", container.getElasticDeformationEnergy_Internal());
+      anaf::LOG::info("Max nodal displacement magnitude: {:.6g} m", maxDisp);
+      anaf::LOG::info("Max element stress magnitude: {:.6g} Pa", maxStress);
+      anaf::LOG::info("Work done by external forces: {:.6g} J", container.getWorkDone_External());
+      anaf::LOG::info("Stored elastic deformation energy: {:.6g} J", container.getElasticDeformationEnergy_Internal());
     }
 
   } // namespace end
