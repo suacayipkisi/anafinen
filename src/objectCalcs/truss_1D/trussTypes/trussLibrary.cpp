@@ -49,6 +49,10 @@ namespace FEM::TRUSS::LIBRARY {
     };
     constexpr MaterialRef kSteel{"Structural Steel (AISI 4130)", 0};
     constexpr MaterialRef kAluminum{"Aluminum 6061-T6", 1};
+    constexpr MaterialRef kSteelS355{"Structural Steel S355 (EN 10025)", 3};
+    constexpr MaterialRef kMildSteel{"Carbon Steel AISI 1020 (hot rolled)", 6};
+    constexpr MaterialRef kDuralumin{"Aluminum 2024-T3", 10};
+    constexpr MaterialRef kAluminum7075{"Aluminum 7075-T6", 13};
 
     constexpr double kCm2 = 1e-4; // cm^2 -> m^2
     constexpr double kKN = 1e3;   // kN -> N
@@ -403,6 +407,40 @@ namespace FEM::TRUSS::LIBRARY {
               toModel(extrude(p, 2, 8.0, 400.0, 70.0), kSteel, "Parker truss bridge")};
     }
 
+    LibraryTruss continuousBridge() {
+      // Three 120 m spans, 10 m panels; the top chord is haunched from 14 m to 24 m over the two
+      // piers, where the hogging moment of a continuous girder peaks.
+      constexpr double panel = 10.0;
+      constexpr std::uint32_t n = 36;
+      const auto depth = [](const double x) {
+        const double toPier = std::min(std::abs(x - 120.0), std::abs(x - 240.0));
+        return 14.0 + 10.0 * std::max(0.0, 1.0 - toPier / 40.0);
+      };
+      Profile p;
+      std::vector<std::uint32_t> b(n + 1), t(n + 1);
+      for (std::uint32_t i = 0; i <= n; ++i) {
+        const double x = panel * i;
+        b[i] = p.add(x, 0.0);
+        t[i] = p.add(x, depth(x));
+      }
+      for (std::uint32_t i = 0; i < n; ++i) {
+        p.member(b[i], b[i + 1], 650.0);
+        p.member(t[i], t[i + 1], 650.0);
+        if (i % 2 == 0) p.member(b[i], t[i + 1], 350.0);
+        else p.member(t[i], b[i + 1], 350.0);
+      }
+      for (std::uint32_t i = 0; i <= n; ++i) p.member(b[i], t[i], 350.0);
+      p.pins = {b[12]};
+      p.rollers = {b[0], b[24], b[36]};
+      for (std::uint32_t i = 1; i < n; ++i) p.loaded.push_back(b[i]);
+      return {{"bridge_continuous_three_span", "Three-span continuous truss bridge", "Bridge",
+               "360 m railway bridge, three continuous 120 m spans, 10 m panels, Warren web with verticals. "
+               "Depth 14 m in the spans, haunched to 24 m over the two piers. Two trusses 12 m apart, braced. "
+               "Pinned on the first pier, rollers on the abutments and the second pier. 1800 kN per panel point "
+               "(double track + deck). Steel S355, chords 650 cm^2, webs 350 cm^2."},
+              toModel(extrude(p, 2, 12.0, 1800.0, 150.0), kSteelS355, "Continuous truss bridge")};
+    }
+
     // ---- stadium / long-span roofs --------------------------------------------------------------
 
     LibraryTruss grandstandCantilever() {
@@ -593,6 +631,176 @@ namespace FEM::TRUSS::LIBRARY {
               toModel(std::move(d), kAluminum, "Geodesic dome")};
     }
 
+    LibraryTruss ovalStadiumRoof() {
+      // A full ring of radial cantilever trusses over an oval bowl. Truss c stands on the back
+      // ellipse (semi-axes 120 m x 95 m) and reaches 35 m towards the pitch. Neighbouring trusses
+      // are tied like extrude(): a purlin at every node and a brace in every face swept by a member,
+      // so the ring closes into one space truss with an inner compression / tension ring.
+      constexpr std::uint32_t trusses = 48, panels = 7;
+      constexpr double semiX = 120.0, semiZ = 95.0, reach = 35.0, eaves = 30.0, backDepth = 6.0;
+      Draft d;
+      std::vector<std::vector<std::uint32_t>> top(trusses), bottom(trusses);
+      for (std::uint32_t c = 0; c < trusses; ++c) {
+        const double theta = 2.0 * kPi * c / trusses;
+        const double bx = semiX * std::cos(theta), bz = semiZ * std::sin(theta);
+        const double back = std::hypot(bx, bz);
+        for (std::uint32_t i = 0; i <= panels; ++i) {
+          const double s = reach * i / panels;
+          const double x = bx * (1.0 - s / back), z = bz * (1.0 - s / back);
+          const double y = eaves + 0.05 * s; // rises towards the pitch, drains to the back gutter
+          top[c].push_back(d.node(x, y, z));
+          bottom[c].push_back(i < panels ? d.node(x, y - backDepth * (1.0 - s / reach), z) : top[c].back());
+        }
+      }
+      struct Member {
+        bool aTop;
+        std::uint32_t a;
+        bool bTop;
+        std::uint32_t b;
+        double area;
+      };
+      std::vector<Member> members;
+      for (std::uint32_t i = 0; i < panels; ++i) {
+        members.push_back({true, i, true, i + 1, 140.0});
+        members.push_back({false, i, false, i + 1, 140.0});
+        members.push_back({false, i, true, i, 60.0});
+        if (i + 1 < panels) members.push_back({true, i, false, i + 1, 60.0});
+      }
+      const auto id = [&](const std::uint32_t c, const bool onTop, const std::uint32_t i) {
+        return onTop ? top[c % trusses][i] : bottom[c % trusses][i];
+      };
+      for (std::uint32_t c = 0; c < trusses; ++c) {
+        for (const auto& m : members) d.bar(id(c, m.aTop, m.a), id(c, m.bTop, m.b), m.area);
+        for (std::uint32_t i = 0; i <= panels; ++i) {
+          d.bar(id(c, true, i), id(c + 1, true, i), 35.0);
+          d.bar(id(c, false, i), id(c + 1, false, i), 35.0);
+        }
+        for (const auto& m : members) d.bar(id(c, m.aTop, m.a), id(c + 1, m.bTop, m.b), 35.0);
+        d.pin(top[c][0]);
+        d.pin(bottom[c][0]);
+      }
+      // 1 kN/m^2 (cladding, snow, services) on the top chord, plus 20 kN of floodlights and
+      // catwalk at every tip.
+      const auto distance = [&](const std::uint32_t a, const std::uint32_t b) {
+        const auto& p = d.nodes[a];
+        const auto& q = d.nodes[b];
+        return std::hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+      };
+      for (std::uint32_t c = 0; c < trusses; ++c) {
+        for (std::uint32_t i = 1; i <= panels; ++i) {
+          const double width = 0.5 * (distance(id(c, true, i), id(c + 1, true, i)) + distance(id(c, true, i), id(c + trusses - 1, true, i)));
+          const double length = reach / panels * (i == panels ? 0.5 : 1.0);
+          d.load(top[c][i], {0.0, -1.0 * kKN * width * length - (i == panels ? 20.0 * kKN : 0.0), 0.0});
+        }
+      }
+      return {{"stadium_oval_ring_roof", "Oval stadium roof (full ring)", "Stadium",
+               "Complete roof of a 240 x 190 m oval stadium: 48 radial cantilever trusses reaching 35 m over "
+               "the stands, 6 m deep at the back columns, tied by purlins and bracing into one closed ring with "
+               "an open 170 x 120 m centre. Every truss pinned at its two back nodes. 1 kN/m^2 roof load plus "
+               "20 kN floodlights per tip. Steel S355, chords 140 cm^2, webs 60 cm^2, ring bracing 35 cm^2."},
+              toModel(std::move(d), kSteelS355, "Oval stadium roof")};
+    }
+
+    LibraryTruss archStadiumRoof() {
+      // Wembley-style arch: parabolic axis, 315 m span, 133 m high, in a plane leaning 22 deg
+      // from the vertical towards -z. Triangular lattice section (7.4 m sides), one triangulated
+      // frame per station and Warren lacing in the three faces.
+      constexpr double span = 315.0, rise = 133.0, side = 7.4;
+      constexpr std::uint32_t bays = 60;
+      const double lean = 22.0 * kPi / 180.0;
+      const Point up{0.0, std::cos(lean), -std::sin(lean)};
+      const Point out{0.0, std::sin(lean), std::cos(lean)};
+      const double r = side / std::sqrt(3.0);
+      Draft d;
+      std::vector<std::array<std::uint32_t, 3>> st;
+      for (std::uint32_t s = 0; s <= bays; ++s) {
+        const double u = span * s / bays;
+        const double xi = 2.0 * u / span - 1.0;
+        const double v = rise * (1.0 - xi * xi);
+        const double slope = -4.0 * rise * xi / span; // dv/du
+        const double norm = std::hypot(1.0, slope);
+        const double nx = -slope / norm, nv = 1.0 / norm; // in-plane normal (x, along up)
+        std::array<std::uint32_t, 3> station{};
+        for (std::size_t c = 0; c < 3; ++c) {
+          const double alpha = 2.0 * kPi * static_cast<double>(c) / 3.0;
+          const double a = r * std::cos(alpha), b = r * std::sin(alpha);
+          const double inPlane = v + a * nv;
+          station[c] = d.node(u - span / 2.0 + a * nx, inPlane * up[1] + b * out[1], inPlane * up[2] + b * out[2]);
+        }
+        st.push_back(station);
+      }
+      for (std::uint32_t s = 0; s <= bays; ++s) {
+        for (std::size_t c = 0; c < 3; ++c) {
+          const std::size_t next = (c + 1) % 3;
+          d.bar(st[s][c], st[s][next], 150.0);
+          if (s == 0 || s == bays) d.pin(st[s][c]);
+          if (s == bays) continue;
+          d.bar(st[s][c], st[s + 1][c], 450.0);
+          if ((s + c) % 2 == 0) d.bar(st[s][c], st[s + 1][next], 120.0);
+          else d.bar(st[s][next], st[s + 1][c], 120.0);
+        }
+      }
+      // Roof cables hang from the two lower chords and pull down and back towards the stands
+      // (32 deg from the vertical), which also balances the lean of the arch's own weight.
+      const double cable = 32.0 * kPi / 180.0;
+      for (std::uint32_t s = 2; s + 2 <= bays; ++s) {
+        for (const std::size_t c : {1u, 2u}) d.load(st[s][c], {0.0, -125.0 * kKN * std::cos(cable), 125.0 * kKN * std::sin(cable)});
+      }
+      return {{"stadium_wembley_arch", "Leaning stadium arch (Wembley style)", "Stadium",
+               "315 m span, 133 m high parabolic arch leaning 22 deg from the vertical, triangular lattice "
+               "section with 7.4 m sides, 60 bays. Both feet pinned. The roof hangs from the lower chords: 250 kN "
+               "of cable force per station, 32 deg from the vertical towards the stands. Steel S355, chords "
+               "450 cm^2, frames 150 cm^2, lacing 120 cm^2."},
+              toModel(std::move(d), kSteelS355, "Leaning stadium arch")};
+    }
+
+    LibraryTruss kiewittDome() {
+      // Kiewitt (lamella) dome: six sectors, ring k carries 6 k nodes, every face a triangle.
+      // 210 m span, 36 m rise on a sphere, the class of the large covered stadium domes.
+      constexpr std::uint32_t rings = 12, sectors = 6;
+      constexpr double halfSpan = 105.0, rise = 36.0;
+      const double sphere = (halfSpan * halfSpan + rise * rise) / (2.0 * rise);
+      const double baseAngle = std::asin(halfSpan / sphere);
+      const double baseY = sphere * std::cos(baseAngle);
+      Draft d;
+      std::vector<std::vector<std::uint32_t>> ring(rings + 1);
+      ring[0] = {d.node(0.0, sphere - baseY, 0.0)};
+      for (std::uint32_t k = 1; k <= rings; ++k) {
+        const double theta = baseAngle * k / rings;
+        const std::uint32_t count = sectors * k;
+        for (std::uint32_t i = 0; i < count; ++i) {
+          const double phi = 2.0 * kPi * i / count;
+          ring[k].push_back(d.node(sphere * std::sin(theta) * std::cos(phi), sphere * std::cos(theta) - baseY,
+                                   sphere * std::sin(theta) * std::sin(phi)));
+        }
+      }
+      const auto at = [&](const std::uint32_t k, const std::uint32_t i) { return ring[k][i % ring[k].size()]; };
+      for (std::uint32_t k = 0; k < rings; ++k) {
+        const bool base = k + 1 == rings;
+        for (std::uint32_t s = 0; s < sectors; ++s) {
+          for (std::uint32_t i = 0; i <= k; ++i) {
+            d.bar(at(k, s * k + i), at(k + 1, s * (k + 1) + i), i == 0 ? 260.0 : 180.0); // i == 0: main rib
+            d.bar(at(k, s * k + i), at(k + 1, s * (k + 1) + i + 1), 180.0);
+            d.bar(at(k + 1, s * (k + 1) + i), at(k + 1, s * (k + 1) + i + 1), base ? 600.0 : 180.0);
+          }
+        }
+      }
+      for (const auto n : ring[rings]) d.pin(n);
+      // 1.2 kN/m^2 on plan (roofing, snow, catwalks), lumped by the plan area around each node.
+      const auto planRadius = [&](const double k) { return sphere * std::sin(baseAngle * k / rings); };
+      d.load(ring[0][0], {0.0, -1.2 * kKN * kPi * std::pow(planRadius(0.5), 2), 0.0});
+      for (std::uint32_t k = 1; k < rings; ++k) {
+        const double area = kPi * (std::pow(planRadius(k + 0.5), 2) - std::pow(planRadius(k - 0.5), 2)) / (sectors * k);
+        for (const auto n : ring[k]) d.load(n, {0.0, -1.2 * kKN * area, 0.0});
+      }
+      return {{"stadium_kiewitt_dome", "Kiewitt dome (210 m stadium)", "Stadium",
+               "Single-layer Kiewitt (lamella) dome over a 210 m circle, 36 m rise: 6 main ribs, 12 rings, "
+               "every panel triangulated, 469 nodes. Pinned on the base tension ring. 1.2 kN/m^2 on plan "
+               "(roofing, snow, catwalks). Steel S355, ribs 260 cm^2, other members 180 cm^2, base ring "
+               "600 cm^2."},
+              toModel(std::move(d), kSteelS355, "Kiewitt dome")};
+    }
+
     // ---- towers and platforms ------------------------------------------------------------------
 
     // Square lattice tower: levels of 4 nodes (corners at +-halfWidth, tapering linearly), legs,
@@ -601,30 +809,38 @@ namespace FEM::TRUSS::LIBRARY {
       Draft draft;
       std::vector<std::array<std::uint32_t, 4>> level;
     };
-    Tower latticeTower(const int levels, const double height, const double baseHalf, const double topHalf,
-                       const double legArea, const double braceArea) {
+    // halfWidth(k), legArea(k) and braceArea(k) per level k = 0..levels; the legs and face
+    // braces between level k and k + 1 use the areas of level k.
+    Tower latticeTower(const int levels, const double height, const std::function<double(int)>& halfWidth,
+                       const std::function<double(int)>& legArea, const std::function<double(int)>& braceArea) {
       Tower tower;
       auto& d = tower.draft;
       for (int k = 0; k <= levels; ++k) {
         const double y = height * k / levels;
-        const double w = baseHalf + (topHalf - baseHalf) * k / levels;
+        const double w = halfWidth(k);
         tower.level.push_back({d.node(-w, y, -w), d.node(w, y, -w), d.node(w, y, w), d.node(-w, y, w)});
       }
       for (std::size_t k = 0; k < tower.level.size(); ++k) {
         const auto& ring = tower.level[k];
+        const double brace = braceArea(static_cast<int>(k));
         for (std::size_t c = 0; c < 4; ++c) {
-          d.bar(ring[c], ring[(c + 1) % 4], braceArea);
+          d.bar(ring[c], ring[(c + 1) % 4], brace);
           if (k == 0) d.pin(ring[c]);
           if (k + 1 < tower.level.size()) {
             const auto& up = tower.level[k + 1];
-            d.bar(ring[c], up[c], legArea);
-            d.bar(ring[c], up[(c + 1) % 4], braceArea);
-            d.bar(ring[(c + 1) % 4], up[c], braceArea);
+            d.bar(ring[c], up[c], legArea(static_cast<int>(k)));
+            d.bar(ring[c], up[(c + 1) % 4], brace);
+            d.bar(ring[(c + 1) % 4], up[c], brace);
           }
         }
-        if (k > 0) d.bar(ring[0], ring[2], braceArea); // plan bracing keeps the section square
+        if (k > 0) d.bar(ring[0], ring[2], brace); // plan bracing keeps the section square
       }
       return tower;
+    }
+    Tower latticeTower(const int levels, const double height, const double baseHalf, const double topHalf,
+                       const double legArea, const double braceArea) {
+      return latticeTower(levels, height, [=](const int k) { return baseHalf + (topHalf - baseHalf) * k / levels; },
+                          [=](int) { return legArea; }, [=](int) { return braceArea; });
     }
 
     LibraryTruss transmissionTower() {
@@ -704,6 +920,31 @@ namespace FEM::TRUSS::LIBRARY {
               toModel(std::move(d), kSteel, "Crane jib")};
     }
 
+    LibraryTruss eiffelTower() {
+      // 300 m wrought-iron style lattice tower; the plan width follows the exponential curve
+      // that makes the Eiffel Tower's legs (125 m square base, about 10 m at the top).
+      constexpr int levels = 24;
+      constexpr double height = 300.0;
+      const auto half = [](const int k) { return 3.0 + 59.5 * std::exp(-height * k / levels / 75.0); };
+      auto tower = latticeTower(levels, height, half, [](const int k) { return 1600.0 * (1.0 - 0.9 * k / levels); },
+                                [](const int k) { return 260.0 * (1.0 - 0.8 * k / levels); });
+      auto& d = tower.draft;
+      for (const auto& [k, total] : {std::pair{5, 8000.0}, {9, 4000.0}, {22, 1200.0}}) { // platforms
+        for (const auto n : tower.level[static_cast<std::size_t>(k)]) d.load(n, {0.0, -total / 4.0 * kKN, 0.0});
+      }
+      // Wind: 1.2 kN/m^2 on the face, 30 % solid, along +x.
+      for (int k = 1; k <= levels; ++k) {
+        const double force = 1.2 * 2.0 * half(k) * (height / levels) * 0.3;
+        for (const auto n : tower.level[static_cast<std::size_t>(k)]) d.load(n, {force / 4.0 * kKN, 0.0, 0.0});
+      }
+      return {{"tower_eiffel_style", "300 m lattice tower (Eiffel style)", "Tower & Platform",
+               "300 m square lattice tower, 24 levels, the plan narrowing exponentially from 125 m at the base "
+               "to 10 m at the top; X-braced faces, plan bracing at every level. Base legs pinned. Platforms: "
+               "8 MN at 62.5 m, 4 MN at 112.5 m, 1.2 MN at 275 m; wind 1.2 kN/m^2 on a 30 % solid face. Mild "
+               "steel, legs 1600 cm^2 tapering to 160 cm^2, bracing 260 to 52 cm^2."},
+              toModel(std::move(d), kMildSteel, "Lattice tower (Eiffel style)")};
+    }
+
     // ---- aircraft --------------------------------------------------------------------------------
 
     // Face k of a box girder joins corner k and corner k + 1 of every station. Rising: corner k
@@ -717,6 +958,7 @@ namespace FEM::TRUSS::LIBRARY {
       double chordArea{};  // cm^2, corner to corner along the girder
       double frameArea{};  // cm^2, station frames (bulkheads, ribs, interplane struts)
       double braceArea{};  // cm^2, face diagonals (lacing, wires)
+      std::function<double(std::size_t)> chordAreaOf; // cm^2 of the chords in bay s; empty: chordArea
       bool rootFrame{true}; // false: station 0 is fully supported, its frame carries nothing
     };
 
@@ -738,7 +980,7 @@ namespace FEM::TRUSS::LIBRARY {
         if (s + 1 == id.size()) continue;
         for (std::size_t c = 0; c < 4; ++c) {
           const std::size_t next = (c + 1) % 4;
-          d.bar(id[s][c], id[s + 1][c], g.chordArea);
+          d.bar(id[s][c], id[s + 1][c], g.chordAreaOf ? g.chordAreaOf(s) : g.chordArea);
           const bool even = s % 2 == 0;
           const auto brace = g.faces[c];
           const bool rising = brace == Brace::Rising || brace == Brace::Cross || (brace == Brace::WarrenRising && even)
@@ -914,15 +1156,271 @@ namespace FEM::TRUSS::LIBRARY {
               toModel(std::move(d), kSteel, "Biplane wing cell")};
     }
 
+    // Weight [N] of the bars built so far (the solver adds the same self weight).
+    double structureWeight(const Draft& d, const double density) {
+      double weight = 0.0;
+      for (const auto& bar : d.bars) {
+        const auto& a = d.nodes[bar.a];
+        const auto& b = d.nodes[bar.b];
+        weight += density * 9.80665 * bar.area * std::hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      }
+      return weight;
+    }
+
+    LibraryTruss rigidAirship() {
+      // Zeppelin-type hull: x aft from the nose, y up, z to starboard. 19 polygonal main rings
+      // (16 sides, node 0 on the keel), each wire-braced to a hub on the axis; longitudinal
+      // girders between the rings, crossed shear wires in every hull panel, an axial wire from
+      // the nose through every hub to the tail cone.
+      constexpr double length = 200.0, maxRadius = 15.0;
+      constexpr std::uint32_t rings = 19, sides = 16;
+      Draft d;
+      const auto nose = d.node(0.0, 0.0, 0.0);
+      std::vector<std::array<std::uint32_t, sides>> ring(rings);
+      std::vector<std::uint32_t> hub(rings);
+      std::vector<double> xs(rings), radius(rings);
+      for (std::uint32_t k = 0; k < rings; ++k) {
+        const double xi = (k + 1.0) / (rings + 1.0);
+        xs[k] = length * xi;
+        radius[k] = maxRadius * std::sqrt(1.0 - (2.0 * xi - 1.0) * (2.0 * xi - 1.0));
+        hub[k] = d.node(xs[k], 0.0, 0.0);
+        for (std::uint32_t j = 0; j < sides; ++j) {
+          const double phi = 2.0 * kPi * j / sides;
+          ring[k][j] = d.node(xs[k], -radius[k] * std::cos(phi), radius[k] * std::sin(phi));
+        }
+      }
+      const auto tail = d.node(length, 0.0, 0.0);
+      d.bar(nose, hub[0], 6.0);
+      d.bar(hub[rings - 1], tail, 6.0);
+      for (std::uint32_t k = 0; k < rings; ++k) {
+        if (k + 1 < rings) d.bar(hub[k], hub[k + 1], 6.0);
+        for (std::uint32_t j = 0; j < sides; ++j) {
+          const std::uint32_t next = (j + 1) % sides;
+          d.bar(ring[k][j], ring[k][next], 12.0); // main ring girder
+          d.bar(hub[k], ring[k][j], 2.0);         // radial wire bracing
+          if (k == 0) d.bar(nose, ring[k][j], 12.0);
+          if (k + 1 == rings) d.bar(ring[k][j], tail, 12.0);
+          if (k + 1 < rings) {
+            d.bar(ring[k][j], ring[k + 1][j], 12.0); // longitudinal girder
+            d.bar(ring[k][j], ring[k + 1][next], 1.5);
+            d.bar(ring[k][next], ring[k + 1][j], 1.5);
+          }
+        }
+      }
+      // Moored: nose cone on the mast (pinned), tail cone held vertically and sideways by the
+      // stern handling party, one keel node held sideways against roll.
+      d.pin(nose);
+      d.fix(tail, {false, true, true});
+      d.fix(ring[rings / 2][0], {false, false, true});
+
+      // Hydrogen lift (11 N/m^3) of every gas cell, half to each bounding ring, on the upper
+      // ring nodes. Five engine cars of 2.5 t and a 4 t control car; the rest of the useful load
+      // (fuel, ballast, crew, cargo) on the keel nodes, so the ship floats in equilibrium.
+      constexpr double liftPerM3 = 11.0;
+      std::vector<double> ringLift(rings, 0.0);
+      const auto cone = [](const double h, const double r1, const double r2) { return kPi * h / 3.0 * (r1 * r1 + r1 * r2 + r2 * r2); };
+      ringLift[0] += liftPerM3 * cone(xs[0], 0.0, radius[0]);
+      ringLift[rings - 1] += liftPerM3 * cone(length - xs[rings - 1], radius[rings - 1], 0.0);
+      for (std::uint32_t k = 0; k + 1 < rings; ++k) {
+        const double cell = liftPerM3 * cone(xs[k + 1] - xs[k], radius[k], radius[k + 1]);
+        ringLift[k] += 0.5 * cell;
+        ringLift[k + 1] += 0.5 * cell;
+      }
+      double totalLift = 0.0;
+      for (std::uint32_t k = 0; k < rings; ++k) {
+        totalLift += ringLift[k];
+        std::vector<std::uint32_t> upper;
+        for (const auto n : ring[k]) {
+          if (d.nodes[n][1] > 1e-6 * radius[k]) upper.push_back(n);
+        }
+        for (const auto n : upper) d.load(n, {0.0, ringLift[k] / static_cast<double>(upper.size()), 0.0});
+      }
+      constexpr double engineCar = 2.5 * 9.80665 * kKN, controlCar = 4.0 * 9.80665 * kKN;
+      for (const auto& [k, j] : {std::pair{5u, 3u}, {5u, 13u}, {10u, 3u}, {10u, 13u}, {15u, 0u}}) d.load(ring[k][j], {0.0, -engineCar, 0.0});
+      d.load(ring[2][0], {0.0, -controlCar / 2.0, 0.0});
+      d.load(ring[3][0], {0.0, -controlCar / 2.0, 0.0});
+      const double usefulLoad = totalLift - structureWeight(d, 2780.0) - 5.0 * engineCar - controlCar;
+      std::vector<std::uint32_t> keel;
+      for (std::uint32_t k = 1; k + 1 < rings; ++k) {
+        for (const std::uint32_t j : {sides - 1, 0u, 1u}) keel.push_back(ring[k][j]);
+      }
+      for (const auto n : keel) d.load(n, {0.0, -usefulLoad / static_cast<double>(keel.size()), 0.0});
+      return {{"aircraft_rigid_airship", "Rigid airship hull (Zeppelin type)", "Aircraft",
+               "200 m hull, 30 m diameter: 19 sixteen-sided main rings wire-braced to an axial wire, "
+               "longitudinal girders, crossed shear wires in every panel, nose and tail cones. Moored: nose "
+               "pinned on the mast, tail held vertically and sideways. Hydrogen lift of each gas cell on the "
+               "upper ring nodes; five 2.5 t engine cars, a 4 t control car and the remaining useful load on "
+               "the keel, so lift and weight balance. Duralumin (2024-T3): girders 12 cm^2, axial wire 6 cm^2, "
+               "radial wires 2 cm^2, shear wires 1.5 cm^2."},
+              toModel(std::move(d), kDuralumin, "Rigid airship hull")};
+    }
+
+    LibraryTruss geodeticFuselage() {
+      // Vickers Wellington style geodetic (diagrid) fuselage: x aft from the nose, y up, z to
+      // starboard. 31 stations, 0.6 m apart, of 20 nodes on an oval; odd stations are turned by
+      // half a pitch, so the members between stations run as two crossing helices. Circumferential
+      // members close every triangle; six triangulated bulkheads keep the section in shape.
+      constexpr std::uint32_t stations = 31, around = 20;
+      constexpr double pitch = 0.6;
+      Draft d;
+      std::vector<std::array<std::uint32_t, around>> st(stations);
+      for (std::uint32_t k = 0; k < stations; ++k) {
+        const double x = pitch * k;
+        const double s = x < 2.4 ? 0.55 + 0.45 * std::sin(x / 2.4 * kPi / 2.0)
+                                 : (x <= 9.0 ? 1.0 : 1.0 - 0.65 * (x - 9.0) / 9.0);
+        const double halfHeight = 1.6 * s, halfWidth = 1.2 * s, centre = 0.6 * std::max(0.0, (x - 9.0) / 9.0);
+        for (std::uint32_t j = 0; j < around; ++j) {
+          const double phi = 2.0 * kPi * (j + 0.5 * (k % 2)) / around;
+          st[k][j] = d.node(x, centre - halfHeight * std::cos(phi), halfWidth * std::sin(phi));
+        }
+      }
+      for (std::uint32_t k = 0; k < stations; ++k) {
+        for (std::uint32_t j = 0; j < around; ++j) {
+          d.bar(st[k][j], st[k][(j + 1) % around], 3.0);
+          if (k + 1 == stations) continue;
+          // Even station node j sits between odd nodes j - 1 and j; odd node j between even j and j + 1.
+          const std::uint32_t left = k % 2 == 0 ? (j + around - 1) % around : j;
+          const std::uint32_t right = k % 2 == 0 ? j : (j + 1) % around;
+          d.bar(st[k][j], st[k + 1][left], 5.0);
+          d.bar(st[k][j], st[k + 1][right], 5.0);
+        }
+        if (k % 6 == 0) { // bulkhead: zig-zag triangulation of the polygon
+          std::vector<std::uint32_t> order{0};
+          for (std::uint32_t a = 1, b = around - 1; a <= b; ++a, --b) {
+            order.push_back(a);
+            if (a != b) order.push_back(b);
+          }
+          for (std::size_t i = 0; i + 1 < order.size(); ++i) d.bar(st[k][order[i]], st[k][order[i + 1]], 3.0);
+        }
+      }
+      // Wing centre-section spar fittings: the side nodes of stations 12 and 14.
+      for (const std::uint32_t k : {12u, 14u}) {
+        d.pin(st[k][around / 4]);
+        d.pin(st[k][3 * around / 4]);
+      }
+      // 3 g pull-up: nose turret 400 kg, tail turret 500 kg, five crew of 100 kg in the cockpit
+      // and fuselage, 2000 kg of bombs in the bay (stations 10..18), 10 kN tail download.
+      constexpr double g3 = 3.0 * 9.80665 / 1000.0 * kKN; // N per kg at 3 g
+      for (const auto n : st[0]) d.load(n, {0.0, -400.0 * g3 / around, 0.0});
+      for (const auto n : st[stations - 1]) d.load(n, {0.0, -500.0 * g3 / around, 0.0});
+      const auto bottom = [&](const std::uint32_t k, const double limit) {
+        std::vector<std::uint32_t> nodes;
+        for (std::uint32_t j = 0; j < around; ++j) {
+          if (std::cos(2.0 * kPi * (j + 0.5 * (k % 2)) / around) > limit) nodes.push_back(st[k][j]);
+        }
+        return nodes;
+      };
+      for (std::uint32_t k = 3; k <= 7; ++k) {
+        const auto floor = bottom(k, 0.8);
+        for (const auto n : floor) d.load(n, {0.0, -500.0 * g3 / 5.0 / static_cast<double>(floor.size()), 0.0});
+      }
+      for (std::uint32_t k = 10; k <= 18; ++k) {
+        const auto bay = bottom(k, 0.8);
+        for (const auto n : bay) d.load(n, {0.0, -2000.0 * g3 / 9.0 / static_cast<double>(bay.size()), 0.0});
+      }
+      for (const std::uint32_t k : {stations - 2, stations - 1}) {
+        std::vector<std::uint32_t> topNodes;
+        for (std::uint32_t j = 0; j < around; ++j) {
+          if (std::cos(2.0 * kPi * (j + 0.5 * (k % 2)) / around) < -0.8) topNodes.push_back(st[k][j]);
+        }
+        for (const auto n : topNodes) d.load(n, {0.0, -5.0 * kKN / static_cast<double>(topNodes.size()), 0.0});
+      }
+      return {{"aircraft_geodetic_fuselage", "Geodetic bomber fuselage (Wellington style)", "Aircraft",
+               "18 m geodetic fuselage of a twin-engine bomber: a diagrid of crossing helical members on an "
+               "oval section (2.4 x 3.2 m) that tapers and rises towards the tail, 31 stations, six triangulated "
+               "bulkheads, 620 nodes. Pinned at the four wing centre-section fittings. 3 g pull-up: turrets "
+               "400 / 500 kg, five crew, 2000 kg bomb load, 10 kN tail download. Duralumin (2024-T3): geodetic "
+               "members 5 cm^2, circumferential members and bulkheads 3 cm^2."},
+              toModel(std::move(d), kDuralumin, "Geodetic fuselage")};
+    }
+
+    LibraryTruss airlinerWingBox() {
+      // Full-span wing box of a narrow-body airliner: x aft, y up, z spanwise (to starboard).
+      // A 4 m centre box inside the fuselage and two 15 m outer boxes with 25 deg sweep, 5 deg
+      // dihedral and linear taper; ribs every 0.6 m. Corners: 0 front spar bottom, 1 front spar
+      // top, 2 rear spar top, 3 rear spar bottom. Spar webs are Warren-laced, the skins cross-braced.
+      std::vector<double> zs;
+      for (int j = 0; j < 25; ++j) zs.push_back(-17.0 + 0.6 * j);
+      for (int j = -2; j <= 2; ++j) zs.push_back(j);
+      for (int j = 1; j <= 25; ++j) zs.push_back(2.0 + 0.6 * j);
+      const auto eta = [](const double z) { return std::max(0.0, (std::abs(z) - 2.0) / 15.0); };
+      const double sweep = std::tan(25.0 * kPi / 180.0), dihedral = std::tan(5.0 * kPi / 180.0);
+      const auto frontSpar = [&](const double z) {
+        const double out = std::max(0.0, std::abs(z) - 2.0);
+        return std::array<double, 2>{out * sweep, out * dihedral};
+      };
+      BoxGirder g;
+      for (const double z : zs) {
+        const double e = eta(z);
+        const double width = 3.2 - 2.4 * e, front = 0.85 - 0.6 * e, rear = 0.7 * front;
+        const auto [x, y] = frontSpar(z);
+        g.stations.push_back({Point{x, y - front / 2, z}, Point{x, y + front / 2, z}, Point{x + width, y + rear / 2, z},
+                              Point{x + width, y - rear / 2, z}});
+      }
+      g.faces = {Brace::WarrenRising, Brace::Cross, Brace::WarrenRising, Brace::Cross};
+      g.chordAreaOf = [&](const std::size_t s) { return 400.0 * (1.0 - 0.6 * eta(0.5 * (zs[s] + zs[s + 1]))); };
+      g.frameArea = 25.0;
+      g.braceArea = 60.0;
+      Draft d;
+      const auto st = boxGirder(d, g);
+      constexpr std::size_t leftBody = 25, rightBody = 29; // z = -2 and z = +2
+      for (const auto s : {leftBody, rightBody}) {
+        for (const auto n : st[s]) d.pin(n); // wing-to-body side ribs
+      }
+      // Engines on pylons at z = +-5.6 m: 3.5 t (engine, nacelle, pylon) at 1 g and 25 kN cruise thrust.
+      for (const auto s : {leftBody - 6, rightBody + 6}) {
+        const auto [x, y] = frontSpar(zs[s]);
+        const auto engine = d.node(x - 2.8, y - 1.8, zs[s]);
+        const std::size_t outboard = s < leftBody ? s - 1 : s + 1;
+        for (const auto n : st[s]) d.bar(engine, n, 40.0);
+        for (const auto n : st[outboard]) d.bar(engine, n, 40.0);
+        d.load(engine, {-25.0 * kKN, -3.5 * 9.80665 * kKN, 0.0});
+      }
+      // 1 g cruise: 370 kN lift per outer wing in a Schrenk distribution (taper 0.3), 60 / 40 %
+      // on the front / rear spar top; 6 t of fuel per wing on the lower corners out to 10 m.
+      std::vector<double> share(zs.size(), 0.0);
+      double sum = 0.0;
+      for (std::size_t s = 0; s < zs.size(); ++s) {
+        const double e = eta(zs[s]);
+        if (e <= 0.0) continue;
+        const double planform = (1.0 - 0.7 * e) / 0.65;
+        share[s] = (e >= 1.0 ? 0.5 : 1.0) * 0.5 * (planform + 4.0 / kPi * std::sqrt(std::max(0.0, 1.0 - e * e)));
+        sum += share[s];
+      }
+      sum /= 2.0; // both wings
+      std::vector<std::size_t> tanks;
+      for (std::size_t s = 0; s < zs.size(); ++s) {
+        const double lift = 370.0 * kKN * share[s] / sum;
+        d.load(st[s][1], {0.0, 0.6 * lift, 0.0});
+        d.load(st[s][2], {0.0, 0.4 * lift, 0.0});
+        if (eta(zs[s]) > 0.0 && std::abs(zs[s]) <= 10.0) tanks.push_back(s);
+      }
+      const double fuel = 2.0 * 6.0 * 9.80665 * kKN / (2.0 * static_cast<double>(tanks.size()));
+      for (const auto s : tanks) {
+        d.load(st[s][0], {0.0, -fuel, 0.0});
+        d.load(st[s][3], {0.0, -fuel, 0.0});
+      }
+      return {{"aircraft_airliner_wing_box", "Airliner wing box (full span)", "Aircraft",
+               "34 m full-span wing box of a narrow-body airliner: 4 m centre box, two 15 m outer boxes with "
+               "25 deg sweep, 5 deg dihedral, taper from 3.2 x 0.85 m to 0.8 x 0.25 m, ribs every 0.6 m, Warren "
+               "spar webs, cross-braced skins, two engines on pylons. Pinned at the wing-to-body side ribs. 1 g "
+               "cruise: 370 kN Schrenk lift per wing, 6 t fuel per wing, 3.5 t engines with 25 kN thrust. "
+               "Aluminum 7075-T6: spar caps 400 cm^2 at the root tapering to 160 cm^2, webs and skins 60 cm^2, "
+               "ribs 25 cm^2."},
+              toModel(std::move(d), kAluminum7075, "Airliner wing box")};
+    }
+
   } // namespace end
 
   std::vector<LibraryTruss> buildLibrary() {
     std::vector<LibraryTruss> library;
     for (auto* build : {kingPostRoof, queenPostRoof, finkRoof, howeRoof, prattRoof, scissorsRoof, bowstringRoof,
-                        prattBridge, howeBridge, warrenBridge, kTrussBridge, parkerBridge,
-                        grandstandCantilever, spaceFrameRoof, schwedlerDome, geodesicDome,
-                        transmissionTower, offshoreJacket, craneJib,
-                        tubeFuselage, engineMount, strutBracedWing, biplaneWingCell}) {
+                        prattBridge, howeBridge, warrenBridge, kTrussBridge, parkerBridge, continuousBridge,
+                        grandstandCantilever, spaceFrameRoof, schwedlerDome, geodesicDome, ovalStadiumRoof,
+                        archStadiumRoof, kiewittDome,
+                        transmissionTower, offshoreJacket, craneJib, eiffelTower,
+                        tubeFuselage, engineMount, strutBracedWing, biplaneWingCell, rigidAirship, geodeticFuselage,
+                        airlinerWingBox}) {
       library.push_back(build());
     }
     return library;

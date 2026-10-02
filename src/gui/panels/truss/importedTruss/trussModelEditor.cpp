@@ -34,6 +34,7 @@
 #include <format>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <stop_token>
 #include <string_view>
 #include <thread>
@@ -131,6 +132,9 @@ namespace anaf::GUI {
     m_selectedBar = kNone;
     m_force = {0.0, 0.0, 0.0};
     m_fixed = {false, false, false};
+    m_supportInclined = false;
+    m_vectorsRestrained = true;
+    setSupportVectors({{0.0, 1.0, 0.0}});
     m_loadedNode = kNone;
     m_status.clear();
     m_statusIsError = false;
@@ -159,6 +163,18 @@ namespace anaf::GUI {
     if (const auto it = bridge.fixedDOFsByNode.find(selectedNode); it != bridge.fixedDOFsByNode.end()) {
       m_fixed = it->second;
     }
+    const auto& node = bridge.activeMesh->trussNodes[selectedNode];
+    m_supportInclined = node.hasInclinedSupport();
+    if (m_supportInclined) {
+      const auto& allowed = node.getAllowedMotionDirections();
+      setSupportVectors(m_vectorsRestrained ? FEM::TRUSS::orthogonalComplement(allowed) : allowed);
+    }
+  }
+
+  void TrussModelEditor::setSupportVectors(const std::vector<std::array<double, 3>>& vectors) {
+    if (vectors.empty() || vectors.size() > 3) return;
+    m_supportVectorCount = static_cast<int>(vectors.size());
+    for (std::size_t i = 0; i < vectors.size(); ++i) m_supportVectors[i] = vectors[i];
   }
 
   void TrussModelEditor::renderSummary() {
@@ -497,21 +513,70 @@ namespace anaf::GUI {
     auto& bridge = BRIDGE::buildBridge();
     ImGui::Text("Node %u", selectedNode);
 
-    ImGui::Checkbox("Fix X##editor_fix_x", &m_fixed[0]);
+    int supportType = m_supportInclined ? 1 : 0;
+    ImGui::RadioButton("Global axes##editor_support_axes", &supportType, 0);
     ImGui::SameLine();
-    ImGui::Checkbox("Fix Y##editor_fix_y", &m_fixed[1]);
-    ImGui::SameLine();
-    ImGui::Checkbox("Fix Z##editor_fix_z", &m_fixed[2]);
+    ImGui::RadioButton("Inclined / skewed##editor_support_inclined", &supportType, 1);
+    m_supportInclined = supportType == 1;
+
+    // Allowed motion of the inclined support, or the error that keeps Apply disabled.
+    std::vector<std::array<double, 3>> allowed;
+    std::string inclinedError;
+    if (m_supportInclined) {
+      renderInclinedSupportInputs();
+      try {
+        const auto basis = FEM::TRUSS::orthonormalize(
+          {m_supportVectors.begin(), m_supportVectors.begin() + m_supportVectorCount});
+        allowed = m_vectorsRestrained ? FEM::TRUSS::orthogonalComplement(basis) : basis;
+      } catch (const std::invalid_argument&) {
+        inclinedError = "The vectors must be non-zero and linearly independent.";
+      }
+      const auto show = [](const char* what, const std::array<double, 3>& v) {
+        ImGui::TextDisabled("%s (%.3f, %.3f, %.3f)", what, v[0], v[1], v[2]);
+      };
+      if (!inclinedError.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.4f, 1.0f), "%s", inclinedError.c_str());
+      } else if (allowed.empty()) {
+        ImGui::TextDisabled("Node is held in every direction (pin).");
+      } else if (allowed.size() == 1) {
+        show("Moves along the line", allowed[0]);
+      } else if (allowed.size() == 2) {
+        show("Slides on the plane with normal", FEM::TRUSS::orthogonalComplement(allowed)[0]);
+      } else {
+        ImGui::TextDisabled("Nothing is restrained (free node).");
+      }
+    } else {
+      ImGui::Checkbox("Fix X##editor_fix_x", &m_fixed[0]);
+      ImGui::SameLine();
+      ImGui::Checkbox("Fix Y##editor_fix_y", &m_fixed[1]);
+      ImGui::SameLine();
+      ImGui::Checkbox("Fix Z##editor_fix_z", &m_fixed[2]);
+    }
+
+    ImGui::BeginDisabled(!inclinedError.empty());
     if (ImGui::Button("Apply Support", ImVec2(-1.0f, 0.0f))) {
       const bool applied = editModel(bridge, [&](MeshData& mesh, FixedDOFMap& fixity) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
+        auto& node = mesh.trussNodes[selectedNode];
+        if (!m_supportInclined) {
+          node.setMovable({!m_fixed[0], !m_fixed[1], !m_fixed[2]});
+        } else if (allowed.size() == 3 || allowed.empty()) {
+          const bool free = !allowed.empty();
+          node.setMovable({free, free, free});
+        } else {
+          node.setAllowedMotionDirections(allowed);
+        }
+        // Global axes that are not in the allowed subspace; never all free for a real support,
+        // so the fixity entry (and the export) keeps the node.
+        const auto& movable = node.getMovable();
+        m_fixed = {!movable[0], !movable[1], !movable[2]};
         if (m_fixed[0] || m_fixed[1] || m_fixed[2]) fixity[selectedNode] = m_fixed;
         else fixity.erase(selectedNode);
-        mesh.trussNodes[selectedNode].setMovable({!m_fixed[0], !m_fixed[1], !m_fixed[2]});
         return true;
       });
       if (applied) setStatus(std::format("Support of node {} updated", selectedNode), false);
     }
+    ImGui::EndDisabled();
 
     ImGui::InputScalarN("Force [N]", ImGuiDataType_Double, m_force.data(), 3, nullptr, nullptr, "%.4g");
     const auto setLoad = [&](const std::array<double, 3> force) {
@@ -531,6 +596,36 @@ namespace anaf::GUI {
     if (ImGui::Button("Remove Load")) {
       m_force = {0.0, 0.0, 0.0};
       if (setLoad(m_force)) setStatus(std::format("Load on node {} removed", selectedNode), false);
+    }
+  }
+
+  void TrussModelEditor::renderInclinedSupportInputs() {
+    bool restrained = m_vectorsRestrained;
+    if (ImGui::RadioButton("Restrained directions##editor_support_restrained", restrained)) restrained = true;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Allowed motion##editor_support_allowed", !restrained)) restrained = false;
+    ImGui::SetItemTooltip("Restrained: the support reaction directions (1 = roller on a plane, 2 = guide along a line, "
+                          "3 = pin).\nAllowed motion: the line (1) or plane (2) the node may move in.");
+    if (restrained != m_vectorsRestrained) {
+      // Switch the meaning without changing the support: the vectors become their complement.
+      try {
+        const auto basis = FEM::TRUSS::orthonormalize(
+          {m_supportVectors.begin(), m_supportVectors.begin() + m_supportVectorCount});
+        if (basis.size() < 3) setSupportVectors(FEM::TRUSS::orthogonalComplement(basis));
+      } catch (const std::invalid_argument&) {
+        // Invalid input: keep the vectors as typed.
+      }
+      m_vectorsRestrained = restrained;
+    }
+
+    ImGui::TextUnformatted("Vectors:");
+    for (int count = 1; count <= 3; ++count) {
+      ImGui::SameLine();
+      ImGui::RadioButton(std::format("{}##editor_support_count", count).c_str(), &m_supportVectorCount, count);
+    }
+    for (int i = 0; i < m_supportVectorCount; ++i) {
+      ImGui::InputScalarN(std::format("d{}##editor_support_vector", i + 1).c_str(), ImGuiDataType_Double,
+                          m_supportVectors[static_cast<std::size_t>(i)].data(), 3, nullptr, nullptr, "%.4g");
     }
   }
 

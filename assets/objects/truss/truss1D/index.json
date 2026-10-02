@@ -75,6 +75,12 @@
       "description": "Span 48 m, 8 panels, Pratt web under a polygonal top chord rising from 6 m at the ends to 9 m at mid-span, where the bending moment peaks. Two trusses 8 m apart, braced. Pin / roller. 400 kN per panel point. Steel, chords 260 cm^2, webs 140 cm^2."
     },
     {
+      "id": "bridge_continuous_three_span",
+      "name": "Three-span continuous truss bridge",
+      "category": "Bridge",
+      "description": "360 m railway bridge, three continuous 120 m spans, 10 m panels, Warren web with verticals. Depth 14 m in the spans, haunched to 24 m over the two piers. Two trusses 12 m apart, braced. Pinned on the first pier, rollers on the abutments and the second pier. 1800 kN per panel point (double track + deck). Steel S355, chords 650 cm^2, webs 350 cm^2."
+    },
+    {
       "id": "stadium_grandstand_cantilever",
       "name": "Grandstand cantilever roof",
       "category": "Stadium",
@@ -99,6 +105,24 @@
       "description": "Frequency-3 icosahedral geodesic dome, radius 10 m: triangulated, so every bar works in pure tension / compression. Pinned on its lower edge nodes. 4 kN per free node. Aluminum 6061-T6, 12 cm^2 tubes."
     },
     {
+      "id": "stadium_oval_ring_roof",
+      "name": "Oval stadium roof (full ring)",
+      "category": "Stadium",
+      "description": "Complete roof of a 240 x 190 m oval stadium: 48 radial cantilever trusses reaching 35 m over the stands, 6 m deep at the back columns, tied by purlins and bracing into one closed ring with an open 170 x 120 m centre. Every truss pinned at its two back nodes. 1 kN/m^2 roof load plus 20 kN floodlights per tip. Steel S355, chords 140 cm^2, webs 60 cm^2, ring bracing 35 cm^2."
+    },
+    {
+      "id": "stadium_wembley_arch",
+      "name": "Leaning stadium arch (Wembley style)",
+      "category": "Stadium",
+      "description": "315 m span, 133 m high parabolic arch leaning 22 deg from the vertical, triangular lattice section with 7.4 m sides, 60 bays. Both feet pinned. The roof hangs from the lower chords: 250 kN of cable force per station, 32 deg from the vertical towards the stands. Steel S355, chords 450 cm^2, frames 150 cm^2, lacing 120 cm^2."
+    },
+    {
+      "id": "stadium_kiewitt_dome",
+      "name": "Kiewitt dome (210 m stadium)",
+      "category": "Stadium",
+      "description": "Single-layer Kiewitt (lamella) dome over a 210 m circle, 36 m rise: 6 main ribs, 12 rings, every panel triangulated, 469 nodes. Pinned on the base tension ring. 1.2 kN/m^2 on plan (roofing, snow, catwalks). Steel S355, ribs 260 cm^2, other members 180 cm^2, base ring 600 cm^2."
+    },
+    {
       "id": "tower_transmission",
       "name": "Transmission line tower",
       "category": "Tower & Platform",
@@ -115,6 +139,12 @@
       "name": "Crane jib (triangular lattice)",
       "category": "Tower & Platform",
       "description": "24 m cantilever jib with a triangular 1.6 m x 2.2 m section, 8 bays, laced on all three faces, fixed (pinned chords) at the mast. 30 kN hook load at the tip. Steel, chords 60 cm^2, lacing 12 cm^2."
+    },
+    {
+      "id": "tower_eiffel_style",
+      "name": "300 m lattice tower (Eiffel style)",
+      "category": "Tower & Platform",
+      "description": "300 m square lattice tower, 24 levels, the plan narrowing exponentially from 125 m at the base to 10 m at the top; X-braced faces, plan bracing at every level. Base legs pinned. Platforms: 8 MN at 62.5 m, 4 MN at 112.5 m, 1.2 MN at 275 m; wind 1.2 kN/m^2 on a 30 % solid face. Mild steel, legs 1600 cm^2 tapering to 160 cm^2, bracing 260 to 52 cm^2."
     },
     {
       "id": "aircraft_tube_fuselage",
@@ -139,6 +169,24 @@
       "name": "Biplane wing cell (two-bay)",
       "category": "Aircraft",
       "description": "Half wing cell of a WWI-era two-bay biplane: 4.6 m, 1.5 m chord and gap, 0.3 m stagger. Interplane struts and flying wires make a Pratt-like truss in the front and rear spar planes; drag wires cross in both wings. Spar roots pinned at the cabane and fuselage. 660 kg at 4.5 g: 14.6 kN lift, 55 / 45 % upper / lower wing. Steel: spars 6 cm^2, struts and ribs 4 cm^2, wires 0.8 cm^2."
+    },
+    {
+      "id": "aircraft_rigid_airship",
+      "name": "Rigid airship hull (Zeppelin type)",
+      "category": "Aircraft",
+      "description": "200 m hull, 30 m diameter: 19 sixteen-sided main rings wire-braced to an axial wire, longitudinal girders, crossed shear wires in every panel, nose and tail cones. Moored: nose pinned on the mast, tail held vertically and sideways. Hydrogen lift of each gas cell on the upper ring nodes; five 2.5 t engine cars, a 4 t control car and the remaining useful load on the keel, so lift and weight balance. Duralumin (2024-T3): girders 12 cm^2, axial wire 6 cm^2, radial wires 2 cm^2, shear wires 1.5 cm^2."
+    },
+    {
+      "id": "aircraft_geodetic_fuselage",
+      "name": "Geodetic bomber fuselage (Wellington style)",
+      "category": "Aircraft",
+      "description": "18 m geodetic fuselage of a twin-engine bomber: a diagrid of crossing helical members on an oval section (2.4 x 3.2 m) that tapers and rises towards the tail, 31 stations, six triangulated bulkheads, 620 nodes. Pinned at the four wing centre-section fittings. 3 g pull-up: turrets 400 / 500 kg, five crew, 2000 kg bomb load, 10 kN tail download. Duralumin (2024-T3): geodetic members 5 cm^2, circumferential members and bulkheads 3 cm^2."
+    },
+    {
+      "id": "aircraft_airliner_wing_box",
+      "name": "Airliner wing box (full span)",
+      "category": "Aircraft",
+      "description": "34 m full-span wing box of a narrow-body airliner: 4 m centre box, two 15 m outer boxes with 25 deg sweep, 5 deg dihedral, taper from 3.2 x 0.85 m to 0.8 x 0.25 m, ribs every 0.6 m, Warren spar webs, cross-braced skins, two engines on pylons. Pinned at the wing-to-body side ribs. 1 g cruise: 370 kN Schrenk lift per wing, 6 t fuel per wing, 3.5 t engines with 25 kN thrust. Aluminum 7075-T6: spar caps 400 cm^2 at the root tapering to 160 cm^2, webs and skins 60 cm^2, ribs 25 cm^2."
     }
   ]
 }

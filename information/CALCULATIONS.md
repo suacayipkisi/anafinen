@@ -3,7 +3,7 @@
 This document describes the finite element calculation for 3D truss structures built from 1D two-node bar elements. It covers the data types, the math, the solver portfolio, and the energy validator.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-29.
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-02.
 > Implemented: static displacement under nodal loads + self-weight.
 > Not implemented yet: mass matrix, modal analysis (Spectra), beam/frame elements, CST.
 
@@ -62,7 +62,8 @@ The element constructor rejects invalid input by throwing `std::invalid_argument
 ### 2.1 Node constraints
 
 - `setMovable({x, y, z})`: `true` means the DOF is free. It rebuilds the allowed-motion basis from the free axes.
-- `setAllowedMotionDirections()` accepts arbitrary directions, orthonormalizes them with Gram-Schmidt, and derives `m_isMovable` from them. An axis is movable only if it lies in the span of the basis.
+- `setAllowedMotionDirections()` accepts arbitrary directions, orthonormalizes them with Gram-Schmidt (`FEM::TRUSS::orthonormalize()`, which throws on zero or dependent vectors, relative tolerance 1e-9), and derives `m_isMovable` from them. An axis is movable only if it lies in the span of the basis.
+- `FEM::TRUSS::orthogonalComplement()` gives the perpendicular directions of a basis (each step takes the global axis with the largest part outside the span). The model editor uses it to turn restrained directions into the allowed motion.
 - The solver works on the allowed-motion basis, not on `m_isMovable` (section 6). For an inclined support `m_isMovable` is only a summary: an axis counts as movable only when it lies fully in the span, so a roller along (1, 1, 0) reports x and y as fixed.
 - `hasInclinedSupport()` is true when a basis vector is not a global axis. `Truss_Imported_or_Entered::setModel()` keeps such a node's basis instead of the axis fixity map, and `ADAPTER::toMeshModel()` writes it as `NodeConstraint::allowedMotion`.
 
@@ -131,12 +132,14 @@ trussLibrary.cpp  buildLibrary()  --- anaf_truss_library_tool --->  assets/objec
 ```
 
 1. The files are generated, never edited: change `trussLibrary.cpp`, run `build/tests/anaf_truss_library_tool`, commit the result. The test `builtInTrussLibraryMatchesTheGenerator` fails on any difference.
-2. `builtInTrussesAreStableAndSolve` checks every model: materials resolve to the built-ins by name, every bar has a section, the reduced stiffness matrix has no zero eigenvalue (λmin / λmax > 1e-12, i.e. no mechanism), the solve passes the energy check, the deflection stays below L/250 of the model extent and every bar stays below yield.
+2. `builtInTrussesAreStableAndSolve` checks every model: materials resolve to the built-ins by name, every bar has a section, the reduced stiffness matrix has no zero eigenvalue (λmin / λmax > 1e-12, i.e. no mechanism; above 1200 free DOFs the smallest / largest `SimplicialLDLT` pivot is used instead, which lies in [λmin, λmax] and avoids a dense eigen solve), the solve passes the energy check, the deflection stays below L/250 of the model extent and every bar stays below yield.
 3. Read-only in the application: loading makes an in-memory copy; File > Export refuses to write into the library folder (Linux packages also install it read-only).
 
 Planar trusses (roofs, bridges, the grandstand) are made spatial by `extrude()`: copies of the plane truss are tied by a strut at every node and a brace in every face swept by a member (purlins + roof bracing, floor beams + wind bracing), which is a stable space truss. Pin at one end (x, y, z), roller at the other (y).
 
-The fuselage and both wings are built by `boxGirder()`: stations of four corners joined by chords, a triangulated frame at every station and one diagonal (or a cross) in every face of every bay, so each bay is a closed triangulated polyhedron. The brace direction is chosen per face (`Brace::Rising`, `Falling`, `WarrenRising`, `WarrenFalling`, `Cross`); the biplane uses it to put only the flying wires in the strut planes (landing wires are slack under positive g and a linear truss would load them in compression).
+The fuselage and both wings are built by `boxGirder()`: stations of four corners joined by chords, a triangulated frame at every station and one diagonal (or a cross) in every face of every bay, so each bay is a closed triangulated polyhedron. The brace direction is chosen per face (`Brace::Rising`, `Falling`, `WarrenRising`, `WarrenFalling`, `Cross`); the biplane uses it to put only the flying wires in the strut planes (landing wires are slack under positive g and a linear truss would load them in compression). The airliner wing box passes a per-bay cap area (`BoxGirder::chordAreaOf`) to taper the spar caps.
+
+The large models are generated directly as space trusses: the oval stadium closes 48 radial cantilevers into a ring with the `extrude()` bracing pattern; the Kiewitt dome and the geodetic fuselage are fully triangulated surfaces (the fuselage with six triangulated bulkheads, which stop the ovalisation mechanism of an open tube); the airship rings are wire-braced wheels around an axial wire anchored in the nose and tail cones. `latticeTower()` takes per-level half width and areas, so the 300 m tower follows an exponential profile.
 
 | Category | Id | Model |
 |---|---|---|
@@ -152,17 +155,25 @@ The fuselage and both wings are built by `boxGirder()`: stations of four corners
 | Bridge | `bridge_warren` | Warren, 30 m |
 | Bridge | `bridge_k_truss` | K-truss, 48 m |
 | Bridge | `bridge_parker` | Parker (camelback), 48 m |
+| Bridge | `bridge_continuous_three_span` | Three-span continuous railway truss, 3 × 120 m, haunched over the piers (S355) |
 | Stadium | `stadium_grandstand_cantilever` | 20 m cantilever grandstand roof |
 | Stadium | `stadium_space_frame` | 24 × 24 m double-layer grid |
 | Stadium | `stadium_schwedler_dome` | Schwedler dome, 36.8 m |
 | Stadium | `stadium_geodesic_dome` | 3V geodesic dome, r = 10 m (aluminum) |
+| Stadium | `stadium_oval_ring_roof` | Full oval stadium roof, 240 × 190 m, 48 radial cantilever trusses, 720 nodes (S355) |
+| Stadium | `stadium_wembley_arch` | Leaning 315 m triangular lattice arch carrying the roof cables (S355) |
+| Stadium | `stadium_kiewitt_dome` | Kiewitt (lamella) dome, 210 m span, 469 nodes (S355) |
 | Tower & Platform | `tower_transmission` | 30 m transmission tower with cross-arms |
 | Tower & Platform | `platform_offshore_jacket` | 40 m four-leg offshore jacket |
 | Tower & Platform | `tower_crane_jib` | 24 m triangular crane jib |
+| Tower & Platform | `tower_eiffel_style` | 300 m lattice tower with an exponential profile, platforms and wind (mild steel) |
 | Aircraft | `aircraft_tube_fuselage` | 5.9 m welded 4130 tube fuselage (Warren), 3.8 g |
 | Aircraft | `aircraft_engine_mount` | Four-point welded engine mount, engine CG on stiff links |
 | Aircraft | `aircraft_strut_braced_wing` | 5 m strut-braced half wing, truss spars, Schrenk lift (aluminum) |
 | Aircraft | `aircraft_biplane_wing_cell` | Two-bay biplane wing cell: struts, flying wires, drag wires |
+| Aircraft | `aircraft_rigid_airship` | 200 m Zeppelin-type hull: wire-braced rings, gas-cell lift, moored (duralumin) |
+| Aircraft | `aircraft_geodetic_fuselage` | 18 m Wellington-style geodetic (diagrid) fuselage, 3 g, 620 nodes (duralumin) |
+| Aircraft | `aircraft_airliner_wing_box` | 34 m full-span swept airliner wing box with engines, 1 g cruise (7075-T6) |
 
 Dimensions, loads and sections of each model are in its `description` (shown in the GUI).
 

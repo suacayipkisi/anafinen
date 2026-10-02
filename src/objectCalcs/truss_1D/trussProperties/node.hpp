@@ -66,4 +66,12 @@ namespace FEM::TRUSS {
     bool hasInclinedSupport() const;
   };
 
+  // Orthonormal basis (Gram-Schmidt) of the span of directions. Throws std::invalid_argument
+  // when a direction is zero or (numerically) depends on the ones before it.
+  std::vector<std::array<double, 3>> orthonormalize(std::vector<std::array<double, 3>> directions);
+
+  // Orthonormal basis of the directions perpendicular to an orthonormal basis: the allowed
+  // motion of a support from its restrained directions, and the other way round.
+  std::vector<std::array<double, 3>> orthogonalComplement(const std::vector<std::array<double, 3>>& basis);
+
 } // namespace FEM::TRUSS end

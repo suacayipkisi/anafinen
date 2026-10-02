@@ -170,50 +170,79 @@ namespace anaf::GUI {
   }
 
   void ViewportRenderer::compileGridShader() {
+    // Fullscreen triangle; the view ray is linear in NDC, so plain interpolation is exact.
     const char* vertexShaderSource = R"(
       #version 460 core
       layout (location = 0) in vec3 aPos;
 
-      uniform mat4 u_MVP;
+      uniform vec3 u_Forward;
+      uniform vec3 u_Right;
+      uniform vec3 u_Up;
 
-      out vec3 vWorldPosition;
+      out vec3 vRay;
 
       void main() {
-        vWorldPosition = aPos;
-        gl_Position = u_MVP * vec4(aPos, 1.0);
+        vRay = u_Forward + aPos.x * u_Right + aPos.y * u_Up;
+        gl_Position = vec4(aPos.xy, 0.0, 1.0);
       }
     )";
 
+    // Intersects each pixel's ray with the y = 0 plane. Positions are relative to u_Origin (a
+    // grid-aligned point near the eye), so they stay small and precise far from the world origin.
     const char* fragmentShaderSource = R"(
       #version 460 core
       layout (location = 0) out vec4 FragColor;
       layout (location = 1) out int EntityID;
 
-      in vec3 vWorldPosition;
+      in vec3 vRay;
 
+      uniform vec3 u_EyeLocal;
+      uniform vec2 u_Origin;
       uniform float u_GridSpacing;
       uniform float u_AxisGap;
+      uniform float u_FadeDistance;
+
+      // Anti-aliased line coverage; fades out once the cells are only a few pixels wide, before
+      // they alias into moire.
+      float gridCoverage(vec2 cell, vec2 width) {
+        vec2 distanceToLine = abs(fract(cell - 0.5) - 0.5) / width;
+        float line = 1.0 - smoothstep(0.0, 1.0, min(distanceToLine.x, distanceToLine.y));
+        return line * (1.0 - smoothstep(0.08, 0.3, max(width.x, width.y)));
+      }
 
       void main() {
-        if (abs(vWorldPosition.x) < u_AxisGap || abs(vWorldPosition.z) < u_AxisGap) discard;
+        vec3 ray = normalize(vRay);
+        bool hitsPlane = ray.y * u_EyeLocal.y < 0.0;
+        float t = hitsPlane ? -u_EyeLocal.y / ray.y : 0.0;
+        vec2 hit = u_EyeLocal.xz + t * ray.xz;
 
-        vec2 gridPosition = vWorldPosition.xz / u_GridSpacing;
-        vec2 distanceToLine = abs(fract(gridPosition - 0.5) - 0.5);
-        vec2 lineWidth = max(fwidth(gridPosition), vec2(0.001));
-        float lineDistance = min(distanceToLine.x / lineWidth.x, distanceToLine.y / lineWidth.y);
-        float lineAlpha = 1.0 - smoothstep(0.0, 1.0, lineDistance);
+        // Derivatives before any discard: they need the whole 2x2 pixel quad.
+        vec2 minorCell = hit / u_GridSpacing;
+        vec2 minorWidth = max(fwidth(minorCell), vec2(1e-6));
+        float minorLine = gridCoverage(minorCell, minorWidth);
+        float majorLine = gridCoverage(minorCell * 0.1, minorWidth * 0.1);
 
-        if (lineAlpha <= 0.0) discard;
-        FragColor = vec4(0.62, 0.70, 0.78, lineAlpha * 0.11);
+        vec2 world = hit + u_Origin;
+        float alpha = max(minorLine * 0.11, majorLine * 0.2);
+        alpha *= 1.0 - smoothstep(0.5 * u_FadeDistance, u_FadeDistance, t);
+        if (!hitsPlane || alpha <= 0.002 || abs(world.x) < u_AxisGap || abs(world.y) < u_AxisGap) discard;
+
+        FragColor = vec4(0.62, 0.70, 0.78, alpha);
         EntityID = -1;
       }
     )";
 
     m_gridProgram = buildProgram(vertexShaderSource, fragmentShaderSource, "grid");
 
-    m_gridMvpLoc = glGetUniformLocation(m_gridProgram.get(), "u_MVP");
-    m_gridSpacingLoc = glGetUniformLocation(m_gridProgram.get(), "u_GridSpacing");
-    m_gridAxisGapLoc = glGetUniformLocation(m_gridProgram.get(), "u_AxisGap");
+    const GLuint program = m_gridProgram.get();
+    m_gridEyeLoc = glGetUniformLocation(program, "u_EyeLocal");
+    m_gridOriginLoc = glGetUniformLocation(program, "u_Origin");
+    m_gridForwardLoc = glGetUniformLocation(program, "u_Forward");
+    m_gridRightLoc = glGetUniformLocation(program, "u_Right");
+    m_gridUpLoc = glGetUniformLocation(program, "u_Up");
+    m_gridSpacingLoc = glGetUniformLocation(program, "u_GridSpacing");
+    m_gridAxisGapLoc = glGetUniformLocation(program, "u_AxisGap");
+    m_gridFadeLoc = glGetUniformLocation(program, "u_FadeDistance");
   }
 
   void ViewportRenderer::compileTextShader() {
@@ -263,12 +292,11 @@ namespace anaf::GUI {
     compileGridShader();
     compileTextShader();
 
-    constexpr float gridReach = 8000.0f;
+    // Fullscreen triangle in NDC (covers the viewport, clipped by the rasterizer).
     const glm::vec3 gridVertices[] = {
-      {-gridReach, 0.001f, -gridReach},
-      { gridReach, 0.001f, -gridReach},
-      { gridReach, 0.001f,  gridReach},
-      {-gridReach, 0.001f,  gridReach}
+      {-1.0f, -1.0f, 0.0f},
+      { 3.0f, -1.0f, 0.0f},
+      {-1.0f,  3.0f, 0.0f}
     };
 
     m_gridVbo = createBuffer();
@@ -286,6 +314,11 @@ namespace anaf::GUI {
     m_glowLineVbo = createBuffer();
     m_glowLineVao = createVertexArray();
     setupVertex3DLayout(m_glowLineVao, m_glowLineVbo);
+
+    // Translucent triangle Buffers (same vertex layout as lines)
+    m_triangleVbo = createBuffer();
+    m_triangleVao = createVertexArray();
+    setupVertex3DLayout(m_triangleVao, m_triangleVbo);
 
     // Point Buffers
     m_pointVbo = createBuffer();
@@ -313,6 +346,12 @@ namespace anaf::GUI {
   void ViewportRenderer::addGlowLine(const glm::vec3& p1, const glm::vec3& p2, const glm::vec4& color) {
     m_glowLineBuffer.push_back({p1, color, -1});
     m_glowLineBuffer.push_back({p2, color, -1});
+  }
+
+  void ViewportRenderer::addTriangle(const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3, const glm::vec4& color) {
+    m_triangleBuffer.push_back({p1, color, -1});
+    m_triangleBuffer.push_back({p2, color, -1});
+    m_triangleBuffer.push_back({p3, color, -1});
   }
 
   void ViewportRenderer::addPoint(const glm::vec3& p, const glm::vec4& color, int entityID, float size) {
@@ -366,6 +405,7 @@ namespace anaf::GUI {
   void ViewportRenderer::clearBuffers() {
     m_lineBuffer.clear();
     m_glowLineBuffer.clear();
+    m_triangleBuffer.clear();
     m_pointBuffer.clear();
   }
 
@@ -381,6 +421,7 @@ namespace anaf::GUI {
   void ViewportRenderer::uploadCurrentBuffer() {
     m_lineVertexCount = uploadVertices(m_lineVbo, m_lineBuffer);
     m_glowLineVertexCount = uploadVertices(m_glowLineVbo, m_glowLineBuffer);
+    m_triangleVertexCount = uploadVertices(m_triangleVbo, m_triangleBuffer);
     m_pointVertexCount = uploadVertices(m_pointVbo, m_pointBuffer);
   }
 
@@ -388,18 +429,24 @@ namespace anaf::GUI {
     m_textVertexCount = uploadVertices(m_textVbo, m_textBuffer);
   }
 
-  void ViewportRenderer::renderGrid(const glm::mat4& mvp, float spacing) {
+  void ViewportRenderer::renderGrid(const GridView& view) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
 
-    glProgramUniformMatrix4fv(m_gridProgram.get(), m_gridMvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
-    glProgramUniform1f(m_gridProgram.get(), m_gridSpacingLoc, spacing);
-    glProgramUniform1f(m_gridProgram.get(), m_gridAxisGapLoc, spacing * 0.16f);
+    const GLuint program = m_gridProgram.get();
+    glProgramUniform3fv(program, m_gridEyeLoc, 1, glm::value_ptr(view.eyeLocal));
+    glProgramUniform2fv(program, m_gridOriginLoc, 1, glm::value_ptr(view.origin));
+    glProgramUniform3fv(program, m_gridForwardLoc, 1, glm::value_ptr(view.forward));
+    glProgramUniform3fv(program, m_gridRightLoc, 1, glm::value_ptr(view.right));
+    glProgramUniform3fv(program, m_gridUpLoc, 1, glm::value_ptr(view.up));
+    glProgramUniform1f(program, m_gridSpacingLoc, view.spacing);
+    glProgramUniform1f(program, m_gridAxisGapLoc, view.spacing * 0.16f);
+    glProgramUniform1f(program, m_gridFadeLoc, view.fadeDistance);
 
-    glUseProgram(m_gridProgram.get());
+    glUseProgram(program);
     glBindVertexArray(m_gridVao.get());
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
 
     glUseProgram(0);
@@ -434,6 +481,15 @@ namespace anaf::GUI {
 
       glDepthMask(GL_TRUE);
       glLineWidth(1.5f);
+    }
+
+    // Translucent surfaces: blended over the lines, no depth writes so they never hide a bar.
+    if (m_triangleVertexCount > 0) {
+      glDepthMask(GL_FALSE);
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glBindVertexArray(m_triangleVao.get());
+      glDrawArrays(GL_TRIANGLES, 0, m_triangleVertexCount);
+      glDepthMask(GL_TRUE);
     }
 
     glDisable(GL_BLEND);

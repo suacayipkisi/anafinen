@@ -33,6 +33,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <numbers>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -44,13 +45,14 @@ namespace anaf::GUI {
     m_renderer_(std::make_unique<ViewportRenderer>())
   {}
 
-  void ViewportPanel::resetCamera() {
-    m_rotationYaw = 0.9f;
-    m_rotationPitch = -0.7f;
-    m_cameraDistance = 18.0f;
-    m_target = glm::vec3(0.0f);
-    m_draggingView = false;
+  namespace {
+    constexpr float kFovY = std::numbers::pi_v<float> / 4.0f; // 45 deg
+    constexpr float kMinCameraDistance = 1e-3f;
+  } // namespace end
 
+  void ViewportPanel::updateSceneBounds() {
+    m_sceneCenter = glm::vec3(0.0f);
+    m_sceneRadius = 10.0f;
     if (!m_currentMesh || m_currentMesh->trussNodes.empty()) return;
 
     glm::vec3 boundsMin(std::numeric_limits<float>::max());
@@ -65,11 +67,41 @@ namespace anaf::GUI {
       boundsMin = glm::min(boundsMin, position);
       boundsMax = glm::max(boundsMax, position);
     }
+    m_sceneCenter = (boundsMin + boundsMax) * 0.5f;
+    m_sceneRadius = std::max(0.5f * glm::length(boundsMax - boundsMin), 0.01f);
+  }
 
-    m_target = (boundsMin + boundsMax) * 0.5f;
-    const glm::vec3 extent = boundsMax - boundsMin;
-    const float modelRadius = 0.5f * glm::length(extent);
-    m_cameraDistance = std::clamp(modelRadius * 2.2f, 2.0f, 500.0f);
+  void ViewportPanel::resetCamera() {
+    m_rotationYaw = 0.9f;
+    m_rotationPitch = -0.7f;
+    m_draggingView = false;
+    updateSceneBounds();
+    m_target = m_sceneCenter;
+    m_cameraDistance = (m_currentMesh && !m_currentMesh->trussNodes.empty()) ? m_sceneRadius * 2.2f : 18.0f;
+  }
+
+  glm::vec3 ViewportPanel::orbitDirection() const {
+    return glm::vec3(
+      std::sin(m_rotationYaw) * std::cos(m_rotationPitch),
+      -std::sin(m_rotationPitch),
+      std::cos(m_rotationYaw) * std::cos(m_rotationPitch)
+    );
+  }
+
+  glm::vec3 ViewportPanel::orbitUp() const {
+    // -d(orbitDirection)/d(pitch): perpendicular to the view direction, equal to +y at zero
+    // pitch, and upside down (continuously) once the camera passes over a pole.
+    return glm::vec3(
+      std::sin(m_rotationYaw) * std::sin(m_rotationPitch),
+      std::cos(m_rotationPitch),
+      std::cos(m_rotationYaw) * std::sin(m_rotationPitch)
+    );
+  }
+
+  float ViewportPanel::farPlane() const {
+    // Far enough for the whole model wherever the target has been panned to.
+    const float reach = m_cameraDistance + glm::length(m_target - m_sceneCenter) + m_sceneRadius;
+    return std::max(reach * 2.0f, 10.0f);
   }
 
   void ViewportPanel::handleCameraInput() {
@@ -80,7 +112,9 @@ namespace anaf::GUI {
     }
 
     if (m_viewportHovered_ && io.MouseWheel != 0.0f) {
-      m_cameraDistance = std::clamp(m_cameraDistance * (1.0f - io.MouseWheel * 0.15f), 0.5f, 500.0f);
+      // Only a numeric guard: zooming out stops when the model is far below a pixel.
+      const float maxDistance = std::max(2000.0f, m_sceneRadius * 50.0f);
+      m_cameraDistance = std::clamp(m_cameraDistance * (1.0f - io.MouseWheel * 0.15f), kMinCameraDistance, maxDistance);
     }
 
     if (m_viewportHovered_ && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) {
@@ -95,43 +129,31 @@ namespace anaf::GUI {
       const ImVec2 delta = io.MouseDelta;
 
       if (delta.x != 0.0f || delta.y != 0.0f) {
-        constexpr float pitchLimit = 1.553343f;
-
-        const glm::vec3 forward = glm::normalize(m_target - glm::vec3(
-          m_target.x + std::sin(m_rotationYaw) * std::cos(m_rotationPitch) * m_cameraDistance,
-          m_target.y - std::sin(m_rotationPitch) * m_cameraDistance,
-          m_target.z + std::cos(m_rotationYaw) * std::cos(m_rotationPitch) * m_cameraDistance
-        ));
-
-        glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
-        if (std::abs(forward.y) > 0.99f) worldUp = glm::vec3(1.0f, 0.0f, 0.0f);
-
-        const glm::vec3 right = glm::normalize(glm::cross(worldUp, forward));
-        const glm::vec3 up = glm::cross(forward, right);
+        const glm::vec3 forward = -orbitDirection();
+        const glm::vec3 up = orbitUp();
+        const glm::vec3 right = glm::cross(forward, up);
 
         const bool panMode = ImGui::IsMouseDown(ImGuiMouseButton_Middle) || io.KeyShift;
         if (panMode) {
           const float panScale = 0.0015f * m_cameraDistance;
-          m_target += (right * delta.x + up * delta.y) * panScale;
+          m_target += (-right * delta.x + up * delta.y) * panScale;
         } else {
-          m_rotationYaw -= delta.x * 0.005f;
-          m_rotationPitch -= delta.y * 0.005f;
-          m_rotationPitch = std::clamp(m_rotationPitch, -pitchLimit, pitchLimit);
+          // Upside down, a horizontal drag still turns the view the way the mouse moves.
+          const float yawSign = std::cos(m_rotationPitch) < 0.0f ? -1.0f : 1.0f;
+          m_rotationYaw = std::remainder(m_rotationYaw - yawSign * delta.x * 0.005f, 2.0f * std::numbers::pi_v<float>);
+          m_rotationPitch = std::remainder(m_rotationPitch - delta.y * 0.005f, 2.0f * std::numbers::pi_v<float>);
         }
       }
     }
   }
 
   glm::mat4 ViewportPanel::getViewProjectionMatrix() const {
-    const glm::vec3 eye = m_target + glm::vec3(
-      std::sin(m_rotationYaw) * std::cos(m_rotationPitch) * m_cameraDistance,
-      -std::sin(m_rotationPitch) * m_cameraDistance,
-      std::cos(m_rotationYaw) * std::cos(m_rotationPitch) * m_cameraDistance
-    );
-
-    const glm::mat4 view = glm::lookAt(eye, m_target, glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::vec3 eye = m_target + orbitDirection() * m_cameraDistance;
+    const glm::mat4 view = glm::lookAt(eye, m_target, orbitUp());
     const float aspect = (m_viewportSize.y > 0.0f) ? (m_viewportSize.x / m_viewportSize.y) : 16.0f / 9.0f;
-    const glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10000.0f);
+    const float farClip = farPlane();
+    const float nearClip = std::max(m_cameraDistance * 0.005f, farClip * 1e-6f);
+    const glm::mat4 projection = glm::perspective(kFovY, aspect, nearClip, farClip);
 
     return projection * view;
   }
@@ -140,10 +162,11 @@ namespace anaf::GUI {
     m_renderer_->clearBuffers();
 
     // Coordinate axes X, Y, Z, extended far past the camera's far clip plane so they appear infinite (EntityID = -1)
-    constexpr float kAxisReach = 8000.0f;
-    m_renderer_->addLine(glm::vec3(-kAxisReach, 0.0f, 0.0f), glm::vec3(kAxisReach, 0.0f, 0.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f), -1);
-    m_renderer_->addLine(glm::vec3(0.0f, -kAxisReach, 0.0f), glm::vec3(0.0f, kAxisReach, 0.0f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f), -1);
-    m_renderer_->addLine(glm::vec3(0.0f, 0.0f, -kAxisReach), glm::vec3(0.0f, 0.0f, kAxisReach), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
+    // farPlane() stays below ~100 scene radii at the widest zoom, so 200 radii look infinite.
+    const float axisReach = std::max(8000.0f, m_sceneRadius * 200.0f);
+    m_renderer_->addLine(glm::vec3(-axisReach, 0.0f, 0.0f), glm::vec3(axisReach, 0.0f, 0.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f), -1);
+    m_renderer_->addLine(glm::vec3(0.0f, -axisReach, 0.0f), glm::vec3(0.0f, axisReach, 0.0f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f), -1);
+    m_renderer_->addLine(glm::vec3(0.0f, 0.0f, -axisReach), glm::vec3(0.0f, 0.0f, axisReach), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
 
     if (!m_currentMesh || m_currentMesh->trussNodes.empty()) {
       m_cachedMaxStress = 0.0;
@@ -244,6 +267,43 @@ namespace anaf::GUI {
       }
     }
 
+    // Inclined / skewed supports (red, at the drawn node position): a plane the node slides on
+    // as a translucent square with outline, or a line it moves along as a double arrow. Sized
+    // from the model, so they stay readable on a 1 m mount and on a 300 m stadium.
+    {
+      const float symbol = std::max(m_sceneRadius * 0.04f, 1e-3f);
+      const glm::vec4 supportColor(1.0f, 0.22f, 0.22f, 1.0f);
+      const glm::vec4 supportFill(1.0f, 0.22f, 0.22f, 0.28f);
+      const glm::vec4 supportGlow(1.0f, 0.3f, 0.3f, 0.35f);
+      const auto toVec = [](const std::array<double, 3>& v) {
+        return glm::vec3(static_cast<float>(v[0]), static_cast<float>(v[1]), static_cast<float>(v[2]));
+      };
+      for (const auto& node : mesh.trussNodes) {
+        if (!node.hasInclinedSupport()) continue;
+        const auto& directions = node.getAllowedMotionDirections();
+        const glm::vec3& pos = nodeLookup[node.getNodeID()];
+        if (directions.size() == 1) {
+          const glm::vec3 along = toVec(directions[0]);
+          const glm::vec3 a = pos - along * (1.6f * symbol), b = pos + along * (1.6f * symbol);
+          m_renderer_->addLine(a, b, supportColor, -1);
+          m_renderer_->addGlowLine(a, b, supportGlow);
+          const glm::vec3 helper = std::abs(along.y) > 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+          const glm::vec3 side = glm::normalize(glm::cross(along, helper)) * (0.25f * symbol);
+          const glm::vec3 side2 = glm::cross(along, side);
+          for (const auto& [tip, back] : {std::pair{a, along}, {b, -along}}) {
+            const glm::vec3 headBase = tip + back * (0.4f * symbol);
+            for (const glm::vec3& offset : {side, -side, side2, -side2}) m_renderer_->addLine(tip, headBase + offset, supportColor, -1);
+          }
+        } else if (directions.size() == 2) {
+          const glm::vec3 u = toVec(directions[0]) * symbol, v = toVec(directions[1]) * symbol;
+          const std::array<glm::vec3, 4> corner{pos - u - v, pos + u - v, pos + u + v, pos - u + v};
+          m_renderer_->addTriangle(corner[0], corner[1], corner[2], supportFill);
+          m_renderer_->addTriangle(corner[0], corner[2], corner[3], supportFill);
+          for (std::size_t c = 0; c < 4; ++c) m_renderer_->addLine(corner[c], corner[(c + 1) % 4], supportColor, -1);
+        }
+      }
+    }
+
     // Force Arrows (Lines in FBO)
     constexpr float arrowWorldLength = 3.0f;
     constexpr float headLength = 0.1f;
@@ -301,6 +361,8 @@ namespace anaf::GUI {
       if (m_fitRequested_ && m_currentMesh) {
         resetCamera();
         m_fitRequested_ = false;
+      } else {
+        updateSceneBounds();
       }
       buildSceneBatches();
     }
@@ -312,9 +374,25 @@ namespace anaf::GUI {
     m_fbo_->clear(0.08f, 0.09f, 0.11f, 1.0f, -1);
 
     const glm::mat4 mvp = getViewProjectionMatrix();
-    const float gridScale = std::max(0.25f, m_cameraDistance / 12.0f);
-    const float gridSpacing = std::pow(10.0f, std::floor(std::log10(gridScale)));
-    m_renderer_->renderGrid(mvp, gridSpacing);
+    {
+      GridView grid;
+      grid.spacing = std::pow(10.0f, std::floor(std::log10(m_cameraDistance / 12.0f)));
+      // Local origin snapped to the major grid, computed in double so a far-panned camera keeps
+      // its precision; the shader then only works with eye-relative coordinates.
+      const glm::vec3 eye = m_target + orbitDirection() * m_cameraDistance;
+      const double major = 10.0 * static_cast<double>(grid.spacing);
+      const double originX = std::floor(static_cast<double>(eye.x) / major) * major;
+      const double originZ = std::floor(static_cast<double>(eye.z) / major) * major;
+      grid.origin = glm::vec2(static_cast<float>(originX), static_cast<float>(originZ));
+      grid.eyeLocal = glm::vec3(static_cast<float>(eye.x - originX), eye.y, static_cast<float>(eye.z - originZ));
+      const float tanHalfFov = std::tan(kFovY * 0.5f);
+      const float aspect = (m_viewportSize.y > 0.0f) ? (m_viewportSize.x / m_viewportSize.y) : 16.0f / 9.0f;
+      grid.forward = -orbitDirection();
+      grid.up = orbitUp() * tanHalfFov;
+      grid.right = glm::cross(grid.forward, orbitUp()) * (tanHalfFov * aspect);
+      grid.fadeDistance = std::max(m_cameraDistance * 40.0f, m_sceneRadius * 6.0f);
+      m_renderer_->renderGrid(grid);
+    }
     m_renderer_->render(mvp);
 
     // Node number labels, rendered as OpenGL glyph quads (ImGui font atlas) instead of an ImGui 2D overlay.
@@ -379,14 +457,7 @@ namespace anaf::GUI {
       drawList->AddCircleFilled(gizmoCenter, gizmoBoxSize * 0.5f, IM_COL32(20, 22, 27, 150));
 
       // Rotation-only camera basis; same lookAt formula as getViewProjectionMatrix, so pitch/yaw stay in sync.
-      const glm::mat3 camRot(glm::lookAt(
-        glm::vec3(
-          std::sin(m_rotationYaw) * std::cos(m_rotationPitch),
-          -std::sin(m_rotationPitch),
-          std::cos(m_rotationYaw) * std::cos(m_rotationPitch)
-        ),
-        glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)
-      ));
+      const glm::mat3 camRot(glm::lookAt(orbitDirection(), glm::vec3(0.0f), orbitUp()));
 
       struct AxisLine { glm::vec3 dir; ImU32 color; const char* label; };
       const AxisLine axes[3] = {

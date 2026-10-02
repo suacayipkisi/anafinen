@@ -48,6 +48,18 @@ namespace anaf::GUI {
     glm::vec4 color;
   };
 
+  // Camera data for the procedural ground grid. Every pixel casts its own view ray at the
+  // y = 0 plane, so the grid has no large geometry to clip and stays exact at any distance.
+  struct GridView {
+    glm::vec3 eyeLocal{0.0f};  // eye position relative to (origin.x, 0, origin.y)
+    glm::vec2 origin{0.0f};    // world x / z of the local grid origin, a multiple of 10 * spacing
+    glm::vec3 forward{0.0f};   // unit view direction
+    glm::vec3 right{0.0f};     // camera right, scaled by tan(fovY / 2) * aspect
+    glm::vec3 up{0.0f};        // camera up, scaled by tan(fovY / 2)
+    float spacing{1.0f};       // minor cell size; every tenth line is a major line
+    float fadeDistance{100.0f}; // the grid fades out towards this distance from the eye
+  };
+
   // Move-only: every GL object is owned by a GlHandle, so copies are rejected at compile time.
   class ViewportRenderer {
   private:
@@ -56,6 +68,8 @@ namespace anaf::GUI {
     GlBuffer m_lineVbo;
     GlVertexArray m_glowLineVao;
     GlBuffer m_glowLineVbo;
+    GlVertexArray m_triangleVao;
+    GlBuffer m_triangleVbo;
     GlVertexArray m_pointVao;
     GlBuffer m_pointVbo;
     GLint m_mvpLoc{-1};
@@ -63,9 +77,14 @@ namespace anaf::GUI {
     GlProgram m_gridProgram;
     GlVertexArray m_gridVao;
     GlBuffer m_gridVbo;
-    GLint m_gridMvpLoc{-1};
+    GLint m_gridEyeLoc{-1};
+    GLint m_gridOriginLoc{-1};
+    GLint m_gridForwardLoc{-1};
+    GLint m_gridRightLoc{-1};
+    GLint m_gridUpLoc{-1};
     GLint m_gridSpacingLoc{-1};
     GLint m_gridAxisGapLoc{-1};
+    GLint m_gridFadeLoc{-1};
 
     GlProgram m_textProgram;
     GlVertexArray m_textVao;
@@ -73,11 +92,13 @@ namespace anaf::GUI {
 
     std::vector<Vertex3D> m_lineBuffer;
     std::vector<Vertex3D> m_glowLineBuffer;
+    std::vector<Vertex3D> m_triangleBuffer;
     std::vector<Point3D> m_pointBuffer;
     std::vector<TextVertex> m_textBuffer;
 
     GLsizei m_lineVertexCount{0};
     GLsizei m_glowLineVertexCount{0};
+    GLsizei m_triangleVertexCount{0};
     GLsizei m_pointVertexCount{0};
     GLsizei m_textVertexCount{0};
 
@@ -94,6 +115,10 @@ namespace anaf::GUI {
 
     // Adds a line to a separate additive-blended pass, drawn thicker and translucent to fake a glow/bloom halo.
     void addGlowLine(const glm::vec3& p1, const glm::vec3& p2, const glm::vec4& color);
+
+    // Adds a translucent, two-sided triangle (e.g. the plane of an inclined support); drawn
+    // blended after the lines, without depth writes.
+    void addTriangle(const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3, const glm::vec4& color);
 
     void addPoint(const glm::vec3& p, const glm::vec4& color, int entityID, float size = 12.0f);
 
@@ -118,7 +143,7 @@ namespace anaf::GUI {
 
     void render(const glm::mat4& mvp);
 
-    void renderGrid(const glm::mat4& mvp, float spacing);
+    void renderGrid(const GridView& view);
 
     void renderText();
   };

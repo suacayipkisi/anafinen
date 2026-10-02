@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-28.
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-02.
 
 ## 1. Overall flow (one frame)
 
@@ -130,7 +130,11 @@ File > Export Model... (Ctrl+E)
 | bar list (clipped, click to select)                   |
 | [Apply to Selected] [Delete Bar]                      |
 |-- Supports & Loads (selected node) -------------------|
-| Fix X / Y / Z                 [Apply Support]         |
+| (o) Global axes  ( ) Inclined / skewed                |
+|   axes:     Fix X / Y / Z                             |
+|   inclined: Restrained / Allowed motion, Vectors 1 2 3|
+|             d1..d3 x y z, resulting line / plane      |
+|                               [Apply Support]         |
 | Force [N] x y z   [Apply Load] [Remove Load]          |
 |-------------------------------------------------------|
 | Deformation Scale, [Run Solver for Truss], progress   |
@@ -145,6 +149,7 @@ File > Export Model... (Ctrl+E)
 5. "Built-in Models" lists the library from `assets/objects/truss/truss1D/index.json` ([CALCULATIONS.md](CALCULATIONS.md) section 3.2). "Load Built-in Model" imports the file through `FileIoPanel::importFile()` like File > Import; the file itself is never written, and File > Export refuses a target inside the library folder.
 6. "Run Solver for Truss" solves the snapshot with `Truss_Imported_or_Entered` ([CALCULATIONS.md](CALCULATIONS.md) section 3.1). If the model cannot be solved, the reason is logged as "Solver not started: ...".
 7. "Clear Model" calls `resetModel(truss_imported_or_entered)` and `resetState()`.
+8. Supports: "Global axes" fixes x / y / z (`Node::setMovable`). "Inclined / skewed" takes 1 to 3 direction vectors, read as the restrained directions (1 = roller on a plane, 2 = guide along a line, 3 = pin) or as the allowed motion (1 = line, 2 = plane); `FEM::TRUSS::orthonormalize()` / `orthogonalComplement()` turn them into the allowed-motion basis for `Node::setAllowedMotionDirections()`. Switching between the two readings replaces the vectors by their complement, so the support stays the same. Dependent or zero vectors disable "Apply Support". The fixity map gets the global axes outside the allowed subspace, so the node keeps its entry (red point, export). The SQPT control panel keeps its X / Y / Z checkboxes.
 
 ## 3. Viewport render pipeline
 
@@ -153,7 +158,7 @@ File > Export Model... (Ctrl+E)
 | Object | Class | GL objects |
 |---|---|---|
 | Offscreen target | `Framebuffer` (`guiMaterials/framebuffer.*`) | MSAA FBO: RGBA8 + R32I + D24S8 renderbuffers. Resolve FBO: RGBA8 + R32I textures (immutable storage). |
-| Batches | `ViewportRenderer` (`panels/viewportRenderer.*`) | 5 VAO/VBO pairs: grid, lines, glow lines, points, text |
+| Batches | `ViewportRenderer` (`panels/viewportRenderer.*`) | 6 VAO/VBO pairs: grid, lines, glow lines, translucent triangles, points, text |
 | Programs | `ViewportRenderer` | `scene` (lines/points), `grid`, `text` |
 
 Every GL object is owned by a move-only `GlHandle` (`guiMaterials/glHandle.hpp`) and created through DSA (`glCreate*`, `glNamed*`, `glVertexArray*`). No `glGen*` or bind-to-edit.
@@ -162,19 +167,19 @@ Every GL object is owned by a move-only `GlHandle` (`guiMaterials/glHandle.hpp`)
 
 | Batch | Struct | loc 0 | loc 1 | loc 2 | loc 3 |
 |---|---|---|---|---|---|
-| lines, glow lines | `Vertex3D` | vec3 position | vec4 color | int entityID (`IFormat`) | - |
+| lines, glow lines, triangles | `Vertex3D` | vec3 position | vec4 color | int entityID (`IFormat`) | - |
 | points | `Point3D` | vec3 position | vec4 color | int entityID | float size |
 | text | `TextVertex` | vec2 NDC position | vec2 uv | vec4 color | - |
-| grid | `glm::vec3` | vec3 position | - | - | - |
+| grid | `glm::vec3` | vec3 NDC position (fullscreen triangle) | - | - | - |
 
-Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (orphaning) only when the mesh or visibility changes. The grid quad uses immutable `glNamedBufferStorage`.
+Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (orphaning) only when the mesh or visibility changes. The grid's fullscreen triangle uses immutable `glNamedBufferStorage`.
 
 ### 3.3 Shaders (inline raw strings, `#version 460 core`)
 
 | Program | Vertex | Fragment outputs |
 |---|---|---|
 | `scene` | `u_MVP * pos`, passes color, flat entity ID, `gl_PointSize` | `location 0`: color, `location 1`: entity ID |
-| `grid` | world position to fragment | Anti-aliased procedural grid in the XZ plane (`fract` + `fwidth`), axis gap around X/Z axes; entity ID = -1 |
+| `grid` | view ray per vertex (`forward + x·right + y·up`) | Ray / y = 0 plane intersection per pixel, in coordinates relative to a grid-aligned origin near the eye; anti-aliased minor + major (×10) lines (`fract` + `fwidth`) that fade out once a cell is a few pixels wide (no moiré) and towards `fadeDistance`; axis gap around X/Z axes; entity ID = -1 |
 | `text` | NDC passthrough | Samples ImGui's font atlas (RGBA32, `.a` = coverage); entity ID = -1 |
 
 `buildProgram()` checks compile and link status and logs the driver's info log through `anaf::LOG::error`. A failing program leaves an empty handle, and the batch then draws nothing.
@@ -184,13 +189,15 @@ Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (
 1. If `dataVersion` changed or `m_meshNeedsUpdate` is set: copy `activeMesh` under `dataMutex`, then `buildSceneBatches()`:
    - Elements become lines colored by `sqrt(|σ| / |σ|_max)` on a blue → green → red ramp. Color shows magnitude only; the sign is visible in the model tree.
    - Nodes (if visible) become points colored by displacement magnitude. The selected node is orange and larger; fixed nodes are red.
+   - Inclined supports (`Node::hasInclinedSupport()`), drawn red at the drawn node position with a size of 4 % of the scene radius: an allowed plane as a translucent square (`addTriangle()`, blended after the lines without depth writes) with an outline, an allowed line as a double arrow with a glow line.
    - Applied forces become arrows with a fixed world length of 3 m: a shaft plus a 4-line head, each duplicated as a glow line.
    - Draw position = `location + displacement * deformScale`.
 2. `fbo.bind()`, depth test on, `fbo.clear(color, entity = -1)`.
-3. `renderGrid()`: blended, depth writes off, spacing `10^floor(log10(max(0.25, distance/12)))`.
+3. `renderGrid(GridView)`: blended, depth writes off, minor spacing `10^floor(log10(distance/12))`, fade distance `max(40 × distance, 6 × scene radius)`. The grid used to be one ±8000 m quad; close to the camera its clipped, interpolated world positions lost precision and the lines bent and swam.
 4. `render()`:
    - lines at 1.5 px with `GL_LINE_SMOOTH` + alpha blend
    - glow lines at 6 px with additive blend and depth writes off
+   - translucent triangles with alpha blend and depth writes off
    - points with `GL_PROGRAM_POINT_SIZE`
 5. Node ID labels: glyph quads from ImGui's baked font. Hidden when the camera distance is ≥ 15, except for the selected node.
 6. `renderText()`: depth test off, blended.
@@ -202,12 +209,14 @@ Resolve order matters. On radeonsi, a blit from an MSAA FBO that is still bound 
 
 | Input (viewport hovered) | Action |
 |---|---|
-| Right drag | Orbit (yaw/pitch, pitch clamped) |
+| Right drag | Orbit (yaw/pitch, no pitch limit: the camera passes over the poles and turns upside down) |
 | Middle drag, or Shift + right drag | Pan target |
-| Mouse wheel | Zoom (distance × (1 − 0.15 × wheel), clamped 0.5 … 500) |
+| Mouse wheel | Zoom (distance × (1 − 0.15 × wheel), from 0.001 to max(2000, 50 × scene radius)) |
 | `R` or "Reset Camera" button | Fit to mesh bounds (distance = 2.2 × radius) |
 
-Projection: `perspective(45°, aspect, 0.1, 10000)`. View: `lookAt(target + spherical(yaw, pitch, distance), target, +Y)`.
+View: `lookAt(target + orbitDirection() × distance, target, orbitUp())`. `orbitUp()` is −∂(orbitDirection)/∂pitch, so it is +Y at zero pitch and stays perpendicular to the view direction at any pitch (no gimbal flip at ±90°). Upside down, the yaw drag is mirrored so the view still follows the mouse.
+
+Projection: `perspective(45°, aspect, near, far)` with `far = 2 × (distance + |target − scene centre| + scene radius)` and `near = max(0.005 × distance, 1e-6 × far)`, so the depth range follows the zoom from millimetre parts to 300 m stadiums. The axis lines reach `max(8000, 200 × scene radius)`, beyond the largest far plane. Scene centre and radius are recomputed (`updateSceneBounds()`) whenever a new snapshot is drawn.
 
 ### 3.6 Picking
 

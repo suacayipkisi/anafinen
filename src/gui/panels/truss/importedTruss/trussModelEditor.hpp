@@ -46,6 +46,12 @@ namespace anaf::GUI {
     std::uint32_t m_selectedBar{kNone};  // index into MeshData::trussElements
     std::array<double, 3> m_force{0.0, 0.0, 0.0};
     std::array<bool, 3> m_fixed{false, false, false};
+    // Inclined / skewed support: 1..3 direction vectors, read as the restrained directions
+    // (support reactions) or as the allowed motion directions; the other set is the complement.
+    bool m_supportInclined{false};
+    bool m_vectorsRestrained{true};
+    int m_supportVectorCount{1};
+    std::array<std::array<double, 3>, 3> m_supportVectors{{{0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {0.0, 0.0, 1.0}}};
     std::uint32_t m_loadedNode{kNone};   // node whose values are in the inputs above
     std::string m_status;                // last edit result shown under the summary
     bool m_statusIsError{false};
@@ -71,6 +77,8 @@ namespace anaf::GUI {
     void renderNodes(std::uint32_t selectedNode);
     void renderBars();
     void renderSupportsAndLoads(std::uint32_t selectedNode);
+    void renderInclinedSupportInputs();
+    void setSupportVectors(const std::vector<std::array<double, 3>>& vectors);
     void renderSolve();
 
   public:

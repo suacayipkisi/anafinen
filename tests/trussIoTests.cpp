@@ -30,6 +30,7 @@
 #include <truss_1D/trussTypes/trussLibrary.hpp>
 
 #include <Eigen/Dense>
+#include <Eigen/SparseCholesky>
 
 #include <algorithm>
 #include <chrono>
@@ -44,6 +45,7 @@
 #include <mutex>
 #include <numbers>
 #include <set>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <thread>
@@ -311,6 +313,41 @@ TEST(selfBuiltTrussMatchesTheHandSolution) {
   CHECK(result.trussNodes[3].getDisplacement() == (std::array<double, 3>{0.0, 0.0, 0.0}));
 }
 
+TEST(supportDirectionsAndTheirComplement) {
+  // The model editor turns restrained directions into the allowed motion and back.
+  using Dir = std::array<double, 3>;
+  const auto dot = [](const Dir& a, const Dir& b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
+  const auto roller = FEM::TRUSS::orthonormalize({{1.0, 1.0, 0.0}}); // reaction normal to a 45 deg plane
+  const auto plane = FEM::TRUSS::orthogonalComplement(roller);
+  REQUIRE(plane.size() == 2);
+  for (const auto& d : plane) {
+    CHECK(std::abs(dot(d, roller[0])) < 1e-12);
+    CHECK(std::abs(dot(d, d) - 1.0) < 1e-12);
+  }
+  CHECK(std::abs(dot(plane[0], plane[1])) < 1e-12);
+  const auto back = FEM::TRUSS::orthogonalComplement(plane);
+  REQUIRE(back.size() == 1);
+  CHECK(std::abs(std::abs(dot(back[0], roller[0])) - 1.0) < 1e-12);
+  CHECK(FEM::TRUSS::orthogonalComplement({}).size() == 3);
+  CHECK(FEM::TRUSS::orthogonalComplement(FEM::TRUSS::orthonormalize({{1, 0, 0}, {0, 2, 0}, {0, 0, 3}})).empty());
+
+  bool threw = false;
+  try {
+    (void)FEM::TRUSS::orthonormalize({{1.0, 2.0, 3.0}, {2.0, 4.0, 6.0}});
+  } catch (const std::invalid_argument&) {
+    threw = true;
+  }
+  CHECK(threw);
+
+  // An axis-aligned restraint stays an ordinary support; a skewed one is inclined, with the
+  // global axes outside the plane reported as fixed (so the fixity map keeps the node).
+  FEM::TRUSS::Node node(0, 0.0, 0.0, 0.0);
+  node.setAllowedMotionDirections(FEM::TRUSS::orthogonalComplement(FEM::TRUSS::orthonormalize({{0.0, 1.0, 0.0}})));
+  CHECK(!node.hasInclinedSupport() && node.getMovable() == (std::array<bool, 3>{true, false, true}));
+  node.setAllowedMotionDirections(plane);
+  CHECK(node.hasInclinedSupport() && node.getMovable() == (std::array<bool, 3>{false, false, true}));
+}
+
 TEST(inclinedSupportsMatchTheRotatedModel) {
   // Triangle truss in the xy plane: pin at node 0, roller along x at node 1, node 2 moves in
   // the plane. Turning the whole model about the gravity axis y leaves self weight unchanged
@@ -455,10 +492,19 @@ namespace {
 
   // Smallest / largest eigenvalue of the reduced stiffness matrix (fixed DOFs removed). A
   // mechanism (unstable truss) has a zero eigenvalue, so the ratio drops to round-off level.
+  // Large models use the smallest / largest LDLT pivot instead: for a symmetric positive
+  // definite matrix every pivot lies in [lambda_min, lambda_max], and a mechanism still gives a
+  // round-off sized pivot, while a dense eigen solve of a few thousand DOFs would take minutes.
   double stiffnessConditionRatio(const BRIDGE::MeshData& mesh, const BRIDGE::FixedDOFMap& fixity,
                                  std::span<const MATERIAL::Material> materials) {
     const auto dofs = static_cast<Eigen::Index>(mesh.trussNodes.size() * 3);
-    Eigen::MatrixXd k = Eigen::MatrixXd::Zero(dofs, dofs);
+    std::vector<Eigen::Index> reducedIndex(static_cast<std::size_t>(dofs), -1);
+    Eigen::Index n = 0;
+    for (Eigen::Index dof = 0; dof < dofs; ++dof) {
+      const auto it = fixity.find(static_cast<std::uint32_t>(dof / 3));
+      if (it == fixity.end() || !it->second[static_cast<std::size_t>(dof % 3)]) reducedIndex[static_cast<std::size_t>(dof)] = n++;
+    }
+    std::vector<Eigen::Triplet<double>> triplets;
     for (const auto& element : mesh.trussElements) {
       if (element.isWireframe) continue;
       const auto& a = mesh.trussNodes[element.node1].getLocation();
@@ -467,26 +513,29 @@ namespace {
       const double length = d.norm();
       const Eigen::Vector3d c = d / length;
       const Eigen::Matrix3d block = materials[element.materialID].getElasticityModulus() * element.crossSectionArea / length * (c * c.transpose());
-      const Eigen::Index i = 3 * static_cast<Eigen::Index>(element.node1), j = 3 * static_cast<Eigen::Index>(element.node2);
-      k.block<3, 3>(i, i) += block;
-      k.block<3, 3>(j, j) += block;
-      k.block<3, 3>(i, j) -= block;
-      k.block<3, 3>(j, i) -= block;
-    }
-    std::vector<Eigen::Index> freeDofs;
-    for (Eigen::Index dof = 0; dof < dofs; ++dof) {
-      const auto it = fixity.find(static_cast<std::uint32_t>(dof / 3));
-      if (it == fixity.end() || !it->second[static_cast<std::size_t>(dof % 3)]) freeDofs.push_back(dof);
-    }
-    const auto n = static_cast<Eigen::Index>(freeDofs.size());
-    Eigen::MatrixXd reduced(n, n);
-    for (Eigen::Index r = 0; r < n; ++r) {
-      for (Eigen::Index c = 0; c < n; ++c) {
-        reduced(r, c) = k(freeDofs[static_cast<std::size_t>(r)], freeDofs[static_cast<std::size_t>(c)]);
+      const std::array<Eigen::Index, 2> base{3 * static_cast<Eigen::Index>(element.node1), 3 * static_cast<Eigen::Index>(element.node2)};
+      for (std::size_t p = 0; p < 2; ++p) {
+        for (std::size_t q = 0; q < 2; ++q) {
+          for (Eigen::Index r = 0; r < 3; ++r) {
+            for (Eigen::Index s = 0; s < 3; ++s) {
+              const auto row = reducedIndex[static_cast<std::size_t>(base[p] + r)];
+              const auto col = reducedIndex[static_cast<std::size_t>(base[q] + s)];
+              if (row >= 0 && col >= 0) triplets.emplace_back(row, col, (p == q ? 1.0 : -1.0) * block(r, s));
+            }
+          }
+        }
       }
     }
-    const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen(reduced, Eigen::EigenvaluesOnly);
-    return eigen.eigenvalues().minCoeff() / eigen.eigenvalues().maxCoeff();
+    Eigen::SparseMatrix<double> reduced(n, n);
+    reduced.setFromTriplets(triplets.begin(), triplets.end());
+    if (n <= 1200) {
+      const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen(Eigen::MatrixXd(reduced), Eigen::EigenvaluesOnly);
+      return eigen.eigenvalues().minCoeff() / eigen.eigenvalues().maxCoeff();
+    }
+    const Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> ldlt(reduced);
+    if (ldlt.info() != Eigen::Success) return 0.0;
+    const Eigen::VectorXd pivots = ldlt.vectorD();
+    return pivots.minCoeff() / pivots.cwiseAbs().maxCoeff();
   }
 } // namespace end
 
@@ -497,7 +546,7 @@ TEST(builtInTrussLibraryMatchesTheGenerator) {
   const auto entries = FEM::TRUSS::LIBRARY::writeLibrary(generated);
   if (!entries) std::printf("      %s\n", entries.error().c_str());
   REQUIRE(entries.has_value());
-  CHECK(entries->size() >= 10 && entries->size() <= 30);
+  CHECK(entries->size() >= 10 && entries->size() <= 40);
 
   const auto indexFile = libraryDir() / fs::path(FEM::TRUSS::LIBRARY::kIndexFile);
   CHECK_MSG(readBytes(indexFile) == readBytes(generated / fs::path(FEM::TRUSS::LIBRARY::kIndexFile)), "index.json is stale");

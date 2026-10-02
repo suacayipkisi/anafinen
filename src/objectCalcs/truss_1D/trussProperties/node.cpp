@@ -34,31 +34,70 @@ namespace FEM::TRUSS {
     }
   }
 
+  namespace {
+    double dot(const std::array<double, 3>& a, const std::array<double, 3>& b) {
+      return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    }
+
+    // Removes the components along an orthonormal basis.
+    std::array<double, 3> residualOf(std::array<double, 3> direction, const std::vector<std::array<double, 3>>& basis) {
+      for (const auto& b : basis) {
+        const double projection = dot(direction, b);
+        for (std::size_t axis = 0; axis < 3; ++axis) direction[axis] -= projection * b[axis];
+      }
+      return direction;
+    }
+  } // namespace end
+
+  std::vector<std::array<double, 3>> orthonormalize(std::vector<std::array<double, 3>> directions) {
+    if (directions.size() > 3) throw std::invalid_argument("A 3D node can have at most three independent motion directions");
+    std::vector<std::array<double, 3>> basis;
+    for (const auto& direction : directions) {
+      const double length = std::sqrt(dot(direction, direction));
+      const auto residual = residualOf(direction, basis);
+      const double norm = std::sqrt(dot(residual, residual));
+      if (!(length > 0.0) || norm <= 1e-9 * length) {
+        throw std::invalid_argument("Directions must be non-zero and linearly independent");
+      }
+      basis.push_back({residual[0] / norm, residual[1] / norm, residual[2] / norm});
+    }
+    return basis;
+  }
+
+  std::vector<std::array<double, 3>> orthogonalComplement(const std::vector<std::array<double, 3>>& basis) {
+    std::vector<std::array<double, 3>> span = basis;
+    std::vector<std::array<double, 3>> complement;
+    while (span.size() < 3) {
+      // The global axis with the largest part outside the span gives the best-conditioned vector.
+      std::array<double, 3> best{};
+      double bestNorm = 0.0;
+      for (std::size_t axis = 0; axis < 3; ++axis) {
+        std::array<double, 3> unit{};
+        unit[axis] = 1.0;
+        const auto residual = residualOf(unit, span);
+        const double norm = std::sqrt(dot(residual, residual));
+        if (norm > bestNorm) {
+          bestNorm = norm;
+          best = residual;
+        }
+      }
+      for (double& value : best) value /= bestNorm;
+      span.push_back(best);
+      complement.push_back(best);
+    }
+    return complement;
+  }
+
   // Gram-Schmidt orthonormalization: the directions become an orthonormal basis of the
   // subspace (line, plane or space) the node may move in.
   void Node::setAllowedMotionDirections(std::vector<std::array<double, 3>> directions) {
-    if (directions.size() > 3) throw std::invalid_argument("A 3D node can have at most three independent motion directions");
-    std::vector<std::array<double, 3>> orthonormalBasis;
-    for (auto& direction : directions) {
-      for (const auto& basis : orthonormalBasis) {
-        const double projection = direction[0] * basis[0] + direction[1] * basis[1] + direction[2] * basis[2];
-        for (std::size_t axis = 0; axis < 3; ++axis) direction[axis] -= projection * basis[axis];
-      }
-      const double norm = std::sqrt(direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2]);
-      if (norm <= 1e-12) throw std::invalid_argument("Allowed motion directions must be non-zero and linearly independent");
-      for (double& value : direction) value /= norm;
-      orthonormalBasis.push_back(direction);
-    }
+    auto orthonormalBasis = orthonormalize(std::move(directions));
     m_allowedMotionDirections = std::move(orthonormalBasis);
     for (std::size_t axis = 0; axis < m_isMovable.size(); ++axis) {
-      std::array<double, 3> residual{};
-      residual[axis] = 1.0;
-      for (const auto& basis : m_allowedMotionDirections) {
-        const double projection = residual[0] * basis[0] + residual[1] * basis[1] + residual[2] * basis[2];
-        for (std::size_t component = 0; component < 3; ++component) residual[component] -= projection * basis[component];
-      }
-      const double residualNorm = std::sqrt(residual[0] * residual[0] + residual[1] * residual[1] + residual[2] * residual[2]);
-      m_isMovable[axis] = residualNorm <= 1e-12;
+      std::array<double, 3> unit{};
+      unit[axis] = 1.0;
+      const auto residual = residualOf(unit, m_allowedMotionDirections);
+      m_isMovable[axis] = std::sqrt(dot(residual, residual)) <= 1e-12;
     }
   }
 

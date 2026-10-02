@@ -48,6 +48,8 @@ namespace anaf::GUI{
     float m_rotationPitch {-0.7f};
     float m_cameraDistance {18.0f};
     glm::vec3 m_target{0.0f, 0.0f, 0.0f};
+    glm::vec3 m_sceneCenter{0.0f, 0.0f, 0.0f};
+    float m_sceneRadius {10.0f};
 
     bool m_draggingView {false};
     bool m_fitRequested_ {false};
@@ -60,7 +62,13 @@ namespace anaf::GUI{
     double m_cachedMaxStress{0.0};
     double m_cachedMaxDisp{0.0};
 
+    void updateSceneBounds();
     void resetCamera();
+    // Orbit camera basis: unit direction from the target to the eye, and the camera up vector.
+    // Up follows the pitch, so the camera can orbit over the poles without a pitch limit.
+    glm::vec3 orbitDirection() const;
+    glm::vec3 orbitUp() const;
+    float farPlane() const;
     void handleCameraInput();
     void buildSceneBatches();
     void renderOverlay2D(const ImVec2& origin, const ImVec2& size);
