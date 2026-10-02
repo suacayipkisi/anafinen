@@ -47,11 +47,9 @@
 #include <mutex>
 #include <numbers>
 #include <set>
-#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <thread>
-#include <tuple>
 
 using namespace anaf;
 namespace fs = std::filesystem;
@@ -139,21 +137,6 @@ namespace {
   }
 
 } // namespace end
-
-TEST(invalidGridParametersAreRefusedBeforeBuilding) {
-  // A zero area or length used to throw inside the OpenMP loops (std::terminate).
-  for (const auto& [cubes, length, area] : {std::tuple{std::array<std::uint32_t, 3>{2, 1, 2}, 1.0, 0.0},
-                                           {std::array<std::uint32_t, 3>{2, 1, 2}, 0.0, 8e-3},
-                                           {std::array<std::uint32_t, 3>{2, 0, 2}, 1.0, 8e-3},
-                                           {std::array<std::uint32_t, 3>{2, 1, 2}, std::nan(""), 8e-3}}) {
-    CHECK(!FEM::TRUSS::buildSimpleTruss(cubes, length, area, 0).has_value());
-  }
-  const auto valid = FEM::TRUSS::buildSimpleTruss({2, 1, 2}, 1.0, 8e-3, 0);
-  REQUIRE(valid.has_value());
-  CHECK(valid->trussNodes.size() == 18);
-  // x / y / z edges 12 + 9 + 12, xy / xz / yz face diagonals 12 + 16 + 12.
-  CHECK(valid->trussElements.size() == 73);
-}
 
 TEST(solvedTrussSurvivesEveryWritableFormat) {
   Fixity fixity;
@@ -288,74 +271,6 @@ TEST(importedTrussSolvesLikeTheGeneratedOne) {
   CHECK(stressError <= 1e-5 * maxStress); // stresses are stored as float
 }
 
-TEST(selfBuiltTrussMatchesTheHandSolution) {
-  // Two-bar truss (Logan-style): supports at (0,0,0) and (2,0,0), load P down at (1,1,0).
-  // Each bar carries N = -P / (2 sin 45deg) from the load; z is fixed everywhere (planar).
-  auto& bridge = BRIDGE::buildBridge();
-  if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
-  BRIDGE::MeshData mesh;
-  mesh.trussNodes = {FEM::TRUSS::Node(0, 0.0, 0.0, 0.0), FEM::TRUSS::Node(1, 2.0, 0.0, 0.0), FEM::TRUSS::Node(2, 1.0, 1.0, 0.0),
-                     FEM::TRUSS::Node(3, 5.0, 5.0, 5.0)}; // node 3: not used by any bar
-  const double area = 1e-4;
-  mesh.trussElements = {{0u, 2u, 0.0f, false, 0u, area, false}, {1u, 2u, 0.0f, false, 0u, area, false},
-                        {0u, 1u, 0.0f, false, 0u, 0.0, true}}; // wireframe edge: drawn, not solved
-  const double load = 1.0e5;
-  mesh.appliedForces = {{2u, {0.0, -load, 0.0}}};
-  const Fixity fixity{{0u, {true, true, true}}, {1u, {true, true, true}}, {2u, {false, false, true}}};
-
-  const auto solved = solveImported(mesh, fixity);
-  if (!solved) std::printf("      %s\n", solved.error().c_str());
-  REQUIRE(solved.has_value());
-  const auto& result = *solved->mesh;
-
-  // Axial stress of each bar (self weight adds a small term; steel over 1.41 m is ~5e4 Pa).
-  const double expectedStress = -load / (2.0 * std::sqrt(0.5)) / area;
-  for (std::size_t e = 0; e < 2; ++e) {
-    CHECK(std::abs(result.trussElements[e].stress - expectedStress) < 1e-3 * std::abs(expectedStress));
-  }
-  CHECK(result.trussElements[2].stress == 0.0f);
-  // Vertical deflection of the apex: v = P L / (2 A E sin^2 45deg), downwards.
-  const double modulus = bridge.allMaterials[0].getElasticityModulus();
-  const double expectedV = -load * std::sqrt(2.0) / (2.0 * area * modulus * 0.5);
-  CHECK(std::abs(result.trussNodes[2].getDisplacement()[1] - expectedV) < 1e-2 * std::abs(expectedV));
-  CHECK(result.trussNodes[3].getDisplacement() == (std::array<double, 3>{0.0, 0.0, 0.0}));
-}
-
-TEST(supportDirectionsAndTheirComplement) {
-  // The model editor turns restrained directions into the allowed motion and back.
-  using Dir = std::array<double, 3>;
-  const auto dot = [](const Dir& a, const Dir& b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
-  const auto roller = FEM::TRUSS::orthonormalize({{1.0, 1.0, 0.0}}); // reaction normal to a 45 deg plane
-  const auto plane = FEM::TRUSS::orthogonalComplement(roller);
-  REQUIRE(plane.size() == 2);
-  for (const auto& d : plane) {
-    CHECK(std::abs(dot(d, roller[0])) < 1e-12);
-    CHECK(std::abs(dot(d, d) - 1.0) < 1e-12);
-  }
-  CHECK(std::abs(dot(plane[0], plane[1])) < 1e-12);
-  const auto back = FEM::TRUSS::orthogonalComplement(plane);
-  REQUIRE(back.size() == 1);
-  CHECK(std::abs(std::abs(dot(back[0], roller[0])) - 1.0) < 1e-12);
-  CHECK(FEM::TRUSS::orthogonalComplement({}).size() == 3);
-  CHECK(FEM::TRUSS::orthogonalComplement(FEM::TRUSS::orthonormalize({{1, 0, 0}, {0, 2, 0}, {0, 0, 3}})).empty());
-
-  bool threw = false;
-  try {
-    (void)FEM::TRUSS::orthonormalize({{1.0, 2.0, 3.0}, {2.0, 4.0, 6.0}});
-  } catch (const std::invalid_argument&) {
-    threw = true;
-  }
-  CHECK(threw);
-
-  // An axis-aligned restraint stays an ordinary support; a skewed one is inclined, with the
-  // global axes outside the plane reported as fixed (so the fixity map keeps the node).
-  FEM::TRUSS::Node node(0, 0.0, 0.0, 0.0);
-  node.setAllowedMotionDirections(FEM::TRUSS::orthogonalComplement(FEM::TRUSS::orthonormalize({{0.0, 1.0, 0.0}})));
-  CHECK(!node.hasInclinedSupport() && node.getMovable() == (std::array<bool, 3>{true, false, true}));
-  node.setAllowedMotionDirections(plane);
-  CHECK(node.hasInclinedSupport() && node.getMovable() == (std::array<bool, 3>{false, false, true}));
-}
-
 TEST(inclinedSupportsMatchTheRotatedModel) {
   // Triangle truss in the xy plane: pin at node 0, roller along x at node 1, node 2 moves in
   // the plane. Turning the whole model about the gravity axis y leaves self weight unchanged
@@ -430,29 +345,6 @@ TEST(inclinedSupportsMatchTheRotatedModel) {
     CHECK(expected != 0.0);
     CHECK(std::abs(static_cast<double>(solved->mesh->trussElements[e].stress) - expected) <= 1e-5 * std::abs(expected));
   }
-}
-
-TEST(importedTrussRejectsUnsolvableModels) {
-  auto& bridge = BRIDGE::buildBridge();
-  if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
-  BRIDGE::MeshData mesh;
-  mesh.trussNodes = {FEM::TRUSS::Node(0, 0.0, 0.0, 0.0), FEM::TRUSS::Node(1, 1.0, 0.0, 0.0)};
-
-  CHECK(!solveImported(BRIDGE::MeshData{}).has_value());          // no nodes
-  CHECK(!solveImported(mesh).has_value());                        // no bars
-  mesh.trussElements = {{0u, 1u, 0.0f, false, 0u, 0.0, true}};
-  CHECK(!solveImported(mesh).has_value());                        // wireframe only
-  mesh.trussElements = {{0u, 1u, 0.0f, false, 0u, 0.0, false}};
-  const auto noArea = solveImported(mesh);
-  REQUIRE(!noArea.has_value());
-  CHECK(noArea.error().find("area") != std::string::npos);
-  mesh.trussElements = {{0u, 1u, 0.0f, false, 999u, 1e-4, false}};
-  CHECK(!solveImported(mesh).has_value());                        // unknown material
-  mesh.trussElements = {{0u, 7u, 0.0f, false, 0u, 1e-4, false}};
-  CHECK(!solveImported(mesh).has_value());                        // missing node
-  mesh.trussNodes = {FEM::TRUSS::Node(0, 0.0, 0.0, 0.0), FEM::TRUSS::Node(5, 1.0, 0.0, 0.0)};
-  mesh.trussElements = {{0u, 1u, 0.0f, false, 0u, 1e-4, false}};
-  CHECK(!solveImported(mesh).has_value());                        // ids are not positions
 }
 
 TEST(resetModelLeavesNothingBehind) {

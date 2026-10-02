@@ -105,7 +105,7 @@ check_mingw() {
     return 0
   fi
   local test
-  for test in anaf_io_tests anaf_truss_io_tests; do
+  for test in anaf_core_tests anaf_io_tests anaf_truss_io_tests; do
     local log="$REPO_ROOT/build-mingw/check-$test.log"
     (cd "$REPO_ROOT/build-mingw/tests" && WINEDEBUG=-all WINEPATH="$MINGW_SYSROOT_BIN;$GMSH_SDK_DIR/lib" \
       timeout 600 wine "$test.exe" > "$log" 2>&1)

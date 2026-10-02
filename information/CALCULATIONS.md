@@ -101,7 +101,7 @@ The result is a copy of the snapshot: displacement on every node, stress on the 
 
 A structure that is still a mechanism (for example too few supports) reaches the referee and fails there, as in section 7; `calculateDisplacements()` then returns false and `solveStatic()` reports the failed solve (before 2026-10-02 the zero displacements went on to the energy check, which passed trivially). A stop request returns "cancelled".
 
-Verified by `anaf_truss_io_tests`: a solved generated grid written to MSH, read back and solved again matches the first result, and a two-bar truss matches the hand solution σ = −P / (2 A sin 45°), v = P L / (2 A E sin² 45°).
+Verified by `anaf_truss_io_tests` (a solved generated grid written to MSH, read back and solved again matches the first result) and by the closed-form cases of `anaf_core_tests` (section 11).
 
 ### 3.2 Built-in truss library (`FEM::TRUSS::LIBRARY`)
 
@@ -271,21 +271,43 @@ The result is written to `bridge.m_isValid` and `bridge.m_energyDiff` and logged
 | Block-CG | `omp parallel for` preconditioner, Eigen SpMV |
 | Stress, energy | `omp parallel for` with `reduction(+)` |
 
-## 11. Known issues
+## 11. Tests
+
+`anaf_core_tests` (`tests/coreTests.cpp`) tests the core alone: it links `anaf_core` only, so it also fails to build if the core ever needs the bridge or the GUI again. Materials are built in the test (`MaterialProperties`), not read from the JSON. Physics checks compare `solveStatic()` with closed-form results:
+
+| Test | Checks |
+|---|---|
+| `elementGeometryAndValidation` | Length and direction cosines of a (3, 4, 12) bar; the constructor refuses area 0, one node twice, a node outside the list, coincident nodes |
+| `nodeSupportBasis`, `supportDirectionsAndTheirComplement` | `setMovable` basis, Gram-Schmidt of arbitrary directions, `isSupported` / `hasInclinedSupport`, `m_isMovable` summary, `orthonormalize` errors, `orthogonalComplement` both ways |
+| `simpleTrussGridAndInvalidParameters` | `buildSimpleTruss()` node / bar counts and the id formula; refused parameters (zero area, length, cube number, NaN) |
+| `axialBarMatchesPLoverAE` | One skewed bar on a rail along itself: u = P L / (A E), σ = P / A |
+| `twoBarTrussMatchesTheHandSolution` | σ = −P / (2 A sin 45°), v = −P L / (2 A E sin² 45°), symmetric apex, wireframe edge and isolated node untouched |
+| `indeterminateThreeBarTruss` | Statically indeterminate three-bar hanger: F_v = P / (1 + 2 cos³ θ), F_i = P cos² θ / (1 + 2 cos³ θ), v = F_v L / (E A) |
+| `hangingBarUnderItsOwnWeight` | Self weight lumped half per node (both node orders of the bar): u = ρ g L² / (2 E); stress envelope ρ g L |
+| `inclinedRailCarriesTheLoadAlongItself` | `u = T q` with a skewed rail: s = 2 P / k for a rail at 45° to the bar |
+| `unsolvableModelsAreReported`, `mechanismIsAnErrorNotAResult` | Error texts instead of results (no nodes / bars, area, material, ids, a mechanism) |
+| `cancelledSolveAndProgress` | A stop request returns "cancelled"; progress is non-decreasing and ends at 1 |
+| `blockCgMatchesTheDirectSolver` | Block-CG against SimplicialLDLT on an SPD 600-DOF system (the referee picks Block-CG only above 400k DOFs) |
+| `materialValidation` | `validateMaterial()` limits and name rules, `sameMaterialName()` |
+
+The tests were checked against injected faults: a wrong self-weight split and a wrong energy balance each make tests fail. `anaf_truss_io_tests` covers the paths through files, the bridge and the built-in library (section 3.2).
+
+## 12. Known issues
 
 - Reaction forces are not computed.
 
-## 12. Planned (not in code yet)
+## 13. Planned (not in code yet)
 
 - Consistent/lumped mass matrix and the generalized eigenproblem `K φ = ω² M φ` with Spectra `SymGEigsShiftSolver` (shift-invert).
 - 2D/3D beam/frame elements (Euler-Bernoulli, Timoshenko) and 2D CST.
 - Imported BCs beyond `fixed`, `allowedMotion` and `force` (prescribed displacements, amplitudes, thermal loads) are read by `anaf_io` but not used by either truss solver.
 
-## 13. Related source files
+## 14. Related source files
 
 - Orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp), [trussSolver.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp); model types: [trussProperties/meshData.hpp](../src/objectCalcs/truss_1D/trussProperties/meshData.hpp)
 - Container: [deformationUnderConstForce.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp)
 - Solvers: [solverPortfolio.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solverPortfolio.hpp), [solver_referee.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_referee.cpp), [solver_cholmod.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_cholmod.cpp), [solver_simplicial.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_simplicial.cpp), [solver_iterative.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_iterative.cpp)
 - Types: [node.hpp](../src/objectCalcs/truss_1D/trussProperties/node.hpp), [element.hpp](../src/objectCalcs/truss_1D/trussProperties/element.hpp), [appliedForce.hpp](../src/objectCalcs/truss_1D/trussProperties/appliedForce.hpp), [properties.hpp](../src/material/properties.hpp)
 - Generator: [simpleQuadranglePrismTrussCreate.cpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp)
+- Tests: [tests/coreTests.cpp](../tests/coreTests.cpp)
 - Built-in library: [trussLibrary.hpp](../src/objectCalcs/truss_1D/trussTypes/trussLibrary.hpp), [trussLibrary.cpp](../src/objectCalcs/truss_1D/trussTypes/trussLibrary.cpp), [tests/trussLibraryTool.cpp](../tests/trussLibraryTool.cpp), [assets/objects/truss/truss1D/](../assets/objects/truss/truss1D/)

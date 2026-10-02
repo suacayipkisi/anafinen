@@ -29,6 +29,11 @@ endif()
 # GUI data path without the GUI: solve -> snapshot -> adapter -> file -> adapter -> snapshot.
 # anaf_core is self-contained (solver, adapter, materials, log, asset lookup). The GUI bridge
 # is compiled in as well because its model reset and user-material handling are tested here.
+# FEM core unit tests: linked against anaf_core only, which also keeps the core self-contained.
+add_executable(anaf_core_tests coreTests.cpp)
+target_link_libraries(anaf_core_tests PRIVATE anaf_core project_warnings_and_optimizations)
+add_test(NAME anaf_core_tests COMMAND anaf_core_tests)
+
 add_executable(anaf_truss_io_tests
     trussIoTests.cpp
     ${PROJECT_SOURCE_DIR}/src/bridge/generalStatus.cpp # the bridge itself is under test (resetModel, user materials)
