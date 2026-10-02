@@ -52,6 +52,7 @@ namespace anaf::BRIDGE {
       selectedNodeId = std::numeric_limits<std::uint32_t>::max();
       m_isValid = false;
       m_energyDiff = 0.0;
+      deformScale = 1.0;
       m_objectType = type;
     }
     dataVersion.fetch_add(1, std::memory_order_release);

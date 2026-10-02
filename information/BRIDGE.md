@@ -40,7 +40,7 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 
 | Field | Type | Written by | Read by | Protection |
 |---|---|---|---|---|
-| `activeMesh` | `shared_ptr<const MeshData>` | Worker (publish), control panel (loads, deform scale), model editor (every edit), `resetModel()`, File > Import | Viewport, model tree, both truss panels, File > Export | `dataMutex` |
+| `activeMesh` | `shared_ptr<const MeshData>` | Worker (publish), control panel (loads, supports), model editor (every edit), `resetModel()`, File > Import | Viewport, model tree, both truss panels, File > Export | `dataMutex` |
 | `modelGeneration` | `atomic<uint64_t>` | `resetModel()` | Workers (taken at start, compared before publishing) | atomic; the comparison runs under `dataMutex` |
 | `dataVersion` | `atomic<uint64_t>` | Every publisher, after swapping `activeMesh` | Viewport (reload check) | atomic, `memory_order_release` on increment |
 | `selectedNodeId` | `uint32_t`, `UINT32_MAX` = none | Viewport picking, both truss panels, `resetModel()` | Both truss panels, viewport | `dataMutex` |
@@ -48,7 +48,8 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `m_isRunning` | `atomic<bool>` | Truss panels (set), worker (clear), `resetModel()` | Truss panels (button state), File > Import, material removal | atomic |
 | `m_isGeneratingPreview` | `atomic<bool>` | Control panel, preview worker, `resetModel()` | Control panel | atomic |
 | `m_progress` | `atomic<float>` 0..1 | Worker (solver steps) | Progress bars | atomic |
-| `m_isValid`, `m_energyDiff` | atomics | `detail::runStaticSolve()` (both solver classes), `resetModel()` | Panels | atomic (written under `dataMutex`) |
+| `m_isValid`, `m_energyDiff` | atomics | `detail::runStaticSolve()`, `resetModel()` | Panels | atomic (written under `dataMutex`) |
+| `deformScale` | `atomic<double>` | Both truss panels ("Deformation Scale", then `dataVersion` bump), `resetModel()` (back to 1) | Viewport (with each snapshot reload) | atomic |
 | `m_objectType` | `atomic<ObjectType>`, starts as `no_type` | `resetModel()` only | Model tree, File > Import (refused for `truss_SQPT`), File menu | atomic; written under `dataMutex` |
 | `workerThread` | `std::jthread` | Truss panels (after `joinWorker()`) | `initgui()` shutdown, `resetModel()` (stop request) | GUI thread only |
 | `allMaterials` | `vector<Material>` | `setStaticInfo()` (built-ins from JSON), `addUserMaterial()`, `removeUserMaterial()` | Control panel (material combo, copies it for the worker), Material Handler, File > Import | `dataMutex`; the solver worker only sees a copy |
@@ -72,12 +73,11 @@ Both types solve the same way: `TRUSS_WORKER::startSolve()` runs `Truss_Imported
 | `trussNodes` | `vector<FEM::TRUSS::Node>` | ID, location, displacement, movable flags, allowed motion basis |
 | `trussElements` | `vector<RenderElement>` | `node1`, `node2`, `stress` (float, Pa), `isStressExceeded`, `materialID`, `crossSectionArea` (m²), `isWireframe` (edge of an imported surface / volume element: drawn, never solved) |
 | `appliedForces` | `vector<FEM::TRUSS::ForceApplied>` | Loads to draw as arrows |
-| `deformScale` | `atomic<double>` | Render-only displacement multiplier |
 | `hasResults` | `bool` | Displacements / stresses come from a solve or a result file (controls what export writes) |
 
 `RenderElement` is a slim copy of `TrussElement_1D`. Only what the viewport and model tree need is kept, which reduces snapshot size and copy time. `stress` is signed (tension > 0, compression < 0). `isStressExceeded` is `|stress| > material.yieldTensileStrength`.
 
-`MeshData` has hand-written copy/move operations because `std::atomic<double>` is neither copyable nor movable.
+`MeshData` is a plain aggregate with default copy / move. The render-only displacement multiplier is not part of it: `Gui_Calc_Bridge::deformScale` (`atomic<double>`, reset to 1 by `resetModel()`) is a view setting; the truss panels write it and bump `dataVersion`, the viewport reads it together with the snapshot. Before 2026-10-02 it lived in `MeshData` as an atomic, which needed hand-written copy / move operations and copied the whole mesh on every scale change.
 
 ## 4. Publication protocol
 
@@ -85,7 +85,7 @@ Every writer follows the same copy-on-write sequence:
 
 ```text
 1. Build or copy:   auto next = std::make_shared<MeshData>(...);   // no lock held
-2. Modify next      (loads, deformScale, solved nodes, ...)
+2. Modify next      (loads, supports, solved nodes, ...)
 3. Swap:            { std::lock_guard lock(bridge.dataMutex); bridge.activeMesh = std::move(next); }
 4. Signal:          bridge.dataVersion.fetch_add(1, std::memory_order_release);
 ```
@@ -100,7 +100,7 @@ Every reader does:
 
 Consequences:
 - A reader never sees a half-written mesh; it holds its own `shared_ptr` until it is done.
-- Changing one value, for example `deformScale`, copies the whole mesh. This is fine at current sizes but becomes relevant for very large models.
+- Changing one value, for example a load, copies the whole mesh. This is fine at current sizes but becomes relevant for very large models. The deformation scale is not in the snapshot, so changing it copies nothing.
 - `dataMutex` is held only for pointer swaps and small map reads, never during a solve.
 
 ### 4.1 Model reset and generations

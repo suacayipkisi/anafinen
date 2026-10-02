@@ -191,7 +191,7 @@ namespace anaf::GUI {
     }
     m_cachedMaxStress = maxStress;
 
-    const double deformScale = mesh.deformScale;
+    const double deformScale = m_deformScale;
 
     auto stressColor = [&](double val) -> glm::vec4 {
       if (maxStress <= 1e-9) {
@@ -352,6 +352,7 @@ namespace anaf::GUI {
         std::lock_guard<std::mutex> lock(bridge.dataMutex);
         m_currentMesh = bridge.activeMesh;
       }
+      m_deformScale = bridge.deformScale.load();
 
       truss_1d_gui_prop.m_meshNeedsUpdate = false;
       truss_1d_gui_prop.m_lastRenderedVersion = currentVersion;
@@ -403,7 +404,7 @@ namespace anaf::GUI {
 
       const float fbWidth = static_cast<float>(m_fbo_->getWidth());
       const float fbHeight = static_cast<float>(m_fbo_->getHeight());
-      const double deformScale = m_currentMesh->deformScale;
+      const double deformScale = m_deformScale;
 
       for (const auto& node : m_currentMesh->trussNodes) {
         const uint32_t id = node.getNodeID();

@@ -59,6 +59,7 @@ namespace anaf::GUI{
     Truss_1D_GUI_PROPERTIES truss_1d_gui_prop{};
 
     std::shared_ptr<const anaf::BRIDGE::MeshData> m_currentMesh{nullptr};
+    double m_deformScale{1.0}; // bridge.deformScale, read together with m_currentMesh
     double m_cachedMaxStress{0.0};
     double m_cachedMaxDisp{0.0};
 

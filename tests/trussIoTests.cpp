@@ -477,6 +477,7 @@ TEST(resetModelLeavesNothingBehind) {
     bridge.hasTrussPreview = true;
   }
   bridge.m_objectType = BRIDGE::ObjectType::truss_SQPT;
+  bridge.deformScale = 50.0;
   const auto generation = bridge.modelGeneration.load();
   const auto version = bridge.dataVersion.load();
 
@@ -485,6 +486,7 @@ TEST(resetModelLeavesNothingBehind) {
   CHECK(bridge.activeMesh == nullptr);
   CHECK(bridge.selectedNodeId == std::numeric_limits<std::uint32_t>::max());
   CHECK(!bridge.hasTrussPreview);
+  CHECK(bridge.deformScale.load() == 1.0);
   CHECK(!bridge.m_isRunning.load() && !bridge.m_isGeneratingPreview.load());
   CHECK(bridge.modelGeneration.load() != generation); // workers started before cannot publish
   CHECK(bridge.dataVersion.load() != version);        // the viewport redraws the empty scene

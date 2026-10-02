@@ -190,7 +190,7 @@ Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (
    - Nodes (if visible) become points colored by displacement magnitude. The selected node is orange and larger; fixed nodes are red.
    - Inclined supports (`Node::hasInclinedSupport()`), drawn red at the drawn node position with a size of 4 % of the scene radius: an allowed plane as a translucent square (`addTriangle()`, blended after the lines without depth writes) with an outline, an allowed line as a double arrow with a glow line.
    - Applied forces become arrows with a fixed world length of 3 m: a shaft plus a 4-line head, each duplicated as a glow line.
-   - Draw position = `location + displacement * deformScale`.
+   - Draw position = `location + displacement * deformScale`, with `deformScale` read from the bridge (`Gui_Calc_Bridge::deformScale`, a view setting) when the snapshot is reloaded.
 2. `fbo.bind()`, depth test on, `fbo.clear(color, entity = -1)`.
 3. `renderGrid(GridView)`: blended, depth writes off, minor spacing `10^floor(log10(distance/12))`, fade distance `max(40 × distance, 6 × scene radius)`. The grid used to be one ±8000 m quad; close to the camera its clipped, interpolated world positions lost precision and the lines bent and swam.
 4. `render()`:

@@ -617,17 +617,10 @@ namespace anaf::GUI {
     auto& bridge = BRIDGE::buildBridge();
     const auto mesh = currentMesh(bridge);
 
-    double scale = mesh ? mesh->deformScale.load() : 1.0;
+    double scale = bridge.deformScale.load();
     ImGui::SetNextItemWidth(160.0f);
-    if (ImGui::InputDouble("Deformation Scale##editor", &scale, 0.0, 0.0, "%.3f") && mesh) {
-      {
-        std::lock_guard lock(bridge.dataMutex);
-        if (bridge.activeMesh) {
-          auto updated = std::make_shared<MeshData>(*bridge.activeMesh);
-          updated->deformScale = scale;
-          bridge.activeMesh = std::move(updated);
-        }
-      }
+    if (ImGui::InputDouble("Deformation Scale##editor", &scale, 0.0, 0.0, "%.3f")) {
+      bridge.deformScale = scale;
       bridge.dataVersion.fetch_add(1, std::memory_order_release);
     }
 

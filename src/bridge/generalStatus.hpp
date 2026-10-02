@@ -59,46 +59,7 @@ namespace anaf::BRIDGE {
     std::vector<FEM::TRUSS::Node> trussNodes;
     std::vector<RenderElement> trussElements;
     std::vector<FEM::TRUSS::ForceApplied> appliedForces;
-    std::atomic<double> deformScale{1.0};
     bool hasResults{false}; // displacements / stresses come from a solve (or a result file)
-
-    MeshData() = default;
-
-    MeshData(const MeshData& other)
-      : trussNodes(other.trussNodes),
-       trussElements(other.trussElements),
-       appliedForces(other.appliedForces),
-       deformScale(other.deformScale.load()),
-       hasResults(other.hasResults) {}
-
-    MeshData& operator=(const MeshData& other) {
-      if (this != &other) {
-        trussNodes = other.trussNodes;
-        trussElements = other.trussElements;
-        appliedForces = other.appliedForces;
-        deformScale.store(other.deformScale.load());
-        hasResults = other.hasResults;
-      }
-      return *this;
-    }
-
-    MeshData(MeshData&& other) noexcept
-      : trussNodes(std::move(other.trussNodes)),
-       trussElements(std::move(other.trussElements)),
-       appliedForces(std::move(other.appliedForces)),
-       deformScale(other.deformScale.load()),
-       hasResults(other.hasResults) {}
-
-    MeshData& operator=(MeshData&& other) noexcept {
-      if (this != &other) {
-        trussNodes = std::move(other.trussNodes);
-        trussElements = std::move(other.trussElements);
-        appliedForces = std::move(other.appliedForces);
-        deformScale.store(other.deformScale.load());
-        hasResults = other.hasResults;
-      }
-      return *this;
-    }
   };
 
   struct Gui_Calc_Bridge {
@@ -117,6 +78,9 @@ namespace anaf::BRIDGE {
     std::shared_ptr<const MeshData> activeMesh{nullptr};
     std::atomic<bool> m_isValid{false};
     std::atomic<double> m_energyDiff{0.0};
+    // View setting, not part of the model: the viewport draws location + displacement * deformScale.
+    // Written by the truss panels (then dataVersion is bumped so the scene is rebuilt).
+    std::atomic<double> deformScale{1.0};
 
     // Elements refer to a material by its index in this vector (RenderElement::materialID,
     // TrussElement_1D::m_type). Built-ins come first in file order, user materials follow.

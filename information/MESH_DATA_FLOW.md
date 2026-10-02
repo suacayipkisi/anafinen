@@ -106,7 +106,7 @@ The preview contains the geometry and the loads. The solve rebuilds the grid fro
 - The viewport obtains the snapshot pointer under `dataMutex` and then reads it through `m_currentMesh`.
 - `dataVersion` signals that the viewport must reload the mesh.
 - `MeshData` is published as `shared_ptr<const MeshData>`, so the viewport cannot modify the active snapshot.
-- `deformScale` does not change mesh geometry; it affects render position through `location + displacement * deformScale`.
+- `Gui_Calc_Bridge::deformScale` is a view setting outside the snapshot; it does not change mesh geometry, only the render position `location + displacement * deformScale`. Changing it bumps `dataVersion` without copying the mesh.
 
 ## 6. Import and export
 

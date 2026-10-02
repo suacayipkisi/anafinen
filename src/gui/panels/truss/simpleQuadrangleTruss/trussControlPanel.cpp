@@ -245,11 +245,6 @@ namespace anaf::GUI {
                 bridge.m_isGeneratingPreview = false;
                 return; // the model was reset while the preview was built
               }
-              if (bridge.activeMesh) {
-                newMesh->deformScale.store(
-                  bridge.activeMesh->deformScale.load(std::memory_order_relaxed),
-                  std::memory_order_relaxed);
-              }
               bridge.activeMesh = std::move(newMesh);
               bridge.hasTrussPreview = true;
               bridge.selectedNodeId = 0u;
@@ -303,23 +298,9 @@ namespace anaf::GUI {
     }
 
     ImGui::SetNextItemWidth(160.0f);
-    double currentScale = 1.0;
-    {
-      std::lock_guard lock(bridge.dataMutex);
-      if (bridge.activeMesh) {
-        currentScale = bridge.activeMesh->deformScale;
-      }
-    }
-
+    double currentScale = bridge.deformScale.load();
     if (ImGui::InputDouble("Deformation Scale", &currentScale, 0.0, 0.0, "%.3f")) {
-      {
-        std::lock_guard<std::mutex> lock(bridge.dataMutex);
-        if (bridge.activeMesh) {
-          auto updatedMesh = std::make_shared<BRIDGE::MeshData>(*bridge.activeMesh);
-          updatedMesh->deformScale = currentScale;
-          bridge.activeMesh = std::move(updatedMesh);
-        }
-      }
+      bridge.deformScale = currentScale;
       bridge.dataVersion.fetch_add(1, std::memory_order_release);
     }
 
@@ -333,13 +314,12 @@ namespace anaf::GUI {
       // The grid is rebuilt from the current inputs on the worker, like the preview.
       TRUSS_WORKER::startSolve(bridge,
         [cubeNumX = m_cubeNumX, cubeNumY = m_cubeNumY, cubeNumZ = m_cubeNumZ, cubeEdgeLength = m_cubeEdgeLength,
-         crossSectionalArea = m_crossSectionalArea, type = materialIndex, deformScale = currentScale,
+         crossSectionalArea = m_crossSectionalArea, type = materialIndex,
          forcesToApply = m_appliedForces, supports = m_supports]() -> std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string> {
           auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
           if (!built) return std::unexpected(built.error());
           built->appliedForces = forcesToApply;
           applySupports(*built, supports);
-          built->deformScale = deformScale;
           return std::make_shared<const BRIDGE::MeshData>(std::move(*built));
         });
     }
