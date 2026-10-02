@@ -21,10 +21,14 @@
 
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <string>
+#include <string_view>
 
-
+// GLFW does not read the desktop's cursor settings, so without this the window shows the
+// default cursor theme instead of the one the user picked. The choice is looked up once at
+// startup and handed to the cursor library through XCURSOR_THEME / XCURSOR_SIZE.
 
 namespace platform_utils {
 
@@ -49,39 +53,54 @@ namespace platform_utils {
     return result;
   }
 
+  inline bool environmentHas(const char* name) {
+    const char* value = std::getenv(name);
+    return value != nullptr && *value != '\0';
+  }
+
+  // GNOME / GTK setting, e.g. "cursor-theme".
+  inline std::string gnomeCursorSetting(const std::string& key) {
+    return execCommand(("gsettings get org.gnome.desktop.interface " + key + " 2>/dev/null").c_str());
+  }
+
+  // KDE Plasma setting from kcminputrc, e.g. "cursorTheme" (Plasma 6, then 5).
+  inline std::string kdeCursorSetting(const std::string& key) {
+    std::string value = execCommand(("kreadconfig6 --file kcminputrc --group Mouse --key " + key + " 2>/dev/null").c_str());
+    if (value.empty()) value = execCommand(("kreadconfig5 --file kcminputrc --group Mouse --key " + key + " 2>/dev/null").c_str());
+    return value;
+  }
+
+  // X resources (X11 window managers), e.g. "Xcursor.theme".
+  inline std::string xresourcesCursorSetting(const std::string& key) {
+    return execCommand(("xrdb -query 2>/dev/null | grep -i '" + key + "' | cut -f2").c_str());
+  }
+
   inline void setupSystemCursor() {
-    // try GNOME / GTK settings
-    std::string theme = execCommand("gsettings get org.gnome.desktop.interface cursor-theme 2>/dev/null");
-    std::string size  = execCommand("gsettings get org.gnome.desktop.interface cursor-size 2>/dev/null");
+    // Values already in the environment are the user's (or the session's) explicit choice:
+    // keep them, and skip the lookups entirely when both are set.
+    const bool haveTheme = environmentHas("XCURSOR_THEME");
+    const bool haveSize = environmentHas("XCURSOR_SIZE");
+    if (haveTheme && haveSize) return;
 
-    // fallback to KDE Plasma if GNOME query failed
-    if (theme.empty()) {
-      theme = execCommand("kreadconfig6 --group Mouse --key cursorTheme 2>/dev/null");
-      if (theme.empty()) {
-        theme = execCommand("kreadconfig5 --group Mouse --key cursorTheme 2>/dev/null");
-      }
-    }
-    if (size.empty()) {
-      size = execCommand("kreadconfig6 --group Mouse --key cursorSize 2>/dev/null");
-      if (size.empty()) {
-        size = execCommand("kreadconfig5 --group Mouse --key cursorSize 2>/dev/null");
-      }
-    }
+    // On Plasma, gsettings still answers when the GNOME schemas are installed, but with GNOME's
+    // default ("Adwaita"), not the user's choice; so the desktop decides which source goes first.
+    const char* desktop = std::getenv("XDG_CURRENT_DESKTOP");
+    const bool plasma = desktop != nullptr && std::string_view(desktop).find("KDE") != std::string_view::npos;
+    const auto lookUp = [plasma](const std::string& gnomeKey, const std::string& kdeKey, const std::string& xKey) {
+      std::string value = plasma ? kdeCursorSetting(kdeKey) : gnomeCursorSetting(gnomeKey);
+      if (value.empty()) value = plasma ? gnomeCursorSetting(gnomeKey) : kdeCursorSetting(kdeKey);
+      if (value.empty()) value = xresourcesCursorSetting(xKey);
+      return value;
+    };
 
-    // fallback to Xresources (X11 / WMs)
-    if (theme.empty()) {
-      theme = execCommand("xrdb -query 2>/dev/null | grep -i 'Xcursor.theme' | cut -f2");
+    if (!haveTheme) {
+      const std::string theme = lookUp("cursor-theme", "cursorTheme", "Xcursor.theme");
+      setenv("XCURSOR_THEME", theme.empty() ? "Adwaita" : theme.c_str(), 1);
     }
-    if (size.empty()) {
-      size = execCommand("xrdb -query 2>/dev/null | grep -i 'Xcursor.size' | cut -f2");
+    if (!haveSize) {
+      const std::string size = lookUp("cursor-size", "cursorSize", "Xcursor.size");
+      setenv("XCURSOR_SIZE", size.empty() ? "24" : size.c_str(), 1);
     }
-
-    // default fallbacks if everything else fails
-    if (theme.empty()) theme = "Adwaita";
-    if (size.empty())  size  = "24";
-
-    setenv("XCURSOR_THEME", theme.c_str(), 1);
-    setenv("XCURSOR_SIZE", size.c_str(), 1);
   }
 
 } // namespace platform_utils

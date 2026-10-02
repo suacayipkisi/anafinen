@@ -239,7 +239,9 @@ Drawn by `renderOverlay2D()` on top of the image:
 
 ## 4. Window and platform details
 
-- On Linux, GLFW picks the platform itself (Wayland or X11; no init hint, no retry). The app ID and X11 class are `anafinen`, matching `anafinen.desktop`. `platform_utils::setupSystemCursor()` reads the GNOME cursor theme and size through `gsettings` and exports them as `XCURSOR_THEME` / `XCURSOR_SIZE`.
+- On Linux, GLFW picks the platform itself (Wayland or X11; no init hint, no retry). The app ID and X11 class are `anafinen`, matching `anafinen.desktop`. GLFW does not follow the desktop's cursor settings, so `platform_utils::setupSystemCursor()` (`linuxCursor.hpp`) looks up the theme and size the user picked and exports them as `XCURSOR_THEME` / `XCURSOR_SIZE` before `glfwInit()`:
+  - A value already in the environment is kept (the user's or the session's explicit choice); with both set, nothing is queried.
+  - Source order follows `XDG_CURRENT_DESKTOP`: on KDE Plasma `kreadconfig6` / `kreadconfig5` (`kcminputrc`, group `Mouse`) first, elsewhere `gsettings` (`org.gnome.desktop.interface`) first, because on Plasma `gsettings` answers with GNOME's default when the GNOME schemas are installed. X resources (`Xcursor.theme` / `Xcursor.size`) come last, then Adwaita / 24.
 - On Windows, the `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` exports request the discrete GPU.
 - The window icon is loaded with libpng from the first existing asset path (see [BUILD_SYSTEM.md](BUILD_SYSTEM.md) section 7).
 - VSync is on (`glfwSwapInterval(1)`).
