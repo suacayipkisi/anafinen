@@ -26,6 +26,7 @@
 #include <exception>
 #include <expected>
 #include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <stop_token>
@@ -53,15 +54,27 @@ namespace anaf::GUI {
       return true;
     }
 
-    // Corner supports of the 10x1x10 demo grid (self weight only). Called right after
-    // resetModel(), so there is no snapshot yet: Generate Preview builds it. Caller holds dataMutex.
-    void ensureDemoTrussCase(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t selectedNode) {
-      bridge.fixedDOFsByNode.clear();
-      bridge.fixedDOFsByNode[0u] = {true, true, true};
-      bridge.fixedDOFsByNode[10u] = {true, true, true};
-      bridge.fixedDOFsByNode[220u] = {true, true, true};
-      bridge.fixedDOFsByNode[230u] = {true, true, true};
-      bridge.selectedNodeId = selectedNode;
+    using Supports = std::map<std::uint32_t, std::array<bool, 3>>;
+
+    // The panel's supports on a generated grid (ids outside the grid are ignored).
+    void applySupports(BRIDGE::MeshData& mesh, const Supports& supports) {
+      for (const auto& [id, fixed] : supports) {
+        if (id < mesh.trussNodes.size()) mesh.trussNodes[id].setMovable({!fixed[0], !fixed[1], !fixed[2]});
+      }
+    }
+
+    // Republishes the active grid with the panel's current loads and supports.
+    void publishInputs(BRIDGE::Gui_Calc_Bridge& bridge, const std::vector<FEM::TRUSS::ForceApplied>& forces, const Supports& supports) {
+      {
+        std::lock_guard lock(bridge.dataMutex);
+        if (!bridge.activeMesh) return;
+        auto updated = std::make_shared<BRIDGE::MeshData>(*bridge.activeMesh);
+        updated->appliedForces = forces;
+        for (auto& node : updated->trussNodes) node.setMovable({true, true, true});
+        applySupports(*updated, supports);
+        bridge.activeMesh = std::move(updated);
+      }
+      bridge.dataVersion.fetch_add(1, std::memory_order_release);
     }
   }
 
@@ -75,8 +88,8 @@ namespace anaf::GUI {
     m_forceNodeId = 126;
     m_forceVector = {0.0, 10000.0, 0.0};
     m_appliedForces.clear();
+    m_supports.clear();
     m_fixed = {false, false, false};
-    m_fixChanged = false;
     m_lastFixNode = std::numeric_limits<std::uint32_t>::max();
   }
 
@@ -184,8 +197,10 @@ namespace anaf::GUI {
         if (!bridge.allMaterials.empty()) {
           m_materialID = bridge.allMaterials[bridge.allMaterials.size() > 1 ? 1 : 0].getMaterialID();
         }
-        ensureDemoTrussCase(bridge, m_forceNodeId);
+        bridge.selectedNodeId = m_forceNodeId;
       }
+      // Corner supports of the 10x1x10 demo grid (self weight only); Generate Preview builds it.
+      for (const std::uint32_t corner : {0u, 10u, 220u, 230u}) m_supports[corner] = {true, true, true};
       bridge.dataVersion.fetch_add(1, std::memory_order_release);
     }
 
@@ -206,7 +221,8 @@ namespace anaf::GUI {
          cubeEdgeLength = m_cubeEdgeLength,
          crossSectionalArea = m_crossSectionalArea,
          type = materialIndex,
-         appliedForces = m_appliedForces](std::stop_token st) mutable {
+         appliedForces = m_appliedForces,
+         supports = m_supports](std::stop_token st) mutable {
           try {
             // cm^2 in the panel, m^2 in the model.
             auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
@@ -221,20 +237,13 @@ namespace anaf::GUI {
             }
             auto newMesh = std::make_shared<BRIDGE::MeshData>(std::move(*built));
             newMesh->appliedForces = appliedForces;
+            applySupports(*newMesh, supports);
 
             {
               std::lock_guard lock(bridge.dataMutex);
               if (bridge.modelGeneration.load() != generation) {
                 bridge.m_isGeneratingPreview = false;
                 return; // the model was reset while the preview was built
-              }
-              for (auto& node : newMesh->trussNodes) {
-                std::array<bool, 3> movable{true, true, true};
-                const auto it = bridge.fixedDOFsByNode.find(node.getNodeID());
-                if (it != bridge.fixedDOFsByNode.end()) {
-                  movable = { !it->second[0], !it->second[1], !it->second[2] };
-                }
-                node.setMovable(movable);
               }
               if (bridge.activeMesh) {
                 newMesh->deformScale.store(
@@ -275,44 +284,22 @@ namespace anaf::GUI {
           [&](const FEM::TRUSS::ForceApplied& f) { return f.getAppliedNode() == m_forceNodeId; }),
         m_appliedForces.end());
       m_appliedForces.emplace_back(m_forceNodeId, m_forceVector);
-
-      {
-        std::lock_guard lock(bridge.dataMutex);
-        if (bridge.activeMesh) {
-          auto updatedMesh = std::make_shared<BRIDGE::MeshData>(*bridge.activeMesh);
-          updatedMesh->appliedForces = m_appliedForces;
-          bridge.activeMesh = std::move(updatedMesh);
-        }
-      }
-      bridge.dataVersion.fetch_add(1, std::memory_order_release);
-    }
-
-    std::array<bool, 3> fixedDOFs = {false, false, false};
-    {
-      std::lock_guard lock(bridge.dataMutex);
-      const auto it = bridge.fixedDOFsByNode.find(m_forceNodeId);
-      if (it != bridge.fixedDOFsByNode.end()) {
-        fixedDOFs = it->second;
-      }
+      publishInputs(bridge, m_appliedForces, m_supports);
     }
 
     // Panel members, not statics: resetState() clears them when the object type changes.
-    {
-      std::lock_guard lock(bridge.dataMutex);
-      if (m_lastFixNode != currentSelectedNode) {
-        m_fixed = fixedDOFs;
-      }
-
-      if (ImGui::Checkbox("Fix X##fix_x", &m_fixed[0])) m_fixChanged = true;
-      if (ImGui::Checkbox("Fix Y##fix_y", &m_fixed[1])) m_fixChanged = true;
-      if (ImGui::Checkbox("Fix Z##fix_z", &m_fixed[2])) m_fixChanged = true;
-
-      if (ImGui::Button("Apply Fixity")) {
-        if (m_fixChanged) {
-          bridge.fixedDOFsByNode[m_forceNodeId] = m_fixed;
-        }
-      }
+    if (m_lastFixNode != currentSelectedNode) {
+      const auto it = m_supports.find(m_forceNodeId);
+      m_fixed = it != m_supports.end() ? it->second : std::array<bool, 3>{false, false, false};
       m_lastFixNode = currentSelectedNode;
+    }
+    ImGui::Checkbox("Fix X##fix_x", &m_fixed[0]);
+    ImGui::Checkbox("Fix Y##fix_y", &m_fixed[1]);
+    ImGui::Checkbox("Fix Z##fix_z", &m_fixed[2]);
+    if (ImGui::Button("Apply Fixity")) {
+      if (m_fixed[0] || m_fixed[1] || m_fixed[2]) m_supports[m_forceNodeId] = m_fixed;
+      else m_supports.erase(m_forceNodeId);
+      publishInputs(bridge, m_appliedForces, m_supports);
     }
 
     ImGui::SetNextItemWidth(160.0f);
@@ -347,10 +334,11 @@ namespace anaf::GUI {
       TRUSS_WORKER::startSolve(bridge,
         [cubeNumX = m_cubeNumX, cubeNumY = m_cubeNumY, cubeNumZ = m_cubeNumZ, cubeEdgeLength = m_cubeEdgeLength,
          crossSectionalArea = m_crossSectionalArea, type = materialIndex, deformScale = currentScale,
-         forcesToApply = m_appliedForces]() -> std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string> {
+         forcesToApply = m_appliedForces, supports = m_supports]() -> std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string> {
           auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
           if (!built) return std::unexpected(built.error());
           built->appliedForces = forcesToApply;
+          applySupports(*built, supports);
           built->deformScale = deformScale;
           return std::make_shared<const BRIDGE::MeshData>(std::move(*built));
         });

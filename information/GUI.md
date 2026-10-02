@@ -90,8 +90,8 @@ File > Import Mesh / CAD... (Ctrl+O)
   -> CAD file? -> "CAD Import Options" modal: bars / surfaces / volumes, element size, order
   -> IoService::runAsync: readMesh + ADAPTER::toMeshData       (I/O thread)
   -> overlay: description, progress bar, stage, Cancel
-  -> done: type switched to truss_SQPT meanwhile? discard. Else resetModel(truss_imported_or_entered),
-           activeMesh, fixedDOFsByNode, dataVersion++ (GUI thread, under dataMutex); log notes / warnings;
+  -> done: model reset meanwhile (modelGeneration)? discard. Else resetModel(truss_imported_or_entered),
+           activeMesh, dataVersion++ (GUI thread, under dataMutex); log notes / warnings;
            model editor and tree open, camera fits
 
 File > Export Model... (Ctrl+E)
@@ -148,7 +148,7 @@ File > Export Model... (Ctrl+E)
 5. "Built-in Models" lists the library from `assets/objects/truss/truss1D/index.json` ([CALCULATIONS.md](CALCULATIONS.md) section 3.2). "Load Built-in Model" imports the file through `FileIoPanel::importFile()` like File > Import; the file itself is never written, and File > Export refuses a target inside the library folder.
 6. "Run Solver for Truss" solves the snapshot with `Truss_Imported_or_Entered` ([CALCULATIONS.md](CALCULATIONS.md) section 3.1). If the model cannot be solved, the reason is logged as "Solver not started: ...".
 7. "Clear Model" calls `resetModel(truss_imported_or_entered)` and `resetState()`.
-8. Supports: "Global axes" fixes x / y / z (`Node::setMovable`). "Inclined / skewed" takes 1 to 3 direction vectors, read as the restrained directions (1 = roller on a plane, 2 = guide along a line, 3 = pin) or as the allowed motion (1 = line, 2 = plane); `FEM::TRUSS::orthonormalize()` / `orthogonalComplement()` turn them into the allowed-motion basis for `Node::setAllowedMotionDirections()`. Switching between the two readings replaces the vectors by their complement, so the support stays the same. Dependent or zero vectors disable "Apply Support". The fixity map gets the global axes outside the allowed subspace, so the node keeps its entry (red point, export). The SQPT control panel keeps its X / Y / Z checkboxes.
+8. Supports: "Global axes" fixes x / y / z (`Node::setMovable`). "Inclined / skewed" takes 1 to 3 direction vectors, read as the restrained directions (1 = roller on a plane, 2 = guide along a line, 3 = pin) or as the allowed motion (1 = line, 2 = plane); `FEM::TRUSS::orthonormalize()` / `orthogonalComplement()` turn them into the allowed-motion basis for `Node::setAllowedMotionDirections()`. Switching between the two readings replaces the vectors by their complement, so the support stays the same. Dependent or zero vectors disable "Apply Support". The support is stored on the node only (red point, model tree, export and the solve read it there). The SQPT control panel keeps its X / Y / Z checkboxes; its supports are panel input put on every grid it builds.
 
 ## 3. Viewport render pipeline
 

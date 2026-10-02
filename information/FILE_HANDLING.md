@@ -9,7 +9,7 @@ This document describes `anaf_io`, the mesh import/export library:
 For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-29 (inclined supports solved and exported by the truss adapter; step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-02 (supports read from and written to the snapshot nodes by the truss adapter; step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -299,8 +299,8 @@ every frame: task->ready()?  (never blocks)
 
 | Function | Direction | Details |
 |---|---|---|
-| `toMeshModel(MeshData, FixedDOFMap)` | export | Nodes (tag = id + 1), Line2 bars with `MaterialID` / `CrossSectionArea`, constraints from the fixity map, loads; `Displacement` and `Stress` when `MeshData::hasResults` |
-| `toMeshData(MeshModel, materials)` | import | Line2 → bars; Line3 → two straight segments; surface / volume elements → unique edges (wireframe preview); points ignored. Constraints → fixity map + node movability; loads; results; `isStressExceeded` from the material yield strength |
+| `toMeshModel(MeshData, materials)` | export | Nodes (tag = id + 1), Line2 bars with `MaterialID` / `CrossSectionArea`, a constraint for every supported node (`Node::isSupported()`, inclined basis included), loads; `Displacement` and `Stress` when `MeshData::hasResults` |
+| `toMeshData(MeshModel, materials)` | import | Line2 → bars; Line3 → two straight segments; surface / volume elements → unique edges (wireframe preview); points ignored. Constraints → node supports (axis fixity or inclined basis); loads; results; `isStressExceeded` from the material yield strength |
 
 ## 8. GUI integration
 

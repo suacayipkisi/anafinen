@@ -64,6 +64,9 @@ namespace FEM::TRUSS {
     // True when an allowed direction is not a global axis, i.e. getMovable() alone does not
     // describe the support.
     bool hasInclinedSupport() const;
+    // True when the node is restrained in some direction (fewer than three allowed directions).
+    // The node is the only place a support is stored: snapshots, the solver and export read it here.
+    bool isSupported() const { return m_allowedMotionDirections.size() < 3; }
   };
 
   // Orthonormal basis (Gram-Schmidt) of the span of directions. Throws std::invalid_argument

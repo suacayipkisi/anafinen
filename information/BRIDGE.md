@@ -12,7 +12,7 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 +------------------------------+                  +-------------------------------------+
 | TrussControlPanel / editor   |  start worker    | Preview: buildSimpleTruss()         |
 |  - geometry / loads / fixity |----------------->| Solve:   TRUSS_WORKER::startSolve() |
-|  - writes fixedDOFsByNode    |                  |                                     |
+|  - supports on snapshot nodes|                  |                                     |
 +---------------+--------------+                  |  writes m_progress (atomic)         |
                 |                                 |  builds new MeshData                |
                 |                                 +------------------+------------------+
@@ -20,7 +20,7 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 +-------------------------------------------------------------------+|+-----------------+
 | Gui_Calc_Bridge  (process-wide singleton: buildBridge())           v                  |
 |                                                                                       |
-|  dataMutex ---- guards --> activeMesh, fixedDOFsByNode, selectedNodeId,               |
+|  dataMutex ---- guards --> activeMesh, selectedNodeId,                                |
 |                            hasTrussPreview, allMaterials                              |
 |  atomics ------------------> m_isRunning, m_isGeneratingPreview, m_progress,          |
 |                              dataVersion, m_isValid, m_energyDiff, m_objectType       |
@@ -43,7 +43,6 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `activeMesh` | `shared_ptr<const MeshData>` | Worker (publish), control panel (loads, deform scale), model editor (every edit), `resetModel()`, File > Import | Viewport, model tree, both truss panels, File > Export | `dataMutex` |
 | `modelGeneration` | `atomic<uint64_t>` | `resetModel()` | Workers (taken at start, compared before publishing) | atomic; the comparison runs under `dataMutex` |
 | `dataVersion` | `atomic<uint64_t>` | Every publisher, after swapping `activeMesh` | Viewport (reload check) | atomic, `memory_order_release` on increment |
-| `fixedDOFsByNode` | `FixedDOFMap` = `unordered_map<uint32_t, array<bool,3>>` | Control panel ("Apply Fixity", demo), model editor ("Apply Support", node delete), File > Import, `resetModel()` | Both truss panels (copy it for the worker), preview worker, viewport, model tree | `dataMutex`; the solver worker only sees a copy |
 | `selectedNodeId` | `uint32_t`, `UINT32_MAX` = none | Viewport picking, both truss panels, `resetModel()` | Both truss panels, viewport | `dataMutex` |
 | `hasTrussPreview` | `bool` | Worker, control panel | Panels | `dataMutex` |
 | `m_isRunning` | `atomic<bool>` | Truss panels (set), worker (clear), `resetModel()` | Truss panels (button state), File > Import, material removal | atomic |
@@ -122,14 +121,15 @@ Every worker takes `modelGeneration` before it starts and publishes only if the 
 
 | Action (control panel) | Bridge effect |
 |---|---|
-| Generate Preview | `m_isGeneratingPreview = true`. A new worker builds geometry only and publishes it with fixity overlaid. `selectedNodeId = 0`. |
-| Run Solver for Truss | `m_isRunning = true`, `m_progress = 0`. `fixedDOFsByNode` and `allMaterials` are copied under `dataMutex` and moved into the worker. The worker runs the full pipeline ([CALCULATIONS.md](CALCULATIONS.md)) with those copies, overlays the fixity it actually used onto the snapshot nodes, and publishes it. `m_progress = 1`, `m_isRunning = false`. |
-| Load Demo | `resetModel(truss_SQPT)`, then sets fixed nodes 0, 10, 220, 230 and a demo load. |
+| Generate Preview | `m_isGeneratingPreview = true`. A new worker builds the grid (`buildSimpleTruss()`), puts the panel's loads and supports on it and publishes it. `selectedNodeId = 0`. |
+| Apply Load / Apply Fixity | Updates the panel input and republishes a copy of the grid snapshot with the new loads / supports. |
+| Run Solver for Truss | `TRUSS_WORKER::startSolve()`: `m_isRunning = true`, `m_progress = 0`, `allMaterials` copied under `dataMutex`. The worker rebuilds the grid with the panel's loads and supports and runs the common pipeline ([CALCULATIONS.md](CALCULATIONS.md) section 1). `m_progress = 1`, `m_isRunning = false`. |
+| Load Demo | `resetModel(truss_SQPT)`, then the panel supports nodes 0, 10, 220, 230 (pinned) and clears the load. |
 | Clear All | `resetModel(truss_SQPT)` and the panel's `resetState()`. |
-| Model editor edit (`TrussModelEditor`) | Disabled while a worker runs. Copies `activeMesh` (or starts an empty one), applies the edit, drops stale results (`hasResults = false`, zero displacements and stresses), publishes under `dataMutex` and bumps `dataVersion`. Node ids stay `0..n-1`: deleting a node removes its bars, load and fixity and moves later ids down by one. |
-| Run Solver for Truss (model editor) | Like the control panel's solve, but the worker gets the `activeMesh` pointer itself and runs `Truss_Imported_or_Entered` ([CALCULATIONS.md](CALCULATIONS.md) section 3.1). An unsolvable model (no bars, bars without area, ...) is logged as "Solver not started: ..." and nothing is published. |
-| File > Import (FileIoPanel) | Refused for `truss_SQPT` and while `m_isRunning` / `m_isGeneratingPreview`. The I/O thread builds the snapshot. The GUI thread discards it if the type was switched to `truss_SQPT` meanwhile; otherwise it calls `resetModel(truss_imported_or_entered)`, sets `activeMesh`, `fixedDOFsByNode` and `hasTrussPreview` under `dataMutex`, then bumps `dataVersion`. |
-| File > Export (FileIoPanel) | Copies the `activeMesh` pointer and `fixedDOFsByNode` under `dataMutex`; conversion and writing run on the I/O thread. |
+| Model editor edit (`TrussModelEditor`) | Disabled while a worker runs. Copies `activeMesh` (or starts an empty one), applies the edit, drops stale results (`hasResults = false`, zero displacements and stresses), publishes under `dataMutex` and bumps `dataVersion`. Node ids stay `0..n-1`: deleting a node removes its bars, load and support and moves later ids down by one. |
+| Run Solver for Truss (model editor) | `TRUSS_WORKER::startSolve()` with the `activeMesh` pointer as the model ([CALCULATIONS.md](CALCULATIONS.md) section 3.1). An unsolvable model (no bars, bars without area, ...) is logged as "Solver not started: ..." and nothing is published. |
+| File > Import (FileIoPanel) | Refused while `m_isRunning` / `m_isGeneratingPreview`. The I/O thread builds the snapshot (supports on its nodes). The GUI thread discards it if `modelGeneration` changed meanwhile; otherwise it calls `resetModel(truss_imported_or_entered)`, sets `activeMesh` and `hasTrussPreview` under `dataMutex`, then bumps `dataVersion`. |
+| File > Export (FileIoPanel) | Copies the `activeMesh` pointer and `allMaterials` under `dataMutex`; conversion and writing run on the I/O thread. |
 | Window close | `initgui()` calls `request_stop()`, then joins by assigning an empty `std::jthread`. |
 
 `joinWorker()` stops and joins the previous worker before a new one is assigned, so two workers never run at the same time. Long loops in the solver check `stop_token` between steps.

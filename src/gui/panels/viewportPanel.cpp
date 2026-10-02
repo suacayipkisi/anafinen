@@ -35,7 +35,6 @@
 #include <mutex>
 #include <numbers>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace anaf::GUI {
@@ -178,11 +177,9 @@ namespace anaf::GUI {
     const auto& mesh = *m_currentMesh;
     auto& bridge = BRIDGE::buildBridge();
 
-    std::unordered_map<std::uint32_t, std::array<bool, 3>> fixedDOFs;
     std::uint32_t selectedId = std::numeric_limits<std::uint32_t>::max();
     {
       std::lock_guard<std::mutex> lock(bridge.dataMutex);
-      fixedDOFs = bridge.fixedDOFsByNode;
       selectedId = bridge.selectedNodeId;
     }
 
@@ -259,7 +256,7 @@ namespace anaf::GUI {
         if (id == selectedId) {
           pColor = glm::vec4(1.0f, 0.7f, 0.2f, 1.0f);
           pSize = 18.0f;
-        } else if (fixedDOFs.find(id) != fixedDOFs.end()) {
+        } else if (node.isSupported()) {
           pColor = glm::vec4(1.0f, 0.3f, 0.3f, 1.0f);
         }
 

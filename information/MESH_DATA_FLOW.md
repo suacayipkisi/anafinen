@@ -34,7 +34,7 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
             +------------------------------------+         |
             | Truss_Imported_or_Entered          |         |
             |  setModel: snapshot -> Node /      |         |
-            |    TrussElement_1D, fixity copy    |         |
+            |    TrussElement_1D, node supports  |         |
             |  setForce: loads -> m_forceVec     |         |
             |  Truss_1D_Container: K triplets,   |         |
             |    self weight, T^T K T q = T^T f, |         |
@@ -62,7 +62,7 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
 | Mesh nodes | snapshot, solver copy | `MeshData::trussNodes`, `Truss_Imported_or_Entered::m_nodes` | Node IDs, original positions, movable state / inclined basis, displacements. |
 | Mesh elements | snapshot, solver copy | `MeshData::trussElements` (`RenderElement`), `m_elements` (`TrussElement_1D`) | Node IDs, area, material, stress; the solver copy adds length, direction cosines, elongation and force. |
 | GUI mesh snapshot | `Gui_Calc_Bridge` | `activeMesh` | Shared publication point for preview or solver results. |
-| Boundary conditions | `Gui_Calc_Bridge` | `fixedDOFsByNode` | Stores `nodeId -> {fixedX, fixedY, fixedZ}` and becomes `Node::setMovable` state before solving. |
+| Supports | snapshot nodes | `Node::m_allowedMotionDirections` (+ `m_isMovable` summary) | The only place a support is stored: axis fixity or an inclined basis. Editors change it on a snapshot copy; the Simple Quadrangle panel keeps its supports as input (`m_supports`) and puts them on every grid it builds. |
 | Applied loads | Panel and snapshot | `m_appliedForces`, `MeshData::appliedForces` | Stores user loads by node and later feeds the global DOF vector. |
 | Global force vector | `Truss_Imported_or_Entered` and container span | `m_forceVec` | Uses `index = 3 * nodeId + axis` for X/Y/Z DOFs; element weight is added here. |
 | Global stiffness data | `Truss_1D_Container` | `m_globalStiffnessMatrix` | Created as 21 upper-triangle Eigen triplets per element. |
@@ -75,8 +75,8 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
 ## 3. Calculation sequence
 
 1. A source makes the snapshot: the Simple Quadrangle panel calls `buildSimpleTruss()` on the worker and adds its loads; the model editor passes the active snapshot.
-2. `TRUSS_WORKER::startSolve()` copies `fixedDOFsByNode` and the material list under `dataMutex`, notes `modelGeneration` and starts the worker.
-3. `setModel()` turns the snapshot into solver nodes and bars; the fixity copy (or a node's inclined basis) becomes the allowed motion of each node.
+2. `TRUSS_WORKER::startSolve()` copies the material list under `dataMutex`, notes `modelGeneration` and starts the worker.
+3. `setModel()` turns the snapshot into solver nodes and bars; each node keeps the allowed motion of its snapshot node (its support).
 4. `ForceApplied` records are written to `m_forceVec[3 * nodeId + axis]`.
 5. `setContainer()` binds the container to the solver vectors through `std::span`. The container does not own the nodes or elements.
 6. `assembleStiffness()` creates global stiffness-matrix triplets from the elements.
@@ -111,8 +111,8 @@ The preview contains the geometry and the loads. The solve rebuilds the grid fro
 ## 6. Import and export
 
 ```text
-Export:  activeMesh (+ fixedDOFsByNode) --ADAPTER::toMeshModel--> anaf::IO::MeshModel --writeMesh--> .msh / .vtu / .vtk / .step
-Import:  file --readMesh--> anaf::IO::MeshModel --ADAPTER::toMeshData--> new MeshData --> activeMesh (+ fixedDOFsByNode)
+Export:  activeMesh --ADAPTER::toMeshModel--> anaf::IO::MeshModel --writeMesh--> .msh / .vtu / .vtk / .step
+Import:  file --readMesh--> anaf::IO::MeshModel --ADAPTER::toMeshData--> new MeshData (supports on the nodes) --> activeMesh
 ```
 
 - Both directions run on the `IoService` thread; only the final pointer swap happens on the GUI thread ([BRIDGE.md](BRIDGE.md) section 5).

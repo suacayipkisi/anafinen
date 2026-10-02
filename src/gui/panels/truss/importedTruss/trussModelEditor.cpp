@@ -43,7 +43,6 @@ namespace anaf::GUI {
 
   namespace {
 
-    using BRIDGE::FixedDOFMap;
     using BRIDGE::Gui_Calc_Bridge;
     using BRIDGE::MeshData;
 
@@ -67,7 +66,7 @@ namespace anaf::GUI {
       {
         std::lock_guard lock(bridge.dataMutex);
         auto mesh = bridge.activeMesh ? std::make_shared<MeshData>(*bridge.activeMesh) : std::make_shared<MeshData>();
-        if (!edit(*mesh, bridge.fixedDOFsByNode)) return false;
+        if (!edit(*mesh)) return false;
         dropResults(*mesh);
         bridge.activeMesh = std::move(mesh);
         bridge.hasTrussPreview = true;
@@ -77,9 +76,9 @@ namespace anaf::GUI {
       return true;
     }
 
-    // Removes node k with its bars, load and fixity; later ids move down by one so that ids
+    // Removes node k with its bars, load and support; later ids move down by one so that ids
     // stay equal to positions (the solver and the viewport index nodes by id).
-    void deleteNode(MeshData& mesh, FixedDOFMap& fixity, const std::uint32_t k) {
+    void deleteNode(MeshData& mesh, const std::uint32_t k) {
       const auto shift = [k](const std::uint32_t id) { return id > k ? id - 1 : id; };
 
       std::vector<FEM::TRUSS::Node> nodes;
@@ -87,7 +86,7 @@ namespace anaf::GUI {
       for (const auto& node : mesh.trussNodes) {
         if (node.getNodeID() == k) continue;
         FEM::TRUSS::Node renumbered(shift(node.getNodeID()), node.getLocX(), node.getLocY(), node.getLocZ());
-        renumbered.setAllowedMotionDirections(node.getAllowedMotionDirections()); // keeps inclined supports
+        renumbered.setAllowedMotionDirections(node.getAllowedMotionDirections()); // keeps the support
         renumbered.setDisplacements(node.getDisplacement());
         nodes.push_back(std::move(renumbered));
       }
@@ -106,12 +105,6 @@ namespace anaf::GUI {
         if (force.getAppliedNode() != k) forces.emplace_back(shift(force.getAppliedNode()), force.getForce());
       }
       mesh.appliedForces = std::move(forces);
-
-      FixedDOFMap shifted;
-      for (const auto& [id, dofs] : fixity) {
-        if (id != k) shifted[shift(id)] = dofs;
-      }
-      fixity = std::move(shifted);
     }
 
     std::shared_ptr<const MeshData> currentMesh(Gui_Calc_Bridge& bridge) {
@@ -158,10 +151,9 @@ namespace anaf::GUI {
     for (const auto& force : bridge.activeMesh->appliedForces) {
       if (force.getAppliedNode() == selectedNode) m_force = force.getForce();
     }
-    if (const auto it = bridge.fixedDOFsByNode.find(selectedNode); it != bridge.fixedDOFsByNode.end()) {
-      m_fixed = it->second;
-    }
     const auto& node = bridge.activeMesh->trussNodes[selectedNode];
+    const auto& movable = node.getMovable();
+    m_fixed = {!movable[0], !movable[1], !movable[2]};
     m_supportInclined = node.hasInclinedSupport();
     if (m_supportInclined) {
       const auto& allowed = node.getAllowedMotionDirections();
@@ -185,10 +177,7 @@ namespace anaf::GUI {
         if (element.isWireframe) ++wireframe;
         else ++bars;
       }
-    }
-    {
-      std::lock_guard lock(bridge.dataMutex);
-      supports = bridge.fixedDOFsByNode.size();
+      supports = static_cast<std::size_t>(std::ranges::count_if(mesh->trussNodes, [](const FEM::TRUSS::Node& node) { return node.isSupported(); }));
     }
 
     if (ImGui::Button("Import File...", ImVec2(-1.0f, 0.0f)) && onRequestImport) onRequestImport();
@@ -223,7 +212,7 @@ namespace anaf::GUI {
     ImGui::InputScalarN("Position [m]##new_node", ImGuiDataType_Double, m_newNode.data(), 3, nullptr, nullptr, "%.4g");
     if (ImGui::Button("Add Node", ImVec2(-1.0f, 0.0f))) {
       std::uint32_t added = 0;
-      editModel(bridge, [&](MeshData& mesh, FixedDOFMap&) {
+      editModel(bridge, [&](MeshData& mesh) {
         added = static_cast<std::uint32_t>(mesh.trussNodes.size());
         mesh.trussNodes.emplace_back(added, m_newNode[0], m_newNode[1], m_newNode[2]);
         return true;
@@ -253,7 +242,7 @@ namespace anaf::GUI {
 
     ImGui::InputScalarN("Position [m]##selected_node", ImGuiDataType_Double, m_nodePosition.data(), 3, nullptr, nullptr, "%.4g");
     if (ImGui::Button("Move Node")) {
-      const bool moved = editModel(bridge, [&](MeshData& mesh, FixedDOFMap&) {
+      const bool moved = editModel(bridge, [&](MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
         mesh.trussNodes[selectedNode].setLocation(m_nodePosition);
         return true;
@@ -262,9 +251,9 @@ namespace anaf::GUI {
     }
     ImGui::SameLine();
     if (ImGui::Button("Delete Node")) {
-      const bool deleted = editModel(bridge, [&](MeshData& mesh, FixedDOFMap& fixity) {
+      const bool deleted = editModel(bridge, [&](MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
-        deleteNode(mesh, fixity, selectedNode);
+        deleteNode(mesh, selectedNode);
         return true;
       });
       if (deleted) {
@@ -306,7 +295,7 @@ namespace anaf::GUI {
 
     if (ImGui::Button("Add Bar", ImVec2(-1.0f, 0.0f))) {
       std::string error;
-      const bool added = editModel(bridge, [&](MeshData& mesh, FixedDOFMap&) {
+      const bool added = editModel(bridge, [&](MeshData& mesh) {
         const auto count = mesh.trussNodes.size();
         const auto a = m_barNodeA, b = m_barNodeB;
         if (a >= count || b >= count) {
@@ -381,7 +370,7 @@ namespace anaf::GUI {
     ImGui::BeginDisabled(m_selectedBar == kNone);
     if (ImGui::Button("Apply to Selected")) {
       const auto bar = m_selectedBar;
-      const bool applied = editModel(bridge, [&](MeshData& edited, FixedDOFMap&) {
+      const bool applied = editModel(bridge, [&](MeshData& edited) {
         return bar < edited.trussElements.size() && assign(edited.trussElements[bar]);
       });
       if (applied) setStatus(std::format("Bar {} updated", bar), false);
@@ -390,7 +379,7 @@ namespace anaf::GUI {
     ImGui::SameLine();
     if (ImGui::Button("Delete Bar")) {
       const auto bar = m_selectedBar;
-      const bool deleted = editModel(bridge, [&](MeshData& edited, FixedDOFMap&) {
+      const bool deleted = editModel(bridge, [&](MeshData& edited) {
         if (bar >= edited.trussElements.size()) return false;
         edited.trussElements.erase(edited.trussElements.begin() + static_cast<std::ptrdiff_t>(bar));
         return true;
@@ -428,7 +417,7 @@ namespace anaf::GUI {
     ImGui::BeginDisabled(bars == 0 && (wireframe == 0 || !m_includeWireframe));
     if (ImGui::Button("Apply to Whole Model", ImVec2(-1.0f, 0.0f))) {
       std::size_t changed = 0;
-      const bool applied = editModel(bridge, [&](MeshData& edited, FixedDOFMap&) {
+      const bool applied = editModel(bridge, [&](MeshData& edited) {
         const auto index = bridge.findMaterialIndex(m_wholeMaterialID); // editModel holds dataMutex
         if (!index || !(m_wholeAreaCm2 > 0.0)) return false;
         for (auto& element : edited.trussElements) {
@@ -553,7 +542,7 @@ namespace anaf::GUI {
 
     ImGui::BeginDisabled(!inclinedError.empty());
     if (ImGui::Button("Apply Support", ImVec2(-1.0f, 0.0f))) {
-      const bool applied = editModel(bridge, [&](MeshData& mesh, FixedDOFMap& fixity) {
+      const bool applied = editModel(bridge, [&](MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
         auto& node = mesh.trussNodes[selectedNode];
         if (!m_supportInclined) {
@@ -564,12 +553,9 @@ namespace anaf::GUI {
         } else {
           node.setAllowedMotionDirections(allowed);
         }
-        // Global axes that are not in the allowed subspace; never all free for a real support,
-        // so the fixity entry (and the export) keeps the node.
+        // The checkboxes show the global axes outside the allowed subspace.
         const auto& movable = node.getMovable();
         m_fixed = {!movable[0], !movable[1], !movable[2]};
-        if (m_fixed[0] || m_fixed[1] || m_fixed[2]) fixity[selectedNode] = m_fixed;
-        else fixity.erase(selectedNode);
         return true;
       });
       if (applied) setStatus(std::format("Support of node {} updated", selectedNode), false);
@@ -578,7 +564,7 @@ namespace anaf::GUI {
 
     ImGui::InputScalarN("Force [N]", ImGuiDataType_Double, m_force.data(), 3, nullptr, nullptr, "%.4g");
     const auto setLoad = [&](const std::array<double, 3> force) {
-      return editModel(bridge, [&](MeshData& mesh, FixedDOFMap&) {
+      return editModel(bridge, [&](MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
         std::erase_if(mesh.appliedForces, [&](const FEM::TRUSS::ForceApplied& applied) {
           return applied.getAppliedNode() == selectedNode;

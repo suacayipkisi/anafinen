@@ -16,7 +16,7 @@ TRUSS_WORKER::startSolve(source)                         progress
    |
    +-- source()                    snapshot (SQPT: buildSimpleTruss() + loads)
    +-- Truss_Imported_or_Entered (trussSolver_Imported.cpp)
-         +-- setModel(snapshot, fixity copy, materials copy)  0.20
+         +-- setModel(snapshot, materials copy)               0.20
          +-- setForce(snapshot loads) -> m_forceVec[3*id + axis]  0.25
          +-- setContainer()   Truss_1D_Container gets std::span views  0.30
          +-- calculate() = detail::runStaticSolve()
@@ -58,7 +58,7 @@ The element constructor rejects invalid input by throwing `std::invalid_argument
 - `setAllowedMotionDirections()` accepts arbitrary directions, orthonormalizes them with Gram-Schmidt (`FEM::TRUSS::orthonormalize()`, which throws on zero or dependent vectors, relative tolerance 1e-9), and derives `m_isMovable` from them. An axis is movable only if it lies in the span of the basis.
 - `FEM::TRUSS::orthogonalComplement()` gives the perpendicular directions of a basis (each step takes the global axis with the largest part outside the span). The model editor uses it to turn restrained directions into the allowed motion.
 - The solver works on the allowed-motion basis, not on `m_isMovable` (section 6). For an inclined support `m_isMovable` is only a summary: an axis counts as movable only when it lies fully in the span, so a roller along (1, 1, 0) reports x and y as fixed.
-- `hasInclinedSupport()` is true when a basis vector is not a global axis. `Truss_Imported_or_Entered::setModel()` keeps such a node's basis instead of the axis fixity map, and `ADAPTER::toMeshModel()` writes it as `NodeConstraint::allowedMotion`.
+- `hasInclinedSupport()` is true when a basis vector is not a global axis. `isSupported()` is true when fewer than three directions are allowed. The node is the only place a support is stored (there is no separate fixity map since 2026-10-02): `Truss_Imported_or_Entered::setModel()` copies every node's basis, and `ADAPTER::toMeshModel()` writes a `NodeConstraint` for every supported node (an inclined one with `allowedMotion`).
 
 ## 3. Mesh generation: simple quadrangle prism truss
 
@@ -84,12 +84,12 @@ The input is a `MeshData` snapshot: generated (section 3), a library model (sect
 ```text
 Truss_Imported_or_Entered (trussSolver_Imported.cpp)       progress
    |
-   +-- setModel(snapshot, fixity copy, materials copy)      0.20
+   +-- setModel(snapshot, materials copy)                   0.20
    |     nodes: ids must equal positions 0..n-1
    |     bars:  every RenderElement except isWireframe
    |            -> TrussElement_1D(materialID, area, node1, node2)
    |     nodes used by no bar -> all DOFs fixed (warning)
-   |     fixity copy          -> Node::setMovable()
+   |     snapshot node support -> setAllowedMotionDirections()
    |
    +-- setForce(snapshot loads)                             0.25
    +-- setContainer()                                       0.30

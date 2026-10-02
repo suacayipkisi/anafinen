@@ -48,7 +48,6 @@ namespace anaf::BRIDGE {
     {
       std::lock_guard lock(dataMutex);
       activeMesh = nullptr;
-      fixedDOFsByNode.clear();
       hasTrussPreview = false;
       selectedNodeId = std::numeric_limits<std::uint32_t>::max();
       m_isValid = false;

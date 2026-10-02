@@ -66,14 +66,34 @@ namespace {
     return dir;
   }
 
-  // Runs the one solve pipeline exactly like TRUSS_WORKER::startSolve() (both truss panels).
-  std::expected<std::shared_ptr<BRIDGE::MeshData>, std::string> solveImported(const BRIDGE::MeshData& mesh,
-                                                                              const BRIDGE::FixedDOFMap& fixity) {
+  // Axis supports by node id, put on the snapshot's nodes (the only place a support is stored).
+  using Fixity = std::map<std::uint32_t, std::array<bool, 3>>;
+
+  void applyFixity(BRIDGE::MeshData& mesh, const Fixity& fixity) {
+    for (const auto& [id, fixed] : fixity) mesh.trussNodes[id].setMovable({!fixed[0], !fixed[1], !fixed[2]});
+  }
+
+  // Axis supports read back from the nodes.
+  Fixity fixityOf(const BRIDGE::MeshData& mesh) {
+    Fixity fixity;
+    for (const auto& node : mesh.trussNodes) {
+      const auto& movable = node.getMovable();
+      if (node.isSupported()) fixity[node.getNodeID()] = {!movable[0], !movable[1], !movable[2]};
+    }
+    return fixity;
+  }
+
+  // Runs the one solve pipeline exactly like TRUSS_WORKER::startSolve() (both truss panels),
+  // with fixity added to the supports already on the nodes.
+  std::expected<std::shared_ptr<BRIDGE::MeshData>, std::string> solveImported(const BRIDGE::MeshData& source,
+                                                                              const Fixity& fixity = {}) {
     auto& bridge = BRIDGE::buildBridge();
     const auto materials = bridge.allMaterials;
+    BRIDGE::MeshData mesh = source;
+    applyFixity(mesh, fixity);
     std::stop_source stop;
     FEM::TRUSS::Truss_Imported_or_Entered solver;
-    if (auto ready = solver.setModel(bridge, stop.get_token(), mesh, fixity, materials); !ready) {
+    if (auto ready = solver.setModel(bridge, stop.get_token(), mesh, materials); !ready) {
       return std::unexpected(ready.error());
     }
     solver.setForce(bridge, stop.get_token(), mesh.appliedForces);
@@ -83,19 +103,20 @@ namespace {
   }
 
   // The generated 5 x 1 x 5 grid, solved like the Simple Quadrangle panel does it.
-  std::shared_ptr<BRIDGE::MeshData> solvedSnapshot(BRIDGE::FixedDOFMap& fixity) {
+  std::shared_ptr<BRIDGE::MeshData> solvedSnapshot(Fixity& fixity) {
     auto& bridge = BRIDGE::buildBridge();
     if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
     fixity = {{0u, {true, true, true}}, {5u, {true, true, true}}, {60u, {true, true, true}}, {65u, {false, true, false}}};
     auto grid = FEM::TRUSS::buildSimpleTruss({5, 1, 5}, 1.0, 80.0e-4, 1);
     REQUIRE(grid.has_value());
     grid->appliedForces = {{20u, {0.0, -12000.0, 0.0}}, {27u, {500.0, 0.0, -250.0}}};
-    auto solved = solveImported(*grid, fixity);
+    applyFixity(*grid, fixity);
+    auto solved = solveImported(*grid);
     REQUIRE(solved.has_value());
     return *solved;
   }
 
-  void compareSnapshots(const BRIDGE::MeshData& expected, const BRIDGE::FixedDOFMap& expectedFixity,
+  void compareSnapshots(const BRIDGE::MeshData& expected, const Fixity& expectedFixity,
                         const FEM::TRUSS::ADAPTER::ImportedTruss& actual, const std::string& label) {
     const auto& mesh = *actual.mesh;
     CHECK_MSG(mesh.hasResults, label);
@@ -116,11 +137,9 @@ namespace {
         && a.crossSectionArea == b.crossSectionArea && a.isStressExceeded == b.isStressExceeded;
     }
     CHECK_MSG(elements, label + " elements");
-    std::map<std::uint32_t, std::array<bool, 3>> fixedOnly;
+    Fixity fixedOnly;
     for (const auto& [node, fixed] : expectedFixity) if (fixed[0] || fixed[1] || fixed[2]) fixedOnly[node] = fixed;
-    using FixityMap = std::map<std::uint32_t, std::array<bool, 3>>;
-    const bool sameFixity = FixityMap(actual.fixity.begin(), actual.fixity.end()) == fixedOnly;
-    CHECK_MSG(sameFixity, label + " fixity");
+    CHECK_MSG(fixityOf(mesh) == fixedOnly, label + " fixity");
     REQUIRE(mesh.appliedForces.size() == expected.appliedForces.size());
     for (std::size_t f = 0; f < expected.appliedForces.size(); ++f) {
       CHECK_MSG(mesh.appliedForces[f].getAppliedNode() == expected.appliedForces[f].getAppliedNode(), label);
@@ -146,10 +165,10 @@ TEST(invalidGridParametersAreRefusedBeforeBuilding) {
 }
 
 TEST(solvedTrussSurvivesEveryWritableFormat) {
-  BRIDGE::FixedDOFMap fixity;
+  Fixity fixity;
   const auto snapshot = solvedSnapshot(fixity);
   REQUIRE(BRIDGE::buildBridge().m_isValid.load());
-  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, fixity, BRIDGE::buildBridge().allMaterials);
+  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, BRIDGE::buildBridge().allMaterials);
   CHECK(model.validate().empty());
 
   struct Variant { const char* file; IO::WriteOptions options; };
@@ -176,9 +195,9 @@ TEST(solvedTrussSurvivesEveryWritableFormat) {
 }
 
 TEST(stepExportKeepsTrussData) {
-  BRIDGE::FixedDOFMap fixity;
+  Fixity fixity;
   const auto snapshot = solvedSnapshot(fixity);
-  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, fixity, BRIDGE::buildBridge().allMaterials);
+  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, BRIDGE::buildBridge().allMaterials);
   const auto path = workDir() / "truss.step";
   REQUIRE(IO::writeMesh(path, model, {}).has_value());
   const auto read = IO::readMesh(path);
@@ -198,7 +217,7 @@ TEST(stepExportKeepsTrussData) {
     return byMidpoint;
   };
   CHECK(stressAt(*snapshot) == stressAt(*imported.mesh));
-  CHECK(imported.fixity.size() == 4);
+  CHECK(fixityOf(*imported.mesh).size() == 4);
   CHECK(imported.mesh->appliedForces.size() == 2);
 }
 
@@ -216,10 +235,10 @@ TEST(solidMeshIsShownAsWireframe) {
 }
 
 TEST(asyncImportConvertsOffTheCallingThread) {
-  BRIDGE::FixedDOFMap fixity;
+  Fixity fixity;
   const auto snapshot = solvedSnapshot(fixity);
   const auto path = workDir() / "async.msh";
-  REQUIRE(IO::writeMesh(path, FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, fixity, BRIDGE::buildBridge().allMaterials), {.encoding = IO::Encoding::Binary}).has_value());
+  REQUIRE(IO::writeMesh(path, FEM::TRUSS::ADAPTER::toMeshModel(*snapshot, BRIDGE::buildBridge().allMaterials), {.encoding = IO::Encoding::Binary}).has_value());
   const auto materials = BRIDGE::buildBridge().allMaterials;
   const auto caller = std::this_thread::get_id();
   std::thread::id worker;
@@ -237,12 +256,12 @@ TEST(asyncImportConvertsOffTheCallingThread) {
 }
 
 TEST(importedTrussSolvesLikeTheGeneratedOne) {
-  BRIDGE::FixedDOFMap fixity;
+  Fixity fixity;
   const auto generated = solvedSnapshot(fixity);
 
   // Through a file, as File > Import delivers it; the results are dropped before solving.
   const auto path = workDir() / "resolve.msh";
-  REQUIRE(IO::writeMesh(path, FEM::TRUSS::ADAPTER::toMeshModel(*generated, fixity, BRIDGE::buildBridge().allMaterials), {}).has_value());
+  REQUIRE(IO::writeMesh(path, FEM::TRUSS::ADAPTER::toMeshModel(*generated, BRIDGE::buildBridge().allMaterials), {}).has_value());
   const auto read = IO::readMesh(path);
   REQUIRE(read.has_value());
   auto imported = FEM::TRUSS::ADAPTER::toMeshData(*read, BRIDGE::buildBridge().allMaterials);
@@ -250,7 +269,7 @@ TEST(importedTrussSolvesLikeTheGeneratedOne) {
   for (auto& element : imported.mesh->trussElements) element.stress = 0.0f;
   imported.mesh->hasResults = false;
 
-  const auto solved = solveImported(*imported.mesh, imported.fixity);
+  const auto solved = solveImported(*imported.mesh);
   if (!solved) std::printf("      %s\n", solved.error().c_str());
   REQUIRE(solved.has_value());
   CHECK(BRIDGE::buildBridge().m_isValid.load());
@@ -292,7 +311,7 @@ TEST(selfBuiltTrussMatchesTheHandSolution) {
                         {0u, 1u, 0.0f, false, 0u, 0.0, true}}; // wireframe edge: drawn, not solved
   const double load = 1.0e5;
   mesh.appliedForces = {{2u, {0.0, -load, 0.0}}};
-  const BRIDGE::FixedDOFMap fixity{{0u, {true, true, true}}, {1u, {true, true, true}}, {2u, {false, false, true}}};
+  const Fixity fixity{{0u, {true, true, true}}, {1u, {true, true, true}}, {2u, {false, false, true}}};
 
   const auto solved = solveImported(mesh, fixity);
   if (!solved) std::printf("      %s\n", solved.error().c_str());
@@ -373,22 +392,17 @@ TEST(inclinedSupportsMatchTheRotatedModel) {
   }
   axisAligned.appliedForces = {{2u, load}};
   inclined.appliedForces = {{2u, rotate(load)}};
-  const BRIDGE::FixedDOFMap axisFixity{{0u, {true, true, true}}, {1u, {false, true, true}}, {2u, {false, false, true}}};
+  const Fixity axisFixity{{0u, {true, true, true}}, {1u, {false, true, true}}, {2u, {false, false, true}}};
   for (const auto& [id, fixed] : axisFixity) axisAligned.trussNodes[id].setMovable({!fixed[0], !fixed[1], !fixed[2]});
   inclined.trussNodes[0].setMovable({false, false, false});
   inclined.trussNodes[1].setAllowedMotionDirections({rotate({1.0, 0.0, 0.0})});
   inclined.trussNodes[2].setAllowedMotionDirections({rotate({1.0, 0.0, 0.0}), {0.0, 1.0, 0.0}});
   CHECK(inclined.trussNodes[1].hasInclinedSupport());
   CHECK(!axisAligned.trussNodes[1].hasInclinedSupport());
-  BRIDGE::FixedDOFMap inclinedFixity;
-  for (const auto& node : inclined.trussNodes) {
-    const auto& movable = node.getMovable();
-    if (!(movable[0] && movable[1] && movable[2])) inclinedFixity[node.getNodeID()] = {!movable[0], !movable[1], !movable[2]};
-  }
 
   // The inclined model goes through a file, as File > Export / Import delivers it.
   const auto path = workDir() / "inclined.msh";
-  REQUIRE(IO::writeMesh(path, FEM::TRUSS::ADAPTER::toMeshModel(inclined, inclinedFixity, bridge.allMaterials), {}).has_value());
+  REQUIRE(IO::writeMesh(path, FEM::TRUSS::ADAPTER::toMeshModel(inclined, bridge.allMaterials), {}).has_value());
   const auto read = IO::readMesh(path);
   REQUIRE(read.has_value());
   const auto imported = FEM::TRUSS::ADAPTER::toMeshData(*read, bridge.allMaterials);
@@ -396,9 +410,9 @@ TEST(inclinedSupportsMatchTheRotatedModel) {
   CHECK(imported.mesh->trussNodes[1].hasInclinedSupport());
   CHECK(imported.mesh->trussNodes[2].hasInclinedSupport());
 
-  const auto reference = solveImported(axisAligned, axisFixity);
+  const auto reference = solveImported(axisAligned);
   REQUIRE(reference.has_value());
-  const auto solved = solveImported(*imported.mesh, imported.fixity);
+  const auto solved = solveImported(*imported.mesh);
   if (!solved) std::printf("      %s\n", solved.error().c_str());
   REQUIRE(solved.has_value());
   CHECK(bridge.m_isValid.load());
@@ -433,33 +447,32 @@ TEST(importedTrussRejectsUnsolvableModels) {
   if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
   BRIDGE::MeshData mesh;
   mesh.trussNodes = {FEM::TRUSS::Node(0, 0.0, 0.0, 0.0), FEM::TRUSS::Node(1, 1.0, 0.0, 0.0)};
-  const BRIDGE::FixedDOFMap none;
 
-  CHECK(!solveImported(BRIDGE::MeshData{}, none).has_value());          // no nodes
-  CHECK(!solveImported(mesh, none).has_value());                        // no bars
+  CHECK(!solveImported(BRIDGE::MeshData{}).has_value());          // no nodes
+  CHECK(!solveImported(mesh).has_value());                        // no bars
   mesh.trussElements = {{0u, 1u, 0.0f, false, 0u, 0.0, true}};
-  CHECK(!solveImported(mesh, none).has_value());                        // wireframe only
+  CHECK(!solveImported(mesh).has_value());                        // wireframe only
   mesh.trussElements = {{0u, 1u, 0.0f, false, 0u, 0.0, false}};
-  const auto noArea = solveImported(mesh, none);
+  const auto noArea = solveImported(mesh);
   REQUIRE(!noArea.has_value());
   CHECK(noArea.error().find("area") != std::string::npos);
   mesh.trussElements = {{0u, 1u, 0.0f, false, 999u, 1e-4, false}};
-  CHECK(!solveImported(mesh, none).has_value());                        // unknown material
+  CHECK(!solveImported(mesh).has_value());                        // unknown material
   mesh.trussElements = {{0u, 7u, 0.0f, false, 0u, 1e-4, false}};
-  CHECK(!solveImported(mesh, none).has_value());                        // missing node
+  CHECK(!solveImported(mesh).has_value());                        // missing node
   mesh.trussNodes = {FEM::TRUSS::Node(0, 0.0, 0.0, 0.0), FEM::TRUSS::Node(5, 1.0, 0.0, 0.0)};
   mesh.trussElements = {{0u, 1u, 0.0f, false, 0u, 1e-4, false}};
-  CHECK(!solveImported(mesh, none).has_value());                        // ids are not positions
+  CHECK(!solveImported(mesh).has_value());                        // ids are not positions
 }
 
 TEST(resetModelLeavesNothingBehind) {
   auto& bridge = BRIDGE::buildBridge();
   auto mesh = std::make_shared<BRIDGE::MeshData>();
   mesh->trussNodes = {FEM::TRUSS::Node(0, 0.0, 0.0, 0.0)};
+  mesh->trussNodes[0].setMovable({false, false, false}); // the support goes with the snapshot
   {
     std::lock_guard lock(bridge.dataMutex);
     bridge.activeMesh = mesh;
-    bridge.fixedDOFsByNode[0u] = {true, true, true};
     bridge.selectedNodeId = 0u;
     bridge.hasTrussPreview = true;
   }
@@ -470,7 +483,6 @@ TEST(resetModelLeavesNothingBehind) {
   bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
   CHECK(bridge.m_objectType.load() == BRIDGE::ObjectType::truss_imported_or_entered);
   CHECK(bridge.activeMesh == nullptr);
-  CHECK(bridge.fixedDOFsByNode.empty());
   CHECK(bridge.selectedNodeId == std::numeric_limits<std::uint32_t>::max());
   CHECK(!bridge.hasTrussPreview);
   CHECK(!bridge.m_isRunning.load() && !bridge.m_isGeneratingPreview.load());
@@ -489,19 +501,24 @@ namespace {
     return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
   }
 
-  // Smallest / largest eigenvalue of the reduced stiffness matrix (fixed DOFs removed). A
-  // mechanism (unstable truss) has a zero eigenvalue, so the ratio drops to round-off level.
-  // Large models use the smallest / largest LDLT pivot instead: for a symmetric positive
+  // Smallest / largest eigenvalue of the reduced stiffness matrix T^T K T, where T maps one
+  // DOF per allowed motion direction of each node (supports, inclined ones too) to the global
+  // DOFs. A mechanism (unstable truss) has a zero eigenvalue, so the ratio drops to round-off
+  // level. Large models use the smallest / largest LDLT pivot instead: for a symmetric positive
   // definite matrix every pivot lies in [lambda_min, lambda_max], and a mechanism still gives a
   // round-off sized pivot, while a dense eigen solve of a few thousand DOFs would take minutes.
-  double stiffnessConditionRatio(const BRIDGE::MeshData& mesh, const BRIDGE::FixedDOFMap& fixity,
-                                 std::span<const MATERIAL::Material> materials) {
+  double stiffnessConditionRatio(const BRIDGE::MeshData& mesh, std::span<const MATERIAL::Material> materials) {
     const auto dofs = static_cast<Eigen::Index>(mesh.trussNodes.size() * 3);
-    std::vector<Eigen::Index> reducedIndex(static_cast<std::size_t>(dofs), -1);
+    std::vector<Eigen::Triplet<double>> transform;
     Eigen::Index n = 0;
-    for (Eigen::Index dof = 0; dof < dofs; ++dof) {
-      const auto it = fixity.find(static_cast<std::uint32_t>(dof / 3));
-      if (it == fixity.end() || !it->second[static_cast<std::size_t>(dof % 3)]) reducedIndex[static_cast<std::size_t>(dof)] = n++;
+    for (const auto& node : mesh.trussNodes) {
+      for (const auto& direction : node.getAllowedMotionDirections()) {
+        for (Eigen::Index axis = 0; axis < 3; ++axis) {
+          const double factor = direction[static_cast<std::size_t>(axis)];
+          if (factor != 0.0) transform.emplace_back(3 * static_cast<Eigen::Index>(node.getNodeID()) + axis, n, factor);
+        }
+        ++n;
+      }
     }
     std::vector<Eigen::Triplet<double>> triplets;
     for (const auto& element : mesh.trussElements) {
@@ -516,17 +533,15 @@ namespace {
       for (std::size_t p = 0; p < 2; ++p) {
         for (std::size_t q = 0; q < 2; ++q) {
           for (Eigen::Index r = 0; r < 3; ++r) {
-            for (Eigen::Index s = 0; s < 3; ++s) {
-              const auto row = reducedIndex[static_cast<std::size_t>(base[p] + r)];
-              const auto col = reducedIndex[static_cast<std::size_t>(base[q] + s)];
-              if (row >= 0 && col >= 0) triplets.emplace_back(row, col, (p == q ? 1.0 : -1.0) * block(r, s));
-            }
+            for (Eigen::Index s = 0; s < 3; ++s) triplets.emplace_back(base[p] + r, base[q] + s, (p == q ? 1.0 : -1.0) * block(r, s));
           }
         }
       }
     }
-    Eigen::SparseMatrix<double> reduced(n, n);
-    reduced.setFromTriplets(triplets.begin(), triplets.end());
+    Eigen::SparseMatrix<double> global(dofs, dofs), t(dofs, n);
+    global.setFromTriplets(triplets.begin(), triplets.end());
+    t.setFromTriplets(transform.begin(), transform.end());
+    const Eigen::SparseMatrix<double> reduced = t.transpose() * global * t;
     if (n <= 1200) {
       const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen(Eigen::MatrixXd(reduced), Eigen::EigenvaluesOnly);
       return eigen.eigenvalues().minCoeff() / eigen.eigenvalues().maxCoeff();
@@ -608,12 +623,12 @@ TEST(builtInTrussesAreStableAndSolve) {
     CHECK_MSG(std::ranges::all_of(imported.mesh->trussElements, [](const BRIDGE::RenderElement& e) {
       return !e.isWireframe && e.crossSectionArea > 0.0;
     }), entry.id);
-    CHECK_MSG(!imported.fixity.empty() && !imported.mesh->appliedForces.empty(), entry.id);
+    CHECK_MSG(!fixityOf(*imported.mesh).empty() && !imported.mesh->appliedForces.empty(), entry.id);
 
-    const double ratio = stiffnessConditionRatio(*imported.mesh, imported.fixity, bridge.allMaterials);
+    const double ratio = stiffnessConditionRatio(*imported.mesh, bridge.allMaterials);
     CHECK_MSG(ratio > 1e-12, std::format("{}: mechanism (lambda_min / lambda_max = {:.3g})", entry.id, ratio));
 
-    const auto solved = solveImported(*imported.mesh, imported.fixity);
+    const auto solved = solveImported(*imported.mesh);
     if (!solved) std::printf("      %s: %s\n", entry.id.c_str(), solved.error().c_str());
     REQUIRE(solved.has_value());
     CHECK_MSG(bridge.m_isValid.load(), entry.id + " energy check");
@@ -723,7 +738,7 @@ TEST(userMaterialsArePersistedOutsideTheAssets) {
 }
 
 TEST(materialsAreMatchedByNameWhenTheListChanges) {
-  BRIDGE::FixedDOFMap fixity;
+  Fixity fixity;
   auto snapshot = solvedSnapshot(fixity);
   const auto& builtins = BRIDGE::buildBridge().allMaterials;
   REQUIRE(builtins.size() >= 2);
@@ -740,7 +755,7 @@ TEST(materialsAreMatchedByNameWhenTheListChanges) {
     builtins[0], renamedCopy(builtins[0], "New Built-in"), builtins[1], renamedCopy(builtins[0], "copper c110 (ANNEALED)")};
   const std::map<std::uint32_t, std::uint32_t> expectedIndex{{0u, 0u}, {1u, 2u}, {userIndex, 3u}};
 
-  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*mesh, fixity, atExport);
+  const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*mesh, atExport);
   for (const char* file : {"names.msh", "names22.msh", "names.vtk", "names.vtu", "names.step"}) {
     const auto path = workDir() / file;
     IO::WriteOptions options;

@@ -39,15 +39,13 @@ namespace FEM::TRUSS::ADAPTER {
   // export time) is still written for viewers such as ParaView and for older anafinen.
   inline constexpr std::string_view kMaterialSetPrefix = "Material:";
 
-  // Snapshot + boundary conditions -> model (for export). Results are included when the
-  // snapshot carries them (MeshData::hasResults). materials: the list the snapshot's
-  // materialID values index into (bridge.allMaterials).
-  anaf::IO::MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, const anaf::BRIDGE::FixedDOFMap& fixity,
-                                  std::span<const anaf::MATERIAL::Material> materials);
+  // Snapshot -> model (for export). Supports come from the nodes (Node::isSupported());
+  // results are included when the snapshot carries them (MeshData::hasResults). materials:
+  // the list the snapshot's materialID values index into (bridge.allMaterials).
+  anaf::IO::MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, std::span<const anaf::MATERIAL::Material> materials);
 
   struct ImportedTruss {
-    std::shared_ptr<anaf::BRIDGE::MeshData> mesh;
-    anaf::BRIDGE::FixedDOFMap fixity;
+    std::shared_ptr<anaf::BRIDGE::MeshData> mesh; // supports are set on its nodes
     std::vector<std::string> notes; // user-facing remarks (e.g. elements shown as wireframe)
   };
 

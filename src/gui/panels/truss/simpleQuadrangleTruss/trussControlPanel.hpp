@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <map>
 #include <vector>
 
 namespace anaf::GUI {
@@ -38,15 +39,17 @@ namespace anaf::GUI {
     double m_crossSectionalArea{80.0};
     std::uint32_t m_forceNodeId{126};
     std::array<double, 3> m_forceVector{0.0, 10000.0, 0.0};
+    // Loads and supports are panel inputs like the grid: the grid is rebuilt for every preview
+    // and solve, and these are put on its nodes (node id -> fixed x / y / z).
     std::vector<FEM::TRUSS::ForceApplied> m_appliedForces;
+    std::map<std::uint32_t, std::array<bool, 3>> m_supports;
     std::array<bool, 3> m_fixed{false, false, false};
-    bool m_fixChanged{false};
     std::uint32_t m_lastFixNode{std::numeric_limits<std::uint32_t>::max()};
   public:
     ~TrussControlPanel() override = default;
     std::function<void()> onOpenMaterialHandler;
 
-    // Back to the default inputs (loads, fixity checkboxes, grid). The model itself lives in
+    // Back to the default inputs (loads, supports, grid). The model itself lives in
     // the bridge and is cleared with Gui_Calc_Bridge::resetModel().
     void resetState();
     void onImGuiRender() override;

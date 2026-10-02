@@ -46,16 +46,15 @@ namespace FEM::TRUSS{
   public:
     Truss_Imported_or_Entered() = default;
 
-    // Builds the solver nodes and bars and applies the fixity (a copy owned by the worker: the
-    // GUI thread may change bridge.fixedDOFsByNode while the solve runs). A node of mesh with an inclined support keeps its allowed directions
-    // instead of the axis fixity. Wireframe edges are skipped. Nodes that no bar uses are held fixed, so a
-    // stray node does not make the stiffness matrix singular. Returns why the model cannot
-    // be solved (no bars, bars without area, unknown material, zero-length bar, ...).
+    // Builds the solver nodes and bars. Supports come from the snapshot's nodes (allowed
+    // motion directions, inclined or along the axes). Wireframe edges are skipped. Nodes that no
+    // bar uses are held fixed, so a stray node does not make the stiffness matrix singular.
+    // Returns why the model cannot be solved (no bars, bars without area, unknown material,
+    // zero-length bar, ...).
     std::expected<void, std::string> setModel(
       anaf::BRIDGE::Gui_Calc_Bridge& bridge,
       std::stop_token st,
       const anaf::BRIDGE::MeshData& mesh,
-      const anaf::BRIDGE::FixedDOFMap& fixedDOFsByNode,
       std::span<const anaf::MATERIAL::Material> materials
     );
 

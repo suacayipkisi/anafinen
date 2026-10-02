@@ -33,8 +33,7 @@ namespace FEM::TRUSS::ADAPTER {
 
   using namespace anaf::IO;
 
-  MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, const anaf::BRIDGE::FixedDOFMap& fixity,
-                        const std::span<const anaf::MATERIAL::Material> materials) {
+  MeshModel toMeshModel(const anaf::BRIDGE::MeshData& mesh, const std::span<const anaf::MATERIAL::Material> materials) {
     MeshModel model;
     model.title = "anafinen truss";
 
@@ -78,13 +77,13 @@ namespace FEM::TRUSS::ADAPTER {
       model.sets.push_back(std::move(set));
     }
 
-    for (const auto& [id, fixed] : fixity) {
-      if (!(fixed[0] || fixed[1] || fixed[2])) continue;
-      if (const auto it = indexById.find(id); it != indexById.end()) {
-        const auto& node = mesh.trussNodes[it->second];
-        auto allowedMotion = node.hasInclinedSupport() ? node.getAllowedMotionDirections() : std::vector<std::array<double, 3>>{};
-        model.constraints.push_back(NodeConstraint{it->second, fixed, std::move(allowedMotion), {}, {}});
-      }
+    for (std::uint32_t i = 0; i < mesh.trussNodes.size(); ++i) {
+      const auto& node = mesh.trussNodes[i];
+      if (!node.isSupported()) continue;
+      // The axes outside the allowed subspace; an inclined support also stores its basis.
+      const auto& movable = node.getMovable();
+      auto allowedMotion = node.hasInclinedSupport() ? node.getAllowedMotionDirections() : std::vector<std::array<double, 3>>{};
+      model.constraints.push_back(NodeConstraint{i, {!movable[0], !movable[1], !movable[2]}, std::move(allowedMotion), {}, {}});
     }
     for (const auto& force : mesh.appliedForces) {
       if (const auto it = indexById.find(force.getAppliedNode()); it != indexById.end()) {
@@ -201,7 +200,6 @@ namespace FEM::TRUSS::ADAPTER {
     for (const auto& [a, b] : wireframeEdges) mesh.trussElements.push_back({a, b, 0.0f, false, 0u, 0.0, true});
 
     for (const auto& constraint : model.constraints) {
-      result.fixity[constraint.node] = constraint.fixed;
       auto& node = mesh.trussNodes[constraint.node];
       node.setMovable({!constraint.fixed[0], !constraint.fixed[1], !constraint.fixed[2]});
       if (!constraint.allowedMotion.empty()) {

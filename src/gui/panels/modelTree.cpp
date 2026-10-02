@@ -19,6 +19,7 @@
 
 #include "imgui.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -37,22 +38,29 @@ namespace anaf::GUI {
 
     if (ImGui::TreeNode("Boundary Conditions (fix and forces)")) {
       ImGui::Text("Applied Fixity");
-      {
-        std::lock_guard lock(bridge.dataMutex); // fixedDOFsByNode is mutable bridge state
-        if (bridge.fixedDOFsByNode.empty()) {
-          ImGui::TextDisabled("No fixed DOFs yet...");
-        } else {
-          ImGui::BeginChild("Applied Fixity List", ImVec2(0, 110), true);
-          for (const auto& [nodeId, dofs] : bridge.fixedDOFsByNode) {
-            ImGui::Text("Node %u: X=%s, Y=%s, Z=%s",
-              nodeId,
-              dofs[0] ? "fixed" : "free",
-              dofs[1] ? "fixed" : "free",
-              dofs[2] ? "fixed" : "free"
-            );
+      const auto supported = meshData
+        ? std::ranges::count_if(meshData->trussNodes, [](const FEM::TRUSS::Node& node) { return node.isSupported(); })
+        : 0;
+      if (supported == 0) {
+        ImGui::TextDisabled("No fixed DOFs yet...");
+      } else {
+        ImGui::BeginChild("Applied Fixity List", ImVec2(0, 110), true);
+        for (const auto& node : meshData->trussNodes) {
+          if (!node.isSupported()) continue;
+          if (node.hasInclinedSupport()) {
+            const auto& allowed = node.getAllowedMotionDirections();
+            ImGui::Text("Node %u: inclined, moves %s", node.getNodeID(),
+                        allowed.empty() ? "nowhere" : (allowed.size() == 1 ? "along a line" : "on a plane"));
+            continue;
           }
-          ImGui::EndChild();
+          const auto& movable = node.getMovable();
+          ImGui::Text("Node %u: X=%s, Y=%s, Z=%s", node.getNodeID(),
+            movable[0] ? "free" : "fixed",
+            movable[1] ? "free" : "fixed",
+            movable[2] ? "free" : "fixed"
+          );
         }
+        ImGui::EndChild();
       }
 
       ImGui::Text("Applied Forces");

@@ -32,12 +32,10 @@ namespace anaf::GUI::TRUSS_WORKER {
   void startSolve(BRIDGE::Gui_Calc_Bridge& bridge, ModelSource source) {
     // Join first: a worker that is still finishing clears m_isRunning on exit.
     bridge.joinWorker();
-    BRIDGE::FixedDOFMap fixity;
     std::vector<MATERIAL::Material> materials;
     std::uint64_t generation = 0;
     {
       std::lock_guard lock(bridge.dataMutex);
-      fixity = bridge.fixedDOFsByNode;
       materials = bridge.allMaterials;
       generation = bridge.modelGeneration.load();
     }
@@ -45,7 +43,7 @@ namespace anaf::GUI::TRUSS_WORKER {
     bridge.m_progress = 0.0f;
 
     bridge.workerThread = std::jthread(
-      [&bridge, source = std::move(source), fixity = std::move(fixity), materials = std::move(materials), generation]
+      [&bridge, source = std::move(source), materials = std::move(materials), generation]
       (std::stop_token st) {
         try {
           configureOpenMPForWorker();
@@ -53,7 +51,7 @@ namespace anaf::GUI::TRUSS_WORKER {
           FEM::TRUSS::Truss_Imported_or_Entered solver;
           if (!model) {
             anaf::LOG::error("Solver not started: {}", model.error());
-          } else if (const auto ready = solver.setModel(bridge, st, **model, fixity, materials); !ready) {
+          } else if (const auto ready = solver.setModel(bridge, st, **model, materials); !ready) {
             anaf::LOG::error("Solver not started: {}", ready.error());
           } else {
             solver.setForce(bridge, st, (*model)->appliedForces);

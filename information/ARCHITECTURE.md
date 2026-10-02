@@ -86,7 +86,7 @@ Rules:
 - Only one worker exists at a time. A panel calls `bridge.joinWorker()` before it sets `m_isRunning` / `m_isGeneratingPreview` and starts a new `std::jthread`, because a worker that is still finishing clears those flags on exit.
 - `bridge.resetModel(type)` (object type change, Clear, Load Demo, a new import) bumps `modelGeneration` and requests stop without joining. A worker publishes only if `modelGeneration` still has the value it took at start, so a solve that outlives a reset never brings the old model back ([BRIDGE.md](BRIDGE.md) section 4.1).
 - The worker never mutates a published `MeshData`. It builds a new one and swaps the `shared_ptr` under `dataMutex`.
-- The worker never reads mutable bridge containers directly. `fixedDOFsByNode` and `allMaterials` are copied under `dataMutex` on the GUI thread and moved into the worker lambda.
+- The worker never reads mutable bridge containers directly. `allMaterials` is copied under `dataMutex` on the GUI thread and moved into the worker lambda; supports and loads travel inside the immutable snapshot.
 - Thread count: `configureOpenMPForWorker()` (`gui/panels/truss/trussWorker.hpp`) sets OpenMP/Eigen to `cores - 2` when there are more than 4 cores. `main.cpp` calls it once at startup; every worker calls it again because OpenMP thread settings are per thread.
 
 ## 5. Startup sequence

@@ -21,7 +21,6 @@
 #include <truss_1D/trussProperties/appliedForce.hpp>
 #include <truss_1D/trussProperties/node.hpp>
 
-#include <array>
 #include <atomic>
 #include <cstdint>
 #include <expected>
@@ -33,7 +32,6 @@
 #include <string>
 #include <string_view>
 #include <thread>
-#include <unordered_map>
 #include <vector>
 
 namespace anaf::BRIDGE {
@@ -44,9 +42,6 @@ namespace anaf::BRIDGE {
   };
 
   std::string_view getObjectTypeName(ObjectType obj);
-
-  // nodeId -> {fixedX, fixedY, fixedZ}
-  using FixedDOFMap = std::unordered_map<std::uint32_t, std::array<bool, 3>>;
 
   struct RenderElement {
     std::uint32_t node1{};
@@ -129,11 +124,11 @@ namespace anaf::BRIDGE {
     // selection across removals. Guarded by dataMutex.
     std::vector<anaf::MATERIAL::Material> allMaterials;
 
-    FixedDOFMap fixedDOFsByNode;
     std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};
     bool hasTrussPreview{false};
 
-    // Drops the whole model (snapshot, fixity, selection, solve status) and switches to type.
+    // Drops the whole model (snapshot with its supports and loads, selection, solve status)
+    // and switches to type.
     // A running worker is asked to stop and can no longer publish (see modelGeneration).
     // Call from the GUI thread; panels reset their own inputs separately.
     void resetModel(ObjectType type);

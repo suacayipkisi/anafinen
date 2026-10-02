@@ -33,7 +33,6 @@ namespace FEM::TRUSS {
     anaf::BRIDGE::Gui_Calc_Bridge& bridge,
     std::stop_token st,
     const anaf::BRIDGE::MeshData& mesh,
-    const anaf::BRIDGE::FixedDOFMap& fixedDOFsByNode,
     std::span<const anaf::MATERIAL::Material> materials
   ) {
     m_nodes.clear();
@@ -107,18 +106,9 @@ namespace FEM::TRUSS {
         ++isolated;
         continue;
       }
-      if (const auto& source = mesh.trussNodes[id]; source.hasInclinedSupport()) {
-        node.setAllowedMotionDirections(source.getAllowedMotionDirections());
-        ++fixedNodes;
-        continue;
-      }
-      const auto it = fixedDOFsByNode.find(id);
-      if (it != fixedDOFsByNode.end() && (it->second[0] || it->second[1] || it->second[2])) {
-        node.setMovable({!it->second[0], !it->second[1], !it->second[2]});
-        ++fixedNodes;
-      } else {
-        node.setMovable({true, true, true});
-      }
+      const auto& source = mesh.trussNodes[id];
+      node.setAllowedMotionDirections(source.getAllowedMotionDirections());
+      if (source.isSupported()) ++fixedNodes;
     }
     if (isolated > 0) anaf::LOG::warn("{} nodes are not connected to any bar; they are held fixed", isolated);
     anaf::LOG::info("Model: {} nodes, {} bars, {} supported nodes", nodeCount, m_elements.size(), fixedNodes);

@@ -46,7 +46,8 @@ namespace anaf::GUI::TRUSS_WORKER {
   using ModelSource = std::function<std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string>()>;
 
   // The one solve path of every truss panel: runs Truss_Imported_or_Entered on
-  // bridge.workerThread with copies of the fixity and material list taken now, and publishes
+  // bridge.workerThread with a copy of the material list taken now (supports and loads are in
+  // the snapshot), and publishes
   // the result snapshot unless the model was reset meanwhile (modelGeneration).
   // Call from the GUI thread.
   void startSolve(BRIDGE::Gui_Calc_Bridge& bridge, ModelSource source);
