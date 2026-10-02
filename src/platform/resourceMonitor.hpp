@@ -23,8 +23,9 @@
 namespace anaf::PLATFORM {
 
   // Process CPU / RAM and system RAM usage, sampled at most every 500 ms.
-  // Linux: /proc. Windows: GetProcessTimes / GetSystemTimes, GetProcessMemoryInfo,
-  // GlobalMemoryStatusEx. Other platforms report nothing (available == false).
+  // Linux: /proc. Windows: GetProcessTimes / GetSystemTimes, GetProcessMemoryInfo. System
+  // RAM comes from queryMemory() (systemInfo.hpp). Other platforms report nothing
+  // (available == false).
   class ResourceMonitor {
   public:
     struct Usage {

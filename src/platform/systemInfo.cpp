@@ -92,16 +92,6 @@ namespace anaf::PLATFORM {
         break;
       }
     }
-    std::ifstream meminfo("/proc/meminfo");
-    while (std::getline(meminfo, line)) {
-      if (line.starts_with("MemTotal:")) {
-        std::istringstream fields(line.substr(9));
-        double kib = 0.0;
-        fields >> kib;
-        info.totalRamGiB = kib / (1024.0 * 1024.0);
-        break;
-      }
-    }
 #elif defined(_WIN32)
     wchar_t buffer[256]{};
     DWORD bytes = sizeof(buffer);
@@ -109,13 +99,36 @@ namespace anaf::PLATFORM {
                      L"ProcessorNameString", RRF_RT_REG_SZ, nullptr, buffer, &bytes) == ERROR_SUCCESS) {
       info.cpuName = toUtf8(buffer);
     }
-    MEMORYSTATUSEX memory{};
-    memory.dwLength = sizeof(memory);
-    if (GlobalMemoryStatusEx(&memory)) info.totalRamGiB = static_cast<double>(memory.ullTotalPhys) / (1024.0 * 1024.0 * 1024.0);
 #endif
+    if (const auto memory = queryMemory()) info.totalRamGiB = memory->totalGiB;
 
     info.cpuName = info.cpuName.empty() ? std::string("CPU") : shortCpuName(info.cpuName);
     return info;
+  }
+
+  std::optional<MemoryStatus> queryMemory() {
+    constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
+#if defined(__linux__)
+    std::ifstream meminfo("/proc/meminfo");
+    std::string line;
+    double totalKiB = 0.0, availableKiB = 0.0;
+    while (std::getline(meminfo, line)) {
+      std::istringstream fields(line);
+      std::string key;
+      double value = 0.0;
+      fields >> key >> value;
+      if (key == "MemTotal:") totalKiB = value;
+      if (key == "MemAvailable:") availableKiB = value;
+    }
+    if (totalKiB > 0.0) return MemoryStatus{totalKiB * 1024.0 / kGiB, std::min(availableKiB, totalKiB) * 1024.0 / kGiB};
+#elif defined(_WIN32)
+    MEMORYSTATUSEX memory{};
+    memory.dwLength = sizeof(memory);
+    if (GlobalMemoryStatusEx(&memory) && memory.ullTotalPhys > 0) {
+      return MemoryStatus{static_cast<double>(memory.ullTotalPhys) / kGiB, static_cast<double>(memory.ullAvailPhys) / kGiB};
+    }
+#endif
+    return std::nullopt;
   }
 
   std::optional<double> queryVideoMemoryGiB([[maybe_unused]] const std::string_view gpuName) {

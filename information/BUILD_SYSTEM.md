@@ -46,10 +46,10 @@ CMakeLists.txt
 |---|---|---|---|
 | `project_warnings_and_optimizations` | INTERFACE | Release flags and defines | - |
 | `anaf_io` | STATIC | `src/io/*` (model, formats, service) | Gmsh, ZLIB (both PRIVATE) |
-| `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`), `src/material/materialLibrary.cpp`, `src/log/anaf_info.cpp`, `src/directory/getExecutableDirectory.cpp`. Self-contained: a front end links it and calls `solveStatic()` (no bridge or GUI code). `MAIN_DIR` (PRIVATE) for the source-tree asset fallback. | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE), nlohmann_json (PRIVATE); Windows: shell32, ole32, uuid (user config folder) |
+| `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`), `src/material/materialLibrary.cpp`, `src/log/anaf_info.cpp`, `src/directory/getExecutableDirectory.cpp`, `src/platform/systemInfo.cpp`. Self-contained: a front end links it and calls `solveStatic()` (no bridge or GUI code). `MAIN_DIR` (PRIVATE) for the source-tree asset fallback. | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE), nlohmann_json (PRIVATE); Windows: shell32, ole32, uuid (user config folder), dxgi, advapi32 (`systemInfo`: VRAM, CPU name from the registry) |
 | `glad_local` | STATIC | `external/glad/src/gl.c` | - |
 | `imgui_suite` | STATIC | ImGui core + GLFW/OpenGL3 backends + ImGuizmo + ImPlot | glad, GLFW, OpenGL |
-| `anafinen` | EXECUTABLE | `main.cpp`, bridge, GUI, platform | `anaf_core`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG; Windows: ole32, comdlg32, shell32, uuid (file dialogs) |
+| `anafinen` | EXECUTABLE | `main.cpp`, bridge, GUI, `platform/resourceMonitor.cpp` | `anaf_core`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG; Windows: ole32, comdlg32, shell32, uuid (file dialogs), psapi (resource monitor) |
 
 Compile definitions on `anafinen` (there is no `ANAF_GUI` / `ANAF_CLI` macro: the log picks its sinks at run time, `anaf::LOG::setCallback()` / `setConsoleOutput()`):
 - `GLFW_INCLUDE_NONE`: GLAD provides the GL headers.
@@ -212,7 +212,7 @@ host: build-containers/<distro>/  (check-*.log or package.log + .deb / .pkg.tar.
 | Arch / CachyOS | `depends`: `glibc gcc-libs glfw libglvnd gmsh suitesparse libpng zlib`. `makedepends`: `cmake ninja git eigen glm nlohmann-json librsvg`. Header-only libraries are build-time only; Spectra comes from the submodule; OpenMP is GCC's `libgomp` in `gcc-libs` (the `openmp` package is LLVM's). `gmsh` is only in the AUR. | `optdepends`: `zenity` or `kdialog` |
 | Debian / Ubuntu | `zlib1g-dev`, `librsvg2-bin` (`package.sh`, README) | DEB `Recommends: zenity \| kdialog`, `Section: science`; `CPACK_PACKAGE_CONTACT` is set (the DEB generator requires a maintainer) |
 | All (0.1.3) | `nlohmann/json`: Fedora `json-devel`, Arch `nlohmann-json` (`makedepends`), Debian `nlohmann-json3-dev`, vcpkg `nlohmann-json` | none (header-only) |
-| Windows (vcpkg) | `libpng`, `glm` added to the README install list (zlib comes with libpng) | none: native dialogs are part of Windows; `ole32`, `comdlg32`, `shell32`, `uuid`, `psapi`, `dxgi`, `advapi32` (`src/platform/`: resource usage, VRAM, CPU name from the registry) are linked |
+| Windows (vcpkg) | `libpng`, `glm` added to the README install list (zlib comes with libpng) | none: native dialogs are part of Windows; `ole32`, `comdlg32`, `shell32`, `uuid`, `psapi` (resource usage) on `anafinen`; `dxgi`, `advapi32` (VRAM, CPU name from the registry) on `anaf_core` |
 
 Without zenity / kdialog on Linux, the application works; only File > Import / Export shows "no native file dialog available".
 

@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "resourceMonitor.hpp"
+#include "systemInfo.hpp"
 
 #include <algorithm>
 
@@ -94,17 +95,6 @@ namespace anaf::PLATFORM {
       }
     }
 
-    std::ifstream memory("/proc/meminfo");
-    std::uint64_t totalKiB = 0, availableKiB = 0;
-    while (std::getline(memory, line)) {
-      std::istringstream fields(line);
-      std::string key;
-      std::uint64_t value = 0;
-      fields >> key >> value;
-      if (key == "MemTotal:") totalKiB = value;
-      if (key == "MemAvailable:") availableKiB = value;
-    }
-    m_usage.systemRamPercent = percent(static_cast<double>(totalKiB - std::min(availableKiB, totalKiB)), static_cast<double>(totalKiB));
     m_usage.available = true;
 
 #elif defined(_WIN32)
@@ -122,14 +112,11 @@ namespace anaf::PLATFORM {
       m_usage.processRamMiB = static_cast<float>(static_cast<double>(counters.WorkingSetSize) / (1024.0 * 1024.0));
     }
 
-    MEMORYSTATUSEX memory{};
-    memory.dwLength = sizeof(memory);
-    if (GlobalMemoryStatusEx(&memory)) {
-      m_usage.systemRamPercent = percent(static_cast<double>(memory.ullTotalPhys - memory.ullAvailPhys),
-                                         static_cast<double>(memory.ullTotalPhys));
-    }
     m_usage.available = true;
 #endif
+    if (const auto memory = queryMemory()) {
+      m_usage.systemRamPercent = percent(memory->totalGiB - memory->availableGiB, memory->totalGiB);
+    }
     return m_usage;
   }
 

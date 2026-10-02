@@ -224,7 +224,7 @@ dofs <= 400,000 ?
 | `solveSimplicialLDLT` | `solver_simplicial.cpp` | Eigen `SimplicialLDLT<..., Upper>` | Always available |
 | `solveBlockCG` | `solver_iterative.cpp` | Preconditioned CG, 3x3 per-node block-Jacobi preconditioner | Tolerance 1e-8, max 50,000 iterations, logs every 200, honors `stop_token` |
 
-Every result is a `Result` record: `type` (`SOLVER::Type`), `available`, `converged`, `iterations`, `relativeResidual = ‖f − K u‖ / ‖f‖`, `elapsedSeconds`, `message`. The referee also logs a hardware summary: CPU model, thread counts, and free/total RAM on Linux.
+Every result is a `Result` record: `type` (`SOLVER::Type`), `available`, `converged`, `iterations`, `relativeResidual = ‖f − K u‖ / ‖f‖`, `elapsedSeconds`, `message`. The referee also logs a hardware summary: CPU name, hardware / OpenMP / Eigen threads, and available / total RAM. It reads them from `anaf::PLATFORM` (`querySystemInfo()` once, `queryMemory()` per solve; Linux and Windows), the same source as the GUI status bar. "Available" is the memory the OS can hand out without swapping (Linux `MemAvailable`, page cache included).
 
 If the solve is rejected, every displacement is set to zero and an error is logged. The pipeline continues, so the validator then runs on a zero solution.
 

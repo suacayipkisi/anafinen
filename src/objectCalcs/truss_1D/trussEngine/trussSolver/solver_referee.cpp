@@ -17,18 +17,13 @@
 
 #include "solverPortfolio.hpp"
 #include <log/anaf_info.hpp>
+#include <platform/systemInfo.hpp>
 
 #include <cmath>
 #include <cstdint>
-#include <fstream>
 #include <limits>
 #include <omp.h>
 #include <string>
-#include <thread>
-
-#if defined(__linux__)
-#include <sys/sysinfo.h>
-#endif
 
 namespace FEM::TRUSS::SOLVER {
 
@@ -42,38 +37,6 @@ namespace FEM::TRUSS::SOLVER {
   }
 
   namespace {
-    double availableMemoryGiB() noexcept {
-    #if defined(__linux__)
-      struct sysinfo info{};
-      if (sysinfo(&info) == 0) {
-        return static_cast<double>(info.freeram) * info.mem_unit / (1024.0 * 1024.0 * 1024.0);
-      }
-    #endif
-      return 0.0;
-    }
-
-    double totalMemoryGiB() noexcept {
-    #if defined(__linux__)
-      struct sysinfo info{};
-      if (sysinfo(&info) == 0) {
-        return static_cast<double>(info.totalram) * info.mem_unit / (1024.0 * 1024.0 * 1024.0);
-      }
-    #endif
-      return 0.0;
-    }
-
-    std::string cpuModel() {
-    #if defined(__linux__)
-      std::ifstream cpuInfo("/proc/cpuinfo");
-      std::string line;
-      while (std::getline(cpuInfo, line)) {
-        constexpr std::string_view prefix = "model name\t: ";
-        if (line.starts_with(prefix)) return line.substr(prefix.size());
-      }
-    #endif
-      return "unknown";
-    }
-
     double relativeResidual(
       const Eigen::SparseMatrix<double>& upperMatrix,
       const Eigen::VectorXd& force,
@@ -92,10 +55,12 @@ namespace FEM::TRUSS::SOLVER {
     }
 
     void logHardware(const Eigen::Index dofs, const Eigen::Index nonZeros) {
+      static const auto system = anaf::PLATFORM::querySystemInfo(); // does not change while running
+      const auto memory = anaf::PLATFORM::queryMemory().value_or(anaf::PLATFORM::MemoryStatus{});
       anaf::LOG::info(
-        "Hardware: CPU '{}', OpenMP {}/{} threads, Eigen {} threads, hardware threads {}, RAM free/total {} / {} GiB, GPU backend CPU-only",
-        cpuModel(), omp_get_max_threads(), omp_get_num_procs(), Eigen::nbThreads(),
-        std::thread::hardware_concurrency(), availableMemoryGiB(), totalMemoryGiB()
+        "Hardware: CPU '{}', {} hardware threads, OpenMP {} / {} threads, Eigen {} threads, RAM available / total {} / {} GiB",
+        system.cpuName, system.threads, omp_get_max_threads(), omp_get_num_procs(), Eigen::nbThreads(),
+        memory.availableGiB, memory.totalGiB
       );
       anaf::LOG::info(
         "System for referee: DOFs {}, stored upper nnz {}",

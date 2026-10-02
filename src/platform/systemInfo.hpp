@@ -17,6 +17,9 @@
 
 #pragma once
 
+// The one place that reads the hardware: the GUI status bar, the resource monitor and the
+// solver referee's log all ask here. Part of anaf_core, so a CLI has it too.
+
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,6 +34,14 @@ namespace anaf::PLATFORM {
   };
 
   SystemInfo querySystemInfo();
+
+  // Physical memory right now. available counts memory the OS can hand out without swapping
+  // (Linux MemAvailable, page cache included; Windows ullAvailPhys).
+  struct MemoryStatus {
+    double totalGiB{0.0};
+    double availableGiB{0.0};
+  };
+  std::optional<MemoryStatus> queryMemory();
 
   // Dedicated video memory of the GPU named gpuName (GL_RENDERER), without OpenGL:
   // Linux amdgpu sysfs, Windows DXGI. std::nullopt when unknown (e.g. NVIDIA on Linux:

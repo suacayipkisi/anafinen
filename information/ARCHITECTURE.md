@@ -67,7 +67,7 @@ This document is the entry point for the project documentation. It describes how
 | `FEM::TRUSS::ADAPTER` | `src/objectCalcs/truss_1D/trussIO/` | `MeshModel` ↔ truss snapshot conversion |
 | `anaf::MATERIAL` | `src/material/` | `Material` property record; material library loader and validation (`materialLibrary.*`, in `anaf_core`) |
 | `anaf::LOG` | `src/log/` | Formatted logging with file, stdout and GUI sinks |
-| `anaf::PLATFORM` | `src/platform/` | OS-specific helpers without GUI dependency: `ResourceMonitor` (CPU / RAM usage), `querySystemInfo()` / `queryVideoMemoryGiB()` and the short CPU / GPU name rules (`systemInfo.*`); Linux and Windows |
+| `anaf::PLATFORM` | `src/platform/` | The one place that reads the hardware (Linux and Windows). `systemInfo.*` is in `anaf_core`: `querySystemInfo()` (CPU name, threads, total RAM), `queryMemory()` (total / available RAM), `queryVideoMemoryGiB()`, the short CPU / GPU name rules; used by the status bar, the resource monitor and the solver referee's log. `ResourceMonitor` (process CPU / RAM, system RAM %) is GUI-only. |
 | `anaf::DIRECTORY` | `src/directory/` | Executable directory lookup; `findAssetPath()` is the single asset search used by fonts, icon and material library; `getUserConfigDirectory()` for per-user data |
 | `platform_utils` | `src/gui/linuxCursor.hpp` | Linux cursor theme setup for GLFW |
 

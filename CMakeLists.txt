@@ -64,6 +64,7 @@ target_link_libraries(anaf_io
 set(ANAF_CORE_SOURCES
     src/log/anaf_info.cpp
     src/directory/getExecutableDirectory.cpp
+    src/platform/systemInfo.cpp
     src/material/materialLibrary.cpp
     src/objectCalcs/truss_1D/trussProperties/node.cpp
     src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
@@ -99,7 +100,7 @@ target_link_libraries(anaf_core PRIVATE nlohmann_json::nlohmann_json)
 # findAssetPath() falls back to the source tree (development builds, tests).
 target_compile_definitions(anaf_core PRIVATE MAIN_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 if(WIN32)
-    target_link_libraries(anaf_core PUBLIC shell32 ole32 uuid) # getUserConfigDirectory()
+    target_link_libraries(anaf_core PUBLIC shell32 ole32 uuid dxgi advapi32) # getUserConfigDirectory(), systemInfo
 endif()
 
 target_link_libraries(anaf_core PUBLIC
@@ -128,7 +129,6 @@ set(ANAFINEN_SOURCES
     src/gui/panels/aboutPanel.cpp
     src/gui/panels/statusBar.cpp
     src/platform/resourceMonitor.cpp
-    src/platform/systemInfo.cpp
     src/gui/fileDialogs/nativeFileDialog.cpp
 )
 
@@ -184,7 +184,7 @@ target_include_directories(anafinen PRIVATE
 # Native file chooser (header-only, WTFPL): Windows common dialogs, zenity / kdialog on Linux.
 target_include_directories(anafinen SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/portable-file-dialogs)
 if(WIN32)
-    target_link_libraries(anafinen PRIVATE ole32 comdlg32 shell32 uuid psapi dxgi advapi32) # psapi / dxgi / advapi32: src/platform
+    target_link_libraries(anafinen PRIVATE ole32 comdlg32 shell32 uuid psapi) # psapi: resourceMonitor
 endif()
 
 add_custom_command(
