@@ -25,15 +25,16 @@
 
 namespace anaf::GUI {
 
+  // Combo order: the value is the row in TrussSelector::m_types.
   enum TrussTypes {
-    simpleQuadranglePrism,
-    nodeEntered
+    nodeEntered,
+    simpleQuadranglePrism
   };
 
   class TrussSelector : public IPanel {
   private:
-    TrussTypes m_trussType{simpleQuadranglePrism};
-    const std::vector<std::string_view> m_types {"Simple Quadrangle", "Imported / Self-Built"};
+    TrussTypes m_trussType{nodeEntered}; // imported / self-built is offered first
+    const std::vector<std::string_view> m_types {"Imported / Self-Built", "Simple Quadrangle"};
   public:
     // Switches the object type (see bindAnalysisFlow): the bridge model and the panels are
     // reset when the type changes, so nothing of the previous model is left behind.
