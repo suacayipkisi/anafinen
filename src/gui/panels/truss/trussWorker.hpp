@@ -19,8 +19,15 @@
 
 // Helpers shared by the truss panels' solver / preview workers (and main() at startup).
 
+#include <bridge/generalStatus.hpp>
+
 #include <Eigen/Core>
 #include <omp.h>
+
+#include <expected>
+#include <functional>
+#include <memory>
+#include <string>
 
 namespace anaf::GUI::TRUSS_WORKER {
 
@@ -33,5 +40,15 @@ namespace anaf::GUI::TRUSS_WORKER {
     omp_set_num_threads(threadCount);
     Eigen::setNbThreads(threadCount);
   }
+
+  // The model to solve, made on the worker thread (building a large generated grid on the
+  // GUI thread would stall the frame loop). An error stops the job with that message.
+  using ModelSource = std::function<std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string>()>;
+
+  // The one solve path of every truss panel: runs Truss_Imported_or_Entered on
+  // bridge.workerThread with copies of the fixity and material list taken now, and publishes
+  // the result snapshot unless the model was reset meanwhile (modelGeneration).
+  // Call from the GUI thread.
+  void startSolve(BRIDGE::Gui_Calc_Bridge& bridge, ModelSource source);
 
 } // namespace anaf::GUI::TRUSS_WORKER end

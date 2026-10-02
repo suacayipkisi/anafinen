@@ -27,6 +27,7 @@
 #include <io/service/ioService.hpp>
 #include <trussEngine/trussSolver.hpp>
 #include <truss_1D/trussIO/trussMeshAdapter.hpp>
+#include <truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp>
 #include <truss_1D/trussTypes/trussLibrary.hpp>
 
 #include <Eigen/Dense>
@@ -65,33 +66,33 @@ namespace {
     return dir;
   }
 
-  // Builds the snapshot exactly like TrussControlPanel's solver worker does.
+  // Runs the one solve pipeline exactly like TRUSS_WORKER::startSolve() (both truss panels).
+  std::expected<std::shared_ptr<BRIDGE::MeshData>, std::string> solveImported(const BRIDGE::MeshData& mesh,
+                                                                              const BRIDGE::FixedDOFMap& fixity) {
+    auto& bridge = BRIDGE::buildBridge();
+    const auto materials = bridge.allMaterials;
+    std::stop_source stop;
+    FEM::TRUSS::Truss_Imported_or_Entered solver;
+    if (auto ready = solver.setModel(bridge, stop.get_token(), mesh, fixity, materials); !ready) {
+      return std::unexpected(ready.error());
+    }
+    solver.setForce(bridge, stop.get_token(), mesh.appliedForces);
+    solver.setContainer(bridge, stop.get_token());
+    solver.calculate(bridge, stop.get_token(), materials);
+    return solver.buildResultMesh(mesh, materials);
+  }
+
+  // The generated 5 x 1 x 5 grid, solved like the Simple Quadrangle panel does it.
   std::shared_ptr<BRIDGE::MeshData> solvedSnapshot(BRIDGE::FixedDOFMap& fixity) {
     auto& bridge = BRIDGE::buildBridge();
     if (bridge.allMaterials.empty()) REQUIRE(bridge.setStaticInfo());
     fixity = {{0u, {true, true, true}}, {5u, {true, true, true}}, {60u, {true, true, true}}, {65u, {false, true, false}}};
-    const std::vector<FEM::TRUSS::ForceApplied> forces{{20u, {0.0, -12000.0, 0.0}}, {27u, {500.0, 0.0, -250.0}}};
-
-    std::stop_source stop;
-    FEM::TRUSS::Truss_SQPT solver{5, 1, 5, 1.0, 80.0, 1};
-    REQUIRE(solver.trussSetAndSetFix_SQPT(bridge, stop.get_token(), fixity).has_value());
-    solver.trussSetForce_SQPT(bridge, stop.get_token(), forces);
-    solver.setContainer(bridge, stop.get_token());
-    auto materials = bridge.allMaterials;
-    solver.calculate(bridge, stop.get_token(), materials);
-
-    auto mesh = std::make_shared<BRIDGE::MeshData>();
-    mesh->trussNodes.assign(solver.getNodes().begin(), solver.getNodes().end());
-    for (const auto& element : solver.getElements()) {
-      const auto& nodes = element.getEleNodes();
-      const auto& material = materials[element.getEleProperties()];
-      mesh->trussElements.push_back({nodes[0], nodes[1], static_cast<float>(element.getEleStress()),
-                                     std::abs(element.getEleStress()) > material.getYieldTensile(), element.getEleProperties(),
-                                     element.getEleCrossSection(), false});
-    }
-    mesh->appliedForces = forces;
-    mesh->hasResults = true;
-    return mesh;
+    auto grid = FEM::TRUSS::buildSimpleTruss({5, 1, 5}, 1.0, 80.0e-4, 1);
+    REQUIRE(grid.has_value());
+    grid->appliedForces = {{20u, {0.0, -12000.0, 0.0}}, {27u, {500.0, 0.0, -250.0}}};
+    auto solved = solveImported(*grid, fixity);
+    REQUIRE(solved.has_value());
+    return *solved;
   }
 
   void compareSnapshots(const BRIDGE::MeshData& expected, const BRIDGE::FixedDOFMap& expectedFixity,
@@ -135,13 +136,13 @@ TEST(invalidGridParametersAreRefusedBeforeBuilding) {
                                            {std::array<std::uint32_t, 3>{2, 1, 2}, 0.0, 8e-3},
                                            {std::array<std::uint32_t, 3>{2, 0, 2}, 1.0, 8e-3},
                                            {std::array<std::uint32_t, 3>{2, 1, 2}, std::nan(""), 8e-3}}) {
-    FEM::TRUSS::SimpleTruss truss{cubes, length, area, 0};
-    CHECK(!truss.setTruss().has_value());
-    CHECK(truss.getNodes().empty() && truss.getElements().empty());
+    CHECK(!FEM::TRUSS::buildSimpleTruss(cubes, length, area, 0).has_value());
   }
-  FEM::TRUSS::SimpleTruss valid{{2, 1, 2}, 1.0, 8e-3, 0};
-  REQUIRE(valid.setTruss().has_value());
-  CHECK(valid.getNodes().size() == 18);
+  const auto valid = FEM::TRUSS::buildSimpleTruss({2, 1, 2}, 1.0, 8e-3, 0);
+  REQUIRE(valid.has_value());
+  CHECK(valid->trussNodes.size() == 18);
+  // x / y / z edges 12 + 9 + 12, xy / xz / yz face diagonals 12 + 16 + 12.
+  CHECK(valid->trussElements.size() == 73);
 }
 
 TEST(solvedTrussSurvivesEveryWritableFormat) {
@@ -234,24 +235,6 @@ TEST(asyncImportConvertsOffTheCallingThread) {
   CHECK(worker != caller);
   compareSnapshots(*snapshot, fixity, *task->wait(), "async");
 }
-
-namespace {
-  // Runs the imported / self-built pipeline exactly like TrussModelEditor's solver worker.
-  std::expected<std::shared_ptr<BRIDGE::MeshData>, std::string> solveImported(const BRIDGE::MeshData& mesh,
-                                                                              const BRIDGE::FixedDOFMap& fixity) {
-    auto& bridge = BRIDGE::buildBridge();
-    const auto materials = bridge.allMaterials;
-    std::stop_source stop;
-    FEM::TRUSS::Truss_Imported_or_Entered solver;
-    if (auto ready = solver.setModel(bridge, stop.get_token(), mesh, fixity, materials); !ready) {
-      return std::unexpected(ready.error());
-    }
-    solver.setForce(bridge, stop.get_token(), mesh.appliedForces);
-    solver.setContainer(bridge, stop.get_token());
-    solver.calculate(bridge, stop.get_token(), materials);
-    return solver.buildResultMesh(mesh, materials);
-  }
-} // namespace end
 
 TEST(importedTrussSolvesLikeTheGeneratedOne) {
   BRIDGE::FixedDOFMap fixity;

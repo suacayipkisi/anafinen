@@ -3,15 +3,15 @@
 This document describes `anaf::BRIDGE`, the shared state between the GUI thread and the calculation worker. It covers what the bridge stores, who reads and writes each field, and which synchronization rule protects it.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-29.
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-02.
 
 ## 1. Overall flow
 
 ```text
            GUI thread                                   Worker thread (std::jthread)
 +------------------------------+                  +-------------------------------------+
-| TrussControlPanel            |  start worker    | Preview: SimpleTruss::setTruss()    |
-|  - geometry / loads / fixity |----------------->| Solve:   Truss_SQPT pipeline        |
+| TrussControlPanel / editor   |  start worker    | Preview: buildSimpleTruss()         |
+|  - geometry / loads / fixity |----------------->| Solve:   TRUSS_WORKER::startSolve() |
 |  - writes fixedDOFsByNode    |                  |                                     |
 +---------------+--------------+                  |  writes m_progress (atomic)         |
                 |                                 |  builds new MeshData                |
@@ -61,8 +61,10 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | Object type | Model comes from | Panel | Import | Export |
 |---|---|---|---|---|
 | `no_type` (start) | - | none | yes (switches to `truss_imported_or_entered`) | yes, once a model exists |
-| `truss_SQPT` | Grid generator (Generate Preview / Run Solver) | `TrussControlPanel` | **no** (menu item greyed out, Ctrl+O refused) | yes |
+| `truss_SQPT` | Grid generator (Generate Preview / Run Solver) | `TrussControlPanel` | yes (switches to `truss_imported_or_entered`) | yes |
 | `truss_imported_or_entered` | File > Import, or node / bar edits | `TrussModelEditor` | yes (replaces the model) | yes |
+
+Both types solve the same way: `TRUSS_WORKER::startSolve()` runs `Truss_Imported_or_Entered` on the snapshot ([CALCULATIONS.md](CALCULATIONS.md) section 1). An import that finishes after the model was reset (type change, Clear) is discarded by its `modelGeneration`.
 
 ## 3. `MeshData`: the published snapshot
 
@@ -195,7 +197,7 @@ Without a `loadUserMaterials()` call (the tests), user materials are session-onl
 - Atomics (`m_progress`, `m_isRunning`, ...) may be written from the worker directly.
 - Publish results only through the protocol in section 4, and only if `modelGeneration` is still the value taken at start (section 4.1).
 - Call `joinWorker()` before setting `m_isRunning` / `m_isGeneratingPreview` for the new job.
-- `buildBridge()` returns a process-wide singleton. The bridge stays a core type on purpose: a planned CLI executable will build a CLI-side bridge instead of the GUI side. Prefer passing `Gui_Calc_Bridge&` explicitly, as `Truss_SQPT` does.
+- `buildBridge()` returns a process-wide singleton. The bridge stays a core type on purpose: a planned CLI executable will build a CLI-side bridge instead of the GUI side. Prefer passing `Gui_Calc_Bridge&` explicitly, as `Truss_Imported_or_Entered` does. New solve jobs go through `TRUSS_WORKER::startSolve()`, which already follows these rules.
 
 ## 7. Related source files
 

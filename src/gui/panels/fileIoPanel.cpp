@@ -109,20 +109,11 @@ namespace anaf::GUI {
     m_noticeUntil = std::chrono::steady_clock::now() + std::chrono::seconds(error ? 8 : 4);
   }
 
-  bool FileIoPanel::importAllowed() {
-    return BRIDGE::buildBridge().m_objectType.load() != BRIDGE::ObjectType::truss_SQPT;
-  }
-
   void FileIoPanel::cancelImport() {
     if (m_importTask) m_importTask->cancel();
   }
 
   void FileIoPanel::requestImport() {
-    if (!importAllowed()) {
-      notify("Import is not available for the Simple Quadrangle truss. Choose Analyze > Truss (1D Element) > "
-             "Imported / Self-Built first (export still works).", true);
-      return;
-    }
     if (busy()) {
       notify("A file operation is already in progress", true);
       return;
@@ -137,10 +128,6 @@ namespace anaf::GUI {
   }
 
   void FileIoPanel::importFile(const std::filesystem::path& path) {
-    if (!importAllowed()) {
-      notify("Import is not available for the Simple Quadrangle truss", true);
-      return;
-    }
     if (busy()) {
       notify("A file operation is already in progress", true);
       return;
@@ -171,11 +158,6 @@ namespace anaf::GUI {
 
   void FileIoPanel::startImport(const std::filesystem::path& path) {
     auto& bridge = BRIDGE::buildBridge();
-    if (!importAllowed()) {
-      notify("Import is not available for the Simple Quadrangle truss", true);
-      m_stage = Stage::Idle;
-      return;
-    }
     if (bridge.m_isRunning || bridge.m_isGeneratingPreview) {
       notify("Wait for the running calculation to finish before importing", true);
       m_stage = Stage::Idle;
@@ -185,6 +167,7 @@ namespace anaf::GUI {
     {
       std::lock_guard lock(bridge.dataMutex);
       materials = bridge.allMaterials;
+      m_importGeneration = bridge.modelGeneration.load();
     }
     const anaf::IO::ReadOptions options = isCad(path) ? m_cadOptions : anaf::IO::ReadOptions{};
     m_importTask = m_service->runAsync<FEM::TRUSS::ADAPTER::ImportedTruss>(
@@ -268,11 +251,10 @@ namespace anaf::GUI {
     auto& bridge = BRIDGE::buildBridge();
     if (m_importTask && m_importTask->ready()) {
       const auto& result = m_importTask->wait();
-      if (result && !importAllowed()) {
-        // The type was switched to the generated truss while the file was read.
-        anaf::LOG::warn("{} discarded: the object type changed to {}", m_importTask->description(),
-                        BRIDGE::getObjectTypeName(bridge.m_objectType.load()));
-        notify("Import discarded (object type changed)", true);
+      if (result && bridge.modelGeneration.load() != m_importGeneration) {
+        // The object type was changed (or the model cleared) while the file was read.
+        anaf::LOG::warn("{} discarded: the model was reset meanwhile", m_importTask->description());
+        notify("Import discarded (model reset)", true);
       } else if (result) {
         // Replaces the whole previous model: stops a running solve and drops its results.
         bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);

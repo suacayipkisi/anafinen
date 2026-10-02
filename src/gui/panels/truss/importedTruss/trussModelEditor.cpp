@@ -22,7 +22,6 @@
 #include <log/anaf_info.hpp>
 #include <panels/truss/materialCombo.hpp>
 #include <panels/truss/trussWorker.hpp>
-#include <truss_1D/trussEngine/trussSolver.hpp>
 
 #include "imgui.h"
 
@@ -30,14 +29,13 @@
 #include <cfloat>
 #include <cmath>
 #include <cstddef>
-#include <exception>
+#include <expected>
 #include <format>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
-#include <stop_token>
+#include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -655,58 +653,10 @@ namespace anaf::GUI {
     } else {
       ImGui::BeginDisabled(!mesh);
       if (ImGui::Button("Run Solver for Truss##editor", ImVec2(-1.0f, 32.0f))) {
-        // Join first: a worker that is still finishing clears m_isRunning on exit.
-        bridge.joinWorker();
-        FixedDOFMap fixity;
-        std::vector<anaf::MATERIAL::Material> materials;
-        std::shared_ptr<const MeshData> model;
-        std::uint64_t generation = 0;
-        {
-          std::lock_guard lock(bridge.dataMutex);
-          model = bridge.activeMesh;
-          fixity = bridge.fixedDOFsByNode;
-          materials = bridge.allMaterials;
-          generation = bridge.modelGeneration.load();
-        }
-        if (!model) {
-          ImGui::EndDisabled();
-          return;
-        }
-        bridge.m_isRunning = true;
-        bridge.m_progress = 0.0f;
         m_status.clear();
-
-        bridge.workerThread = std::jthread(
-          [&bridge, model = std::move(model), fixity = std::move(fixity), materials = std::move(materials), generation]
-          (std::stop_token st) {
-            try {
-              TRUSS_WORKER::configureOpenMPForWorker();
-              FEM::TRUSS::Truss_Imported_or_Entered solver;
-              if (const auto ready = solver.setModel(bridge, st, *model, fixity, materials); !ready) {
-                anaf::LOG::error("Solver not started: {}", ready.error());
-              } else {
-                solver.setForce(bridge, st, model->appliedForces);
-                solver.setContainer(bridge, st);
-                solver.calculate(bridge, st, materials);
-                if (!st.stop_requested()) {
-                  auto solved = solver.buildResultMesh(*model, materials);
-                  bool published = false;
-                  {
-                    std::lock_guard lock(bridge.dataMutex);
-                    if (bridge.modelGeneration.load() == generation) { // not reset while solving
-                      bridge.activeMesh = std::move(solved);
-                      published = true;
-                    }
-                  }
-                  if (published) bridge.dataVersion.fetch_add(1, std::memory_order_release);
-                }
-              }
-            } catch (const std::exception& exception) {
-              anaf::LOG::error("Solver failed: {}", exception.what());
-            }
-            bridge.m_progress = 1.0f;
-            bridge.m_isRunning = false;
-          });
+        TRUSS_WORKER::startSolve(bridge, [mesh]() -> std::expected<std::shared_ptr<const MeshData>, std::string> {
+          return mesh;
+        });
       }
       ImGui::EndDisabled();
     }

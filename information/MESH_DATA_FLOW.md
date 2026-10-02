@@ -1,126 +1,70 @@
 # Mesh Data and Calculation Flow
 
-This document describes how mesh data for the Simple Quadrangle Prism Truss is created, stored, passed through the solver, and finally displayed in the viewport.
+This document describes how truss mesh data is created (Simple Quadrangle generator, built-in library, import, model editor), stored, passed through the one solver pipeline, and finally displayed in the viewport.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-29.
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-02.
 > Part of the documentation set indexed in [ARCHITECTURE.md](ARCHITECTURE.md). Module details: [CALCULATIONS.md](CALCULATIONS.md), [BRIDGE.md](BRIDGE.md), [GUI.md](GUI.md).
 
 ## 1. Overall flow
 
-The following diagram uses a terminal-style layout to show the main data path:
+Every model reaches the solver as a `MeshData` snapshot; only the source differs.
 
 ```text
-+-------------------------------+
-| TrussControlPanel             |
-| onImGuiRender()               |
-| geometry / material / loads   |
-| fixed DOFs                    |
-+---------------+---------------+
-      |
-      +-- Generate Preview
-      |       |
-      |       v
-      |  +-------------+
-      |  | Preview     |
-      |  | worker      |
-      |  +------+------+
-      |         |
-      |         v
-      |  +-------------+
-      |  | SimpleTruss |
-      |  | setTruss()  |
-      |  +------+------+
-      |         |
-      |         v
-      |  +-------------+
-      |  | Preview     |
-      |  | MeshData    |
-      |  +------+------+
-      |         |
-      |         +-- publish --> activeMesh
-      |
-      +-- Run Solver
-         |
-         v
-         +-------------+
-         | Solver      |
-         | std::jthread|
-         +------+------+
-           |
-           v
-         +-------------+
-         | Truss_SQPT  |
-         | m_truss     |
-         +------+------+
-           |
-           +-- fixedDOFsByNode
-           |   -> Node::setMovable()
-           +-- ForceApplied -> m_forceVec
-           |                  (3 DOF per node)
-           v
-         +------------------------+
-         | Truss_1D_Container     |
-         | spans: nodes/elements  |
-         +------------+-----------+
-            |
-            v
-         +------------------------+
-         | assembleStiffness()    |
-         | global stiffness       |
-         | triplets               |
-         +------------+-----------+
-            |
-            v
-         +------------------------+
-         | solveDisplacements()   |
-         | reduce to allowed DOFs |
-         | solve sparse system    |
-         +------------+-----------+
-            |
-            v
-         +------------------------+
-         | displacement / stress |
-         | force / energy check   |
-         +------------+-----------+
-            |
-            v
-         +------------------------+
-         | Solved MeshData        |
-         +------------+-----------+
-            |
-            +-- publish --> activeMesh
-
-          +-----------------------+
-          | activeMesh            |
-          | shared_ptr<const      |
-          | MeshData>             |
-          +-----------+-----------+
-            |
-            v
-          +-----------------------+
-          | ViewportPanel         |
-          | m_currentMesh         |
-          | buildSceneBatches()   |
-          +-----------+-----------+
-            |
-        +-------------+-------------+
-        |             |             |
-        v             v             v
-        element lines  node points   force arrows
-        stress colors  fixity        applied loads
++---------------------------+   +---------------------------+   +-------------------+
+| TrussControlPanel (SQPT)  |   | TrussModelEditor          |   | FileIoPanel       |
+| grid / material / loads   |   | nodes / bars / supports   |   | import, library   |
++-------------+-------------+   +-------------+-------------+   +---------+---------+
+              |                               |                           |
+   Generate Preview / Run Solver        edits (copy + publish)     readMesh -> toMeshData
+              |                               |                           |
+              v                               |                           |
+   buildSimpleTruss() -> MeshData             |                           |
+              |                               |                           |
+              +---------------+---------------+-------------+-------------+
+                              |                             |
+                              v                             v
+                    +-------------------+          bridge.activeMesh
+                    | TRUSS_WORKER::    |          (shared_ptr<const MeshData>)
+                    | startSolve(source)|                   |
+                    | std::jthread      |                   |
+                    +---------+---------+                   |
+                              |                             |
+                              v                             |
+            +------------------------------------+         |
+            | Truss_Imported_or_Entered          |         |
+            |  setModel: snapshot -> Node /      |         |
+            |    TrussElement_1D, fixity copy    |         |
+            |  setForce: loads -> m_forceVec     |         |
+            |  Truss_1D_Container: K triplets,   |         |
+            |    self weight, T^T K T q = T^T f, |         |
+            |    stress, energy check            |         |
+            |  buildResultMesh: result snapshot  |         |
+            +------------------+-----------------+         |
+                               |                           |
+                               +-- publish (same model generation) --> activeMesh
+                                                                 |
+                                                                 v
+                                                  +---------------------------+
+                                                  | ViewportPanel             |
+                                                  | m_currentMesh             |
+                                                  | buildSceneBatches()       |
+                                                  +-------------+-------------+
+                                                                |
+                                                 element lines, node points,
+                                                 supports, force arrows
 ```
 
 ## 2. Where data is stored
 
 | Data | Main owner | Storage field | Role in the lifecycle |
 |---|---|---|---|
-| Mesh nodes | `SimpleTruss` or snapshot | `m_allNodes` / `MeshData::trussNodes` | Stores node IDs, original positions, movable state, and displacements. |
-| Mesh elements | `SimpleTruss` or snapshot | `m_allElements` / `MeshData::trussElements` | Stores node IDs, length, direction cosines, area, material, stress, and force. |
+| Mesh nodes | snapshot, solver copy | `MeshData::trussNodes`, `Truss_Imported_or_Entered::m_nodes` | Node IDs, original positions, movable state / inclined basis, displacements. |
+| Mesh elements | snapshot, solver copy | `MeshData::trussElements` (`RenderElement`), `m_elements` (`TrussElement_1D`) | Node IDs, area, material, stress; the solver copy adds length, direction cosines, elongation and force. |
 | GUI mesh snapshot | `Gui_Calc_Bridge` | `activeMesh` | Shared publication point for preview or solver results. |
 | Boundary conditions | `Gui_Calc_Bridge` | `fixedDOFsByNode` | Stores `nodeId -> {fixedX, fixedY, fixedZ}` and becomes `Node::setMovable` state before solving. |
 | Applied loads | Panel and snapshot | `m_appliedForces`, `MeshData::appliedForces` | Stores user loads by node and later feeds the global DOF vector. |
-| Global force vector | `Truss_SQPT` and container span | `m_forceVec` | Uses `index = 3 * nodeId + axis` for X/Y/Z DOFs; element weight is added here. |
+| Global force vector | `Truss_Imported_or_Entered` and container span | `m_forceVec` | Uses `index = 3 * nodeId + axis` for X/Y/Z DOFs; element weight is added here. |
 | Global stiffness data | `Truss_1D_Container` | `m_globalStiffnessMatrix` | Created as 21 upper-triangle Eigen triplets per element. |
 | Reduced system | Local variables in `calculateDisplacements()` | `reducedStiffnessMatrix`, `reducedForceVec` | Solver system over the allowed motion directions (`Tᵀ K T`, `Tᵀ f`). |
 | Displacement results | Container and nodes | `m_resultDisplacements`, `Node::m_displacement` | Written to nodes after solving and then copied into the GUI snapshot. |
@@ -130,40 +74,30 @@ The following diagram uses a terminal-style layout to show the main data path:
 
 ## 3. Calculation sequence
 
-1. The panel collects geometry and material parameters from its local GUI state.
-2. `Truss_SQPT` calls `SimpleTruss::setTruss()`.
-3. `setTruss()` creates grid nodes and X/Y/Z edge elements plus XY/XZ/YZ diagonal elements.
-4. A copy of `fixedDOFsByNode` (taken under `dataMutex` before the worker starts) is converted into `movable = !fixed` for each node.
-5. `ForceApplied` records are written to `m_forceVec[3 * nodeId + axis]`.
-6. `setContainer()` binds the container to the `m_truss` vectors through `std::span`. The container does not own the nodes or elements.
-7. `assembleStiffness()` creates global stiffness-matrix triplets from the elements.
-8. `considerWeight()` adds element weights to the global force vector.
-9. `calculateDisplacements()` reduces the system to the allowed motion directions of each node (fixed DOFs drop out, inclined supports are rotated in), solves it, and writes displacements to the nodes.
-10. Node locations stay undeformed; the displacement lives only in `Node::m_displacement`. Element elongation, axial force, and stress are calculated.
-11. `runValidator()` performs the energy check and writes status values to the bridge.
-12. Nodes and elements are copied into a new `MeshData` snapshot and published through `bridge.activeMesh`.
-13. `dataVersion` is incremented. The viewport reads the new snapshot and draws elements, nodes, and force arrows.
+1. A source makes the snapshot: the Simple Quadrangle panel calls `buildSimpleTruss()` on the worker and adds its loads; the model editor passes the active snapshot.
+2. `TRUSS_WORKER::startSolve()` copies `fixedDOFsByNode` and the material list under `dataMutex`, notes `modelGeneration` and starts the worker.
+3. `setModel()` turns the snapshot into solver nodes and bars; the fixity copy (or a node's inclined basis) becomes the allowed motion of each node.
+4. `ForceApplied` records are written to `m_forceVec[3 * nodeId + axis]`.
+5. `setContainer()` binds the container to the solver vectors through `std::span`. The container does not own the nodes or elements.
+6. `assembleStiffness()` creates global stiffness-matrix triplets from the elements.
+7. `considerWeight()` adds element weights to the global force vector.
+8. `calculateDisplacements()` reduces the system to the allowed motion directions of each node (fixed DOFs drop out, inclined supports are rotated in), solves it, and writes displacements to the nodes.
+9. Node locations stay undeformed; the displacement lives only in `Node::m_displacement`. Element elongation, axial force, and stress are calculated.
+10. `runValidator()` performs the energy check and writes status values to the bridge.
+11. `buildResultMesh()` copies the snapshot with displacements and stresses; it is published through `bridge.activeMesh` if the model was not reset meanwhile.
+12. `dataVersion` is incremented. The viewport reads the new snapshot and draws elements, nodes, supports and force arrows.
 
 ## 4. Difference between preview and solver
 
 ```text
-Preview:
-  SimpleTruss::setTruss()
-      -> MeshData(node + element + loads)
-      -> activeMesh
-      -> Viewport
+Preview (Simple Quadrangle only):
+  buildSimpleTruss() -> MeshData (nodes + bars + loads) -> activeMesh -> Viewport
 
-Solver:
-  Truss_SQPT::m_truss.setTruss()
-     -> boundary conditions + force vector
-     -> Truss_1D_Container calculation
-     -> displacement/stress/force results
-     -> solved MeshData snapshot
-     -> activeMesh
-     -> Viewport
+Solve (every model):
+  source() -> Truss_Imported_or_Entered -> result MeshData -> activeMesh -> Viewport
 ```
 
-The preview mesh contains the geometric mesh and GUI visualization state. The solver mesh contains the same node and element structure after displacement, element force, and stress fields have been calculated.
+The preview contains the geometry and the loads. The solve rebuilds the grid from the panel inputs (so a changed input is used without a new preview) and adds displacements and stresses.
 
 ## 5. Snapshot and thread flow
 
@@ -187,13 +121,13 @@ Import:  file --readMesh--> anaf::IO::MeshModel --ADAPTER::toMeshData--> new Mes
 
 ## 7. Related source files
 
-- GUI and worker flow: [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp)
+- GUI and worker flow: [src/gui/panels/truss/trussWorker.cpp](../src/gui/panels/truss/trussWorker.cpp), [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [src/gui/panels/truss/importedTruss/trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp)
 - Bridge and `MeshData`: [src/bridge/generalStatus.hpp](../src/bridge/generalStatus.hpp)
-- Solver orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver_SQPT.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_SQPT.cpp)
+- Solver orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver_Imported.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_Imported.cpp), [trussSolver_static.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_static.cpp)
 - Solver class: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp)
 - Container calculations: [src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp)
 - Container data fields: [src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp)
 - Mesh generation: [src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp)
-- Mesh generator class: [src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp)
+- Mesh generator: [src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp)
 - Viewport snapshot reading and drawing: [src/gui/panels/viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp)
 - Import / export adapter: [src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp](../src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp)

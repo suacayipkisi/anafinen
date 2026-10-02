@@ -18,192 +18,95 @@
 #include "simpleQuadranglePrismTrussCreate.hpp"
 #include <log/anaf_info.hpp>
 
-#include <cstddef>
 #include <cmath>
-#include <cstdint>
+#include <cstddef>
 #include <format>
 #include <limits>
-#include <span>
-#include <vector>
 
 namespace FEM::TRUSS {
 
-  std::expected<void, std::string> SimpleTruss::setTruss(){
-    m_allNodes.clear();
-    m_allElements.clear();
-    if (m_cubeNum[0] == 0 || m_cubeNum[1] == 0 || m_cubeNum[2] == 0) {
+  std::expected<anaf::BRIDGE::MeshData, std::string> buildSimpleTruss(
+    const std::array<std::uint32_t, 3> cubeNum,
+    const double edgeLength,
+    const double areaM2,
+    const std::uint32_t materialIndex
+  ) {
+    const auto [nx, ny, nz] = cubeNum;
+    if (nx == 0 || ny == 0 || nz == 0) {
       return std::unexpected("cube numbers must be at least 1");
     }
-    if (!(std::isfinite(m_cubeEdgeLength) && m_cubeEdgeLength > 0.0)) {
-      return std::unexpected(std::format("element length must be > 0 (got {})", m_cubeEdgeLength));
+    if (!(std::isfinite(edgeLength) && edgeLength > 0.0)) {
+      return std::unexpected(std::format("element length must be > 0 (got {})", edgeLength));
     }
-    if (!(std::isfinite(m_area) && m_area > 0.0)) {
-      return std::unexpected(std::format("cross-section area must be > 0 (got {} m^2)", m_area));
+    if (!(std::isfinite(areaM2) && areaM2 > 0.0)) {
+      return std::unexpected(std::format("cross-section area must be > 0 (got {} m^2)", areaM2));
     }
     // Node ids are 32-bit and the stiffness triplets index DOFs (3 per node) with int.
-    const double nodeCount = (m_cubeNum[0] + 1.0) * (m_cubeNum[1] + 1.0) * (m_cubeNum[2] + 1.0);
+    const double nodeCount = (nx + 1.0) * (ny + 1.0) * (nz + 1.0);
     if (3.0 * nodeCount > static_cast<double>(std::numeric_limits<int>::max())) {
       return std::unexpected(std::format("{:.0f} nodes are too many", nodeCount));
     }
 
-    // node count in every direction (x, y, z)
-    const std::uint32_t nx = m_cubeNum[0];
-    const std::uint32_t ny = m_cubeNum[1];
-    const std::uint32_t nz = m_cubeNum[2];
+    const std::uint32_t rowX = nx + 1;
+    const std::uint32_t layer = rowX * (ny + 1);
+    const auto id = [&](const std::uint32_t i, const std::uint32_t j, const std::uint32_t k) { return i + j * rowX + k * layer; };
 
-    const std::uint32_t nx_nodes = nx + 1;
-    const std::uint32_t ny_nodes = ny + 1;
-    const std::uint32_t nz_nodes = nz + 1;
-
-    const std::size_t totalNodes = static_cast<std::size_t>(nx_nodes) * ny_nodes * nz_nodes;
-    m_allNodes.resize(totalNodes);
-    
-    // id = i + j * nx_nodes + k * (nx_nodes * ny_nodes)
-    // set all truss nodes
-    #pragma omp parallel for collapse(3) schedule(static)
-    for (long long k = 0; k < nz_nodes; ++k) {
-      for (std::uint32_t j = 0; j < ny_nodes; ++j) {
-        for (std::uint32_t i = 0; i < nx_nodes; ++i) {
-          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
-          const auto kk = static_cast<std::uint32_t>(k);
-          std::uint32_t nodeID = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          m_allNodes[nodeID] = Node(
-            nodeID,
-            static_cast<double>(m_cubeEdgeLength * i),
-            static_cast<double>(m_cubeEdgeLength * j),
-            static_cast<double>(m_cubeEdgeLength * kk)
-          );
+    anaf::BRIDGE::MeshData mesh;
+    mesh.trussNodes.reserve(static_cast<std::size_t>(nodeCount));
+    for (std::uint32_t k = 0; k <= nz; ++k) {
+      for (std::uint32_t j = 0; j <= ny; ++j) {
+        for (std::uint32_t i = 0; i <= nx; ++i) {
+          mesh.trussNodes.emplace_back(id(i, j, k), edgeLength * i, edgeLength * j, edgeLength * k);
         }
       }
     }
 
-    anaf::LOG::success("All nodes for simple truss created. NodeNum: {}", totalNodes);
-
-    // determine elements
-    const std::size_t xEdgesCount = static_cast<std::size_t>(nx) * ny_nodes * nz_nodes;
-    const std::size_t yEdgesCount = static_cast<std::size_t>(nx_nodes) * ny * nz_nodes;
-    const std::size_t zEdgesCount = static_cast<std::size_t>(nx_nodes) * ny_nodes * nz;
-
-    const std::size_t xyCrossCount = static_cast<std::size_t>(nx) * ny * nz_nodes * 2;
-    const std::size_t xzCrossCount = static_cast<std::size_t>(nx) * ny_nodes * nz * 2;
-    const std::size_t yzCrossCount = static_cast<std::size_t>(nx_nodes) * ny * nz * 2;
-
-    const std::size_t totalElements = xEdgesCount + yEdgesCount + zEdgesCount +
-                    xyCrossCount + xzCrossCount + yzCrossCount;
-    m_allElements.resize(totalElements);
-
-    const std::size_t offset_xEdges  = 0;
-    const std::size_t offset_yEdges  = offset_xEdges + xEdgesCount;
-    const std::size_t offset_zEdges  = offset_yEdges + yEdgesCount;
-    const std::size_t offset_xyCross = offset_zEdges + zEdgesCount;
-    const std::size_t offset_xzCross = offset_xyCross + xyCrossCount;
-    const std::size_t offset_yzCross = offset_xzCross + xzCrossCount;
-    const std::span<const Node> allNodes{m_allNodes};
-
-    // parallel to X-direction
-    #pragma omp parallel for collapse(3) schedule(static)
-    for (long long k = 0; k < nz_nodes; ++k) {
-      for (std::uint32_t j = 0; j < ny_nodes; ++j) {
-        for (std::uint32_t i = 0; i < nx; ++i) {
-          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
-          const auto kk = static_cast<std::uint32_t>(k);
-          std::uint32_t n1 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n2 = (i + 1) + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::size_t idx = offset_xEdges + (i + j * nx + kk * (nx * ny_nodes));
-          m_allElements[idx] = TrussElement_1D(m_type, m_area, n1, n2, allNodes);
-        }
+    const auto bar = [&](const std::uint32_t a, const std::uint32_t b) {
+      mesh.trussElements.push_back({a, b, 0.0f, false, materialIndex, areaM2, false});
+    };
+    // Edges along x, y and z, then both diagonals of the xy, xz and yz faces.
+    for (std::uint32_t k = 0; k <= nz; ++k) {
+      for (std::uint32_t j = 0; j <= ny; ++j) {
+        for (std::uint32_t i = 0; i < nx; ++i) bar(id(i, j, k), id(i + 1, j, k));
       }
     }
-
-    // parallel to Y-direction
-    #pragma omp parallel for collapse(3) schedule(static)
-    for (long long k = 0; k < nz_nodes; ++k) {
+    for (std::uint32_t k = 0; k <= nz; ++k) {
       for (std::uint32_t j = 0; j < ny; ++j) {
-        for (std::uint32_t i = 0; i < nx_nodes; ++i) {
-          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
-          const auto kk = static_cast<std::uint32_t>(k);
-          std::uint32_t n1 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n2 = i + (j + 1) * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::size_t idx = offset_yEdges + (i + j * nx_nodes + kk * (nx_nodes * ny));
-          m_allElements[idx] = TrussElement_1D(m_type, m_area, n1, n2, allNodes);
-        }
+        for (std::uint32_t i = 0; i <= nx; ++i) bar(id(i, j, k), id(i, j + 1, k));
       }
     }
-
-    // parallel to Z-direction
-    #pragma omp parallel for collapse(3) schedule(static)
-    for (long long k = 0; k < nz; ++k) {
-      for (std::uint32_t j = 0; j < ny_nodes; ++j) {
-        for (std::uint32_t i = 0; i < nx_nodes; ++i) {
-          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
-          const auto kk = static_cast<std::uint32_t>(k);
-          std::uint32_t n1 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n2 = i + j * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
-          std::size_t idx = offset_zEdges + (i + j * nx_nodes + kk * (nx_nodes * ny_nodes));
-          m_allElements[idx] = TrussElement_1D(m_type, m_area, n1, n2, allNodes);
-        }
+    for (std::uint32_t k = 0; k < nz; ++k) {
+      for (std::uint32_t j = 0; j <= ny; ++j) {
+        for (std::uint32_t i = 0; i <= nx; ++i) bar(id(i, j, k), id(i, j, k + 1));
       }
     }
-
-    // cross in X-Y plane
-    #pragma omp parallel for collapse(3) schedule(static)
-    for (long long k = 0; k < nz_nodes; ++k) {
+    for (std::uint32_t k = 0; k <= nz; ++k) {
       for (std::uint32_t j = 0; j < ny; ++j) {
         for (std::uint32_t i = 0; i < nx; ++i) {
-          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
-          const auto kk = static_cast<std::uint32_t>(k);
-          std::uint32_t n00 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n10 = (i + 1) + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n01 = i + (j + 1) * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n11 = (i + 1) + (j + 1) * nx_nodes + kk * (nx_nodes * ny_nodes);
-
-          std::size_t baseIdx = offset_xyCross + 2 * (i + j * nx + kk * (nx * ny));
-          m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, n00, n11, allNodes);
-          m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, n10, n01, allNodes);
+          bar(id(i, j, k), id(i + 1, j + 1, k));
+          bar(id(i + 1, j, k), id(i, j + 1, k));
         }
       }
     }
-
-    // cross in X-Z plane
-    #pragma omp parallel for collapse(3) schedule(static)
-    for (long long k = 0; k < nz; ++k) {
-      for (std::uint32_t j = 0; j < ny_nodes; ++j) {
+    for (std::uint32_t k = 0; k < nz; ++k) {
+      for (std::uint32_t j = 0; j <= ny; ++j) {
         for (std::uint32_t i = 0; i < nx; ++i) {
-          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
-          const auto kk = static_cast<std::uint32_t>(k);
-          std::uint32_t n00 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n10 = (i + 1) + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n01 = i + j * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
-          std::uint32_t n11 = (i + 1) + j * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
-
-          std::size_t baseIdx = offset_xzCross + 2 * (i + j * nx + kk * (nx * ny_nodes));
-          m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, n00, n11, allNodes);
-          m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, n10, n01, allNodes);
+          bar(id(i, j, k), id(i + 1, j, k + 1));
+          bar(id(i + 1, j, k), id(i, j, k + 1));
         }
       }
     }
-
-    // cross in Y-Z plane
-    #pragma omp parallel for collapse(3) schedule(static)
-    for (long long k = 0; k < nz; ++k) {
+    for (std::uint32_t k = 0; k < nz; ++k) {
       for (std::uint32_t j = 0; j < ny; ++j) {
-        for (std::uint32_t i = 0; i < nx_nodes; ++i) {
-          // The outer index is signed for MSVC OpenMP; cast once here (collapse(3) needs perfect nesting).
-          const auto kk = static_cast<std::uint32_t>(k);
-          std::uint32_t n00 = i + j * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n10 = i + (j + 1) * nx_nodes + kk * (nx_nodes * ny_nodes);
-          std::uint32_t n01 = i + j * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
-          std::uint32_t n11 = i + (j + 1) * nx_nodes + (kk + 1) * (nx_nodes * ny_nodes);
-
-          std::size_t baseIdx = offset_yzCross + 2 * (i + j * nx_nodes + kk * (nx_nodes * ny));
-          m_allElements[baseIdx]     = TrussElement_1D(m_type, m_area, n00, n11, allNodes);
-          m_allElements[baseIdx + 1] = TrussElement_1D(m_type, m_area, n10, n01, allNodes);
+        for (std::uint32_t i = 0; i <= nx; ++i) {
+          bar(id(i, j, k), id(i, j + 1, k + 1));
+          bar(id(i, j + 1, k), id(i, j, k + 1));
         }
       }
     }
 
-    anaf::LOG::success("All elements for simple truss created. ElementNum: {}", totalElements);
-    return {};
-  } // end: setTruss()
+    anaf::LOG::success("Simple truss created: {} nodes, {} bars", mesh.trussNodes.size(), mesh.trussElements.size());
+    return mesh;
+  }
 
 } // namespace FEM::TRUSS end

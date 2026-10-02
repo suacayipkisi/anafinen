@@ -24,6 +24,7 @@
 #include <truss_1D/trussIO/trussMeshAdapter.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -42,12 +43,9 @@ namespace anaf::GUI {
     // Imports path without the file chooser (built-in library models).
     void importFile(const std::filesystem::path& path);
     void requestExport();
-    // Cancels a running import (the object type is about to change).
+    // Cancels a running import (the object type is about to change). An import that finishes
+    // anyway is discarded when the model was reset after it started (modelGeneration).
     void cancelImport();
-
-    // Import replaces the model with truss_imported_or_entered. A generated truss_SQPT can
-    // only be exported: import is refused while it is the selected type.
-    static bool importAllowed();
 
     std::function<void()> onImported; // e.g. show the model tree
 
@@ -72,6 +70,7 @@ namespace anaf::GUI {
     std::shared_ptr<anaf::IO::IoTask<anaf::IO::WriteReport>> m_exportTask;
     Stage m_stage{Stage::Idle};
     std::filesystem::path m_pendingImport;
+    std::uint64_t m_importGeneration{0}; // bridge.modelGeneration when the running import started
 
     anaf::IO::ReadOptions m_cadOptions;
     int m_exportFormat{0};

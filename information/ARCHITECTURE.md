@@ -54,7 +54,7 @@ This document is the entry point for the project documentation. It describes how
 - `anaf_core` holds the FEM code and the solver-specific adapters.
 - `anafinen` adds the GUI, the bridge, the log, and the entry point.
 
-`anaf_core` also includes `bridge/generalStatus.hpp` (`Truss_SQPT` takes the bridge by reference). This is intentional until the CLI executable exists; see section 8.1.
+`anaf_core` also includes `bridge/generalStatus.hpp` (`Truss_Imported_or_Entered` takes the bridge by reference). This is intentional until the CLI executable exists; see section 8.1.
 
 ## 3. Namespaces
 
@@ -138,7 +138,7 @@ Update the documents when any of the following happens:
 
 ### 8.1 Deferred by design
 
-- `anaf_core` includes `bridge/generalStatus.hpp` (`Truss_SQPT` takes `Gui_Calc_Bridge&`) and calls `anaf::LOG`. Their sources (`generalStatus.cpp`, `anaf_info.cpp`, and `getExecutableDirectory.cpp` for the material library lookup) are compiled into the GUI executable only, so `anaf_core` cannot be linked on its own yet; `anaf_truss_io_tests` adds these files explicitly. The material library loader itself (`materialLibrary.cpp`) is already in `anaf_core` and has no GUI or log dependency. This is intentional for now. A pure CLI executable is planned for a later phase; at that point the bridge gets a CLI-side counterpart and the core is built against that instead of the GUI side.
+- `anaf_core` includes `bridge/generalStatus.hpp` (`Truss_Imported_or_Entered` takes `Gui_Calc_Bridge&`) and calls `anaf::LOG`. Their sources (`generalStatus.cpp`, `anaf_info.cpp`, and `getExecutableDirectory.cpp` for the material library lookup) are compiled into the GUI executable only, so `anaf_core` cannot be linked on its own yet; `anaf_truss_io_tests` adds these files explicitly. The material library loader itself (`materialLibrary.cpp`) is already in `anaf_core` and has no GUI or log dependency. This is intentional for now. A pure CLI executable is planned for a later phase; at that point the bridge gets a CLI-side counterpart and the core is built against that instead of the GUI side.
 
 ### 8.2 Fixed
 
@@ -166,7 +166,7 @@ Update the documents when any of the following happens:
 | File I/O ran on the calling thread | 2026-09-28 | `IoService` runs all file work (and snapshot conversion) on its own thread. |
 | `ModelTree` read `bridge.activeMesh` without the lock and deep-copied the mesh every frame | 2026-09-28 | Pointer copy under `dataMutex`; snapshots are immutable. |
 | Preview used the cross-section in cm² while the solver used m² | 2026-09-28 | Preview converts to m² like the solver. |
-| Build failed with GCC 14 (Debian 13): `std::vector<std::string>` passed to `std::format` (range formatting needs libstdc++ 15) | 2026-09-28 | `trussSolver_SQPT.cpp` joins the fixed-node list by hand. |
+| Build failed with GCC 14 (Debian 13): `std::vector<std::string>` passed to `std::format` (range formatting needs libstdc++ 15) | 2026-09-28 | `trussSolver_SQPT.cpp` joined the fixed-node list by hand (the file is gone since the single solve path, 2026-10-02). |
 | With the AUR `gmsh-bin` SDK (built by an older GCC), Gmsh lost physical names: our `std::map<std::pair<int, int>, std::string>` instantiation was exported from the executable and interposed libgmsh's own copy | 2026-09-28 | `mshFormat.cpp` keys its maps with a file-local `IntPair` type, so the instantiations have internal linkage. See [FILE_HANDLING.md](FILE_HANDLING.md) section 10. |
 | Linux packaging: `package.sh` only worked from `package/` on Arch; `PKGBUILD` required `spectra` (AUR, header-only) and `eigen` at run time and LLVM `openmp`; without ImageMagick the SVG was installed as `anafinen.png`; Debian's ImageMagick rendered an empty icon | 2026-09-28 | See [BUILD_SYSTEM.md](BUILD_SYSTEM.md) sections 5 and 8. |
 | `readsFilesWrittenByAnafinen012` failed with Gmsh 4.13: the STEP fixture was written in millimetres | 2026-09-28 | The fixture sets `Geometry.OCCTargetUnit` to `M`, like the STEP writer. |

@@ -73,7 +73,6 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_iterative.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_referee.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver_static.cpp
-    src/objectCalcs/truss_1D/trussEngine/trussSolver_SQPT.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver_Imported.cpp
 )
 
@@ -115,6 +114,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/materialHandler.cpp
     src/gui/panels/modelTree.cpp
     src/gui/panels/truss/trussTypePanel.cpp
+    src/gui/panels/truss/trussWorker.cpp
     src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp
     src/gui/panels/truss/importedTruss/trussModelEditor.cpp
     src/gui/panels/viewportPanel.cpp

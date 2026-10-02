@@ -9,33 +9,28 @@ This document describes the finite element calculation for 3D truss structures b
 
 ## 1. Overall flow
 
-Two orchestrators feed the same pipeline: `Truss_SQPT` for the generated grid truss (below) and `Truss_Imported_or_Entered` for imported or hand-built models (section 3.1). Everything from `calculate()` on is shared (`detail::runStaticSolve()`).
+One orchestrator solves every model: `Truss_Imported_or_Entered` takes a `MeshData` snapshot, whatever made it (the Simple Quadrangle generator `buildSimpleTruss()`, a built-in library model, File > Import or the model editor). Both truss panels start it through `TRUSS_WORKER::startSolve()` (`src/gui/panels/truss/trussWorker.cpp`), which copies the fixity and the material list, builds the model on the worker thread and publishes the result unless the model was reset meanwhile.
 
 ```text
-Truss_SQPT (trussSolver_SQPT.cpp)                       progress
+TRUSS_WORKER::startSolve(source)                         progress
    |
-   +-- trussSetAndSetFix_SQPT(fixedDOFs copy)             0.20
-   |     SimpleTruss::setTruss()  -> nodes + elements
-   |     fixity copy              -> Node::setMovable()
-   |
-   +-- trussSetForce_SQPT()                               0.25
-   |     ForceApplied list        -> m_forceVec[3*id + axis]
-   |
-   +-- setContainer()                                     0.30
-   |     Truss_1D_Container gets std::span views (no ownership)
-   |
-   +-- calculate()
-         |
-         +-- assembleStiffness()       upper-triangle triplets     0.50
-         +-- considerWeight()          -rho*A*L*g split to nodes    0.55
-         +-- calculateDisplacements()
-         |     u = T q (allowed directions) -> T^T K T, T^T f
-         |     SOLVER::solveSelected()  (referee)                   0.85
-         |     scatter back to nodes
-         +-- max |displacement| for the log (node locations stay undeformed)
-         +-- calculateElementForcesAndStress()                      0.90
-         +-- runValidator()   energy check                          0.95
-         +-- write m_isValid / m_energyDiff to bridge
+   +-- source()                    snapshot (SQPT: buildSimpleTruss() + loads)
+   +-- Truss_Imported_or_Entered (trussSolver_Imported.cpp)
+         +-- setModel(snapshot, fixity copy, materials copy)  0.20
+         +-- setForce(snapshot loads) -> m_forceVec[3*id + axis]  0.25
+         +-- setContainer()   Truss_1D_Container gets std::span views  0.30
+         +-- calculate() = detail::runStaticSolve()
+         |     +-- assembleStiffness()       upper-triangle triplets     0.50
+         |     +-- considerWeight()          -rho*A*L*g split to nodes    0.55
+         |     +-- calculateDisplacements()
+         |     |     u = T q (allowed directions) -> T^T K T, T^T f
+         |     |     SOLVER::solveSelected()  (referee)                   0.85
+         |     |     scatter back to nodes
+         |     +-- max |displacement| for the log (node locations stay undeformed)
+         |     +-- calculateElementForcesAndStress()                      0.90
+         |     +-- runValidator()   energy check                          0.95
+         |     +-- write m_isValid / m_energyDiff to bridge
+         +-- buildResultMesh(snapshot)   result snapshot, published by startSolve
 ```
 
 ## 2. Data types
@@ -46,12 +41,10 @@ Truss_SQPT (trussSolver_SQPT.cpp)                       progress
 | `TrussElement_1D` | `trussProperties/element.hpp` | Material index (`m_type`), area, two node IDs; computed length and direction cosines (`double`: in `float` the stiffness entries carried ~1e-7 relative error and the energy check failed); results: elongation, axial force, stress |
 | `ForceApplied` | `trussProperties/appliedForce.hpp` | Node ID + force vector [N] |
 | `Material` | `material/properties.hpp` | E, G, K, yield/ultimate strength, density, Poisson, ductility, ID, built-in flag. Built-ins are loaded from `assets/bridge/materialProperties.json` ([BRIDGE.md](BRIDGE.md) section 5.1). |
-| `SimpleTruss` | `trussTypes/simpleQuadranglePrismTrussCreate.hpp` | Owns node and element vectors of the generated prism truss |
 | `Truss_1D_Container` | `trussEngine/trussSolver/deformationUnderConstForce.hpp` | Non-owning spans over force vector, nodes, elements; triplets; results; energy values |
-| `Truss_SQPT` | `trussEngine/trussSolver.hpp` | Orchestrates one solve for the simple quadrangle prism truss |
-| `Truss_Imported_or_Entered` | `trussEngine/trussSolver.hpp` | Orchestrates one solve for an imported or hand-built snapshot (section 3.1) |
+| `Truss_Imported_or_Entered` | `trussEngine/trussSolver.hpp` | Orchestrates one solve of any snapshot (section 3.1) |
 
-Units are SI throughout: m, m², N, Pa, kg/m³. The GUI enters the cross-section in cm²; `Truss_SQPT`, the preview and the model editor all multiply by `1e-4` (snapshots store m²). `Material` has both `m_elasticityModulus` and `m_youngModulus`; the solver uses `m_elasticityModulus`.
+Units are SI throughout: m, m², N, Pa, kg/m³. The GUI enters the cross-section in cm²; the Simple Quadrangle panel and the model editor multiply by `1e-4` (snapshots store m²). `Material` has both `m_elasticityModulus` and `m_youngModulus`; the solver uses `m_elasticityModulus`.
 
 The element constructor rejects invalid input by throwing `std::invalid_argument` / `std::out_of_range`:
 - area ≤ 0
@@ -69,12 +62,13 @@ The element constructor rejects invalid input by throwing `std::invalid_argument
 
 ## 3. Mesh generation: simple quadrangle prism truss
 
-Input: cube counts `(nx, ny, nz)`, edge length `a`, area `A`, material index.
+`buildSimpleTruss(cubeNum, edgeLength, areaM2, materialIndex)` (`trussTypes/simpleQuadranglePrismTrussCreate.cpp`) returns a `MeshData` snapshot without supports, loads or results; the panel adds the loads and the solve is the common one (section 1).
 
+- It refuses (`std::unexpected`) a zero cube number, a length or area that is not finite and > 0, and grids whose DOF count does not fit the `int` triplet indices. Before 2026-10-02 the generator ran in OpenMP loops and a zero area threw from the element constructor inside them, which called `std::terminate`.
 - Nodes: `(nx+1)(ny+1)(nz+1)` on a grid, `id = i + j*(nx+1) + k*(nx+1)(ny+1)`, position `(a*i, a*j, a*k)`.
-- Elements, written into preallocated ranges, so the element index is deterministic:
+- Bars, in this order (plain serial loops, `k` outermost, `i` innermost):
 
-| Range | Count |
+| Group | Count |
 |---|---|
 | X edges | `nx (ny+1)(nz+1)` |
 | Y edges | `(nx+1) ny (nz+1)` |
@@ -83,11 +77,9 @@ Input: cube counts `(nx, ny, nz)`, edge length `a`, area `A`, material index.
 | XZ face diagonals | `2 nx (ny+1) nz` |
 | YZ face diagonals | `2 (nx+1) ny nz` |
 
-Every loop is `#pragma omp parallel for collapse(3)`. Each iteration writes its own slot, so no synchronization is needed.
+### 3.1 Solving a snapshot (`Truss_Imported_or_Entered`)
 
-### 3.1 Imported / self-built trusses (`Truss_Imported_or_Entered`)
-
-The model is not generated: it is the `MeshData` snapshot that File > Import or the model editor published. Only the model source differs; the container, the referee and the solvers are the same as for `Truss_SQPT` (both call `detail::runStaticSolve()`, `trussSolver_static.cpp`).
+The input is a `MeshData` snapshot: generated (section 3), a library model (section 3.2), imported, or entered in the model editor. The static solve itself is `detail::runStaticSolve()` (`trussSolver_static.cpp`).
 
 ```text
 Truss_Imported_or_Entered (trussSolver_Imported.cpp)       progress
@@ -119,7 +111,7 @@ Truss_Imported_or_Entered (trussSolver_Imported.cpp)       progress
 
 A structure that is still a mechanism (for example too few supports) reaches the referee and fails there, as in section 7.
 
-Verified by `anaf_truss_io_tests`: a generated truss written to MSH, read back and solved through this path matches the `Truss_SQPT` result, and a two-bar truss matches the hand solution σ = −P / (2 A sin 45°), v = P L / (2 A E sin² 45°).
+Verified by `anaf_truss_io_tests`: a solved generated grid written to MSH, read back and solved again matches the first result, and a two-bar truss matches the hand solution σ = −P / (2 A sin 45°), v = P L / (2 A E sin² 45°).
 
 ### 3.2 Built-in truss library (`FEM::TRUSS::LIBRARY`)
 
@@ -301,7 +293,7 @@ The result is written to `bridge.m_isValid` and `bridge.m_energyDiff` and logged
 
 ## 13. Related source files
 
-- Orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp), [trussSolver_SQPT.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_SQPT.cpp), [trussSolver_Imported.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_Imported.cpp), [trussSolver_static.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_static.cpp) (shared static solve)
+- Orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp), [trussSolver_Imported.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_Imported.cpp), [trussSolver_static.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver_static.cpp) (shared static solve)
 - Container: [deformationUnderConstForce.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp)
 - Solvers: [solverPortfolio.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solverPortfolio.hpp), [solver_referee.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_referee.cpp), [solver_cholmod.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_cholmod.cpp), [solver_simplicial.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_simplicial.cpp), [solver_iterative.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_iterative.cpp)
 - Types: [node.hpp](../src/objectCalcs/truss_1D/trussProperties/node.hpp), [element.hpp](../src/objectCalcs/truss_1D/trussProperties/element.hpp), [appliedForce.hpp](../src/objectCalcs/truss_1D/trussProperties/appliedForce.hpp), [properties.hpp](../src/material/properties.hpp)

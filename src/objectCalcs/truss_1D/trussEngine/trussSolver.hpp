@@ -28,55 +28,14 @@
 
 #include <bridge/generalStatus.hpp>
 #include <trussProperties/appliedForce.hpp>
-#include <trussTypes/simpleQuadranglePrismTrussCreate.hpp>
 #include <io/model/meshModel.hpp>
 #include "trussSolver/deformationUnderConstForce.hpp"
 
 namespace FEM::TRUSS{
 
-  // simple quadrangle prism truss
-  class Truss_SQPT {
-  private:
-    std::vector<double> m_forceVec;
-    SimpleTruss m_truss;
-    Truss_1D_Container m_container;
-  public:
-    Truss_SQPT(
-      std::uint32_t cubeNumX,
-      std::uint32_t cubeNumY,
-      std::uint32_t cubeNumZ,
-      double elementLength,
-      double area,
-      std::uint32_t type
-    ) :
-      // area is entered in cm^2; the model works in m^2
-      m_truss({{cubeNumX, cubeNumY, cubeNumZ}, elementLength, area * 1e-4, type})
-    {}
-
-    // fixedDOFsByNode must be a copy owned by the worker, not bridge.fixedDOFsByNode:
-    // the GUI thread may modify the bridge map while the solve runs. Returns why the grid
-    // cannot be built (zero area, length or cube number).
-    std::expected<void, std::string> trussSetAndSetFix_SQPT(
-      anaf::BRIDGE::Gui_Calc_Bridge& bridge,
-      std::stop_token st,
-      const anaf::BRIDGE::FixedDOFMap& fixedDOFsByNode
-    );
-
-    void trussSetForce_SQPT(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st, const std::vector<ForceApplied>& force);
-
-    void setContainer(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st);
-
-    void calculate(anaf::BRIDGE::Gui_Calc_Bridge& bridge, std::stop_token st, std::span<const anaf::MATERIAL::Material> materials);
-
-    const std::vector<Node>& getNodes() const { return m_truss.getNodes(); }
-    const std::vector<TrussElement_1D>& getElements() const { return m_truss.getElements(); }
-
-  };
-
-  // Truss imported from a file or entered by hand in the model editor. The model arrives as
-  // a snapshot: node ids are the 0-based node indices, bar materials index the material list
-  // the worker copied together with the snapshot. Same container, referee and solvers as
-  // Truss_SQPT; only the model source differs.
+  // Solves any truss snapshot: imported from a file, entered by hand in the model editor or
+  // generated (buildSimpleTruss, the built-in library). Node ids are the 0-based node indices,
+  // bar materials index the material list the worker copied together with the snapshot.
   class Truss_Imported_or_Entered {
   private:
     std::vector<Node> m_nodes;
@@ -87,8 +46,8 @@ namespace FEM::TRUSS{
   public:
     Truss_Imported_or_Entered() = default;
 
-    // Builds the solver nodes and bars and applies the fixity (a worker-owned copy, as for
-    // Truss_SQPT). A node of mesh with an inclined support keeps its allowed directions
+    // Builds the solver nodes and bars and applies the fixity (a copy owned by the worker: the
+    // GUI thread may change bridge.fixedDOFsByNode while the solve runs). A node of mesh with an inclined support keeps its allowed directions
     // instead of the axis fixity. Wireframe edges are skipped. Nodes that no bar uses are held fixed, so a
     // stray node does not make the stiffness matrix singular. Returns why the model cannot
     // be solved (no bars, bars without area, unknown material, zero-length bar, ...).

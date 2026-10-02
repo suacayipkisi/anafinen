@@ -51,7 +51,6 @@ TrussSelector     --onSelected(type)-----------------------> type changed? FileI
 TrussControlPanel --onOpenMaterialHandler()----------------> MaterialHandler.isOpen = true
 TrussModelEditor  --onOpenMaterialHandler / onRequestImport-> MaterialHandler.isOpen / FileIoPanel.requestImport()
 MainDockSpaceHost --on_import_mesh / on_export_results-----> FileIoPanel.requestImport() / requestExport()
-MainDockSpaceHost --is_import_enabled()--------------------> FileIoPanel::importAllowed() (false for truss_SQPT)
 FileIoPanel       --onImported()---------------------------> panels resetState(), TrussModelEditor + ModelTree open,
                                                               ViewportPanel.requestFit()
 ```
@@ -60,7 +59,7 @@ Object type switch: selecting the type that is already active only reopens its p
 
 | Panel | File | Window title | Status |
 |---|---|---|---|
-| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O; greyed out with a tooltip while `truss_SQPT` is active), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D; Help: "About anafinen...". Builds the default dock layout once (left: analysis set and model editor, right: model tree, bottom: console, center: viewport). |
+| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D; Help: "About anafinen...". Builds the default dock layout once (left: analysis set and model editor, right: model tree, bottom: console, center: viewport). |
 | `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking, overlays, legends |
 | `TrussSelector` | `panels/truss/trussTypePanel.cpp` | "Select Truss Type" | "Simple Quadrangle" (generated, export only) or "Imported / Self-Built". Warns that a type change clears the model. |
 | `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). `resetState()` restores the default inputs. |
@@ -104,7 +103,7 @@ File > Export Model... (Ctrl+E)
 
 - **Native dialogs:** `portable-file-dialogs` behind `fileDialogs/nativeFileDialog.*`. It is the only translation unit that includes the header. On Linux it runs `zenity` / `kdialog` as a child process; closing the application kills an open chooser. When no backend exists the panel reports it instead of failing.
 - **Blocking during a calculation:** import is refused while the solver or preview worker runs, so the worker cannot overwrite the imported snapshot.
-- **Generated truss:** while `truss_SQPT` is active, import is refused (menu item disabled, Ctrl+O and the editor button show a notice); export works. Import from `no_type` switches to `truss_imported_or_entered`.
+- **Object type:** an import always switches to `truss_imported_or_entered` (from `no_type` or `truss_SQPT` too) and opens the model editor. An import still running when the model is reset (type change, Clear) is discarded: `FileIoPanel` compares `modelGeneration` with the value taken at start.
 - **Solving imported models:** bars are solved in the model editor (section 2.4). Surface / volume meshes are shown as wireframe edges (`RenderElement::isWireframe`) and are never solved.
 
 ### 2.4 Model editor (`TrussModelEditor`)

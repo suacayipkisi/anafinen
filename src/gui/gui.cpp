@@ -137,7 +137,6 @@ namespace anaf::GUI {
       panels.dock->on_show_about = [panels] { panels.about->isOpen = true; };
       panels.dock->on_import_mesh = [panels] { panels.fileIo->requestImport(); };
       panels.dock->on_export_results = [panels] { panels.fileIo->requestExport(); };
-      panels.dock->is_import_enabled = [] { return FileIoPanel::importAllowed(); };
       // The import itself reset the bridge to truss_imported_or_entered (FileIoPanel::pollTasks).
       panels.fileIo->onImported = [panels] {
         panels.control->resetState();

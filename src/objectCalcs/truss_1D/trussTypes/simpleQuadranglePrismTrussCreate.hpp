@@ -17,50 +17,26 @@
 
 #pragma once
 
-#include <trussProperties/element.hpp>
-#include <trussProperties/node.hpp>
+#include <bridge/generalStatus.hpp>
 
-#include <cstdint>
 #include <array>
+#include <cstdint>
 #include <expected>
 #include <string>
-#include <vector>
 
 namespace FEM::TRUSS {
 
-  class SimpleTruss{
-  private:
-    std::array<std::uint32_t, 3> m_cubeNum{1, 1, 1}; // unit cubes along x, y, z; none of them may be zero
-    std::vector<Node> m_allNodes;
-    std::vector<TrussElement_1D> m_allElements;
-    std::uint32_t m_type{}; // material index
-    double m_cubeEdgeLength{};
-    double m_area{};
-  public:
-    SimpleTruss(
-      std::array<std::uint32_t, 3> cubeNum,
-      double cubeEdgeLength,
-      double area,
-      std::uint32_t type
-    ): 
-      m_cubeNum(cubeNum),
-      m_type(type),
-      m_cubeEdgeLength(cubeEdgeLength),
-      m_area(area)
-    {}
-
-    // Checks the parameters first and builds nothing when they are invalid: the element
-    // constructor throws on a zero area or length, and an exception thrown inside the OpenMP
-    // loops below would call std::terminate instead of reaching the caller.
-    std::expected<void, std::string> setTruss();
-
-    std::vector<Node>& getNodes() { return m_allNodes; }
-    const std::vector<Node>& getNodes() const { return m_allNodes; }
-
-    std::vector<TrussElement_1D>& getElements() { return m_allElements; }
-    const std::vector<TrussElement_1D>& getElements() const { return m_allElements; }
-
-    std::uint32_t getNodeNum() const {return static_cast<std::uint32_t>(m_allNodes.size());}
-  };
+  // Simple quadrangle prism truss (SQPT): cubeNum[axis] unit cubes along x / y / z, with a
+  // bar on every cube edge and both diagonals of every cube face. Node id
+  // i + j (nx + 1) + k (nx + 1)(ny + 1) sits at (i, j, k) * edgeLength. Every bar gets
+  // materialIndex (into the material list) and areaM2. The snapshot has no supports, loads
+  // or results; it is solved like any other model by Truss_Imported_or_Entered.
+  // Fails on a zero cube number, length or area, and on grids too large for 32-bit ids.
+  std::expected<anaf::BRIDGE::MeshData, std::string> buildSimpleTruss(
+    std::array<std::uint32_t, 3> cubeNum,
+    double edgeLength,
+    double areaM2,
+    std::uint32_t materialIndex
+  );
 
 } // namespace FEM::TRUSS end

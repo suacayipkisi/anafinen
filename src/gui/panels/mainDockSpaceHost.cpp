@@ -46,13 +46,8 @@ namespace anaf::GUI {
 
     if (ImGui::BeginMenuBar()) {
       if (ImGui::BeginMenu("File")) {
-        const bool importEnabled = !is_import_enabled || is_import_enabled();
-        if (ImGui::MenuItem("Import Mesh / CAD...", "Ctrl+O", false, importEnabled)) {
+        if (ImGui::MenuItem("Import Mesh / CAD...", "Ctrl+O")) {
           if (on_import_mesh) on_import_mesh();
-        }
-        if (!importEnabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-          ImGui::SetTooltip("Not available for the Simple Quadrangle truss (export works).\n"
-                            "Select Analyze > Truss (1D Element) > Imported / Self-Built to import.");
         }
         if (ImGui::MenuItem("Export Model...", "Ctrl+E")) {
           if (on_export_results) on_export_results();

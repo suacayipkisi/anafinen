@@ -24,23 +24,23 @@
 #include <cmath>
 #include <cstdint>
 #include <exception>
+#include <expected>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <stop_token>
+#include <string>
 #include <thread>
 
 #include <bridge/generalStatus.hpp>
 #include <log/anaf_info.hpp>
 #include <panels/truss/materialCombo.hpp>
 #include <panels/truss/trussWorker.hpp>
-#include <truss_1D/trussEngine/trussSolver.hpp>
+#include <truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp>
 
 namespace anaf::GUI {
 
   namespace {
-    using TRUSS_WORKER::configureOpenMPForWorker;
-
     // Elements and the solver take the material as an index into allMaterials.
     bool resolveMaterialIndex(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t materialID, std::uint32_t& index) {
       std::lock_guard lock(bridge.dataMutex);
@@ -208,10 +208,9 @@ namespace anaf::GUI {
          type = materialIndex,
          appliedForces = m_appliedForces](std::stop_token st) mutable {
           try {
-            configureOpenMPForWorker();
-            // Same units as the solver (cm^2 in the panel, m^2 in the model).
-            FEM::TRUSS::SimpleTruss preview{{cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type};
-            if (const auto built = preview.setTruss(); !built) {
+            // cm^2 in the panel, m^2 in the model.
+            auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
+            if (!built) {
               anaf::LOG::error("Preview not generated: {}", built.error());
               bridge.m_isGeneratingPreview = false;
               return;
@@ -220,14 +219,7 @@ namespace anaf::GUI {
               bridge.m_isGeneratingPreview = false;
               return;
             }
-
-            auto newMesh = std::make_shared<BRIDGE::MeshData>();
-            newMesh->trussNodes.assign(preview.getNodes().begin(), preview.getNodes().end());
-            newMesh->trussElements.reserve(preview.getElements().size());
-            for (const auto& element : preview.getElements()) {
-              const auto& nodes = element.getEleNodes();
-              newMesh->trussElements.push_back({nodes[0], nodes[1], 0.0f, false, element.getEleProperties(), element.getEleCrossSection(), false});
-            }
+            auto newMesh = std::make_shared<BRIDGE::MeshData>(std::move(*built));
             newMesh->appliedForces = appliedForces;
 
             {
@@ -351,114 +343,17 @@ namespace anaf::GUI {
       ImGui::EndDisabled();
     }
     else if (ImGui::Button("Run Solver for Truss", ImVec2(-1, 32)) && resolveMaterialIndex(bridge, m_materialID, materialIndex)) {
-      bridge.joinWorker();
-      bridge.m_isRunning = true;
-      bridge.m_progress = 0.0f;
-
-      // The worker gets its own copies: the GUI thread keeps editing the bridge
-      // (Apply Fixity, materials) while the solve runs.
-      BRIDGE::FixedDOFMap fixedDOFsSnapshot;
-      std::vector<anaf::MATERIAL::Material> materialsSnapshot;
-      {
-        std::lock_guard lock(bridge.dataMutex);
-        fixedDOFsSnapshot = bridge.fixedDOFsByNode;
-        materialsSnapshot = bridge.allMaterials;
-      }
-
-      bridge.workerThread = std::jthread(
-        [&bridge,
-         generation = bridge.modelGeneration.load(),
-         fixedDOFs = std::move(fixedDOFsSnapshot),
-         allMaterials = std::move(materialsSnapshot),
-         cubeNumX = m_cubeNumX,
-         cubeNumY = m_cubeNumY,
-         cubeNumZ = m_cubeNumZ,
-         cubeEdgeLength = m_cubeEdgeLength,
-         crossSectionalArea = m_crossSectionalArea,
-         type = materialIndex,
-         deformScale = currentScale,
-         forcesToApply = m_appliedForces
-        ](std::stop_token st) mutable {
-          try {
-            configureOpenMPForWorker();
-
-            FEM::TRUSS::Truss_SQPT solver{
-              cubeNumX,
-              cubeNumY,
-              cubeNumZ,
-              cubeEdgeLength,
-              crossSectionalArea,
-              type
-            };
-
-            if (const auto built = solver.trussSetAndSetFix_SQPT(bridge, st, fixedDOFs); !built) {
-              anaf::LOG::error("Solver not started: {}", built.error());
-              bridge.m_progress = 0.0f;
-              bridge.m_isRunning = false;
-              return;
-            }
-            solver.trussSetForce_SQPT(bridge, st, forcesToApply);
-            solver.setContainer(bridge, st);
-            solver.calculate(bridge, st, allMaterials);
-            if (st.stop_requested()) {
-              bridge.m_progress = 0.0f;
-              bridge.m_isRunning = false;
-              return;
-            }
-
-            // send solved nodes and elements into new snapshot
-            auto newMesh = std::make_shared<BRIDGE::MeshData>();
-            newMesh->trussNodes.assign(solver.getNodes().begin(), solver.getNodes().end());
-            newMesh->trussElements.reserve(solver.getElements().size());
-            for (const auto& element : solver.getElements()) {
-              const auto& nodes = element.getEleNodes();
-              const auto& material = allMaterials[element.getEleProperties()];
-              const bool isStressExceeded =
-                std::abs(element.getEleStress()) > material.getYieldTensile();
-              newMesh->trussElements.push_back({
-                nodes[0],
-                nodes[1],
-                static_cast<float>(element.getEleStress()),
-                isStressExceeded,
-                element.getEleProperties(),
-                element.getEleCrossSection(),
-                false
-              });
-            }
-            newMesh->appliedForces = forcesToApply;
-            newMesh->deformScale = deformScale;
-            newMesh->hasResults = true;
-
-            // apply the boundary conditions this solve used into nodes for overlay draw
-            for (auto& node : newMesh->trussNodes) {
-              std::array<bool, 3> movable{true, true, true};
-              const auto it = fixedDOFs.find(node.getNodeID());
-              if (it != fixedDOFs.end()) {
-                movable = { !it->second[0], !it->second[1], !it->second[2] };
-              }
-              node.setMovable(movable);
-            }
-
-            bool published = false;
-            {
-              std::lock_guard lock(bridge.dataMutex);
-              if (bridge.modelGeneration.load() == generation) { // not reset while solving
-                bridge.activeMesh = std::move(newMesh);
-                bridge.hasTrussPreview = true;
-                published = true;
-              }
-            }
-
-            // send signal to gui to draw scene
-            if (published) bridge.dataVersion.fetch_add(1, std::memory_order_release);
-
-          } catch (const std::exception& exception) {
-            anaf::LOG::error("Solver failed: {}", exception.what());
-          }
-
-          bridge.m_progress = 1.0f;
-          bridge.m_isRunning = false;
-      });
+      // The grid is rebuilt from the current inputs on the worker, like the preview.
+      TRUSS_WORKER::startSolve(bridge,
+        [cubeNumX = m_cubeNumX, cubeNumY = m_cubeNumY, cubeNumZ = m_cubeNumZ, cubeEdgeLength = m_cubeEdgeLength,
+         crossSectionalArea = m_crossSectionalArea, type = materialIndex, deformScale = currentScale,
+         forcesToApply = m_appliedForces]() -> std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string> {
+          auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
+          if (!built) return std::unexpected(built.error());
+          built->appliedForces = forcesToApply;
+          built->deformScale = deformScale;
+          return std::make_shared<const BRIDGE::MeshData>(std::move(*built));
+        });
     }
 
     if (ImGui::Button("Clear All", ImVec2(-1, 32))) {

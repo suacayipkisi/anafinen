@@ -40,7 +40,6 @@ namespace anaf::GUI {
     std::function<void()> on_export_results;
     std::function<void()> on_run_solver;
     std::function<void()> on_show_about;
-    std::function<bool()> is_import_enabled; // greys out File > Import when it returns false
 
     explicit MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
 
