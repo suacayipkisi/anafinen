@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-02.
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (window icon: 128 px + 32 px).
 
 ## 1. Overall flow (one frame)
 
@@ -243,7 +243,7 @@ Drawn by `renderOverlay2D()` on top of the image:
   - A value already in the environment is kept (the user's or the session's explicit choice); with both set, nothing is queried.
   - Source order follows `XDG_CURRENT_DESKTOP`: on KDE Plasma `kreadconfig6` / `kreadconfig5` (`kcminputrc`, group `Mouse`) first, elsewhere `gsettings` (`org.gnome.desktop.interface`) first, because on Plasma `gsettings` answers with GNOME's default when the GNOME schemas are installed. X resources (`Xcursor.theme` / `Xcursor.size`) come last, then Adwaita / 24.
 - On Windows, the `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` exports request the discrete GPU.
-- The window icon is loaded with libpng from the first existing asset path (see [BUILD_SYSTEM.md](BUILD_SYSTEM.md) section 7).
+- The window icon is set from two PNGs, each loaded with libpng from the first existing asset path (see [BUILD_SYSTEM.md](BUILD_SYSTEM.md) section 7): `icons/anafinen.png` (128 px) and `icons/anafinen-32.png` (drawn from the small-size SVG). GLFW picks the closest size for the title bar and taskbar, so small sizes are not shrunk from 128 px. On Wayland GLFW ignores it; the compositor uses the hicolor icon named in `anafinen.desktop`.
 - VSync is on (`glfwSwapInterval(1)`).
 
 ## 5. Adding a new panel

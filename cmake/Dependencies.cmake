@@ -86,35 +86,63 @@ endif()
 set(ANAFINEN_GENERATED_ASSETS_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-assets")
 file(MAKE_DIRECTORY "${ANAFINEN_GENERATED_ASSETS_DIR}/icons")
 
-# ANAFINEN_ICON_PNG falls back to the committed, pre-rendered assets/icons/anafinen.png when no
-# converter is available (the usual case on Windows).
-set(ANAFINEN_ICON_PNG "")
-set(_anafinen_icon_png "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen.png")
+# Renders <svg> to a <size>x<size> PNG at <out>; <result_var> is TRUE on success. A failed render
+# removes <out>, so a stale PNG from an earlier configure is never shipped.
+function(anafinen_render_icon svg size out result_var)
+    if(ANAFINEN_SVG_RENDERER)
+        execute_process(
+            COMMAND "${ANAFINEN_SVG_RENDERER}" --width ${size} --height ${size} --keep-aspect-ratio
+                    --output "${out}" "${svg}"
+            RESULT_VARIABLE _result
+        )
+    elseif(ANAFINEN_IMAGE_CONVERTER)
+        execute_process(
+            COMMAND "${ANAFINEN_IMAGE_CONVERTER}" "${svg}" -resize ${size}x${size} "${out}"
+            RESULT_VARIABLE _result
+        )
+    endif()
+    if(DEFINED _result AND _result EQUAL 0)
+        set(${result_var} TRUE PARENT_SCOPE)
+    else()
+        file(REMOVE "${out}")
+        set(${result_var} FALSE PARENT_SCOPE)
+    endif()
+endfunction()
 
-if(ANAFINEN_SVG_RENDERER)
-    execute_process(
-        COMMAND "${ANAFINEN_SVG_RENDERER}" --width 128 --height 128 --keep-aspect-ratio
-                --output "${_anafinen_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
-        RESULT_VARIABLE ANAFINEN_ICON_CONVERSION_RESULT
-    )
-elseif(ANAFINEN_IMAGE_CONVERTER)
-    execute_process(
-        COMMAND "${ANAFINEN_IMAGE_CONVERTER}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
-                -resize 128x128 "${_anafinen_icon_png}"
-        RESULT_VARIABLE ANAFINEN_ICON_CONVERSION_RESULT
-    )
-endif()
-if(DEFINED ANAFINEN_ICON_CONVERSION_RESULT AND ANAFINEN_ICON_CONVERSION_RESULT EQUAL 0)
-    set(ANAFINEN_ICON_PNG "${_anafinen_icon_png}")
-endif()
+# anafinen.svg is drawn for 48 px and up, anafinen-small.svg for 16-32 px (its A counter stays open).
+# ANAFINEN_ICON_PNG (128 px) and ANAFINEN_ICON_PNG_32 are the window icons; they fall back to the
+# committed renders in assets/icons/ when no converter is available (the usual case on Windows).
+# ANAFINEN_ICON_PNG_SMALL_SIZES lists the 16 / 24 px hicolor icons that could be rendered.
+set(_anafinen_icon_dir "${ANAFINEN_GENERATED_ASSETS_DIR}/icons")
+set(_anafinen_icon_src "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons")
+# Re-run configure (and so the renders) when a logo source changes.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${_anafinen_icon_src}/anafinen.svg" "${_anafinen_icon_src}/anafinen-small.svg")
 
-if(NOT ANAFINEN_ICON_PNG)
-    # Never ship a stale PNG from an earlier configure.
-    file(REMOVE "${_anafinen_icon_png}")
-    set(ANAFINEN_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.png")
+anafinen_render_icon("${_anafinen_icon_src}/anafinen.svg" 128 "${_anafinen_icon_dir}/anafinen.png" _ok)
+if(_ok)
+    set(ANAFINEN_ICON_PNG "${_anafinen_icon_dir}/anafinen.png")
+else()
+    set(ANAFINEN_ICON_PNG "${_anafinen_icon_src}/anafinen.png")
     message(STATUS "No rsvg-convert / ImageMagick could convert assets/icons/anafinen.svg; "
                    "using the pre-rendered assets/icons/anafinen.png")
 endif()
+
+anafinen_render_icon("${_anafinen_icon_src}/anafinen-small.svg" 32 "${_anafinen_icon_dir}/anafinen-32.png" _ok)
+if(_ok)
+    set(ANAFINEN_ICON_PNG_32 "${_anafinen_icon_dir}/anafinen-32.png")
+else()
+    set(ANAFINEN_ICON_PNG_32 "${_anafinen_icon_src}/anafinen-32.png")
+endif()
+
+set(ANAFINEN_ICON_PNG_SMALL_SIZES "")
+foreach(_size 16 24)
+    anafinen_render_icon("${_anafinen_icon_src}/anafinen-small.svg" ${_size}
+                         "${_anafinen_icon_dir}/anafinen-${_size}.png" _ok)
+    if(_ok)
+        list(APPEND ANAFINEN_ICON_PNG_SMALL_SIZES ${_size})
+    endif()
+endforeach()
 
 # Gmsh SDK integration
 if(WIN32)

@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 added, MinGW cross-build removed).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons).
 
 ## 1. Overall flow
 
@@ -92,7 +92,7 @@ Third-party include directories are marked `SYSTEM` (`imgui_suite`, `glad_local`
 | Spectra | submodule `external/spectra`, else `find_package(Spectra)` | no | Header-only; imported as `spectra_local` |
 | glm | `find_package(glm CONFIG)`, else header search | yes | - |
 | nlohmann/json | `find_package(nlohmann_json 3.11 CONFIG)`, else `FetchContent` of the v3.12.0 release tarball (SHA-256 pinned) | yes | Header-only, linked PRIVATE into `anaf_core` for the material library. |
-| librsvg / ImageMagick | `find_program(rsvg-convert)`, else `find_program(magick convert)` (only `magick` on Windows, where `convert` is `System32\convert.exe`) | no | Converts `assets/icons/anafinen.svg` to a 128x128 PNG at configure time (`ANAFINEN_ICON_PNG`). `rsvg-convert` is preferred: Debian's ImageMagick has no rsvg delegate, and its internal MSVG renderer draws only the background while still exiting with 0. Without a converter the committed, pre-rendered `assets/icons/anafinen.png` is used. On Windows `src/anafinen.rc` also embeds `assets/icons/anafinen.ico` (16-256 px) into the `.exe`; regenerate both files when the SVG changes. (Before 0.1.3 the SVG was copied under the `.png` name, which shipped a broken hicolor icon.) |
+| librsvg / ImageMagick | `find_program(rsvg-convert)`, else `find_program(magick convert)` (only `magick` on Windows, where `convert` is `System32\convert.exe`) | no | Renders the icons at configure time (`anafinen_render_icon()`): `assets/icons/anafinen.svg` (drawn for 48 px and up) to 128x128 (`ANAFINEN_ICON_PNG`), and `assets/icons/anafinen-small.svg` (16-32 px variant with heavier strokes, so the A's counter stays open) to 32x32 (`ANAFINEN_ICON_PNG_32`) and 16 / 24 px (`ANAFINEN_ICON_PNG_SMALL_SIZES`, hicolor only). `rsvg-convert` is preferred: Debian's ImageMagick has no rsvg delegate, and its internal MSVG renderer draws only the background while still exiting with 0. Without a converter the committed renders `assets/icons/anafinen.png` / `anafinen-32.png` are used and the 16 / 24 px hicolor icons are skipped. On Windows `src/anafinen.rc` also embeds `assets/icons/anafinen.ico` (16/24/32 from the small SVG, 48-256 from the large one, PNG entries) into the `.exe`. After changing either SVG, run `package/tools/render-icons.py` (rsvg-convert or inkscape) to regenerate the committed `.ico` and PNGs. (Before 0.1.3 the SVG was copied under the `.png` name, which shipped a broken hicolor icon.) |
 | portable-file-dialogs | vendored header `external/portable-file-dialogs/` (commit `c12ea8c`, WTFPL) | yes | Native file chooser. Linux runtime needs `zenity`, `kdialog`, `matedialog` or `qarma` |
 | Python 3 + `vtk` module | `find_package(Python3)` + `import vtk` probe | no | Enables the `vtk_reference_check` test |
 
@@ -162,7 +162,7 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 
 ## 7. Build artifacts and assets
 
-- `POST_BUILD` copies `assets/` next to the executable. It also copies the generated PNG icon and, on Windows, the Gmsh DLL.
+- `POST_BUILD` copies `assets/` next to the executable. It also copies the two window icons (`anafinen.png`, `anafinen-32.png`; generated or committed) and, on Windows, the Gmsh DLL.
 - Runtime asset lookup order (fonts, icon, material library), all through `anaf::DIRECTORY::findAssetPath()`:
   1. `<exe dir>/assets`
   2. `/usr/share/anafinen/assets`
@@ -175,7 +175,7 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 
 | Platform | Install layout | CPack generator | Package name |
 |---|---|---|---|
-| Linux | `bin/anafinen`, `share/anafinen/assets` (without the `.desktop` file), `share/applications/anafinen.desktop`, hicolor icons (SVG + 128px PNG) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
+| Linux | `bin/anafinen`, `share/anafinen/assets` (without the `.desktop` file), `share/applications/anafinen.desktop`, hicolor icons (scalable SVG, 128 px PNG, and 16 / 24 / 32 px PNGs from `anafinen-small.svg`) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
 | Windows | Flat: `anafinen.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES`, app-local MSVC runtime (`InstallRequiredSystemLibraries`, including `vcomp140.dll` for `/openmp`, so no Visual C++ Redistributable is needed; added after the 0.1.3 release) | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
 
 Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: hdf5` (and `suitesparse` when CHOLMOD is enabled).
@@ -264,6 +264,9 @@ package/tools/container-check.sh                  # both distros: build + tests
 package/tools/container-check.sh arch package     # package, install, ldd / icon check
 package/tools/container-check.sh debian shell     # interactive shell with the working tree in /work
 package/tools/container-check.sh --rebuild all    # rebuild the images (distro updates)
+
+# After editing assets/icons/anafinen.svg or anafinen-small.svg: regenerate the committed .ico / PNGs
+package/tools/render-icons.py
 ```
 
 ## 10. Related files
@@ -275,5 +278,6 @@ package/tools/container-check.sh --rebuild all    # rebuild the images (distro u
 - [cmake/Packaging.cmake](../cmake/Packaging.cmake)
 - [package/package.sh](../package/package.sh), [package/PKGBUILD](../package/PKGBUILD), [package/PACKAGE_BUILD.md](../package/PACKAGE_BUILD.md)
 - [package/tools/container-check.sh](../package/tools/container-check.sh), [package/tools/containers/](../package/tools/containers/)
+- [package/tools/render-icons.py](../package/tools/render-icons.py), [assets/icons/](../assets/icons/), [src/anafinen.rc](../src/anafinen.rc)
 - [.gitmodules](../.gitmodules)
 - [tests/CMakeLists.txt](../tests/CMakeLists.txt)

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ANAFINEN logo, small-size variant for 16, 24 and 32 px (anafinen.svg covers 48 px and up).
+     Same construction as anafinen.svg, drawn larger (glyph box 16..240, cap height 32..224) with
+     heavier strokes (stems 32, slanted strokes 28-30, crossbar 24) so the A's counter stays open.
+     Vertical and horizontal edges sit on multiples of 16 (crossbar bottom on 8): whole pixels at
+     16 x 16 and 32 x 32. No border line at these sizes. -->
+<svg width="256" height="256" version="1.1" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17171C"/>
+      <stop offset="1" stop-color="#0B0B0E"/>
+    </linearGradient>
+    <linearGradient id="contourGrad" x1="0" y1="224" x2="0" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2F5BFF"/>
+      <stop offset="0.25" stop-color="#00C2FF"/>
+      <stop offset="0.5" stop-color="#2EE06A"/>
+      <stop offset="0.75" stop-color="#FFD21F"/>
+      <stop offset="1" stop-color="#FF3B1F"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="32" fill="url(#bgGrad)"/>
+  <!-- A left leg, shared stem, A crossbar, N diagonal, N right stem (clockwise, nonzero union). -->
+  <path fill="url(#contourGrad)" d="
+    M16 224 L128 32 L160 32 L160 32.71 L48.42 224 Z
+    M128 32 L160 32 L160 224 L128 224 Z
+    M64 144 L128 144 L128 168 L64 168 Z
+    M128 32 L160.47 32 L240 224 L207.53 224 Z
+    M208 32 L240 32 L240 224 L208 224 Z"/>
+</svg>

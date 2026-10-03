@@ -27,6 +27,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -55,12 +56,17 @@
 namespace anaf::GUI {
 
   namespace {
-    void setWindowIcon(GLFWwindow* window) {
-      const std::filesystem::path icon_subpath = std::filesystem::path("icons") / "anafinen.png";
-      const std::filesystem::path icon_path = anaf::DIRECTORY::findAssetPath(icon_subpath);
+    struct DecodedIcon {
+      int width = 0;
+      int height = 0;
+      std::vector<png_byte> pixels; // RGBA8
+    };
+
+    std::optional<DecodedIcon> loadIconPng(std::string_view file_name) {
+      const std::filesystem::path icon_path =
+        anaf::DIRECTORY::findAssetPath(std::filesystem::path("icons") / file_name);
       if (icon_path.empty()) {
-        anaf::LOG::warn("[GUI] Application icon not found.");
-        return;
+        return std::nullopt;
       }
 
       // Read through std::ifstream: libpng's *_from_file uses fopen(), which cannot open
@@ -71,24 +77,41 @@ namespace anaf::GUI {
       png_image image{};
       image.version = PNG_IMAGE_VERSION;
       if (encoded.empty() || !png_image_begin_read_from_memory(&image, encoded.data(), encoded.size())) {
-        anaf::LOG::warn("[GUI] Failed to read application icon.");
-        return;
+        anaf::LOG::warn("[GUI] Failed to read application icon {}.", file_name);
+        return std::nullopt;
       }
       image.format = PNG_FORMAT_RGBA;
-      std::vector<png_byte> pixels(PNG_IMAGE_SIZE(image));
-      if (!png_image_finish_read(&image, nullptr, pixels.data(), 0, nullptr)) {
+      DecodedIcon icon{static_cast<int>(image.width), static_cast<int>(image.height),
+                       std::vector<png_byte>(PNG_IMAGE_SIZE(image))};
+      if (!png_image_finish_read(&image, nullptr, icon.pixels.data(), 0, nullptr)) {
         png_image_free(&image);
-        anaf::LOG::warn("[GUI] Failed to decode application icon.");
+        anaf::LOG::warn("[GUI] Failed to decode application icon {}.", file_name);
+        return std::nullopt;
+      }
+      png_image_free(&image);
+      return icon;
+    }
+
+    // anafinen-32.png is drawn from the small-size SVG; GLFW picks the closest size for the
+    // title bar / taskbar instead of shrinking the 128 px image (which closes the A's counter).
+    void setWindowIcon(GLFWwindow* window) {
+      std::vector<DecodedIcon> icons;
+      for (const std::string_view file_name : {"anafinen.png", "anafinen-32.png"}) {
+        if (auto icon = loadIconPng(file_name)) {
+          icons.push_back(std::move(*icon));
+        }
+      }
+      if (icons.empty()) {
+        anaf::LOG::warn("[GUI] Application icon not found.");
         return;
       }
 
-      GLFWimage glfw_icon{
-        static_cast<int>(image.width),
-        static_cast<int>(image.height),
-        pixels.data()
-      };
-      glfwSetWindowIcon(window, 1, &glfw_icon);
-      png_image_free(&image);
+      std::vector<GLFWimage> glfw_icons;
+      glfw_icons.reserve(icons.size());
+      for (DecodedIcon& icon : icons) {
+        glfw_icons.push_back(GLFWimage{icon.width, icon.height, icon.pixels.data()});
+      }
+      glfwSetWindowIcon(window, static_cast<int>(glfw_icons.size()), glfw_icons.data());
     }
 
     // Which window system GLFW picked. On Linux it can differ from the session: under a

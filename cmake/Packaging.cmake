@@ -8,11 +8,9 @@ if(WIN32)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
         DESTINATION "assets"
     )
-    if(ANAFINEN_ICON_PNG)
-        install(FILES "${ANAFINEN_ICON_PNG}"
-            DESTINATION "assets/icons"
-        )
-    endif()
+    install(FILES "${ANAFINEN_ICON_PNG}" "${ANAFINEN_ICON_PNG_32}"
+        DESTINATION "assets/icons"
+    )
     install(FILES "${GMSH_DLL}"
         DESTINATION .
     )
@@ -40,11 +38,9 @@ else()
         DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets"
         PATTERN "anafinen.desktop" EXCLUDE
     )
-    if(ANAFINEN_ICON_PNG)
-        install(FILES "${ANAFINEN_ICON_PNG}"
-            DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets/icons"
-        )
-    endif()
+    install(FILES "${ANAFINEN_ICON_PNG}" "${ANAFINEN_ICON_PNG_32}"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets/icons"
+    )
 endif()
 
 if(UNIX AND NOT APPLE)
@@ -58,11 +54,21 @@ if(UNIX AND NOT APPLE)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.svg"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
     )
-    if(ANAFINEN_ICON_PNG)
-        install(FILES "${ANAFINEN_ICON_PNG}"
-            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/128x128/apps
+    install(FILES "${ANAFINEN_ICON_PNG}"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/128x128/apps
+    )
+    # Small sizes come from anafinen-small.svg; without them the desktop would scale the
+    # scalable icon down and close the A's counter.
+    install(FILES "${ANAFINEN_ICON_PNG_32}"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/32x32/apps
+        RENAME anafinen.png
+    )
+    foreach(_size IN LISTS ANAFINEN_ICON_PNG_SMALL_SIZES)
+        install(FILES "${ANAFINEN_GENERATED_ASSETS_DIR}/icons/anafinen-${_size}.png"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${_size}x${_size}/apps
+            RENAME anafinen.png
         )
-    endif()
+    endforeach()
 endif()
 
 set(CPACK_PACKAGE_NAME "anafinen")

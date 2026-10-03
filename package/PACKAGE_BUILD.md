@@ -29,9 +29,12 @@ install it first (`gmsh`, built from source, or the prebuilt `gmsh-bin`); the
 script stops with a hint when it is missing. For Debian, the script uses CPack's
 DEB generator and derives shared-library dependencies with `dpkg-shlibdeps`.
 
-The 128x128 PNG icon is rendered from `assets/icons/anafinen.svg` with
-`rsvg-convert` (librsvg) or, as a fallback, ImageMagick. The scripts install
-the converter. Without one, the package has no PNG icon (CMake warns).
+The PNG icons are rendered at configure time with `rsvg-convert` (librsvg) or,
+as a fallback, ImageMagick: 128x128 from `assets/icons/anafinen.svg`, and
+16 / 24 / 32 px from `assets/icons/anafinen-small.svg`. The scripts install the
+converter. Without one, CMake uses the committed `anafinen.png` /
+`anafinen-32.png` and skips the 16 / 24 px hicolor icons. After editing an SVG,
+run `package/tools/render-icons.py` to regenerate the committed `.ico` and PNGs.
 
 To check the Debian and Arch packages without those systems, run
 `package/tools/container-check.sh debian package` or `package/tools/container-check.sh arch package`
