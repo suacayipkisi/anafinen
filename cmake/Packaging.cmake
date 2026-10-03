@@ -31,19 +31,6 @@ if(WIN32)
         set(CMAKE_INSTALL_OPENMP_LIBRARIES ON) # vcomp140.dll for /openmp
         include(InstallRequiredSystemLibraries) # vcruntime140*.dll, msvcp140*.dll
     endif()
-
-    # use MinGW DLL if croscompile on linux
-    if(CMAKE_CROSSCOMPILING)
-        install(FILES
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libgomp-1.dll"
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libwinpthread-1.dll"
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libpng16-16.dll"
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/zlib1.dll"
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libgcc_s_seh-1.dll"
-            "/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libstdc++-6.dll"
-            DESTINATION .
-        )
-    endif()
 else()
     install(TARGETS anafinen
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -97,8 +84,10 @@ elseif(UNIX AND NOT APPLE)
     set(CPACK_RPM_PACKAGE_RELEASE "1.alpha")
     set(CPACK_RPM_PACKAGE_LICENSE "GPLv3+")
     set(CPACK_RPM_PACKAGE_GROUP "Applications/Engineering")
+    # AUTOREQPROV adds the shared-library requirements; these name the packages for readers.
+    set(CPACK_RPM_PACKAGE_REQUIRES "hdf5")
     if(ANAFINEN_HAS_CHOLMOD)
-        set(CPACK_RPM_PACKAGE_REQUIRES "suitesparse")
+        string(APPEND CPACK_RPM_PACKAGE_REQUIRES ", suitesparse")
     endif()
     set(CPACK_DEBIAN_PACKAGE_VERSION "${PROJECT_VERSION}~alpha1")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)

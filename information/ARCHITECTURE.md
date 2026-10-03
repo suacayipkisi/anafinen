@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -14,7 +14,7 @@ This document is the entry point for the project documentation. It describes how
 | [BUILD_SYSTEM.md](BUILD_SYSTEM.md) | CMake modules, dependency detection, targets, packaging |
 | [BRIDGE.md](BRIDGE.md) | `Gui_Calc_Bridge`, `MeshData` snapshots, synchronization rules |
 | [CALCULATIONS.md](CALCULATIONS.md) | Truss FEM pipeline, stiffness assembly, solver portfolio, validator |
-| [FILE_HANDLING.md](FILE_HANDLING.md) | `anaf_io`: format-neutral mesh model, MSH / VTK / VTU / STEP / IGES / BREP, async I/O service |
+| [FILE_HANDLING.md](FILE_HANDLING.md) | `anaf_io`: format-neutral mesh model, MSH / VTK / VTU / STEP / IGES / BREP, HDF5 array store, async I/O service |
 | [IO_USAGE.md](IO_USAGE.md) | How callers use `anaf_io`: public headers, `readMesh` / `writeMesh`, `IoService`, building and reading a `MeshModel`, solver adapters |
 | [GUI.md](GUI.md) | Frame loop, panels, viewport render pipeline, picking |
 | [MESH_DATA_FLOW.md](MESH_DATA_FLOW.md) | End-to-end path of one truss mesh from the panel to the screen |
@@ -47,6 +47,8 @@ This document is the entry point for the project documentation. It describes how
 |  | anaf_io (static library, no solver / GUI dependency)               |   |
 |  |  anaf::IO: MeshModel, MSH / VTK / VTU (native), STEP / IGES / BREP |   |
 |  |  (Gmsh + OCC), IoService (own I/O thread)                          |   |
+|  |  anaf::IO::ARRAY: HDF5 matrices / vectors / tensors (std, Eigen,   |   |
+|  |  CHOLMOD adapters header-only)                                     |   |
 |  +--------------------------------------------------------------------+   |
 +---------------------------------------------------------------------------+
 ```
@@ -65,6 +67,7 @@ This document is the entry point for the project documentation. It describes how
 | `anaf::BRIDGE` | `src/bridge/` | Shared state between GUI thread and worker thread |
 | `anaf::GUI` | `src/gui/` | Window, ImGui layer, panels, OpenGL renderer |
 | `anaf::IO` | `src/io/` | Format-neutral mesh model, readers / writers, async I/O service (library `anaf_io`) |
+| `anaf::IO::ARRAY` | `src/io/array/` | HDF5 store for dense / sparse arrays (`ArrayFile`) and its std, Eigen and CHOLMOD adapters (part of `anaf_io`) |
 | `FEM::TRUSS::ADAPTER` | `src/objectCalcs/truss_1D/trussIO/` | `MeshModel` ↔ truss snapshot conversion |
 | `anaf::MATERIAL` | `src/material/` | `Material` property record; material library loader and validation (`materialLibrary.*`, in `anaf_core`) |
 | `anaf::LOG` | `src/log/` | `std::format` logging (`info` / `warn` / `error` / `success` / `core`) with file, GUI callback and stdout sinks, chosen at run time. A floating-point value states its own precision in the format string (`{:.3e}` for round-off sized energy differences, `{:.6g}` for results); there is no global precision setting. |

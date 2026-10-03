@@ -3,13 +3,14 @@
 This document describes `anaf_io`, the mesh import/export library:
 - its format-neutral data model
 - every supported format and version
+- the HDF5 array store for matrices, vectors and tensors (section 4.5)
 - the asynchronous service
 - how the GUI (and a future CLI) use it
 
 For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names, link to the interoperability plan; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 array store `src/io/array/`; 2026-10-03: rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names, link to the interoperability plan; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -30,6 +31,9 @@ For a caller-side guide (public headers, functions, code examples), see [IO_USAG
                  |          fields with time steps, constraints, loads, element attributes)    |
                  |                                                                             |
                  |  service/ioService.hpp: IoService (one I/O thread, IoTask polling, cancel)  |
+                 |                                                                             |
+  .h5 (HDF5) <-->|  array/arrayFile.hpp: ArrayFile (dense / sparse arrays, groups, attributes) |
+                 |     + header-only adapters: stdArrays, eigenArrays, cholmodArrays           |
                  +-----------------------------------------------------------------------------+
                             ^                                   ^
                             |                                   |
@@ -41,8 +45,9 @@ For a caller-side guide (public headers, functions, code examples), see [IO_USAG
 
 | Rule | Why |
 |---|---|
-| `anaf_io` depends only on Gmsh (CAD formats) and zlib (VTU compression), both PRIVATE | GUI, CLI and tests link the same library without pulling in solver or GUI code |
-| Public headers: `io/meshIo.hpp`, `io/service/ioService.hpp`, `io/model/*.hpp`, `io/core/ioTypes.hpp` | `io/detail/*` and `io/formats/*` are internal |
+| `anaf_io` depends only on Gmsh (CAD formats), zlib (VTU compression) and HDF5 (array store), all PRIVATE | GUI, CLI and tests link the same library without pulling in solver or GUI code |
+| The Eigen and CHOLMOD adapters (`io/array/eigenArrays.hpp`, `cholmodArrays.hpp`) are header-only | `anaf_io` compiles and links without Eigen or CHOLMOD; only the code that includes an adapter needs that library |
+| Public headers: `io/meshIo.hpp`, `io/service/ioService.hpp`, `io/model/*.hpp`, `io/core/ioTypes.hpp`, `io/array/*.hpp` | `io/detail/*` (including `h5Handle.hpp`, the only place besides `arrayFile.cpp` that includes `hdf5.h`) and `io/formats/*` are internal |
 | Solver-specific conversions live outside `anaf_io` (`trussMeshAdapter` in `anaf_core`) | New object types (beams, shells, solids) add their own adapter; formats do not change |
 | No GUI macros (`ANAF_GUI`) in shared headers | Libraries are compiled once and linked into several executables; a macro that changes a type would break the ODR |
 
@@ -292,6 +297,51 @@ END
 - Each session clears the model and restores all option defaults, so settings such as mesh size limits cannot leak into the next import.
 - Gmsh is initialized without reading the user's `gmshrc`.
 
+### 4.5 HDF5 array store (`array/arrayFile.cpp`)
+
+Binary storage for solver data that is not a mesh: stiffness / mass matrices, load and result vectors, eigenvector sets, tensors. It is a separate API (`anaf::IO::ARRAY::ArrayFile`), not a `FileFormat` of `readMesh` / `writeMesh`. The layout follows the conventions of h5py, SciPy and anndata, so Python, MATLAB (`h5read`) and HDFView read the files without anaf code.
+
+```text
+  caller                         anaf_io (anaf::IO::ARRAY)                      file (.h5)
+  ------                         -------------------------                      ----------
+  std::vector / array / mdspan -> stdArrays.hpp    write / readVector / readRows / asMdspan
+  Eigen dense / SparseMatrix ---> eigenArrays.hpp  write / readEigen<T>
+  cholmod_sparse / dense -------> cholmodArrays.hpp write / readCholmodSparse / readCholmodDense
+                                        |
+                                        v
+                                 arrayFile.hpp: ArrayFile  writeDense / readDense,
+                                 (span + shape, CSC/CSR)   writeSparse / readSparse,
+                                        |                  info / list / exists / remove,
+                                        v                  setAttribute / attribute
+                                 arrayFile.cpp + detail/h5Handle.hpp  -- HDF5 C API --> /group/dataset
+                                 (one process-wide mutex around every HDF5 call)
+```
+
+Where data is stored:
+
+| Data | HDF5 object | Notes |
+|---|---|---|
+| Dense array of rank N | dataset with N dimensions | Row-major (C order). Rank 0 = scalar dataspace. Eigen ColMajor matrices are transposed while copying, so `(rows, cols)` on disk is the mathematical shape. |
+| Sparse matrix | group with datasets `data`, `indices` (int64), `indptr` (int64) | Attributes `encoding-type` = `csc_matrix` / `csr_matrix`, `encoding-version` = `0.1.0`, `shape` = int64[2] (anndata convention; `scipy.sparse.csc_matrix((data, indices, indptr), shape)` rebuilds it). |
+| Symmetric CHOLMOD matrix | same group + attribute `cholmod-stype` | Only one triangle is stored, as in CHOLMOD. Other readers see a triangular matrix. |
+| Complex values | compound type `{r, i}` of float or double | The h5py convention. |
+| Attributes | HDF5 attributes | int64, double, variable-length UTF-8 string, int64[] or double[]. Fixed-length strings written by other tools are read too. |
+| Groups | HDF5 groups | Missing parents are created on write (`results/step_001/u`). Link names are UTF-8. |
+
+Element types: `float`, `double`, `int32`, `int64`, `uint64`, `complex<float>`, `complex<double>`. A read must ask for the stored type or a lossless widening (float → double, int32 → int64, complex64 → complex128); anything else is `TypeMismatch`.
+
+Write sequence (`writeDense`):
+
+1. Lock the HDF5 mutex; turn off HDF5's automatic error printing (it is per thread in thread-safe builds).
+2. Check the file is open and writable, normalize the path (`a//b`, `.` and `..` are rejected), check `values.size()` against the shape.
+3. When the path exists: delete the link (`overwrite = true`, the default) or fail with `AlreadyExists`.
+4. Create the dataspace and the dataset with intermediate groups; with `deflateLevel` 1–9 the dataset is chunked (at most 1 MiB per chunk) and zlib-compressed.
+5. Write the whole buffer in one `H5Dwrite`. Errors carry the HDF5 error stack in `ArrayError::message`.
+
+Read sequence (`readSparse`): `info()` reads the attributes and the `data` size, then the three datasets are read (`indices` / `indptr` converted to int64 by HDF5) and validated: pointer count, monotonic pointers, last pointer = non-zeros, every index inside the matrix. A broken file gives `InvalidData`, never undefined behaviour in Eigen or CHOLMOD. Eigen needs sorted inner indices; unsorted ones (allowed by CSC, produced by some CHOLMOD routines) are rebuilt through triplets, which also sums duplicates.
+
+Thread safety: distribution HDF5 builds are not thread-safe (`h5cc -showconfig`: `Threadsafety: no`). Every `ArrayFile` call holds one process-wide mutex, so different files can be used from different threads (tested with four threads). A single `ArrayFile` object must not be shared between threads without external locking.
+
 ## 5. Synchronous API (`io/meshIo.hpp`)
 
 ```cpp
@@ -349,6 +399,7 @@ See [GUI.md](GUI.md) section 2.3. In short:
 | Test | What it proves |
 |---|---|
 | `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar (v3: step kinds, labels, globals, thermal BCs, amplitudes, damping); prescribed displacements, thermal BCs, amplitudes, initial conditions and damping in every format, checked in the file text too; amplitude interpolation; `validate()` of broken references; step kinds, labels and global data in every format; `TimeValue`; `.pvd` series with a late-starting field, progress and cancellation; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation; rotational constraints, nodal moments (force + moment merge on read), section attributes, `ElementFormulation`, `beamOrientation`, `Rotation` mode shapes and 12-component `BeamSectionForce` in every format (STEP sidecar per element, edge direction kept); a truss model writes exactly the arrays it wrote before; `validate()` of broken beam data |
+| `anaf_array_tests` | HDF5 array store: dense round trips of every element type and rank 0–4 (incl. zero-size), widening reads and refused narrowing, groups / list / exists / remove / overwrite, every attribute kind, error codes (missing file, non-HDF5 file, read-only, moved-from object, kind / shape mismatch), deflate shrinks a repetitive array more than tenfold, sparse validation on write and on read (hand-made broken group), std containers and `mdspan` (`layout_right` in place, `layout_left` gathered), Eigen dense (ColMajor on disk is row-major, blocks, strided rows, fixed sizes, `Array`, complex) and sparse (CSC / CSR in either Eigen order, uncompressed, unsorted indices, complex), CHOLMOD sparse (stype, CSR → CSC) and dense (leading dimension) when available, UTF-8 file names, four threads writing their own files |
 | `vtk_reference_check` | Python + official VTK 9.5: 124 files written by VTK in every legacy / XML variant are read exactly as VTK reads them; VTK reads every variant anaf_io writes. The grids include field data, `TimeValue` and `_Mode_NNN` arrays. Skipped when the Python `vtk` module is missing |
 | `anaf_core_tests` | The FEM core alone, against closed-form results ([CALCULATIONS.md](CALCULATIONS.md) section 11) |
 | `anaf_truss_io_tests` | The GUI data path without the GUI: solve → snapshot → adapter → every format → adapter → identical snapshot (bit-exact); inclined supports through MSH and the solver; STEP with X-bracing; wireframe preview; conversion off the calling thread; material library loading, user material add / remove / save (temporary files only, never the real user config); materials matched by name after the list changes (all writable formats); material files under a non-ASCII folder |
@@ -372,6 +423,7 @@ The plan for the format and data model gaps below (Abaqus `.inp`, CalculiX `.frd
 - Binary MSH 4.1 files cannot be opened by the Gmsh 4.15 build on Fedora (its bug, see 4.1). Our files are valid; use MSH 2.2 or ASCII 4.1 for that Gmsh version.
 - Debian 13's Gmsh 4.13 package aborts inside its own second-order 3D meshing (Eigen assertion; see [ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 4). CAD import with element order 2 may hit it.
 - `anaf_io` must not instantiate standard templates on types that Gmsh also uses internally (for example `std::map<std::pair<int, int>, std::string>`, Gmsh's physical-name map). Such an instantiation is exported from the executable and replaces libgmsh's copy at run time; with a Gmsh SDK built by another GCC (AUR `gmsh-bin`) the two libstdc++ versions then share one tree and Gmsh loses physical names. `mshFormat.cpp` uses the file-local `IntPair` key for this reason.
+- HDF5 store: deleting or overwriting an object does not shrink the file (HDF5 does not reclaim the space; `h5repack` does). Only whole datasets are read and written: no partial (hyperslab) access or appending yet. `std::mdspan` support needs a standard library that has it (GCC 15+, MSVC 17.9+); with GCC 14 (Debian 13) the `mdspan` overloads are left out and their test is skipped.
 - Element types beyond the table are skipped with a warning. Binary files with such types are rejected, because their node count is needed to skip them.
 
 ## 11. Related source files
@@ -379,7 +431,8 @@ The plan for the format and data model gaps below (Abaqus `.inp`, CalculiX `.frd
 - Public API: [src/io/meshIo.hpp](../src/io/meshIo.hpp), [src/io/core/ioTypes.hpp](../src/io/core/ioTypes.hpp), [src/io/service/ioService.hpp](../src/io/service/ioService.hpp)
 - Model: [src/io/model/meshModel.hpp](../src/io/model/meshModel.hpp), [src/io/model/elementType.cpp](../src/io/model/elementType.cpp)
 - Formats: [mshFormat.cpp](../src/io/formats/mshFormat.cpp), [vtkLegacyFormat.cpp](../src/io/formats/vtkLegacyFormat.cpp), [vtuFormat.cpp](../src/io/formats/vtuFormat.cpp), [cadFormat.cpp](../src/io/formats/cadFormat.cpp)
+- HDF5 array store: [arrayTypes.hpp](../src/io/array/arrayTypes.hpp), [arrayFile.hpp](../src/io/array/arrayFile.hpp), [arrayFile.cpp](../src/io/array/arrayFile.cpp), [stdArrays.hpp](../src/io/array/stdArrays.hpp), [eigenArrays.hpp](../src/io/array/eigenArrays.hpp), [cholmodArrays.hpp](../src/io/array/cholmodArrays.hpp), [h5Handle.hpp](../src/io/detail/h5Handle.hpp)
 - Internals: [modelCodec.cpp](../src/io/detail/modelCodec.cpp), [vtkCommon.cpp](../src/io/detail/vtkCommon.cpp), [textIo.hpp](../src/io/detail/textIo.hpp), [gmshSession.cpp](../src/io/detail/gmshSession.cpp)
 - Adapter: [trussMeshAdapter.cpp](../src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp)
 - GUI: [fileIoPanel.cpp](../src/gui/panels/fileIoPanel.cpp), [nativeFileDialog.cpp](../src/gui/fileDialogs/nativeFileDialog.cpp)
-- Tests: [ioTests.cpp](../tests/ioTests.cpp), [vtkReferenceCheck.py](../tests/vtkReferenceCheck.py), [trussIoTests.cpp](../tests/trussIoTests.cpp), [ioTool.cpp](../tests/ioTool.cpp)
+- Tests: [arrayTests.cpp](../tests/arrayTests.cpp), [ioTests.cpp](../tests/ioTests.cpp), [vtkReferenceCheck.py](../tests/vtkReferenceCheck.py), [trussIoTests.cpp](../tests/trussIoTests.cpp), [ioTool.cpp](../tests/ioTool.cpp)

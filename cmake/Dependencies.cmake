@@ -4,8 +4,28 @@ find_package(OpenGL REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 
+# HDF5 (required): binary matrix / vector / tensor files (anaf_io, src/io/array/). Always a
+# prebuilt library: the distribution package on Linux (found through h5cc, as Fedora and Debian
+# ship no CMake config), the vcpkg port on Windows (hdf5-config.cmake). Only the C API is used.
+set(HDF5_PREFER_PARALLEL OFF)
+find_package(HDF5 REQUIRED COMPONENTS C)
+if(TARGET HDF5::HDF5)
+    set(ANAFINEN_HDF5_TARGET HDF5::HDF5)
+else()
+    add_library(anafinen_hdf5 INTERFACE)
+    target_include_directories(anafinen_hdf5 SYSTEM INTERFACE ${HDF5_C_INCLUDE_DIRS} ${HDF5_INCLUDE_DIRS})
+    target_compile_definitions(anafinen_hdf5 INTERFACE ${HDF5_C_DEFINITIONS} ${HDF5_DEFINITIONS})
+    target_link_libraries(anafinen_hdf5 INTERFACE ${HDF5_C_LIBRARIES})
+    set(ANAFINEN_HDF5_TARGET anafinen_hdf5)
+endif()
+if(HDF5_IS_PARALLEL)
+    message(FATAL_ERROR "HDF5 found at ${HDF5_C_INCLUDE_DIRS} is an MPI (parallel) build; install the serial one "
+                        "(Fedora hdf5-devel, Debian libhdf5-dev, Arch hdf5, vcpkg hdf5) or set HDF5_ROOT.")
+endif()
+message(STATUS "HDF5 ${HDF5_VERSION}: ${ANAFINEN_HDF5_TARGET}")
+
 # nlohmann/json (header-only, MIT): material library file. The system / vcpkg package is used
-# when present; otherwise (e.g. the MinGW cross-build sysroot) the pinned release is fetched.
+# when present; otherwise the pinned release is fetched.
 find_package(nlohmann_json 3.11 CONFIG QUIET)
 if(NOT TARGET nlohmann_json::nlohmann_json)
     include(FetchContent)

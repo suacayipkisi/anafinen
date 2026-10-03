@@ -24,7 +24,7 @@ RUN apt-get update \
       sudo git ccache file ca-certificates \
       cmake ninja-build build-essential pkg-config librsvg2-bin libeigen3-dev libsuitesparse-dev \
       libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev \
-      nlohmann-json3-dev \
+      nlohmann-json3-dev libhdf5-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # Unprivileged build user with passwordless sudo (package.sh calls sudo apt-get).

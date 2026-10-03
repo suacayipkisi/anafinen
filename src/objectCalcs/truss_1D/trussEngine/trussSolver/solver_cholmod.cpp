@@ -24,7 +24,7 @@
 
 namespace FEM::TRUSS::SOLVER {
 
-  // Parameters are unused in builds without CHOLMOD (MinGW, CMAKE_IGNORE_PATH test builds).
+  // Parameters are unused in builds without CHOLMOD (no SuiteSparse installed, CMAKE_IGNORE_PATH test builds).
   Result solveCholmod(
     [[maybe_unused]] const Eigen::SparseMatrix<double>& upperMatrix,
     [[maybe_unused]] const Eigen::VectorXd& force,

@@ -19,19 +19,16 @@
 # Builds and tests the project and prints only a short summary: warnings, errors and
 # failed tests. Full logs stay in <build dir>/check-*.log.
 #
-# Usage: package/tools/check.sh [gcc|clang|mingw|all]...   (default: gcc)
+# Usage: package/tools/check.sh [gcc|clang|all]...   (default: gcc)
 #   gcc    Linux GCC, build dir "build" (the normal development tree), ctest
 #   clang  Linux Clang, build dir "build-clang", ctest
-#   mingw  Windows cross-build (MinGW), build dir "build-mingw", tests under Wine
+# Windows is checked natively with MSVC (package/package-windows.ps1), not cross-compiled.
 #
-# Environment: GMSH_SDK_DIR (Windows Gmsh SDK, default ~/Projects/gmsh-sdk),
-#              MAX_LINES (warning / error lines shown per target, default 30).
+# Environment: MAX_LINES (warning / error lines shown per target, default 30).
 
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-GMSH_SDK_DIR="${GMSH_SDK_DIR:-$HOME/Projects/gmsh-sdk}"
-MINGW_SYSROOT_BIN="/usr/x86_64-w64-mingw32/sys-root/mingw/bin"
 MAX_LINES="${MAX_LINES:-30}"
 FAILED=0
 
@@ -89,45 +86,15 @@ check_clang() {
   CC=clang CXX=clang++ build clang build-clang && run_ctest clang build-clang
 }
 
-check_mingw() {
-  local dll
-  dll="$(ls "$GMSH_SDK_DIR"/lib/gmsh-*.dll 2>/dev/null | head -1)"
-  [[ -z "$dll" ]] && { echo "[mingw] Gmsh SDK not found in $GMSH_SDK_DIR (set GMSH_SDK_DIR)"; FAILED=1; return 1; }
-  build mingw build-mingw \
-    -DCMAKE_TOOLCHAIN_FILE=/usr/share/mingw/toolchain-mingw64.cmake \
-    -DGMSH_SDK_DIR="$GMSH_SDK_DIR" \
-    -DGMSH_INCLUDE_DIR="$GMSH_SDK_DIR/include" \
-    -DGMSH_LIBRARY="$GMSH_SDK_DIR/lib/gmsh.dll.lib" \
-    -DGMSH_DLL="$dll" || return 1
-
-  if ! command -v wine > /dev/null; then
-    echo "[mingw] wine not installed, tests skipped"
-    return 0
-  fi
-  local test
-  for test in anaf_core_tests anaf_io_tests anaf_truss_io_tests; do
-    local log="$REPO_ROOT/build-mingw/check-$test.log"
-    (cd "$REPO_ROOT/build-mingw/tests" && WINEDEBUG=-all WINEPATH="$MINGW_SYSROOT_BIN;$GMSH_SDK_DIR/lib" \
-      timeout 600 wine "$test.exe" > "$log" 2>&1)
-    local status=$?
-    echo "[mingw] $test (Wine): $(grep -E "test cases" "$log" | tail -1)"
-    if [[ $status -ne 0 ]]; then
-      grep -E "FAIL" "$log" | head -n "$MAX_LINES"
-      FAILED=1
-    fi
-  done
-}
-
 targets=("$@")
 [[ ${#targets[@]} -eq 0 ]] && targets=(gcc)
-[[ " ${targets[*]} " == *" all "* ]] && targets=(gcc clang mingw)
+[[ " ${targets[*]} " == *" all "* ]] && targets=(gcc clang)
 
 for target in "${targets[@]}"; do
   case "$target" in
     gcc) check_gcc ;;
     clang) check_clang ;;
-    mingw) check_mingw ;;
-    *) echo "unknown target '$target' (gcc, clang, mingw, all)"; exit 2 ;;
+    *) echo "unknown target '$target' (gcc, clang, all)"; exit 2 ;;
   esac
 done
 

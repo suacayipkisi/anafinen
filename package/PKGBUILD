@@ -1,6 +1,6 @@
 # Maintainer: Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) <konuki8523@gmail.com>
 pkgname=anafinen
-pkgver=0.1.3_alpha
+pkgver=0.2.0_alpha
 pkgrel=1
 pkgdesc="3D FEM Analysis Engine"
 arch=('x86_64')
@@ -8,7 +8,7 @@ url="https://github.com/suacayipkisi/anafinen"
 license=('GPL-3.0-or-later')
 # Header-only libraries (eigen, glm, nlohmann-json) are build-time only; Spectra comes from the
 # external/spectra submodule. OpenMP is GCC's libgomp (gcc-libs). gmsh is in the AUR (gmsh or gmsh-bin).
-depends=('glibc' 'gcc-libs' 'glfw' 'libglvnd' 'gmsh' 'suitesparse' 'libpng' 'zlib')
+depends=('glibc' 'gcc-libs' 'glfw' 'libglvnd' 'gmsh' 'suitesparse' 'libpng' 'zlib' 'hdf5')
 makedepends=('cmake' 'ninja' 'git' 'eigen' 'glm' 'nlohmann-json' 'librsvg')
 optdepends=('zenity: native file dialog for File > Import / Export'
             'kdialog: native file dialog on KDE')

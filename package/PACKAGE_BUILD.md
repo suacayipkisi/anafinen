@@ -8,6 +8,10 @@ available. The native packaging script installs them during the build:
 - Arch/CachyOS: `suitesparse`
 - Debian/Ubuntu: `libsuitesparse-dev`
 
+HDF5 (binary matrix / vector files) is required and always comes prebuilt from the
+distribution: Fedora `hdf5-devel`, Arch/CachyOS `hdf5`, Debian/Ubuntu `libhdf5-dev`.
+The scripts and the container images install it.
+
 After installing the libraries listed below for your distribution, run the
 same command from the repository root. The script initializes submodules,
 builds a Release binary, and selects RPM, pacman, or DEB according to the
@@ -46,7 +50,9 @@ The package builds and installs normally.
 ## Packaging for Windows
 
 Requirements: Visual Studio 2022 (or Build Tools) with the C++ x64 tools, CMake, Ninja,
-vcpkg and the Gmsh SDK.
+vcpkg (with the packages listed in the README, including `hdf5:x64-windows`) and the Gmsh SDK.
+vcpkg compiles each port once; the anafinen build only links them, and `RUNTIME_DEPENDENCIES`
+copies their DLLs (`hdf5.dll`, `zlib1.dll`, ...) into the ZIP.
 
 vcpkg and the Gmsh SDK may live on any drive: CMake finds them on its own
 (`VCPKG_ROOT` / `GMSH_SDK_DIR` environment variables, `vcpkg` on `PATH`, then

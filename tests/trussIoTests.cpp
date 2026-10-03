@@ -447,7 +447,7 @@ TEST(builtInTrussLibraryMatchesTheGenerator) {
   const auto indexFile = libraryDir() / fs::path(FEM::TRUSS::LIBRARY::kIndexFile);
   CHECK_MSG(readBytes(indexFile) == readBytes(generated / fs::path(FEM::TRUSS::LIBRARY::kIndexFile)), "index.json is stale");
   // Models are compared by content, not bytes: -ffast-math and different libm builds (GCC,
-  // Clang, MinGW) may change the last bits of sin / cos in the generated coordinates.
+  // Clang, MSVC) may change the last bits of sin / cos in the generated coordinates.
   const auto close = [](const double a, const double b) { return std::abs(a - b) <= 1e-9 * (1.0 + std::abs(a)); };
   for (const auto& entry : *entries) {
     const auto committedPath = FEM::TRUSS::LIBRARY::modelFile(libraryDir(), entry);

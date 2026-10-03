@@ -3,23 +3,23 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-02.
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 added, MinGW cross-build removed).
 
 ## 1. Overall flow
 
 ```text
 CMakeLists.txt
    |
-   +-- project(anafinen VERSION 0.1.3), C++23, compile_commands.json
+   +-- project(anafinen VERSION 0.2.0), C++23, compile_commands.json
    |
    +-- include(CompilerOptions)  -> project_warnings_and_optimizations (INTERFACE)
-   +-- include(Dependencies)     -> Eigen, OpenMP, OpenGL, PNG, CHOLMOD?, Gmsh, Spectra, glm
+   +-- include(Dependencies)     -> Eigen, OpenMP, OpenGL, PNG, HDF5, CHOLMOD?, Gmsh, Spectra, glm
    +-- include(ExternalGui)      -> glad_local, GLFW target, imgui_suite
    |
-   +-- add_library(anaf_io STATIC ...)     mesh I/O (Gmsh, zlib PRIVATE)
+   +-- add_library(anaf_io STATIC ...)     mesh I/O + HDF5 array store (Gmsh, zlib, HDF5 PRIVATE)
    +-- add_library(anaf_core STATIC ...)   FEM + truss adapter (links anaf_io)
    +-- add_executable(anafinen ...)        GUI + bridge + log + main (+ portable-file-dialogs)
-   +-- tests/ (ANAFINEN_BUILD_TESTS=ON)    anaf_core_tests (anaf_core only), anaf_io_tests, anaf_io_tool,
+   +-- tests/ (ANAFINEN_BUILD_TESTS=ON)    anaf_core_tests (anaf_core only), anaf_io_tests, anaf_array_tests, anaf_io_tool,
    |                                       anaf_truss_io_tests, vtk_reference_check,
    |                                       anaf_truss_library_tool (regenerates assets/objects/truss/truss1D)
    |        |
@@ -46,7 +46,7 @@ CMakeLists.txt
 | Target | Type | Contents | Links |
 |---|---|---|---|
 | `project_warnings_and_optimizations` | INTERFACE | Release flags and defines | - |
-| `anaf_io` | STATIC | `src/io/*` (model, formats, service) | Gmsh, ZLIB (both PRIVATE) |
+| `anaf_io` | STATIC | `src/io/*` (model, formats, service, `array/` HDF5 store) | Gmsh, ZLIB, HDF5 (all PRIVATE). The Eigen and CHOLMOD adapters in `src/io/array/` are header-only, so `anaf_io` itself links neither. |
 | `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`), `src/material/materialLibrary.cpp`, `src/log/anaf_info.cpp`, `src/directory/getExecutableDirectory.cpp`, `src/platform/systemInfo.cpp`. Self-contained: a front end links it and calls `solveStatic()` (no bridge or GUI code). `MAIN_DIR` (PRIVATE) for the source-tree asset fallback. | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE), nlohmann_json (PRIVATE); Windows: shell32, ole32, uuid (user config folder), dxgi, advapi32 (`systemInfo`: VRAM, CPU name from the registry) |
 | `glad_local` | STATIC | `external/glad/src/gl.c` | - |
 | `imgui_suite` | STATIC | ImGui core + GLFW/OpenGL3 backends + ImGuizmo + ImPlot | glad, GLFW, OpenGL |
@@ -74,7 +74,7 @@ Warnings (all configurations, through `project_warnings_and_optimizations`, so o
 | GCC / Clang | `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion` | Clang's `-Wconversion` includes `-Wsign-conversion` (GCC's does not in C++); it is turned off because signed OpenMP indices and `int` / `size_t` mixing make it noise. |
 | MSVC | `/W4 /permissive- /external:anglebrackets /external:W0` | `<...>` includes count as external and are not checked. |
 
-Third-party include directories are marked `SYSTEM` (`imgui_suite`, `glad_local`, `spectra_local`, portable-file-dialogs; imported targets such as Eigen are SYSTEM by default), so their headers do not trigger these flags. Status on 2026-09-28: zero warnings with GCC 16, Clang, and MinGW GCC 16 (with and without CHOLMOD); MSVC `/W4` has not been run yet.
+Third-party include directories are marked `SYSTEM` (`imgui_suite`, `glad_local`, `spectra_local`, portable-file-dialogs; imported targets such as Eigen are SYSTEM by default), so their headers do not trigger these flags. Status on 2026-10-04: zero warnings with GCC 16 and Clang; MSVC `/W4` has not been run yet. (The MinGW cross-build was removed on 2026-10-04: Windows is built and tested natively with MSVC + vcpkg.)
 | All | `NDEBUG`, `EIGEN_NO_DEBUG` in Release | `ccache` as compiler launcher if found |
 
 `-ffast-math` allows reassociation, so floating-point results can differ slightly between Debug and Release. `-fno-finite-math-only` keeps `std::isfinite` checks working, which the solver referee relies on.
@@ -86,11 +86,12 @@ Third-party include directories are marked `SYSTEM` (`imgui_suite`, `glad_local`
 | Eigen3 | `find_package(Eigen3 CONFIG REQUIRED)` | yes | - |
 | OpenMP | `find_package(OpenMP REQUIRED)` | yes | MSVC uses `/openmp` (OpenMP 2.0, `vcomp140.dll`) instead of the imported target |
 | OpenGL, ZLIB, PNG | `find_package(... REQUIRED)` | yes | Windows fallback creates `OpenGL::GL` -> `opengl32` |
+| HDF5 (C API) | `find_package(HDF5 REQUIRED COMPONENTS C)`, `HDF5_PREFER_PARALLEL OFF` | yes | See section 5.3. Target in `ANAFINEN_HDF5_TARGET` (`HDF5::HDF5`, or the `anafinen_hdf5` INTERFACE fallback built from `HDF5_C_*` variables). An MPI build stops the configure. |
 | SuiteSparse CHOLMOD | see section 5.1 | no | Sets `ANAFINEN_HAS_CHOLMOD` |
 | Gmsh SDK | `find_path` / `find_library` | yes | Windows: `GMSH_SDK_DIR`; when empty or without `include/gmsh.h` it is auto-detected (section 5.2), also resolves `GMSH_DLL` |
 | Spectra | submodule `external/spectra`, else `find_package(Spectra)` | no | Header-only; imported as `spectra_local` |
 | glm | `find_package(glm CONFIG)`, else header search | yes | - |
-| nlohmann/json | `find_package(nlohmann_json 3.11 CONFIG)`, else `FetchContent` of the v3.12.0 release tarball (SHA-256 pinned) | yes | Header-only, linked PRIVATE into `anaf_core` for the material library. The fetch covers the MinGW cross-build sysroot. |
+| nlohmann/json | `find_package(nlohmann_json 3.11 CONFIG)`, else `FetchContent` of the v3.12.0 release tarball (SHA-256 pinned) | yes | Header-only, linked PRIVATE into `anaf_core` for the material library. |
 | librsvg / ImageMagick | `find_program(rsvg-convert)`, else `find_program(magick convert)` (only `magick` on Windows, where `convert` is `System32\convert.exe`) | no | Converts `assets/icons/anafinen.svg` to a 128x128 PNG at configure time (`ANAFINEN_ICON_PNG`). `rsvg-convert` is preferred: Debian's ImageMagick has no rsvg delegate, and its internal MSVG renderer draws only the background while still exiting with 0. Without a converter the committed, pre-rendered `assets/icons/anafinen.png` is used. On Windows `src/anafinen.rc` also embeds `assets/icons/anafinen.ico` (16-256 px) into the `.exe`; regenerate both files when the SVG changes. (Before 0.1.3 the SVG was copied under the `.png` name, which shipped a broken hicolor icon.) |
 | portable-file-dialogs | vendored header `external/portable-file-dialogs/` (commit `c12ea8c`, WTFPL) | yes | Native file chooser. Linux runtime needs `zenity`, `kdialog`, `matedialog` or `qarma` |
 | Python 3 + `vtk` module | `find_package(Python3)` + `import vtk` probe | no | Enables the `vtk_reference_check` test |
@@ -134,12 +135,27 @@ other Gmsh SDKs found are listed too. An explicit `-D` value, a VS Code `cmake.c
 or the environment variable always takes precedence. Delete the cache entry (or the build directory)
 to re-run the detection.
 
+### 5.3 HDF5 (prebuilt only)
+
+HDF5 is never compiled as part of this project; the build only links a library that is already installed.
+
+| Platform | Package | How CMake finds it |
+|---|---|---|
+| Fedora | `hdf5-devel` (runtime `hdf5`) | No CMake config is packaged: `FindHDF5` runs `h5cc -show` |
+| Debian / Ubuntu | `libhdf5-dev` (runtime `libhdf5-310` etc. through `dpkg-shlibdeps`) | `h5cc` (serial flavour under `/usr/include/hdf5/serial`) |
+| Arch / CachyOS | `hdf5` | `h5cc` / CMake config |
+| Windows | vcpkg `hdf5:x64-windows` (default features include zlib) | `hdf5-config.cmake` of the vcpkg port; DLLs reach the ZIP through `RUNTIME_DEPENDENCIES` |
+
+vcpkg builds the port once on the developer machine (classic mode, `installed/x64-windows`); after that only linking happens, like every other vcpkg dependency. Fedora's Gmsh links the same `libhdf5.so.310`, so only one HDF5 is loaded in the process.
+
+Only the C API is used (`src/io/array/arrayFile.cpp`, `src/io/detail/h5Handle.hpp`): its ABI does not depend on the C++ compiler, and the separately packaged C++ API (`H5Cpp`) is not needed. Distribution builds are not thread-safe (`h5cc -showconfig`: `Threadsafety: no`), so `anaf_io` serializes every HDF5 call through one mutex.
+
 ## 6. GUI dependencies (`cmake/ExternalGui.cmake`)
 
 | Library | Source order |
 |---|---|
 | GLAD | Always vendored: `external/glad` (GL 4.6 core loader) |
-| GLFW | `external/glfw` subdirectory → MinGW sysroot (cross build) → `find_package(glfw3)` → pkg-config → `FetchContent` GLFW 3.4 |
+| GLFW | `external/glfw` subdirectory → `find_package(glfw3)` → pkg-config → `FetchContent` GLFW 3.4 |
 | ImGui, ImGuizmo, ImPlot | Submodules in `external/` compiled into `imgui_suite`. If `external/imgui` is missing, falls back to vcpkg `find_package(imgui/implot/imguizmo)` |
 
 The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`DockBuilder*`) are required by `MainDockSpaceHost`.
@@ -161,9 +177,8 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 |---|---|---|---|
 | Linux | `bin/anafinen`, `share/anafinen/assets` (without the `.desktop` file), `share/applications/anafinen.desktop`, hicolor icons (SVG + 128px PNG) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
 | Windows | Flat: `anafinen.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES`, app-local MSVC runtime (`InstallRequiredSystemLibraries`, including `vcomp140.dll` for `/openmp`, so no Visual C++ Redistributable is needed; added after the 0.1.3 release) | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
-| Windows (MinGW cross) | Same + MinGW runtime DLLs from the Fedora sysroot (`RUNTIME_DEPENDENCIES` is skipped: not supported when cross-compiling) | `ZIP` | same |
 
-Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: suitesparse` when CHOLMOD is enabled.
+Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: hdf5` (and `suitesparse` when CHOLMOD is enabled).
 
 ### 8.1 Packaging scripts
 
@@ -210,8 +225,9 @@ host: build-containers/<distro>/  (check-*.log or package.log + .deb / .pkg.tar.
 | Platform | Build packages added for `anaf_io` | Runtime extra |
 |---|---|---|
 | Fedora | `zlib-devel`, `ImageMagick` (`package.sh`, README) | RPM `Suggests: zenity` |
-| Arch / CachyOS | `depends`: `glibc gcc-libs glfw libglvnd gmsh suitesparse libpng zlib`. `makedepends`: `cmake ninja git eigen glm nlohmann-json librsvg`. Header-only libraries are build-time only; Spectra comes from the submodule; OpenMP is GCC's `libgomp` in `gcc-libs` (the `openmp` package is LLVM's). `gmsh` is only in the AUR. | `optdepends`: `zenity` or `kdialog` |
+| Arch / CachyOS | `depends`: `glibc gcc-libs glfw libglvnd gmsh suitesparse libpng zlib hdf5`. `makedepends`: `cmake ninja git eigen glm nlohmann-json librsvg`. Header-only libraries are build-time only; Spectra comes from the submodule; OpenMP is GCC's `libgomp` in `gcc-libs` (the `openmp` package is LLVM's). `gmsh` is only in the AUR. | `optdepends`: `zenity` or `kdialog` |
 | Debian / Ubuntu | `zlib1g-dev`, `librsvg2-bin` (`package.sh`, README) | DEB `Recommends: zenity \| kdialog`, `Section: science`; `CPACK_PACKAGE_CONTACT` is set (the DEB generator requires a maintainer) |
+| All (2026-10-04) | HDF5: Fedora `hdf5-devel`, Arch `hdf5` (`depends`), Debian `libhdf5-dev`, vcpkg `hdf5` | the shared HDF5 library (RPM / DEB find it automatically, Arch `depends`, Windows ZIP ships `hdf5.dll`) |
 | All (0.1.3) | `nlohmann/json`: Fedora `json-devel`, Arch `nlohmann-json` (`makedepends`), Debian `nlohmann-json3-dev`, vcpkg `nlohmann-json` | none (header-only) |
 | Windows (vcpkg) | `libpng`, `glm` added to the README install list (zlib comes with libpng) | none: native dialogs are part of Windows; `ole32`, `comdlg32`, `shell32`, `uuid`, `psapi` (resource usage) on `anafinen`; `dxgi`, `advapi32` (VRAM, CPU name from the registry) on `anaf_core` |
 
@@ -229,7 +245,7 @@ Without zenity / kdialog on Linux, the application works; only File > Import / E
 ```bash
 # Build + test with a short summary (warnings, errors, test results); full logs in <dir>/check-*.log
 package/tools/check.sh            # Linux GCC in build/
-package/tools/check.sh all        # + Clang (build-clang/) + MinGW cross-build with Wine tests (build-mingw/)
+package/tools/check.sh all        # + Clang (build-clang/)
 
 # Configure + build (Linux)
 git submodule update --init --recursive

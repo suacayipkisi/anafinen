@@ -53,10 +53,14 @@ This project incorporates and builds upon the following third-party software and
    - License: MIT License
    - Copyright (C) Niels Lohmann
 
-14. **Inter Font**
+14. **HDF5** (binary matrix / vector / tensor files, C library)
+   - License: BSD-3-Clause style (HDF5 license, see https://github.com/HDFGroup/hdf5/blob/develop/LICENSE)
+   - Copyright (C) 2006 The HDF Group; Copyright (C) 1998-2006 The Board of Trustees of the University of Illinois
+
+15. **Inter Font**
    - See license at [assets/fonts/Inter/LICENSE.txt](assets/fonts/Inter/LICENSE.txt)
 
-15. **CascadiaCode Font**
+16. **CascadiaCode Font**
    - See license at [assets/fonts/CascadiaCode/LICENSE.txt](assets/fonts/CascadiaCode/LICENSE.txt)
 
 ## License of anafinen

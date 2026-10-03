@@ -19,18 +19,6 @@ if(EXISTS "${EXTERNAL_DIR}/glfw/CMakeLists.txt")
     set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
     add_subdirectory("${EXTERNAL_DIR}/glfw" EXCLUDE_FROM_ALL)
     set(GLFW_TARGET glfw)
-elseif(WIN32)
-    # MinGW GLFW in sysroot
-    find_library(MINGW_GLFW_LIB NAMES glfw3 glfw HINTS /usr/x86_64-w64-mingw32/sys-root/mingw/lib NO_DEFAULT_PATH)
-    find_path(MINGW_GLFW_INC NAMES "GLFW/glfw3.h" HINTS /usr/x86_64-w64-mingw32/sys-root/mingw/include NO_DEFAULT_PATH)
-    if(MINGW_GLFW_LIB AND MINGW_GLFW_INC)
-        add_library(glfw_mingw INTERFACE IMPORTED)
-        set_target_properties(glfw_mingw PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "${MINGW_GLFW_INC}"
-            INTERFACE_LINK_LIBRARIES "${MINGW_GLFW_LIB};gdi32"
-        )
-        set(GLFW_TARGET glfw_mingw)
-    endif()
 else()
     find_package(glfw3 CONFIG QUIET)
     if(TARGET glfw)

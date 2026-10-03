@@ -7,7 +7,7 @@ endif()
 # Windows: locate the vcpkg toolchain (and define the Gmsh SDK lookup) on any drive.
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LocateWindowsSdks.cmake")
 
-project(anafinen VERSION 0.1.3 LANGUAGES C CXX)
+project(anafinen VERSION 0.2.0 LANGUAGES C CXX)
 
 # A 32-bit compiler (e.g. the VS Code kit "amd64_x86", Hostx64/x86/cl.exe) cannot link the 64-bit
 # vcpkg packages; find_package would only report an unrelated "version not compatible" error.
@@ -36,7 +36,8 @@ include(Dependencies)
 
 include(ExternalGui)
 
-# Format-neutral mesh I/O: no solver or GUI dependency, shared by every front end (GUI / CLI).
+# Format-neutral mesh I/O and the HDF5 array store: no solver or GUI dependency, shared by every
+# front end (GUI / CLI).
 set(ANAF_IO_SOURCES
     src/io/model/elementType.cpp
     src/io/model/meshModel.cpp
@@ -50,6 +51,7 @@ set(ANAF_IO_SOURCES
     src/io/formats/cadFormat.cpp
     src/io/meshIo.cpp
     src/io/service/ioService.cpp
+    src/io/array/arrayFile.cpp
 )
 
 add_library(anaf_io STATIC ${ANAF_IO_SOURCES})
@@ -58,6 +60,7 @@ target_link_libraries(anaf_io
     PRIVATE
         Gmsh::Gmsh
         ZLIB::ZLIB
+        ${ANAFINEN_HDF5_TARGET}
         project_warnings_and_optimizations
 )
 
@@ -227,9 +230,8 @@ endif()
 # Installation rules for executable and assets
 # Install layout per platform (binary, assets, licenses) lives in cmake/Packaging.cmake.
 
-# Install runtime DLL dependencies into the package root. RUNTIME_DEPENDENCIES is not
-# supported when cross-compiling; the MinGW build lists its DLLs in cmake/Packaging.cmake.
-if(WIN32 AND NOT CMAKE_CROSSCOMPILING)
+# Install runtime DLL dependencies (vcpkg: libpng, zlib, HDF5, SuiteSparse, ...) into the package root.
+if(WIN32)
     install(TARGETS anafinen
         RUNTIME_DEPENDENCIES
             DIRECTORIES

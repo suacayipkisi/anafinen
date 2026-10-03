@@ -53,6 +53,7 @@ The FEM theory, the solver design and the overall architecture are my own work, 
 - Calculation: Eigen, Spectra, SuiteSparse CHOLMOD
 - Visualisation and GUI: OpenGL, GLAD, GLFW, ImGUI, ImGuizmo, ImPlot, glm, portable-file-dialogs
 - File formats (import/export): Gmsh MSH 1/2.2/4.0/4.1, VTK legacy 2.0-5.1, VTK XML (.vtu), STEP/IGES/BREP (via Gmsh + OpenCASCADE)
+- Binary matrix / vector / tensor files: HDF5 (C API; readable by h5py, SciPy, MATLAB)
 - Multithreading: OpenMP and threaded SuiteSparse/BLAS backends
 
 # Build (Linux and Windows)
@@ -88,6 +89,7 @@ sudo dnf install -y \
     libpng-devel \
     zlib-devel \
     json-devel \
+    hdf5-devel \
     glm-devel \
     ImageMagick \
     zenity
@@ -96,7 +98,7 @@ sudo dnf install -y \
 #### Libraries Arch-CachyOS
 ```bash
 # Spectra comes from the git submodule (it is not in the official repos); OpenMP is GCC's libgomp (gcc-libs).
-sudo pacman -S glibc gcc-libs eigen suitesparse glfw mesa cmake ninja git glm libpng zlib nlohmann-json librsvg zenity
+sudo pacman -S glibc gcc-libs eigen suitesparse glfw mesa cmake ninja git glm libpng zlib nlohmann-json hdf5 librsvg zenity
 
 # WARNING!!!!!! using paru means using AUR which is a place sometimes hackers might play around. be careful!!! 
 # If you dont want to install via AUR, you may look for installing it from their websites like what we install for windows.
@@ -106,7 +108,7 @@ paru -S gmsh-bin
 #### Libraries Debian-Ubuntu
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev librsvg2-bin zenity
+sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev libhdf5-dev librsvg2-bin zenity
 ```
 
 ### Clone This Repo
@@ -159,18 +161,17 @@ Calculation libs:
 .\vcpkg install eigen3:x64-windows
 .\vcpkg install spectra:x64-windows
 .\vcpkg install suitesparse:x64-windows
+.\vcpkg install hdf5:x64-windows
 ```
+
+HDF5 is required. vcpkg builds it once into `installed/x64-windows`; the anafinen
+build only links it, and the packaging script copies `hdf5.dll` into the ZIP.
 
 SuiteSparse is optional at configure time. When its headers and libraries are
 found, the build uses Eigen's CHOLMOD backend; otherwise it uses Eigen's
 built-in sparse LDLT solver.
 
-For native Windows builds, install SuiteSparse through vcpkg. The Linux-to-
-Windows MinGW cross-build does not include CHOLMOD because Fedora does not ship
-the required MinGW SuiteSparse development package; it uses the fallback solver
-unless a real MinGW SuiteSparse installation is passed through `CHOLMOD_ROOT`.
-The value `/path/to/suitesparse` is only an example and must not be passed
-literally.
+Windows builds use MSVC with vcpkg; a MinGW (cross-)build is not supported.
 
 Gui and visualization:
 ```cmd

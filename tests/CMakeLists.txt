@@ -5,6 +5,16 @@ add_executable(anaf_io_tests ioTests.cpp)
 target_link_libraries(anaf_io_tests PRIVATE anaf_io Gmsh::Gmsh project_warnings_and_optimizations)
 add_test(NAME anaf_io_tests COMMAND anaf_io_tests)
 
+# HDF5 array store (src/io/array/) with its std, Eigen and (when available) CHOLMOD adapters.
+add_executable(anaf_array_tests arrayTests.cpp)
+target_link_libraries(anaf_array_tests PRIVATE anaf_io Eigen3::Eigen project_warnings_and_optimizations)
+if(ANAFINEN_HAS_CHOLMOD)
+    target_compile_definitions(anaf_array_tests PRIVATE ANAFINEN_HAS_CHOLMOD)
+    target_include_directories(anaf_array_tests PRIVATE ${CHOLMOD_INCLUDE_DIR})
+    target_link_libraries(anaf_array_tests PRIVATE ${CHOLMOD_LIBRARIES})
+endif()
+add_test(NAME anaf_array_tests COMMAND anaf_array_tests)
+
 add_executable(anaf_io_tool ioTool.cpp)
 target_link_libraries(anaf_io_tool PRIVATE anaf_io project_warnings_and_optimizations)
 

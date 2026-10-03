@@ -5,7 +5,7 @@ This guide shows how code outside `src/io/` reads and writes model files through
 For the file formats themselves (which data goes where in MSH, VTK, VTU, `.pvd` and the STEP sidecar), see [FILE_HANDLING.md](FILE_HANDLING.md).
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (rotational constraints, nodal moments, beam section data and orientation, beam / dynamic result names).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 array store, section 9; 2026-10-03: rotational constraints, nodal moments, beam section data and orientation, beam / dynamic result names).
 
 ## 1. Overview
 
@@ -36,6 +36,10 @@ For the file formats themselves (which data goes where in MSH, VTK, VTU, `.pvd` 
 | `io/model/elementType.hpp` | `ElementType`, `elementInfo`, `allElementTypes`, `elementTypeFromGmsh`, `elementTypeFromVtk` | Walking element blocks |
 | `io/core/ioTypes.hpp` | `FileFormat`, `ReadOptions`, `WriteOptions`, `IoError`, `WriteReport`, `IoContext`, `FormatDescriptor`, `formatName` | Already included by `meshIo.hpp` |
 | `io/core/pathUtf8.hpp` | `pathToUtf8`, `pathFromUtf8` | Every path that is shown, logged, or comes from / goes to a UTF-8 string |
+| `io/array/arrayFile.hpp` | `ArrayFile` (HDF5 store), includes `arrayTypes.hpp` (`ScalarType`, `DenseArray`, `CompressedMatrix`, `CompressedView`, `ArrayError`, `AttributeValue`, `WriteOptions`) | Matrices, vectors, tensors in binary files (section 9) |
+| `io/array/stdArrays.hpp` | `write` for `std::vector`, `std::array`, `std::span`, nested vectors, `std::mdspan`; `readVector`, `readRows`, `asMdspan` | Standard containers |
+| `io/array/eigenArrays.hpp` | `write` for Eigen dense objects and `Eigen::SparseMatrix`; `readEigen<T>` | Eigen data; the target must link `Eigen3::Eigen` |
+| `io/array/cholmodArrays.hpp` | `write` for `cholmod_sparse` / `cholmod_dense`; `readCholmodSparse`, `readCholmodDense` | CHOLMOD data; only in code built with `ANAFINEN_HAS_CHOLMOD` |
 
 Build: link the target to `anaf_io` (`target_link_libraries(<target> PRIVATE anaf_io)`); `anaf_core` already links it. Include paths start at `src/`, for example `#include <io/meshIo.hpp>`.
 
@@ -450,7 +454,62 @@ Rules:
 - Use `pathToUtf8(path)` and `pathFromUtf8(text)`. `WriteReport::path` and `extraFiles` are already UTF-8.
 - `anaf_io`, the file panel and the native dialog follow this rule (fixed 2026-09-28, [ARCHITECTURE.md](ARCHITECTURE.md) section 8.2).
 
-## 9. Related files
+## 9. Matrices, vectors and tensors: `io/array/` (HDF5)
+
+`ArrayFile` stores solver data in HDF5 files: dense arrays of any rank, CSC / CSR sparse matrices, groups and attributes. Layout and design are in [FILE_HANDLING.md](FILE_HANDLING.md) section 4.5. Every function returns `Result<T>` (`std::expected<T, ArrayError>`); nothing throws.
+
+| Call | Does |
+|---|---|
+| `ArrayFile::create(path)` / `ArrayFile::open(path, Access)` | New file (replaces an existing one) / existing file, read-only by default |
+| `write(file, "name", object, {.overwrite, .deflateLevel})` | Adapter overloads; parent groups are created |
+| `file.writeDense<T>(name, span, shape)` / `file.readDense<T>(name)` | Core API: row-major buffer + shape |
+| `file.writeSparse<T>(name, CompressedView)` / `file.readSparse<T>(name)` | Core API: compressed storage with int64 indices, validated |
+| `readVector<T>`, `readRows<T>`, `asMdspan<Rank>(DenseArray&)` | std results |
+| `readEigen<Type>(file, name)` | Any dense Eigen type (fixed sizes are checked) or `Eigen::SparseMatrix` |
+| `readCholmodSparse(file, name, common)` / `readCholmodDense(...)` | Allocated with `cholmod_common`; free with `cholmod_free_sparse` / `cholmod_free_dense` |
+| `info`, `list`, `exists`, `createGroup`, `remove`, `setAttribute`, `attribute` | Structure and metadata |
+
+```cpp
+#include <io/array/eigenArrays.hpp>
+#include <io/array/stdArrays.hpp>
+
+using namespace anaf::IO::ARRAY;
+
+bool saveSystem(const std::filesystem::path& path, const Eigen::SparseMatrix<double>& K, const Eigen::VectorXd& f,
+                const std::vector<double>& frequencies) {
+  auto file = ArrayFile::create(path);
+  if (!file) return false;                                    // file.error().message has the reason
+  return write(*file, "system/K", K, {.deflateLevel = 4})     // csc_matrix group
+      && write(*file, "system/f", f)                          // rank-1 dataset
+      && write(*file, "modal/frequencies", frequencies)
+      && file->setAttribute("modal/frequencies", "unit", std::string("Hz"))
+      && file->close();                                       // reports a failed flush
+}
+
+std::expected<Eigen::SparseMatrix<double>, ArrayError> loadStiffness(const std::filesystem::path& path) {
+  auto file = ArrayFile::open(path);
+  if (!file) return std::unexpected(file.error());
+  return readEigen<Eigen::SparseMatrix<double>>(*file, "system/K");
+}
+```
+
+```python
+# The same file in Python (h5py + SciPy)
+import h5py, scipy.sparse as sp
+with h5py.File("system.h5") as f:
+    g = f["system/K"]
+    K = sp.csc_matrix((g["data"][:], g["indices"][:], g["indptr"][:]), shape=g.attrs["shape"])
+    u = f["system/f"][:]
+```
+
+Rules:
+
+1. Call the adapter `write` overloads without explicit template arguments (`write(file, name, v)`, not `write<double>(...)`): an explicit argument is also tried against the Eigen overloads and fails to compile.
+2. Keep the `ArrayFile` on one thread at a time; different files may be used from different threads.
+3. Data written as `float` reads back as `double`, not the other way round. Pick the type you will read.
+4. Overwriting does not shrink the file. For files that are rewritten many times, write a new file instead.
+
+## 10. Related files
 
 - [../src/io/meshIo.hpp](../src/io/meshIo.hpp): synchronous API
 - [../src/io/service/ioService.hpp](../src/io/service/ioService.hpp): `IoService`, `IoTask`
@@ -461,4 +520,6 @@ Rules:
 - [../src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.hpp](../src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.hpp): example adapter
 - [../src/gui/panels/fileIoPanel.cpp](../src/gui/panels/fileIoPanel.cpp): example `IoService` use
 - [../tests/ioTests.cpp](../tests/ioTests.cpp): round-trip tests and a sample model with every kind of data
+- [../src/io/array/arrayFile.hpp](../src/io/array/arrayFile.hpp), [stdArrays.hpp](../src/io/array/stdArrays.hpp), [eigenArrays.hpp](../src/io/array/eigenArrays.hpp), [cholmodArrays.hpp](../src/io/array/cholmodArrays.hpp): HDF5 array store
+- [../tests/arrayTests.cpp](../tests/arrayTests.cpp): array store tests
 - [FILE_HANDLING.md](FILE_HANDLING.md): formats and on-disk encoding
