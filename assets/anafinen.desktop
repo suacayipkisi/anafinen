@@ -6,5 +6,5 @@ Exec=anafinen
 Icon=anafinen
 Terminal=false
 Categories=Development;Engineering;
-StartupNotify=true
+StartupNotify=false
 StartupWMClass=anafinen

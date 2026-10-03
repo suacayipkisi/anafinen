@@ -15,7 +15,7 @@ fi
 
 if [ -f /etc/fedora-release ]; then
     echo "Detected Fedora. Generating RPM..."
-    sudo dnf install -y rpm-build ninja-build cmake gcc-c++ ImageMagick eigen3-devel suitesparse-devel libpng-devel mesa-libGL-devel gmsh-devel glfw-devel spectra-devel glm-devel zlib-devel json-devel hdf5-devel
+    sudo dnf install -y rpm-build ninja-build cmake gcc-c++ librsvg2-tools ImageMagick eigen3-devel suitesparse-devel libpng-devel mesa-libGL-devel gmsh-devel glfw-devel spectra-devel glm-devel zlib-devel json-devel hdf5-devel
     cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_NATIVE_OPTIMIZATIONS=OFF
     cmake --build "$BUILD_DIR"
     cpack --config "$BUILD_DIR/CPackConfig.cmake" -G RPM -B "$BUILD_DIR"

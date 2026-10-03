@@ -91,6 +91,7 @@ sudo dnf install -y \
     json-devel \
     hdf5-devel \
     glm-devel \
+    librsvg2-tools \
     ImageMagick \
     zenity
 ```

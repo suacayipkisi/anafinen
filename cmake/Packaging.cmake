@@ -90,6 +90,17 @@ elseif(UNIX AND NOT APPLE)
     set(CPACK_RPM_PACKAGE_RELEASE "1.alpha")
     set(CPACK_RPM_PACKAGE_LICENSE "GPLv3+")
     set(CPACK_RPM_PACKAGE_GROUP "Applications/Engineering")
+    # Shared directories belong to filesystem / hicolor-icon-theme. Owning them makes rpm reset
+    # their mtimes to the package timestamp, which stale icon-theme caches then miss.
+    set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+        "/usr/share/applications"
+        "/usr/share/icons"
+        "/usr/share/icons/hicolor"
+    )
+    foreach(_size IN ITEMS 16x16 24x24 32x32 128x128 scalable)
+        list(APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+            "/usr/share/icons/hicolor/${_size}" "/usr/share/icons/hicolor/${_size}/apps")
+    endforeach()
     # AUTOREQPROV adds the shared-library requirements; these name the packages for readers.
     set(CPACK_RPM_PACKAGE_REQUIRES "hdf5")
     if(ANAFINEN_HAS_CHOLMOD)
