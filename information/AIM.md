@@ -15,6 +15,7 @@
 - [Done] Implement calculation validator(energy method).
 - [Processing] Add beam calculations
 - [Processing] Add import-export to files (.vtk, .msh)
+- [Planned] Exchange complete models and results with other programs (.inp, .frd, .bdf; see INTEROP_PLAN.md)
 
 ## Phase 2: 
 - [Processing] Add various and self build truss types and add import option and implement model tree.

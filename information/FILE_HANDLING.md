@@ -9,7 +9,7 @@ This document describes `anaf_io`, the mesh import/export library:
 For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names, link to the interoperability plan; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -355,6 +355,12 @@ See [GUI.md](GUI.md) section 2.3. In short:
 
 ## 10. Known issues and limits
 
+The plan for the format and data model gaps below (Abaqus `.inp`, CalculiX `.frd`, Nastran `.bdf`, UNV / MED through Gmsh, `.pvtu` / `.vtm` / `.vtp`, material values, analysis steps, units, reactions) is [INTEROP_PLAN.md](INTEROP_PLAN.md).
+
+- Material values are not written: files carry the material name and `MaterialID` only, so another program cannot solve an exported model without its own material data (INTEROP_PLAN.md G1).
+- No analysis step concept and no unit system beyond `lengthUnit`; MSH / VTK files are read as metres (INTEROP_PLAN.md G2, G3).
+- No reaction forces in the results (INTEROP_PLAN.md G4).
+- XML VTK: only `UnstructuredGrid` (`.vtu`, `.pvd`); `.pvtu`, `.vtm`, `.vtp`, Lagrange cells (68–72) and polyhedra (42) are not read.
 - VTK / VTU store one time step per file. Time series need MSH or a `.pvd` collection.
 - Step labels (load case names) are not stored in VTK / VTU / `.pvd`.
 - No complex values (harmonic response with phase) yet.

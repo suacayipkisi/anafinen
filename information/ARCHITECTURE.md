@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (beam / rotational data in `anaf_io`, known issue 5).
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -18,6 +18,7 @@ This document is the entry point for the project documentation. It describes how
 | [IO_USAGE.md](IO_USAGE.md) | How callers use `anaf_io`: public headers, `readMesh` / `writeMesh`, `IoService`, building and reading a `MeshModel`, solver adapters |
 | [GUI.md](GUI.md) | Frame loop, panels, viewport render pipeline, picking |
 | [MESH_DATA_FLOW.md](MESH_DATA_FLOW.md) | End-to-end path of one truss mesh from the panel to the screen |
+| [INTEROP_PLAN.md](INTEROP_PLAN.md) | Plan (not implemented): `.inp`, `.frd`, `.bdf`, Gmsh-bridged and VTK read gaps; data model prerequisites (materials, steps, units, reactions) |
 | [AIM.md](AIM.md) | Master plan and phase checklist |
 
 ## 2. Module map
@@ -123,7 +124,7 @@ Update the documents when any of the following happens:
 | New element type, solver, or analysis | [CALCULATIONS.md](CALCULATIONS.md), [MESH_DATA_FLOW.md](MESH_DATA_FLOW.md), [AIM.md](AIM.md) |
 | New field in `MeshData` or `Gui_Calc_Bridge` | [BRIDGE.md](BRIDGE.md) |
 | New panel, shader, or GL resource | [GUI.md](GUI.md) |
-| New file format or format change | [FILE_HANDLING.md](FILE_HANDLING.md) |
+| New file format or format change | [FILE_HANDLING.md](FILE_HANDLING.md); mark the step done in [INTEROP_PLAN.md](INTEROP_PLAN.md) section 6 |
 | `anaf_io` public API change (`meshIo.hpp`, `ioService.hpp`, `MeshModel` members, options) | [IO_USAGE.md](IO_USAGE.md), [FILE_HANDLING.md](FILE_HANDLING.md) |
 | New dependency, CMake option, or package target | [BUILD_SYSTEM.md](BUILD_SYSTEM.md) |
 | A known issue is fixed | Remove it from section 8 below |
@@ -134,7 +135,7 @@ Update the documents when any of the following happens:
 |---|---|---|---|
 | 2 | The Gmsh 4.15 build on Fedora aborts when it opens any binary MSH 4.1 file (its own too). | Gmsh (external) | Only affects opening our binary 4.1 files **in Gmsh**; anafinen reads MSH natively. |
 | 4 | Debian 13's `libgmsh4.13` (4.13.1+ds1) is built with Eigen assertions on and aborts inside its own second-order 3D meshing (`gmsh::model::mesh::generate` → `MElement::signedInvCondNumRange` → Eigen `invalid matrix product`). | Gmsh (external), Debian package | `anaf_io_tests` aborts in `highOrderNodeOrderingMatchesGmshVtkWriter` on Debian; the other tests pass when run one by one. A CAD import with element order 2 may abort the application on Debian as well. Fedora and Arch are not affected. |
-| 5 | The truss adapter (`trussMeshAdapter.cpp` `toMeshData`) reads only `NodeConstraint::fixed` and `NodalLoad::force`. Rotational fixity, prescribed rotations, nodal moments and `ElementFormulation` (beam) are dropped without a warning. | `anaf_core`, truss adapter | A frame file imported into the truss solver loses its moments; the energy check still passes, because the dropped loads never enter the work term. Fix: warn on (or reject) rotational data and beam formulations until a beam solver exists. |
+| 5 | The truss adapter (`trussMeshAdapter.cpp` `toMeshData`) reads only `NodeConstraint::fixed` and `NodalLoad::force`. Rotational fixity, prescribed rotations, nodal moments and `ElementFormulation` (beam) are dropped without a warning. | `anaf_core`, truss adapter | A frame file imported into the truss solver loses its moments; the energy check still passes, because the dropped loads never enter the work term. Fix: warn on (or reject) rotational data and beam formulations until a beam solver exists. Planned as [INTEROP_PLAN.md](INTEROP_PLAN.md) P0 item 8. |
 
 ### 8.1 Deferred by design
 
