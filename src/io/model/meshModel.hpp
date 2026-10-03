@@ -105,18 +105,24 @@ namespace anaf::IO {
   // (inclined supports); empty means "derive from `fixed`".
   // `prescribed` is the imposed displacement of the fixed DOFs in global components (m);
   // zero is an ordinary support. For inclined supports the part normal to `allowedMotion` applies.
+  // Rotational constraints (beams / frames / shells): `fixedRotation[axis]` (Rx, Ry, Rz),
+  // `prescribedRotation` (rad, small-rotation vector), and optional independent `amplitudeRotation`.
   struct NodeConstraint {
     std::uint32_t node{};
     std::array<bool, 3> fixed{};
     std::vector<std::array<double, 3>> allowedMotion;
     std::array<double, 3> prescribed{};
     std::string amplitude;
+    std::array<bool, 3> fixedRotation{};
+    std::array<double, 3> prescribedRotation{};
+    std::string amplitudeRotation{};
   };
 
   struct NodalLoad {
     std::uint32_t node{};
     std::array<double, 3> force{}; // N
     std::string amplitude;
+    std::array<double, 3> moment{}; // concentrated moment: Mx, My, Mz [N*m], global axes
   };
 
   // Prescribed temperature (Dirichlet) of one node, K.
@@ -164,25 +170,53 @@ namespace anaf::IO {
   };
 
   // Well-known element attribute names shared by all formats and solvers.
+  // Values follow `lengthUnit` (m^2 / m^4 for "m"); anaf_io never converts units.
+  // Beam section properties refer to the principal axes of the local frame (see MeshModel::beamOrientation).
   namespace Attribute {
     inline constexpr const char* MaterialId = "MaterialID";
     inline constexpr const char* CrossSectionArea = "CrossSectionArea"; // m^2
     inline constexpr const char* HeatGeneration = "HeatGeneration";     // W/m^3 (volumetric heat source)
+    inline constexpr const char* SecondMomentY = "SecondMomentY";       // m^4, second moment of area about local y
+    inline constexpr const char* SecondMomentZ = "SecondMomentZ";       // m^4, second moment of area about local z
+    inline constexpr const char* TorsionConstant = "TorsionConstant";   // m^4, St. Venant J (not the polar moment)
+    inline constexpr const char* ShearAreaY = "ShearAreaY";             // m^2, effective shear area k*A along local y; 0 / missing = shear-rigid
+    inline constexpr const char* ShearAreaZ = "ShearAreaZ";             // m^2, effective shear area k*A along local z; 0 / missing = shear-rigid
+    inline constexpr const char* ElementFormulation = "ElementFormulation"; // ElementFormulation code; missing = Bar
   }
+
+  // Values of the "ElementFormulation" attribute. A Line2 / Line3 element is a bar (axial only,
+  // 3 DOFs per node) unless the attribute says otherwise, so files without it keep their meaning.
+  enum class ElementFormulation : std::uint8_t {
+    Bar = 0,
+    EulerBernoulliBeam = 1, // 6 DOFs per node, shear-rigid
+    TimoshenkoBeam = 2      // 6 DOFs per node, shear-flexible (uses ShearAreaY / ShearAreaZ)
+  };
 
   // Well-known initial condition quantities.
   namespace InitialQuantity {
-    inline constexpr const char* Displacement = "Displacement"; // 3 components, m
-    inline constexpr const char* Velocity = "Velocity";         // 3 components, m/s
-    inline constexpr const char* Temperature = "Temperature";   // 1 component, K
+    inline constexpr const char* Displacement = "Displacement";       // 3 components, m
+    inline constexpr const char* Velocity = "Velocity";               // 3 components, m/s
+    inline constexpr const char* Rotation = "Rotation";               // 3 components, rad
+    inline constexpr const char* AngularVelocity = "AngularVelocity"; // 3 components, rad/s
+    inline constexpr const char* Temperature = "Temperature";         // 1 component, K
   }
 
   // Well-known field names shared by all formats and solvers.
   namespace FieldName {
-    inline constexpr const char* Displacement = "Displacement"; // node, 3 components, m
-    inline constexpr const char* Stress = "Stress";             // element, Pa (bars: axial, tension > 0)
-    inline constexpr const char* AxialForce = "AxialForce";     // element, N (tension > 0)
+    inline constexpr const char* Displacement = "Displacement";                   // node, 3 components, m
+    inline constexpr const char* Stress = "Stress";                               // element, Pa (bars: axial, tension > 0)
+    inline constexpr const char* AxialForce = "AxialForce";                       // element, N (tension > 0)
+    inline constexpr const char* Rotation = "Rotation";                           // node, 3 components, rad
+    inline constexpr const char* Velocity = "Velocity";                           // node, 3 components, m/s
+    inline constexpr const char* Acceleration = "Acceleration";                   // node, 3 components, m/s^2
+    inline constexpr const char* AngularVelocity = "AngularVelocity";             // node, 3 components, rad/s
+    inline constexpr const char* AngularAcceleration = "AngularAcceleration";     // node, 3 components, rad/s^2
+    inline constexpr const char* BeamSectionForce = "BeamSectionForce";           // element, 12 components, N and N*m (see below)
   }
+  // BeamSectionForce: N, Vy, Vz, T, My, Mz at node 0, then the same at node 1, in the local frame
+  // of MeshModel::beamOrientation. Section sign convention, not element end forces: the value at
+  // node 0 is minus the end force k*u there, the value at node 1 is plus it. N > 0 is tension at
+  // both ends (matches AxialForce), and a constant moment shows the same My / Mz at both ends.
 
   // Well-known global array names.
   namespace GlobalName {
@@ -207,6 +241,10 @@ namespace anaf::IO {
     std::optional<Damping> damping;
     // Per-element scalar attributes indexed by global element index (MaterialID, CrossSectionArea, ...).
     std::map<std::string, std::vector<double>> elementAttributes;
+    // Beam orientation reference vector v per global element index, global axes; empty = none given.
+    // Local x runs from node 0 to node 1, v lies in the local x-y plane: z = normalize(x cross v),
+    // y = z cross x. A zero vector leaves the choice to the solver's default rule.
+    std::vector<std::array<double, 3>> beamOrientation;
     std::vector<GlobalArray> globalData;
 
     std::string lengthUnit{"m"};

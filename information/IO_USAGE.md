@@ -5,7 +5,7 @@ This guide shows how code outside `src/io/` reads and writes model files through
 For the file formats themselves (which data goes where in MSH, VTK, VTU, `.pvd` and the STEP sidecar), see [FILE_HANDLING.md](FILE_HANDLING.md).
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-09-28 (after `8a947e1`).
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (rotational constraints, nodal moments, beam section data and orientation, beam / dynamic result names).
 
 ## 1. Overview
 
@@ -253,9 +253,10 @@ auto exportTask = io.exportAsync(path, snapshot, options);
 |---|---|---|
 | Geometry | `nodes`, `blocks` | `Node`, `ElementBlock` |
 | Named groups (physical groups, materials as `Material:<name>`) | `sets` | `EntitySet` (node or element members) |
-| Per-element scalars | `elementAttributes` | `MaterialID`, `CrossSectionArea` (m²), `HeatGeneration` (W/m³), any other name |
-| Supports and prescribed displacements | `constraints` | `NodeConstraint{node, fixed, allowedMotion, prescribed (m), amplitude}` |
-| Forces | `loads` | `NodalLoad{node, force (N), amplitude}` |
+| Per-element scalars | `elementAttributes` | `MaterialID`, `CrossSectionArea` (m²), `HeatGeneration` (W/m³), beam section data (`SecondMomentY/Z`, `TorsionConstant` (m⁴), `ShearAreaY/Z` (m²)), `ElementFormulation` (`ElementFormulation` enum code; missing = bar), any other name |
+| Beam orientation | `beamOrientation` | `std::vector<std::array<double, 3>>`, one reference vector per element (global axes) or empty; v lies in the local x–y plane, zero = solver default |
+| Supports, prescribed displacements and rotations | `constraints` | `NodeConstraint{node, fixed, allowedMotion, prescribed (m), amplitude, fixedRotation, prescribedRotation (rad), amplitudeRotation}`; `amplitudeRotation` is independent of `amplitude` |
+| Forces and moments | `loads` | `NodalLoad{node, force (N), amplitude, moment (N·m)}`; one amplitude for both, use another entry for a moment with another history |
 | Prescribed temperatures | `temperatureConstraints` | `TemperatureConstraint{node, temperature (K), amplitude}` |
 | Heat loads | `heatLoads` | `HeatLoad{node, power (W), amplitude}` |
 | Time functions | `amplitudes` | `Amplitude{name, times, factors}`; `factorAt(t)` is piecewise linear and held constant outside the range |
@@ -280,9 +281,9 @@ An empty `amplitude` name means a constant factor of 1. `validate()` rejects ref
 
 | Namespace | Names |
 |---|---|
-| `FieldName` | `Displacement` (node, 3, m), `Stress` (element, Pa, tension > 0), `AxialForce` (element, N) |
-| `Attribute` | `MaterialId`, `CrossSectionArea`, `HeatGeneration` |
-| `InitialQuantity` | `Displacement` (3, m), `Velocity` (3, m/s), `Temperature` (1, K) |
+| `FieldName` | `Displacement` (node, 3, m), `Rotation` (node, 3, rad), `Velocity` / `Acceleration` / `AngularVelocity` / `AngularAcceleration` (node, 3), `Stress` (element, Pa, tension > 0), `AxialForce` (element, N, tension > 0), `BeamSectionForce` (element, 12: N, Vy, Vz, T, My, Mz at node 0 then node 1, local axes, section sign convention) |
+| `Attribute` | `MaterialId`, `CrossSectionArea`, `HeatGeneration`, `SecondMomentY`, `SecondMomentZ`, `TorsionConstant`, `ShearAreaY`, `ShearAreaZ`, `ElementFormulation` |
+| `InitialQuantity` | `Displacement` (3, m), `Velocity` (3, m/s), `Rotation` (3, rad), `AngularVelocity` (3, rad/s), `Temperature` (1, K) |
 | `GlobalName` | `NaturalFrequency` (1 component per mode, Hz) |
 
 Any other name also round-trips. The well-known names are the ones other solvers and viewers look for.
@@ -375,6 +376,30 @@ model.globalData.push_back(std::move(frequencies));
 ```
 
 Load cases use `StepKind::LoadCase`, `times = {1, 2, ...}` and `stepLabels = {"Dead", "Wind", ...}`.
+
+Beam (frame) data. Elements stay `Line2`; `ElementFormulation` makes them beams, and missing means bar:
+
+```cpp
+model.elementAttributes[Attribute::ElementFormulation] = {
+  static_cast<double>(ElementFormulation::EulerBernoulliBeam), static_cast<double>(ElementFormulation::EulerBernoulliBeam)};
+model.elementAttributes[Attribute::SecondMomentY] = {8.5e-6, 8.5e-6};   // m^4, principal axes
+model.elementAttributes[Attribute::SecondMomentZ] = {2.3e-5, 2.3e-5};
+model.elementAttributes[Attribute::TorsionConstant] = {1.2e-7, 1.2e-7};
+model.beamOrientation = {{0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0}};      // v in the local x-y plane, not parallel to the bar
+
+NodeConstraint clamp;                                             // fixed in translation and rotation
+clamp.node = 0;
+clamp.fixed = {true, true, true};
+clamp.fixedRotation = {true, true, true};
+model.constraints.push_back(clamp);
+
+NodalLoad torque;
+torque.node = 2;
+torque.moment = {0.0, 0.0, 500.0};                                // N*m, global axes
+model.loads.push_back(torque);
+```
+
+Beam mode shapes are two fields with `StepKind::Mode`: `FieldName::Displacement` and `FieldName::Rotation`. Internal forces go into one `FieldName::BeamSectionForce` field (12 components per element, see 6.3).
 
 ### 6.6 Reading a model
 

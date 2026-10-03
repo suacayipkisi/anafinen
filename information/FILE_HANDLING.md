@@ -9,7 +9,7 @@ This document describes `anaf_io`, the mesh import/export library:
 For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-02 (supports read from and written to the snapshot nodes by the truss adapter; step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -56,21 +56,23 @@ For a caller-side guide (public headers, functions, code examples), see [IO_USAG
 | `blocks` | `vector<ElementBlock>` | One block per element type: `tags`, `connectivity` (node indices, **Gmsh local order**), `entityTags` (geometric entity per element) |
 | `sets` | `vector<EntitySet>` | Named node or element sets: `name`, `kind`, `dimension`, `tag` (physical tag), `members` |
 | `fields` | `vector<Field>` | `name`, `location` (node / element), `components`, `times[s]`, `steps[s][entity * components + c]`, `stepKind`, optional `stepLabels[s]` |
-| `constraints` | `vector<NodeConstraint>` | `fixed[3]` per global axis, optional `allowedMotion` basis (inclined supports), `prescribed[3]` imposed displacement of the fixed DOFs [m], `amplitude` |
-| `loads` | `vector<NodalLoad>` | Nodal force [N], `amplitude` |
+| `constraints` | `vector<NodeConstraint>` | `fixed[3]` per global axis, optional `allowedMotion` basis (inclined supports), `prescribed[3]` imposed displacement of the fixed DOFs [m], `amplitude`; rotations: `fixedRotation[3]` about global X, Y, Z, `prescribedRotation[3]` [rad, small-rotation vector] of the fixed rotational DOFs, `amplitudeRotation` (independent of `amplitude`; empty = constant 1) |
+| `loads` | `vector<NodalLoad>` | Nodal `force` [N] and `moment` [N·m] in global axes, one `amplitude` for both; a moment with another time history is another entry |
 | `temperatureConstraints` | `vector<TemperatureConstraint>` | Prescribed nodal temperature [K], `amplitude` |
 | `heatLoads` | `vector<HeatLoad>` | Concentrated heat flow into a node [W] (> 0 heats), `amplitude` |
 | `amplitudes` | `vector<Amplitude{name, times, factors}>` | Piecewise linear time factor, held constant outside its range (`factorAt(t)`) |
-| `initialConditions` | `vector<InitialCondition{quantity, components, values}>` | Nodal initial state: `InitialQuantity::Displacement` (3), `Velocity` (3), `Temperature` (1), or any name |
+| `initialConditions` | `vector<InitialCondition{quantity, components, values}>` | Nodal initial state: `InitialQuantity::Displacement` (3), `Velocity` (3), `Rotation` (3), `AngularVelocity` (3), `Temperature` (1), or any name |
 | `damping` | `optional<Damping>` | Rayleigh `alpha` [1/s], `beta` [s] (C = αM + βK) and `modalRatios` (one per mode) |
-| `elementAttributes` | `map<string, vector<double>>` | Per-element scalars: `MaterialID`, `CrossSectionArea` [m²], and any future attribute (thickness, …) |
+| `elementAttributes` | `map<string, vector<double>>` | Per-element scalars: `MaterialID`, `CrossSectionArea` [m²], beam section data `SecondMomentY` / `SecondMomentZ` / `TorsionConstant` [m⁴], `ShearAreaY` / `ShearAreaZ` [m², k·A], `ElementFormulation` (0 / missing = bar, 1 = Euler-Bernoulli, 2 = Timoshenko), and any other attribute (thickness, …) |
+| `beamOrientation` | `vector<array<double, 3>>` | Per-element reference vector v [global axes], empty = none. Local x = node 0 → node 1, v in the local x–y plane, z = x × v, y = z × x; a zero vector leaves the choice to the solver |
 | `globalData` | `vector<GlobalArray{name, components, values}>` | Model-level arrays that belong to no node or element (natural frequencies, modal masses, …) |
 | `lengthUnit`, `title`, `warnings` | | Metadata; readers append non-fatal issues to `warnings` |
 
 - Global element index: block 0 elements first, then block 1, and so on. Sets, element fields and attributes are indexed by it.
-- `validate()` returns a message for every inconsistency (sizes, indices, unknown amplitude names, unsorted amplitude times, amplitude names with quotes or line breaks). Every writer refuses an invalid model; every reader validates its result.
+- `validate()` returns a message for every inconsistency (sizes, indices, unknown amplitude names, unsorted amplitude times, amplitude names with quotes or line breaks, a prescribed rotation on a free rotational DOF, an unknown or non-line `ElementFormulation`, a beam orientation on a non-line element or parallel to the element axis). Every writer refuses an invalid model; every reader validates its result.
 - **Amplitude references:** a BC or load names its amplitude; an empty name is a constant factor 1. The stored value is the reference magnitude that the amplitude scales.
-- Well-known names: `FieldName::Displacement` (node, 3), `FieldName::Stress` (element, Pa, tension > 0), `FieldName::AxialForce`, `Attribute::MaterialId`, `Attribute::CrossSectionArea`, `GlobalName::NaturalFrequency` (Hz, one tuple per mode).
+- Well-known names: `FieldName::Displacement` (node, 3), `Rotation` (node, 3, rad), `Velocity`, `Acceleration`, `AngularVelocity`, `AngularAcceleration` (node, 3), `Stress` (element, Pa, tension > 0), `AxialForce` (element, N, tension > 0), `BeamSectionForce` (element, 12: N, Vy, Vz, T, My, Mz at node 0 then node 1, local axes, section sign convention, so N > 0 is tension at both ends), the `Attribute::*` names above, `GlobalName::NaturalFrequency` (Hz, one tuple per mode). Mode shapes of beams are a `Displacement` and a `Rotation` field, both with `StepKind::Mode`.
+- Units follow `lengthUnit` (N·mm and mm⁴ when it is `mm`); `anaf_io` never converts them.
 
 **Step kinds** (`Field::stepKind`) say what `times[s]` holds:
 
@@ -116,14 +118,18 @@ Formats that store named arrays (VTK, VTU, the MSH data sections, the STEP sidec
 | Array (location, components) | Holds |
 |---|---|
 | `Fixity` (node, 3) | 1 = fixed, 0 = free |
+| `FixityRotation` (node, 3) | rotational fixity about X, Y, Z; only written when a constraint fixes a rotation |
 | `AllowedMotionBasis` (node, 10) | rank + 3×3 free-direction basis; only written when a node has an inclined support |
 | `NodalForce` (node, 3) | loads [N]; `NodalForce:<amplitude>` for loads with an amplitude (loads on one node with the same amplitude are summed) |
+| `NodalMoment[:<amplitude>]` (node, 3) | moments [N·m]; on read, force and moment of one (node, amplitude) merge into one `NodalLoad` |
 | `PrescribedDisplacement[:<amplitude>]` (node, 4) | member flag, ux, uy, uz [m]; only written when a constraint has a non-zero value or an amplitude |
+| `PrescribedRotation[:<amplitude>]` (node, 4) | member flag, rx, ry, rz [rad]; keyed by `amplitudeRotation`, only written when a rotation is non-zero or `amplitudeRotation` is set |
 | `PrescribedTemperature[:<amplitude>]` (node, 2) | member flag, temperature [K] |
 | `NodalHeat[:<amplitude>]` (node, 1) | heat loads [W] |
 | `Initial:<quantity>` (node, any) | initial conditions |
 | `HeatGeneration` (element, 1) | volumetric heat source [W/m³], an element attribute |
-| `MaterialID`, `CrossSectionArea`, `Attribute:<name>` (element, 1) | element attributes |
+| `MaterialID`, `CrossSectionArea`, `Attribute:<name>` (element, 1) | element attributes; the beam section names and `ElementFormulation` use the `Attribute:` prefix, so anafinen 0.1.3 already reads them into `elementAttributes` |
+| `BeamOrientation` (element, 3) | `beamOrientation`; only written when it is set. Gmsh and ParaView show it as a vector (Glyph works) |
 | `NodeSet:<name>` / `ElementSet:<name>` (1) | set membership (1 = member) |
 | `NodeTag`, `ElementTag`, `EntityTag` (1) | original ids (VTK / VTU only; MSH stores them natively) |
 
@@ -137,7 +143,36 @@ Global arrays (`encodeModelGlobals()`), stored like `globalData` in every format
 
 **Materials by name (truss adapter, 0.1.3):** `toMeshModel()` writes one element set `Material:<material name>` per material used, in addition to `MaterialID`. Sets survive every format (MSH physical groups, `ElementSet:Material:<name>` arrays in VTK / VTU / sidecar), so `toMeshData()` matches bars to the current material list by name (ASCII case-insensitive). An unknown name, or a `MaterialID` outside the list, falls back to material 0 with a warning note. Files without material sets (anafinen ≤ 0.1.2) use `MaterialID`, which matches the built-in order (0 steel, 1 aluminum). MSH 4.1 stores elements per entity, so a multi-material model reads back grouped by material; node pairs, materials and results stay matched (tested for MSH 4.1 / 2.2, VTK, VTU, STEP + sidecar).
 
+**Compatibility of the rotational and beam data:** all of it uses new array names, and nothing new is written for a model without it (a truss writes exactly `Fixity`, `NodalForce`, … as before; `anaf_truss_io_tests` compares the committed library files). An older reader keeps the unknown arrays as plain fields and still reads supports and forces. The reasons behind each choice are in section 3.3.
+
 On read, the legacy names written by anafinen ≤ 0.1.2 are accepted too: `FixityX/Y/Z`, `AllowedMotionRank` + 9-component `AllowedMotionBasis`, and `FixityDirection_*`.
+
+### 3.3 Beam and rotational data: design decisions (phase 2.10)
+
+The beam / frame data was added without breaking files, readers or callers of anafinen 0.1.3. Every choice below has a reason that is easy to undo by accident.
+
+| Decision | Chosen | Rejected | Reason |
+|---|---|---|---|
+| New struct members | Appended at the end of `NodeConstraint` / `NodalLoad`; no constructors | Inserted next to the translational members; user-declared constructors | Every caller uses positional aggregate init (`NodeConstraint{n, fixed, {}, {}, {}}`). Inserting members shifts the initializers, and `NodalLoad{n, f, {}}` would even compile silently with the wrong meaning. Constructors would break designated initializers. |
+| Rotational fixity | Two groups: `fixed[3]` + `fixedRotation[3]` | One `array<bool, 6>`; a widened 6-component `Fixity` array | Different units (m vs rad), and `allowedMotion` is a translational basis. Most important: a 6-component `Fixity` fails the `components == 3` check of older readers, which would then drop **all** supports. A separate `FixityRotation` array is just ignored by them. |
+| Skewed rotational supports | Not representable (`fixedRotation` in global axes only) | `allowedRotation` free-direction basis | Two independent bases cannot express "the support frame is rotated" consistently, and the decoder turned translation-only nodes into identity rotation bases (the same trap as `AllowedMotionBasis`). The right model is a node-local frame for all 6 DOFs; it can come later. |
+| Time history of imposed rotations | `amplitudeRotation`, independent; empty = constant 1 | Sharing `amplitude`; "empty = inherit `amplitude`" | Settlement and imposed rotation may follow different histories. "Inherit" made the round trip non-idempotent: `{"Ramp", ""}` read back as `{"Ramp", "Ramp"}`. |
+| Time history of moments | The load's one `amplitude`; another history is another `NodalLoad` entry | `amplitudeMoment` | `loads` is a vector of additive entries, so a second amplitude field is a second way to say the same thing, and the decoder could not reproduce the original representation. On read, force and moment of one (node, amplitude) merge into one entry. |
+| Bar or beam | Explicit `ElementFormulation` attribute; missing = bar | Inferring "beam" from the presence of `SecondMomentZ` | Bars and beams are both `Line2`. Inference would turn a truss exported with section data into a frame silently. "Missing = bar" keeps every existing file's meaning. |
+| Section attribute names | `SecondMomentY/Z`, `TorsionConstant`, `ShearAreaY/Z`, string = constant name, written as `Attribute:<name>` | `"Iyy"` / `"Izz"`, `MomentOfInertia*`, unprefixed names | anafinen 0.1.3 decodes `Attribute:<name>` into `elementAttributes` already: full compatibility at zero cost. Unprefixed new names would stay plain fields there. "Moment of inertia" reads as mass inertia. Principal axes are assumed (no `Iyz`); `TorsionConstant` is St. Venant J, not the polar moment. |
+| Beam orientation | Typed `MeshModel::beamOrientation`, written as one 3-component element array `BeamOrientation` | Three scalar attributes `OrientationX/Y/Z`; a result `Field`; a third reference node | One 3-component array is a vector in Gmsh and ParaView (Glyph works), and cannot exist half-written. `fields` is for results. Reference nodes are unconnected mesh nodes that renumbering and "remove unused nodes" break. |
+| Orientation convention | v in the local x–y plane: x = node 0 → node 1, z = normalize(x × v), y = z × x; zero v = solver default | Roll angle | A roll angle depends on the solver's default reference rule, which is ambiguous for vertical members. `validate()` rejects v parallel to the axis. |
+| Beam internal forces | One 12-component `BeamSectionForce` (N, Vy, Vz, T, My, Mz at node 0, then node 1), section sign convention; `AxialForce` kept | Separate `BendingMoment` / `ShearForce` / `TorsionalMoment`, one value per element | One value per element cannot hold a linear moment diagram, the main beam result. Section convention (node 0 = −k·u, node 1 = +k·u) makes N > 0 tension at both ends, consistent with the truss `AxialForce`. |
+| Rotation results | Separate `Rotation` field (node, 3); mode shapes = `Displacement` + `Rotation` with `StepKind::Mode` | A 6-component displacement | ParaView "Warp By Vector" needs a 3-component displacement. |
+
+Not covered yet, left for later work:
+- beam end releases (hinges), e.g. two bit-mask attributes `ReleaseNode0` / `ReleaseNode1`;
+- distributed element loads on beams (part of the element-face load gap);
+- concentrated nodal mass and rotary inertia;
+- node-local frames (skewed rotational supports);
+- springs / dashpots;
+- a `FieldLocation::ElementNode` (Gmsh `$ElementNodeData`) for per-element-node results;
+- modal global names (`ModalMass`, `ParticipationFactor`, `EffectiveModalMass`), with the modal analysis step.
 
 ## 4. Formats
 
@@ -313,7 +348,7 @@ See [GUI.md](GUI.md) section 2.3. In short:
 
 | Test | What it proves |
 |---|---|
-| `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar (v3: step kinds, labels, globals, thermal BCs, amplitudes, damping); prescribed displacements, thermal BCs, amplitudes, initial conditions and damping in every format, checked in the file text too; amplitude interpolation; `validate()` of broken references; step kinds, labels and global data in every format; `TimeValue`; `.pvd` series with a late-starting field, progress and cancellation; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation |
+| `anaf_io_tests` | Round trips of a model with all 17 element types, non-contiguous tags, sets, multi-step fields, BCs (incl. inclined), loads and awkward doubles: MSH 2.2 / 4.1 ASCII / binary, VTK 4.2 / 5.1 ASCII / binary, VTU ASCII / binary / zlib; cross-format chain; Gmsh-written MSH 1 / 2.2 / 4.0 / 4.1 incl. views; Gmsh reads our files; high-order node order against Gmsh's VTK writer; STEP + sidecar (v3: step kinds, labels, globals, thermal BCs, amplitudes, damping); prescribed displacements, thermal BCs, amplitudes, initial conditions and damping in every format, checked in the file text too; amplitude interpolation; `validate()` of broken references; step kinds, labels and global data in every format; `TimeValue`; `.pvd` series with a late-starting field, progress and cancellation; STEP / IGES / BREP solids; files from anafinen 0.1.2; error codes; async service and cancellation; rotational constraints, nodal moments (force + moment merge on read), section attributes, `ElementFormulation`, `beamOrientation`, `Rotation` mode shapes and 12-component `BeamSectionForce` in every format (STEP sidecar per element, edge direction kept); a truss model writes exactly the arrays it wrote before; `validate()` of broken beam data |
 | `vtk_reference_check` | Python + official VTK 9.5: 124 files written by VTK in every legacy / XML variant are read exactly as VTK reads them; VTK reads every variant anaf_io writes. The grids include field data, `TimeValue` and `_Mode_NNN` arrays. Skipped when the Python `vtk` module is missing |
 | `anaf_core_tests` | The FEM core alone, against closed-form results ([CALCULATIONS.md](CALCULATIONS.md) section 11) |
 | `anaf_truss_io_tests` | The GUI data path without the GUI: solve → snapshot → adapter → every format → adapter → identical snapshot (bit-exact); inclined supports through MSH and the solver; STEP with X-bracing; wireframe preview; conversion off the calling thread; material library loading, user material add / remove / save (temporary files only, never the real user config); materials matched by name after the list changes (all writable formats); material files under a non-ASCII folder |
@@ -324,6 +359,8 @@ See [GUI.md](GUI.md) section 2.3. In short:
 - Step labels (load case names) are not stored in VTK / VTU / `.pvd`.
 - No complex values (harmonic response with phase) yet.
 - BCs and loads are nodal only: no element-face loads (pressure, surface heat flux, convection), no nodal springs or dashpots.
+- Beam data is stored but no beam solver exists yet. The truss adapter (`toMeshData`) reads only `fixed` and `force`: it silently drops `fixedRotation`, `prescribedRotation`, `moment` and treats every Line2 as a bar whatever its `ElementFormulation`. Importing a frame file into the truss solver therefore ignores moments without a warning ([ARCHITECTURE.md](ARCHITECTURE.md) section 8).
+- Not covered yet (section 3.3): beam end releases, distributed element loads, concentrated nodal mass / rotary inertia, node-local frames for skewed rotational supports, `ElementNode` field location.
 - STEP export writes line elements only; the rest of the model is in the sidecar.
 - Gmsh-based CAD import cannot be interrupted inside Gmsh; cancellation waits for the current Gmsh call.
 - Binary MSH 4.1 files cannot be opened by the Gmsh 4.15 build on Fedora (its bug, see 4.1). Our files are valid; use MSH 2.2 or ASCII 4.1 for that Gmsh version.

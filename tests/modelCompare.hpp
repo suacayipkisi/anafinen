@@ -186,14 +186,18 @@ namespace anaf::TESTING {
         continue;
       }
       if (c.fixed != it->second.fixed) diff(std::format("constraint on node {} fixity differs", node));
+      if (c.fixedRotation != it->second.fixedRotation) diff(std::format("constraint on node {} rotational fixity differs", node));
       if (c.prescribed != it->second.prescribed || c.amplitude != it->second.amplitude) {
         diff(std::format("constraint on node {} prescribed displacement / amplitude differs", node));
       }
+      if (c.prescribedRotation != it->second.prescribedRotation || c.amplitudeRotation != it->second.amplitudeRotation) {
+        diff(std::format("constraint on node {} prescribed rotation / amplitude differs", node));
+      }
       if (!c.allowedMotion.empty() && c.allowedMotion != it->second.allowedMotion) diff(std::format("constraint on node {} basis differs", node));
     }
-    std::map<std::pair<std::uint32_t, std::string>, std::array<double, 3>> expectedLoads, actualLoads;
-    for (const auto& l : expected.loads) expectedLoads[{nodeMap[l.node], l.amplitude}] = l.force;
-    for (const auto& l : actual.loads) actualLoads[{l.node, l.amplitude}] = l.force;
+    std::map<std::pair<std::uint32_t, std::string>, std::pair<std::array<double, 3>, std::array<double, 3>>> expectedLoads, actualLoads;
+    for (const auto& l : expected.loads) expectedLoads[{nodeMap[l.node], l.amplitude}] = {l.force, l.moment};
+    for (const auto& l : actual.loads) actualLoads[{l.node, l.amplitude}] = {l.force, l.moment};
     if (expectedLoads != actualLoads) diff("loads differ");
 
     std::map<std::pair<std::uint32_t, std::string>, double> expectedTemperatures, actualTemperatures, expectedHeat, actualHeat;
@@ -252,6 +256,16 @@ namespace anaf::TESTING {
       }
     }
     if (expected.elementAttributes.size() != actual.elementAttributes.size()) diff("attribute count differs");
+    if (expected.beamOrientation.size() != actual.beamOrientation.size()) {
+      diff(std::format("beam orientation count {} vs {}", expected.beamOrientation.size(), actual.beamOrientation.size()));
+    } else {
+      for (std::size_t e = 0; e < expected.beamOrientation.size(); ++e) {
+        if (expected.beamOrientation[e] != actual.beamOrientation[elementMap[e]]) {
+          diff(std::format("beam orientation of element {} differs", e));
+          break;
+        }
+      }
+    }
 
     for (const auto& global : expected.globalData) {
       const auto* other = actual.findGlobal(global.name);

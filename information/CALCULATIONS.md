@@ -3,7 +3,7 @@
 This document describes the finite element calculation for 3D truss structures built from 1D two-node bar elements. It covers the data types, the math, the solver portfolio, and the energy validator.
 
 > **Document status**
-> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-02.
+> Verified against: `v0.1.3-alpha` (released 2026-10-01), content checked 2026-10-03 (beam data in `anaf_io`, section 13).
 > Implemented: static displacement under nodal loads + self-weight.
 > Not implemented yet: mass matrix, modal analysis (Spectra), beam/frame elements, CST.
 
@@ -299,8 +299,12 @@ The tests were checked against injected faults: a wrong self-weight split and a 
 ## 13. Planned (not in code yet)
 
 - Consistent/lumped mass matrix and the generalized eigenproblem `K φ = ω² M φ` with Spectra `SymGEigsShiftSolver` (shift-invert).
-- 2D/3D beam/frame elements (Euler-Bernoulli, Timoshenko) and 2D CST.
-- Imported BCs beyond `fixed`, `allowedMotion` and `force` (prescribed displacements, amplitudes, thermal loads) are read by `anaf_io` but not used by either truss solver.
+- 2D/3D beam/frame elements (Euler-Bernoulli, Timoshenko) and 2D CST. The file side is ready since phase 2.10: `anaf_io` stores rotational fixity, prescribed rotations, nodal moments, section properties (`SecondMomentY/Z`, `TorsionConstant`, `ShearAreaY/Z`), `ElementFormulation` and the orientation vector, and defines `Rotation` and `BeamSectionForce` results ([FILE_HANDLING.md](FILE_HANDLING.md) sections 3 and 3.3). A beam solver must:
+  - build the local frame from `MeshModel::beamOrientation`: x = node 0 → node 1, z = normalize(x × v), y = z × x; a zero v needs a default rule, e.g. global Z as the reference, global X for vertical members;
+  - read `ElementFormulation` (missing = bar) and take `ShearAreaY/Z` for Timoshenko only;
+  - write `BeamSectionForce` in section convention: the values at node 0 are −(k·u) there and those at node 1 are +(k·u), so N > 0 is tension at both ends;
+  - also write `AxialForce`, and write mode shapes as `Displacement` + `Rotation`.
+- Imported BCs beyond `fixed`, `allowedMotion` and `force` (prescribed displacements, amplitudes, thermal loads, rotational fixity, prescribed rotations, nodal moments) are read by `anaf_io` but not used by either truss solver. The rotational ones are dropped without a warning ([ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 5).
 
 ## 14. Related source files
 

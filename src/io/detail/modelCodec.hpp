@@ -23,14 +23,19 @@
 //
 // Field names written:
 //   node    "Fixity"               3 comps, 1 = fixed, 0 = free
+//   node    "FixityRotation"       3 comps, 1 = fixed, 0 = free (only when rotational fixity exists)
 //   node    "AllowedMotionBasis"  10 comps, rank + 3 x 3 basis (only when a node has an inclined support)
 //   node    "NodalForce"           3 comps, N; "NodalForce:<amplitude>" for loads with an amplitude
+//   node    "NodalMoment"          3 comps, N*m; "NodalMoment:<amplitude>" for moments with an amplitude
 //   node    "PrescribedDisplacement[:<amplitude>]"  4 comps: member flag, ux, uy, uz (m)
+//   node    "PrescribedRotation[:<amplitude>]"      4 comps: member flag, rx, ry, rz (rad)
 //   node    "PrescribedTemperature[:<amplitude>]"   2 comps: member flag, K
 //   node    "NodalHeat[:<amplitude>]"               1 comp, W
 //   node    "Initial:<quantity>"   initial conditions, their own component count
 //   element "HeatGeneration"       1 comp, W/m^3 (an attribute like "MaterialID")
-//   element "MaterialID", "CrossSectionArea", "Attribute:<name>"   1 comp each
+//   element "MaterialID", "CrossSectionArea", "Attribute:<name>"   1 comp each; newer well-known
+//           attributes (SecondMomentY, ..., ElementFormulation) use the prefix, so v0.1.3 readers keep them
+//   element "BeamOrientation"      3 comps, reference vector v (only when MeshModel::beamOrientation is set)
 //   node    "NodeSet:<name>"       1 comp, 1 = member      (VTK / VTU / sidecar)
 //   element "ElementSet:<name>"    1 comp, 1 = member      (VTK / VTU / sidecar)
 //   node    "NodeTag", element "ElementTag", "EntityTag"   original ids (VTK / VTU)

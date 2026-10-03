@@ -19,6 +19,7 @@
 #include "testSupport.hpp"
 
 #include <io/meshIo.hpp>
+#include <io/detail/modelCodec.hpp>
 #include <io/service/ioService.hpp>
 
 #include <gmsh.h>
@@ -129,6 +130,10 @@ namespace {
     model.fields[5].stepKind = StepKind::Mode;
     model.fields[6].stepKind = StepKind::LoadCase;
     model.fields[6].stepLabels = {"Dead load", "Wind \"+X\" gust"};
+    // Beam results: mode shapes carry a rotation field next to the displacement one.
+    model.fields.push_back(field(FieldName::Rotation, FieldLocation::Node, 3, {1.5, 4.25, 1.0 / 3.0}));
+    model.fields.back().stepKind = StepKind::Mode;
+    model.fields.push_back(field(FieldName::BeamSectionForce, FieldLocation::Element, 12, {0.5, 1.0}));
     model.globalData = {
       GlobalArray{GlobalName::NaturalFrequency, 1, {1.5, 4.25, 1.0 / 3.0}},
       GlobalArray{"Modal Mass", 2, {awkward(1, 9), awkward(2, 9), -0.0, 6.02214076e23}},
@@ -136,11 +141,16 @@ namespace {
 
     const double s = 1.0 / std::sqrt(2.0);
     model.constraints = {
-      NodeConstraint{0, {true, true, true}, {}, {}, {}},
-      NodeConstraint{1, {false, true, false}, {}, {0.0, -2.5e-3, 0.0}, "Ramp"}, // imposed settlement
-      NodeConstraint{2, {true, true, true}, {{s, s, 0.0}}, {}, {}}, // inclined roller along x = y
+      NodeConstraint{0, {true, true, true}, {}, {}, {}, {true, true, true}, {}, {}},
+      NodeConstraint{1, {false, true, false}, {}, {0.0, -2.5e-3, 0.0}, "Ramp", {false, false, true}, {0.0, 0.0, 0.05}, "Ramp"},
+      NodeConstraint{2, {true, true, true}, {{s, s, 0.0}}, {}, {}, {}, {}, {}},
     };
-    model.loads = {NodalLoad{5, {0.0, -1000.5, 0.0}, {}}, NodalLoad{7, {1e-3, 2e5, -3.25}, {}}, NodalLoad{7, {0.0, 0.0, 12.5}, "Pulse"}};
+    model.loads = {
+      NodalLoad{5, {0.0, -1000.5, 0.0}, {}, {50.0, 0.0, 0.0}},
+      NodalLoad{7, {1e-3, 2e5, -3.25}, {}},
+      NodalLoad{7, {0.0, 0.0, 12.5}, "Pulse", {0.0, -25.0, 0.0}},
+      NodalLoad{8, {}, "Ramp", {10.0, 20.0, 30.0}}
+    };
     model.temperatureConstraints = {TemperatureConstraint{3, 293.15, {}}, TemperatureConstraint{4, 0.0, "Heat Cycle"}};
     model.heatLoads = {HeatLoad{6, 150.0, {}}, HeatLoad{8, -1.0 / 3.0, "Heat Cycle"}};
     model.amplitudes = {
@@ -152,6 +162,7 @@ namespace {
     for (std::size_t i = 0; i < velocity.size(); ++i) velocity[i] = awkward(i, 6);
     for (std::size_t i = 0; i < temperature.size(); ++i) temperature[i] = 273.15 + static_cast<double>(i);
     model.initialConditions = {InitialCondition{InitialQuantity::Velocity, 3, velocity},
+                               InitialCondition{InitialQuantity::Rotation, 3, velocity},
                                InitialCondition{InitialQuantity::Temperature, 1, temperature}};
     model.damping = Damping{0.05, 2e-4, {0.02, 0.03, 1.0 / 3.0}};
 
@@ -165,6 +176,40 @@ namespace {
     model.elementAttributes[Attribute::CrossSectionArea] = area;
     model.elementAttributes["Thickness"] = thickness;
     model.elementAttributes[Attribute::HeatGeneration] = std::vector<double>(elementTotal, 5e3);
+
+    // Beam data on the line elements: Euler-Bernoulli / Timoshenko alternating, one line element left
+    // with a zero orientation (solver default). Every other element stays a bar with no orientation.
+    std::vector<double> formulation(elementTotal, 0.0), secondMomentY(elementTotal), secondMomentZ(elementTotal),
+                        torsion(elementTotal), shearArea(elementTotal);
+    model.beamOrientation.assign(elementTotal, {});
+    std::size_t element = 0;
+    std::size_t lines = 0;
+    for (const auto& block : model.blocks) {
+      const auto& info = elementInfo(block.type);
+      for (std::size_t e = 0; e < block.size(); ++e, ++element) {
+        secondMomentY[element] = awkward(element, 11) * 1e-6;
+        secondMomentZ[element] = awkward(element, 12) * 1e-6;
+        torsion[element] = 2.0 / 3.0 * 1e-7;
+        shearArea[element] = 0.0;
+        if (info.dimension != 1) continue;
+        formulation[element] = lines % 2 == 0 ? 1.0 : 2.0;
+        if (lines % 2 == 1) shearArea[element] = 5.0 / 6.0 * area[element];
+        if (lines++ == 0) continue;
+        const auto& p0 = model.nodes[block.connectivity[e * static_cast<std::size_t>(info.nodeCount)]].position;
+        const auto& p1 = model.nodes[block.connectivity[e * static_cast<std::size_t>(info.nodeCount) + 1]].position;
+        const std::array<double, 3> axis{p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
+        const std::array<double, 3> helper{0.3, -0.7, 1.0 / 3.0};
+        // v = axis x helper: perpendicular to the axis by construction.
+        model.beamOrientation[element] = {axis[1] * helper[2] - axis[2] * helper[1], axis[2] * helper[0] - axis[0] * helper[2],
+                                         axis[0] * helper[1] - axis[1] * helper[0]};
+      }
+    }
+    model.elementAttributes[Attribute::ElementFormulation] = formulation;
+    model.elementAttributes[Attribute::SecondMomentY] = secondMomentY;
+    model.elementAttributes[Attribute::SecondMomentZ] = secondMomentZ;
+    model.elementAttributes[Attribute::TorsionConstant] = torsion;
+    model.elementAttributes[Attribute::ShearAreaY] = shearArea;
+    model.elementAttributes[Attribute::ShearAreaZ] = shearArea;
     return model;
   }
 
@@ -630,8 +675,17 @@ TEST(stepRoundTripWithSidecar) {
   const std::size_t elements = model.elementCount();
   model.elementAttributes[Attribute::MaterialId] = std::vector<double>(elements, 1.0);
   model.elementAttributes[Attribute::CrossSectionArea] = std::vector<double>(elements, 8e-3);
-  model.constraints = {NodeConstraint{0, {true, true, true}, {}, {}, {}}, NodeConstraint{2, {false, true, false}, {}, {}, {}}};
-  model.loads = {NodalLoad{4, {0.0, -1e4, 0.0}, {}}};
+  // Beam data, distinct per element so a mismatched element shows up.
+  model.elementAttributes[Attribute::ElementFormulation] = std::vector<double>(elements, 2.0);
+  model.elementAttributes[Attribute::SecondMomentZ].resize(elements);
+  model.beamOrientation.resize(elements);
+  for (std::size_t e = 0; e < elements; ++e) {
+    model.elementAttributes[Attribute::SecondMomentZ][e] = awkward(e, 7) * 1e-6;
+    model.beamOrientation[e] = {0.0, 0.0, 1.0 + static_cast<double>(e) / 3.0}; // the truss lies in z = 0
+  }
+  model.constraints = {NodeConstraint{0, {true, true, true}, {}, {}, {}, {true, true, true}, {}, {}},
+                       NodeConstraint{2, {false, true, false}, {}, {}, {}, {false, true, false}, {0.0, 0.01, 0.0}, "Warm Up"}};
+  model.loads = {NodalLoad{4, {0.0, -1e4, 0.0}, {}, {0.0, 0.0, 2500.0}}};
   std::vector<double> stress(elements);
   for (std::size_t e = 0; e < elements; ++e) stress[e] = (e % 2 ? -1.0 : 1.0) * awkward(e, 4);
   model.fields = {Field{FieldName::Stress, FieldLocation::Element, 1, {0.0}, {stress}, StepKind::Time, {}},
@@ -666,17 +720,44 @@ TEST(stepRoundTripWithSidecar) {
   };
   for (const auto& c : model.constraints) {
     const auto node = nodeAt(model.nodes[c.node].position);
-    const bool found = std::ranges::any_of(back.constraints, [&](const NodeConstraint& b) { return b.node == node && b.fixed == c.fixed; });
+    const bool found = std::ranges::any_of(back.constraints, [&](const NodeConstraint& b) {
+      return b.node == node && b.fixed == c.fixed && b.fixedRotation == c.fixedRotation
+          && b.prescribedRotation == c.prescribedRotation && b.amplitudeRotation == c.amplitudeRotation;
+    });
     CHECK_MSG(found, std::format("constraint on node {}", c.node));
   }
   REQUIRE(back.loads.size() == 1);
   CHECK(back.loads[0].node == nodeAt(model.nodes[4].position));
   CHECK(back.loads[0].force == model.loads[0].force);
+  CHECK(back.loads[0].moment == model.loads[0].moment);
   const auto* backStress = back.findField(FieldName::Stress, FieldLocation::Element);
   REQUIRE(backStress != nullptr);
   std::multiset<double> expectedStress(stress.begin(), stress.end()), actualStress(backStress->steps[0].begin(), backStress->steps[0].end());
   CHECK(expectedStress == actualStress);
   CHECK(back.elementAttributes.at(Attribute::CrossSectionArea) == std::vector<double>(elements, 8e-3));
+  // Beam data follows each element, and node 0 stays node 0 (the local x axis must not flip).
+  REQUIRE(back.beamOrientation.size() == elements);
+  REQUIRE(back.elementAttributes.contains(Attribute::SecondMomentZ));
+  CHECK(back.elementAttributes.at(Attribute::ElementFormulation) == std::vector<double>(elements, 2.0));
+  const auto& backLines = back.blocks.front();
+  for (std::size_t e = 0; e < elements; ++e) {
+    const auto first = nodeAt(model.nodes[pairs[e][0]].position);
+    const auto second = nodeAt(model.nodes[pairs[e][1]].position);
+    std::size_t match = elements;
+    bool sameDirection = false;
+    for (std::size_t b = 0; b < backLines.size(); ++b) {
+      const auto n0 = backLines.connectivity[b * 2];
+      const auto n1 = backLines.connectivity[b * 2 + 1];
+      if ((n0 == first && n1 == second) || (n0 == second && n1 == first)) {
+        match = b;
+        sameDirection = n0 == first;
+      }
+    }
+    REQUIRE(match < elements);
+    CHECK_MSG(sameDirection, std::format("element {} reversed", e));
+    CHECK(back.beamOrientation[match] == model.beamOrientation[e]);
+    CHECK(back.elementAttributes.at(Attribute::SecondMomentZ)[match] == model.elementAttributes.at(Attribute::SecondMomentZ)[e]);
+  }
   const auto* chords = back.findSet("Chords", SetKind::Element);
   CHECK(chords && chords->members.size() == 4);
   const auto* cases = back.findField("CaseForce", FieldLocation::Node);
@@ -856,6 +937,130 @@ TEST(ioServiceCancellation) {
     const auto& result = task->wait();
     CHECK(result.has_value() || result.error().code == IoError::Code::Cancelled);
   }
+}
+
+TEST(trussModelEncodesWithoutRotationalFields) {
+  MeshModel model;
+  model.nodes = {Node{1, {0.0, 0.0, 0.0}}, Node{2, {1.0, 0.0, 0.0}}};
+  auto& block = model.blockFor(ElementType::Line2);
+  block.tags = {1};
+  block.connectivity = {0, 1};
+  model.constraints = {NodeConstraint{0, {true, true, true}, {}, {}, {}}};
+  model.loads = {NodalLoad{1, {0.0, -100.0, 0.0}, {}}};
+
+  // Exactly the arrays a truss model got before rotational DOFs existed.
+  std::vector<std::string> names;
+  for (const auto& field : anaf::IO::detail::encodeModelData(model, {})) names.push_back(field.name);
+  CHECK((names == std::vector<std::string>{"Fixity", "NodalForce", "NodeTag", "ElementTag"}));
+}
+
+TEST(forceAndMomentOnSameNodeMergeOnDecode) {
+  MeshModel model;
+  model.nodes = {Node{1, {0.0, 0.0, 0.0}}, Node{2, {1.0, 0.0, 0.0}}};
+  auto& block = model.blockFor(ElementType::Line2);
+  block.tags = {1};
+  block.connectivity = {0, 1};
+  model.loads = {NodalLoad{1, {10.0, 20.0, 30.0}, "StepPulse", {100.0, 200.0, 300.0}}};
+  model.amplitudes = {Amplitude{"StepPulse", {0.0, 1.0}, {1.0, 1.0}}};
+
+  const auto encoded = anaf::IO::detail::encodeModelData(model, {});
+  MeshModel decoded = model;
+  decoded.loads.clear();
+  decoded.fields = encoded;
+  anaf::IO::detail::decodeModelData(decoded, {});
+
+  REQUIRE(decoded.loads.size() == 1);
+  CHECK(decoded.loads[0].node == 1);
+  CHECK(decoded.loads[0].force == (std::array<double, 3>{10.0, 20.0, 30.0}));
+  CHECK(decoded.loads[0].moment == (std::array<double, 3>{100.0, 200.0, 300.0}));
+  CHECK(decoded.loads[0].amplitude == "StepPulse");
+}
+
+TEST(rotationOnlyConstraintAndPinSupport) {
+  MeshModel model;
+  model.nodes = {Node{1, {0.0, 0.0, 0.0}}, Node{2, {1.0, 0.0, 0.0}}};
+  auto& block = model.blockFor(ElementType::Line2);
+  block.tags = {1};
+  block.connectivity = {0, 1};
+  model.constraints = {
+    NodeConstraint{0, {false, false, false}, {}, {}, {}, {true, true, true}, {}, {}},
+    NodeConstraint{1, {true, true, false}, {}, {}, {}, {false, false, false}, {}, {}},
+  };
+
+  const auto encoded = anaf::IO::detail::encodeModelData(model, {});
+  MeshModel decoded = model;
+  decoded.constraints.clear();
+  decoded.fields = encoded;
+  anaf::IO::detail::decodeModelData(decoded, {});
+
+  REQUIRE(decoded.constraints.size() == 2);
+  auto c0 = std::ranges::find_if(decoded.constraints, [](const NodeConstraint& c) { return c.node == 0; });
+  auto c1 = std::ranges::find_if(decoded.constraints, [](const NodeConstraint& c) { return c.node == 1; });
+  REQUIRE(c0 != decoded.constraints.end());
+  REQUIRE(c1 != decoded.constraints.end());
+  CHECK(c0->fixed == (std::array<bool, 3>{false, false, false}));
+  CHECK(c0->fixedRotation == (std::array<bool, 3>{true, true, true}));
+  CHECK(c0->allowedMotion.empty());
+  CHECK(c1->fixed == (std::array<bool, 3>{true, true, false}));
+  CHECK(c1->fixedRotation == (std::array<bool, 3>{false, false, false}));
+  CHECK(c1->allowedMotion.empty());
+}
+
+TEST(validateRejectsPrescribedRotationOnFreeDof) {
+  MeshModel model;
+  model.nodes = {Node{1, {0.0, 0.0, 0.0}}};
+  model.constraints = {
+    NodeConstraint{0, {}, {}, {}, {}, {false, true, false}, {0.05, 0.0, 0.0}, {}},
+  };
+  const auto problems = model.validate();
+  CHECK(!problems.empty());
+  CHECK(std::ranges::any_of(problems, [](const std::string& p) {
+    return p.find("prescribed rotation about X on a free rotational DOF") != std::string::npos;
+  }));
+}
+
+TEST(sectionAttributesUseThePrefixOlderReadersUnderstand) {
+  MeshModel model;
+  model.nodes = {Node{1, {0.0, 0.0, 0.0}}, Node{2, {1.0, 0.0, 0.0}}};
+  auto& block = model.blockFor(ElementType::Line2);
+  block.tags = {1};
+  block.connectivity = {0, 1};
+  model.elementAttributes[Attribute::CrossSectionArea] = {1e-3};
+  model.elementAttributes[Attribute::SecondMomentZ] = {2e-6};
+  model.elementAttributes[Attribute::ElementFormulation] = {1.0};
+  model.beamOrientation = {{0.0, 1.0, 0.0}};
+
+  std::vector<std::string> names;
+  for (const auto& field : anaf::IO::detail::encodeModelData(model, {true, true, false})) names.push_back(field.name);
+  // v0.1.3 decodes "Attribute:<name>" into elementAttributes; unprefixed new names would stay plain fields.
+  CHECK((names == std::vector<std::string>{"CrossSectionArea", "Attribute:ElementFormulation", "Attribute:SecondMomentZ", "BeamOrientation"}));
+}
+
+TEST(validateRejectsBrokenBeamData) {
+  MeshModel model;
+  model.nodes = {Node{1, {0.0, 0.0, 0.0}}, Node{2, {1.0, 0.0, 0.0}}, Node{3, {0.0, 1.0, 0.0}}};
+  auto& line = model.blockFor(ElementType::Line2);
+  line.tags = {1, 2};
+  line.connectivity = {0, 1, 0, 2};
+  auto& triangle = model.blockFor(ElementType::Tri3);
+  triangle.tags = {3};
+  triangle.connectivity = {0, 1, 2};
+
+  model.beamOrientation = {{0.0, 0.0, 1.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+  model.elementAttributes[Attribute::ElementFormulation] = {1.0, 3.0, 2.0};
+  const auto problems = model.validate();
+  auto mentions = [&](const std::string& text) {
+    return std::ranges::any_of(problems, [&](const std::string& p) { return p.find(text) != std::string::npos; });
+  };
+  CHECK(mentions("element 1: beam orientation is parallel to the element axis"));
+  CHECK(mentions("beam orientation on a non-line element"));
+  CHECK(mentions("element 1: unknown element formulation 3"));
+  CHECK(mentions("beam formulation on a non-line element"));
+  CHECK(!mentions("element 0:"));
+  CHECK(problems.size() == 4);
+
+  model.beamOrientation.pop_back();
+  CHECK(std::ranges::any_of(model.validate(), [](const std::string& p) { return p.find("beam orientation: 2 vectors for 3 elements") != std::string::npos; }));
 }
 
 TEST(formatDetection) {

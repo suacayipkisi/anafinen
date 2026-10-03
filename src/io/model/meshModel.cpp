@@ -18,6 +18,7 @@
 #include "meshModel.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <stdexcept>
 
@@ -192,6 +193,44 @@ namespace anaf::IO {
         problems.push_back(std::format("attribute '{}': {} values for {} elements", name, values.size(), elementTotal));
       }
     }
+    if (!beamOrientation.empty() && beamOrientation.size() != elementTotal) {
+      problems.push_back(std::format("beam orientation: {} vectors for {} elements", beamOrientation.size(), elementTotal));
+    }
+    const auto formulation = elementAttributes.find(Attribute::ElementFormulation);
+    const bool checkFormulation = formulation != elementAttributes.end() && formulation->second.size() == elementTotal;
+    const bool checkOrientation = beamOrientation.size() == elementTotal;
+    std::size_t global = 0;
+    for (const auto& block : blocks) {
+      const auto& info = elementInfo(block.type);
+      for (std::size_t e = 0; e < block.size(); ++e, ++global) {
+        if (checkFormulation) {
+          const double code = formulation->second[global];
+          if (code != 0.0 && code != 1.0 && code != 2.0) {
+            problems.push_back(std::format("element {}: unknown element formulation {}", global, code));
+          } else if (code != 0.0 && info.dimension != 1) {
+            problems.push_back(std::format("element {} ({}): beam formulation on a non-line element", global, info.name));
+          }
+        }
+        if (!checkOrientation) continue;
+        const auto& v = beamOrientation[global];
+        if (v == std::array<double, 3>{}) continue;
+        if (info.dimension != 1) {
+          problems.push_back(std::format("element {} ({}): beam orientation on a non-line element", global, info.name));
+          continue;
+        }
+        const std::size_t first = e * static_cast<std::size_t>(info.nodeCount);
+        if (first + 1 >= block.connectivity.size() || block.connectivity[first] >= nodeTotal || block.connectivity[first + 1] >= nodeTotal) continue;
+        const auto& p0 = nodes[block.connectivity[first]].position;
+        const auto& p1 = nodes[block.connectivity[first + 1]].position;
+        const std::array<double, 3> axis{p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
+        const double axisLength = std::hypot(axis[0], axis[1], axis[2]);
+        const double vLength = std::hypot(v[0], v[1], v[2]);
+        const double cosine = axisLength > 0.0 ? std::abs(axis[0] * v[0] + axis[1] * v[1] + axis[2] * v[2]) / (axisLength * vLength) : 1.0;
+        if (cosine > 1.0 - 1e-6) {
+          problems.push_back(std::format("element {}: beam orientation is parallel to the element axis", global));
+        }
+      }
+    }
     for (std::size_t g = 0; g < globalData.size(); ++g) {
       const auto& array = globalData[g];
       if (array.components < 1 || array.values.size() % static_cast<std::size_t>(std::max(array.components, 1)) != 0) {
@@ -221,7 +260,15 @@ namespace anaf::IO {
         problems.push_back(std::format("{} on node {}: unknown amplitude '{}'", what, node, amplitude));
       }
     };
-    for (const auto& constraint : constraints) checkReference(constraint.amplitude, "constraint", constraint.node);
+    for (const auto& constraint : constraints) {
+      checkReference(constraint.amplitude, "constraint", constraint.node);
+      checkReference(constraint.amplitudeRotation, "rotational constraint", constraint.node);
+      for (std::size_t axis = 0; axis < 3; ++axis) {
+        if (constraint.prescribedRotation[axis] != 0.0 && !constraint.fixedRotation[axis]) {
+          problems.push_back(std::format("constraint on node {}: prescribed rotation about {} on a free rotational DOF", constraint.node, "XYZ"[axis]));
+        }
+      }
+    }
     for (const auto& load : loads) checkReference(load.amplitude, "load", load.node);
     for (const auto& constraint : temperatureConstraints) checkReference(constraint.amplitude, "temperature constraint", constraint.node);
     for (const auto& load : heatLoads) checkReference(load.amplitude, "heat load", load.node);

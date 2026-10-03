@@ -31,15 +31,19 @@ namespace anaf::IO::detail {
   namespace {
 
     constexpr std::string_view kFixity = "Fixity";
+    constexpr std::string_view kFixityRotation = "FixityRotation";
     constexpr std::string_view kAllowedMotion = "AllowedMotionBasis";
     constexpr std::string_view kNodalForce = "NodalForce";
+    constexpr std::string_view kNodalMoment = "NodalMoment";
     constexpr std::string_view kPrescribedDisplacement = "PrescribedDisplacement";
+    constexpr std::string_view kPrescribedRotation = "PrescribedRotation";
     constexpr std::string_view kPrescribedTemperature = "PrescribedTemperature";
     constexpr std::string_view kNodalHeat = "NodalHeat";
     constexpr std::string_view kInitialPrefix = "Initial:";
     constexpr std::string_view kAmplitudePrefix = "Amplitude:";
     constexpr std::string_view kRayleighDamping = "RayleighDamping";
     constexpr std::string_view kModalDampingRatio = "ModalDampingRatio";
+    constexpr std::string_view kBeamOrientation = "BeamOrientation";
     constexpr std::string_view kAttributePrefix = "Attribute:";
     constexpr std::string_view kNodeSetPrefix = "NodeSet:";
     constexpr std::string_view kElementSetPrefix = "ElementSet:";
@@ -306,6 +310,21 @@ namespace anaf::IO::detail {
         }
         out.push_back(makeField(std::string(kAllowedMotion), FieldLocation::Node, 10, std::move(basis)));
       }
+
+      bool anyRotational = false;
+      for (const auto& constraint : model.constraints) {
+        if (constraint.fixedRotation != std::array<bool, 3>{}) {
+          anyRotational = true;
+          break;
+        }
+      }
+      if (anyRotational) {
+        std::vector<double> fixityRot(nodeTotal * 3, 0.0);
+        for (const auto& constraint : model.constraints) {
+          for (int axis = 0; axis < 3; ++axis) fixityRot[constraint.node * 3 + axis] = constraint.fixedRotation[axis] ? 1.0 : 0.0;
+        }
+        out.push_back(makeField(std::string(kFixityRotation), FieldLocation::Node, 3, std::move(fixityRot)));
+      }
     }
 
     // Per-amplitude arrays; std::map keeps the output order stable.
@@ -322,14 +341,39 @@ namespace anaf::IO::detail {
       out.push_back(makeField(withAmplitude(kPrescribedDisplacement, amplitude), FieldLocation::Node, 4, std::move(values)));
     }
 
+    std::map<std::string, std::vector<double>> prescribedRot;
+    for (const auto& constraint : model.constraints) {
+      const bool imposed = constraint.prescribedRotation != std::array<double, 3>{} || !constraint.amplitudeRotation.empty();
+      if (!imposed) continue;
+      auto& values = prescribedRot[constraint.amplitudeRotation];
+      if (values.empty()) values.assign(nodeTotal * 4, 0.0);
+      values[constraint.node * 4] = 1.0;
+      for (int axis = 0; axis < 3; ++axis) values[constraint.node * 4 + 1 + axis] = constraint.prescribedRotation[axis];
+    }
+    for (auto& [amplitude, values] : prescribedRot) {
+      out.push_back(makeField(withAmplitude(kPrescribedRotation, amplitude), FieldLocation::Node, 4, std::move(values)));
+    }
+
     std::map<std::string, std::vector<double>> forces;
     for (const auto& load : model.loads) {
+      if (load.force == std::array<double, 3>{}) continue;
       auto& force = forces[load.amplitude];
       if (force.empty()) force.assign(nodeTotal * 3, 0.0);
       for (int axis = 0; axis < 3; ++axis) force[load.node * 3 + axis] += load.force[axis];
     }
     for (auto& [amplitude, force] : forces) {
       out.push_back(makeField(withAmplitude(kNodalForce, amplitude), FieldLocation::Node, 3, std::move(force)));
+    }
+
+    std::map<std::string, std::vector<double>> moments;
+    for (const auto& load : model.loads) {
+      if (load.moment == std::array<double, 3>{}) continue;
+      auto& moment = moments[load.amplitude];
+      if (moment.empty()) moment.assign(nodeTotal * 3, 0.0);
+      for (int axis = 0; axis < 3; ++axis) moment[load.node * 3 + axis] += load.moment[axis];
+    }
+    for (auto& [amplitude, moment] : moments) {
+      out.push_back(makeField(withAmplitude(kNodalMoment, amplitude), FieldLocation::Node, 3, std::move(moment)));
     }
 
     std::map<std::string, std::vector<double>> temperatures;
@@ -362,6 +406,14 @@ namespace anaf::IO::detail {
       if (values.size() != elementTotal) continue;
       std::string fieldName = isKnownAttribute(name) ? name : std::string(kAttributePrefix) + name;
       out.push_back(makeField(std::move(fieldName), FieldLocation::Element, 1, values));
+    }
+
+    if (!model.beamOrientation.empty() && model.beamOrientation.size() == elementTotal) {
+      std::vector<double> orientation(elementTotal * 3);
+      for (std::size_t e = 0; e < elementTotal; ++e) {
+        for (int a = 0; a < 3; ++a) orientation[e * 3 + a] = model.beamOrientation[e][a];
+      }
+      out.push_back(makeField(std::string(kBeamOrientation), FieldLocation::Element, 3, std::move(orientation)));
     }
 
     if (options.nodeSets || options.elementSets) {
@@ -486,6 +538,15 @@ namespace anaf::IO::detail {
       if (legacyRank) model.fields.push_back(std::move(*legacyRank));
     }
 
+    // Rotational fixity.
+    if (auto fixityRot = takeField(model, kFixityRotation, FieldLocation::Node); fixityRot && fixityRot->components == 3 && sized(*fixityRot, nodeTotal)) {
+      const auto& values = *lastStep(*fixityRot);
+      for (std::uint32_t n = 0; n < nodeTotal; ++n) {
+        const std::array<bool, 3> fixedRot{values[n * 3] != 0.0, values[n * 3 + 1] != 0.0, values[n * 3 + 2] != 0.0};
+        if (fixedRot[0] || fixedRot[1] || fixedRot[2]) constraintFor(model, constraintIndex, n).fixedRotation = fixedRot;
+      }
+    }
+
     // Legacy "FixityDirection_*" vectors list fixed directions per node.
     std::vector<std::vector<Direction>> fixedDirections;
     for (auto it = model.fields.begin(); it != model.fields.end();) {
@@ -516,6 +577,22 @@ namespace anaf::IO::detail {
     }
 
     // Prescribed displacements, loads, thermal BCs and initial conditions (all node arrays).
+    // "NodalForce:<a>" and "NodalMoment:<a>" of one node merge into one NodalLoad per (node, amplitude).
+    struct LoadKey {
+      std::string amplitude;
+      std::uint32_t node;
+      bool operator<(const LoadKey& o) const noexcept {
+        if (node != o.node) return node < o.node;
+        return amplitude < o.amplitude;
+      }
+    };
+    std::map<LoadKey, std::size_t> loadIndex;
+    for (std::size_t i = 0; i < model.loads.size(); ++i) loadIndex.try_emplace({model.loads[i].amplitude, model.loads[i].node}, i);
+    auto loadFor = [&](const std::uint32_t node, const std::string& amplitude) -> NodalLoad& {
+      const auto [entry, inserted] = loadIndex.try_emplace({amplitude, node}, model.loads.size());
+      if (inserted) model.loads.push_back(NodalLoad{node, {}, amplitude});
+      return model.loads[entry->second];
+    };
     for (auto it = model.fields.begin(); it != model.fields.end();) {
       const Field& field = *it;
       bool consumed = false;
@@ -529,10 +606,24 @@ namespace anaf::IO::detail {
             constraint.amplitude = *amplitude;
           }
           consumed = true;
+        } else if (const auto rotAmplitude = amplitudeOf(field.name, kPrescribedRotation); rotAmplitude && field.components == 4) {
+          for (std::uint32_t n = 0; n < nodeTotal; ++n) {
+            if (values[n * 4] == 0.0) continue;
+            auto& constraint = constraintFor(model, constraintIndex, n);
+            constraint.prescribedRotation = {values[n * 4 + 1], values[n * 4 + 2], values[n * 4 + 3]};
+            constraint.amplitudeRotation = *rotAmplitude;
+          }
+          consumed = true;
         } else if (const auto forceAmplitude = amplitudeOf(field.name, kNodalForce); forceAmplitude && field.components == 3) {
           for (std::uint32_t n = 0; n < nodeTotal; ++n) {
             const std::array<double, 3> f{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
-            if (f[0] != 0.0 || f[1] != 0.0 || f[2] != 0.0) model.loads.push_back(NodalLoad{n, f, *forceAmplitude});
+            if (f[0] != 0.0 || f[1] != 0.0 || f[2] != 0.0) loadFor(n, *forceAmplitude).force = f;
+          }
+          consumed = true;
+        } else if (const auto momentAmplitude = amplitudeOf(field.name, kNodalMoment); momentAmplitude && field.components == 3) {
+          for (std::uint32_t n = 0; n < nodeTotal; ++n) {
+            const std::array<double, 3> m{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
+            if (m[0] != 0.0 || m[1] != 0.0 || m[2] != 0.0) loadFor(n, *momentAmplitude).moment = m;
           }
           consumed = true;
         } else if (const auto temperatureAmplitude = amplitudeOf(field.name, kPrescribedTemperature); temperatureAmplitude && field.components == 2) {
@@ -579,6 +670,17 @@ namespace anaf::IO::detail {
       it = consumed ? model.globalData.erase(it) : it + 1;
     }
     if (damping) model.damping = std::move(damping);
+
+    // Beam orientation (3 components, so not part of the scalar attribute loop below).
+    if (auto orientation = takeField(model, kBeamOrientation, FieldLocation::Element); orientation) {
+      if (orientation->components == 3 && sized(*orientation, elementTotal)) {
+        const auto& values = *lastStep(*orientation);
+        model.beamOrientation.resize(elementTotal);
+        for (std::size_t e = 0; e < elementTotal; ++e) model.beamOrientation[e] = {values[e * 3], values[e * 3 + 1], values[e * 3 + 2]};
+      } else {
+        model.fields.push_back(std::move(*orientation)); // not a recognised encoding: keep it as an ordinary field
+      }
+    }
 
     // Element attributes, sets and tags.
     std::vector<std::uint64_t> nodeTags;
