@@ -1273,14 +1273,16 @@ TEST(beamModelSurvivesEveryWritableFormat) {
     compareBeamModels(*solved.mesh, *imported->mesh, v.file);
   }
 
-  // The imported model, solved again, gives the same results.
+  // The imported model, solved again, gives the same results. The inclined support basis is
+  // rebuilt on import and may differ in the last bit (same span, see sameSpan), which MSVC
+  // carries to ~1e-12 relative in the displacements.
   const auto read = IO::readMesh(beamWorkDir() / "b41b.msh");
   REQUIRE(read.has_value());
   auto imported = FEM::BEAM::ADAPTER::toMeshData(*read, materials(), fileSections());
   REQUIRE(imported.has_value());
   const auto again = solve(*imported->mesh, fileSections());
   for (std::size_t n = 0; n < again.mesh->nodes.size(); ++n) {
-    CHECK(nearVec(again.mesh->nodes[n].getDisplacement(), solved.mesh->nodes[n].getDisplacement(), 1e-12));
+    CHECK(nearVec(again.mesh->nodes[n].getDisplacement(), solved.mesh->nodes[n].getDisplacement(), 1e-10));
   }
 }
 

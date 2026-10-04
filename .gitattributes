@@ -3,3 +3,6 @@ external/glad/** linguist-vendored
 # src/gl.c linguist-vendored
 # include/glad/** linguist-vendored
 # include/KHR/** linguist-vendored
+
+# Built-in libraries are compared byte for byte with their generators: keep LF on every platform.
+assets/objects/** text eol=lf

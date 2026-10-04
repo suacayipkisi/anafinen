@@ -72,3 +72,13 @@ target_link_libraries(anaf_beam_library_tool PRIVATE anaf_core project_warnings_
 add_executable(anaf_truss_library_tool trussLibraryTool.cpp)
 target_compile_definitions(anaf_truss_library_tool PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}")
 target_link_libraries(anaf_truss_library_tool PRIVATE anaf_core project_warnings_and_optimizations)
+
+# Gmsh SDK DLL next to the test executables (vcpkg's applocal step copies only vcpkg DLLs).
+if(WIN32)
+    foreach(_target anaf_io_tests anaf_array_tests anaf_io_tool anaf_core_tests anaf_beam_tests
+                    anaf_truss_io_tests anaf_beam_library_tool anaf_truss_library_tool)
+        add_custom_command(TARGET ${_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${GMSH_DLL}" $<TARGET_FILE_DIR:${_target}>
+        )
+    endforeach()
+endif()

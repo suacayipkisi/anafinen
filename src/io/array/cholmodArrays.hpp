@@ -34,7 +34,6 @@
 #include <complex>
 #include <format>
 #include <limits>
-#include <suitesparse/cholmod.h>
 
 namespace anaf::IO::ARRAY {
 
