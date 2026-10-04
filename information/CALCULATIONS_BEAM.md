@@ -3,9 +3,9 @@
 This document describes the linear static calculation of 3D frames built from two-node beam elements (Euler-Bernoulli and Timoshenko): data types, local axes, element matrices, loads, supports, results along the element and the tests.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (file adapter: section 11; GUI: [GUI.md](GUI.md) sections 2.5-2.7; stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (section face triangulation for rendering, section 2.2; file adapter: section 11; GUI: [GUI.md](GUI.md) sections 2.5-2.7; stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
 > Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 82 standard profiles; normal, shear and von Mises stresses with a yield check.
-> Not implemented yet: drawing beams in the viewport, point-wise stresses inside the section, channels / angles / tees, end releases (hinges), mass matrix, reactions.
+> Not implemented yet: point-wise stresses inside the section, channels / angles / tees, end releases (hinges), mass matrix, reactions.
 
 ## 1. Overall flow
 
@@ -97,6 +97,8 @@ Section plane: origin at the centroid, local y along the height (the web of an I
 | Catalogue stores dimensions only | One formula set; tests compare it with published tables instead of copying their numbers. |
 | Shear areas from ν at solve time | Cowper's coefficients depend on Poisson's ratio, which belongs to the material. |
 | Exact A and I with fillets / radii instead of the rounded catalogue formulas | The composite of rectangles, quarter discs and spandrels is exact; the outline integral checks it. |
+
+Rendering: `triangulateSection(shape, segmentsPerQuarter)` (`beamSection/sectionTriangulation.*`) cuts a section face into triangles for the end caps the viewport draws: the outline loops are merged into one polygon (each hole bridged to the closest visible outer vertex) and ear-clipped ([GUI.md](GUI.md) section 3.9).
 
 Catalogue (`assets/bridge/sectionCatalog.json`, schema 1, lengths in m): IPE 80–600, HEA 100–600, HEB 100–600 (EN 10365), 10 CHS, 10 SHS, 6 RHS (EN 10210-2 hot finished: outer corner radius 1.5 t, inner 1.0 t). The file format and the user file follow the material library (`sectionLibrary.hpp`): built-in IDs 0..n−1, names unique ignoring ASCII case, no quotes or control characters, user file written next to the target and renamed over it.
 
@@ -257,6 +259,7 @@ The same energy balance as the truss ([CALCULATIONS.md](CALCULATIONS.md) section
 | `beamImportAddsUnknownSections` | A missing section and one with the same name but other dimensions come back as new sections ("My I (imported)"); known ones are reused; the solve with the extended list matches |
 | `inclinedRotationSupportIsReported` | An inclined rotation support is written as fixed about all global axes outside its span, with a warning; the translational basis is kept |
 | `beamFilesAreTellApartFromTrussFiles` | `isBeamModel()` false for a truss export; a beam without section data is refused; A, Iy, Iz, J alone give a general "Imported section 1" |
+| `sectionFacesAreTriangulated` | Every shape (concave I, box and pipe with holes, 1 / 4 / 8 segments per quarter): all triangles counter-clockwise, their areas sum to the outline polygon's area |
 | `solverUsesTheSectionShape` | Timoshenko rectangle with Cowper's κ(ν = 0.3); catalogue IPE 300 bending about its strong axis |
 
 The tests were checked against injected faults: in the adapter local loads written as global, swapped box corner radii, lost rotational fixity and lost Timoshenko formulation; in the stresses the Mz sign, a support function without the corner radius, the I fillet in Q (caught after the clipped outline integral was added), a box corner term in Q, the Bredt factor and a missing stationary point; in the sections a wrong J coefficient of the I formula (caught after the table tolerance went from 0.5 % to 0.1 %), the corner disc sign and swapped κ axes of the box, the spandrel's own inertia, and the box corner radius in J (caught only after the Dlubal value was added); in the solver φ built from the wrong inertia, the sign of the x-z fixed-end moment (caught only after `cantileverUnderUniformLoadInBothPlanes` was added), the section sign, and in the diagrams the w rotation sign, the Mz load term, the Timoshenko particular part and a wrong shape function; each makes tests fail.
@@ -298,6 +301,7 @@ Export (`toMeshModel(mesh, materials, sections)`) writes everything above; an in
 - Container and element math: [deformationUnderConstForce.hpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.cpp)
 - Stresses: [sectionStress.hpp](../src/objectCalcs/beam/beamSection/sectionStress.hpp), [sectionStress.cpp](../src/objectCalcs/beam/beamSection/sectionStress.cpp), [beamStress.hpp](../src/objectCalcs/beam/beamEngine/beamStress.hpp), [beamStress.cpp](../src/objectCalcs/beam/beamEngine/beamStress.cpp)
 - Results along the element: [beamDiagrams.hpp](../src/objectCalcs/beam/beamEngine/beamDiagrams.hpp), [beamDiagrams.cpp](../src/objectCalcs/beam/beamEngine/beamDiagrams.cpp)
+- Rendering helper: [sectionTriangulation.hpp](../src/objectCalcs/beam/beamSection/sectionTriangulation.hpp), [sectionTriangulation.cpp](../src/objectCalcs/beam/beamSection/sectionTriangulation.cpp)
 - Cross-sections: [beamSection.hpp](../src/objectCalcs/beam/beamSection/beamSection.hpp), [beamSection.cpp](../src/objectCalcs/beam/beamSection/beamSection.cpp), [sectionLibrary.hpp](../src/objectCalcs/beam/beamSection/sectionLibrary.hpp), [sectionLibrary.cpp](../src/objectCalcs/beam/beamSection/sectionLibrary.cpp), [assets/bridge/sectionCatalog.json](../assets/bridge/sectionCatalog.json)
 - Types: [node.hpp](../src/objectCalcs/beam/beamProperties/node.hpp), [node.cpp](../src/objectCalcs/beam/beamProperties/node.cpp), [element.hpp](../src/objectCalcs/beam/beamProperties/element.hpp), [loads.hpp](../src/objectCalcs/beam/beamProperties/loads.hpp), [meshData.hpp](../src/objectCalcs/beam/beamProperties/meshData.hpp)
 - Support bases (shared with the truss): [supportBasis.hpp](../src/objectCalcs/common/supportBasis.hpp), [supportBasis.cpp](../src/objectCalcs/common/supportBasis.cpp)

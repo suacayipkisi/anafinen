@@ -20,6 +20,7 @@
 #include <guiMaterials/iPanel.hpp>
 #include <guiMaterials/framebuffer.hpp>
 #include <bridge/generalStatus.hpp>
+#include "beamSceneRenderer.hpp"
 #include "viewportRenderer.hpp"
 #include "viewportToolbar.hpp"
 
@@ -29,7 +30,10 @@
 #include <glm/ext/vector_float3.hpp>
 
 #include <cstdint>
+#include <limits>
 #include <memory>
+#include <utility>
+#include <vector>
 
 namespace anaf::GUI{
 
@@ -40,8 +44,11 @@ namespace anaf::GUI{
 
   class ViewportPanel : public IPanel {
   private:
+    static constexpr std::uint32_t kNone = std::numeric_limits<std::uint32_t>::max();
+
     std::shared_ptr<Framebuffer> m_fbo_ ;
     std::unique_ptr<ViewportRenderer> m_renderer_;
+    std::unique_ptr<BeamSceneRenderer> m_beamRenderer_; // beam sections and node spheres
 
     bool m_viewportHovered_ {false};
 
@@ -60,10 +67,44 @@ namespace anaf::GUI{
     Truss_1D_GUI_PROPERTIES truss_1d_gui_prop{};
 
     std::shared_ptr<const anaf::BRIDGE::MeshData> m_currentMesh{nullptr};
-    double m_deformScale{1.0}; // bridge.deformScale, read together with m_currentMesh
+    std::shared_ptr<const anaf::BRIDGE::BeamMeshData> m_currentBeamMesh{nullptr};
+    double m_deformScale{1.0}; // bridge.deformScale, read together with the snapshot
     double m_cachedMaxStress{0.0};
     double m_cachedMaxDisp{0.0};
+    std::uint32_t m_selectedNode{kNone};    // bridge selections, compared every frame so a
+    std::uint32_t m_selectedElement{kNone}; // selection made in a panel redraws the highlight
+    std::vector<std::pair<std::uint32_t, glm::vec3>> m_nodeLabels; // id, drawn position
 
+    // Beam scene: every element sampled at stations along it (exact displacement field, values
+    // for the coloring), rebuilt when the snapshot changes; the drawn shape (positions and
+    // rotated section frames) is derived from it for the deformation scale.
+    struct BeamDrawElement {
+      std::vector<glm::vec3> base;       // undeformed station positions, node 1 to node 2
+      std::vector<glm::vec3> offset;     // displacement per station (m, unscaled); empty without results
+      std::vector<float> xi;             // station position x / L
+      glm::vec3 rotation0{0.0f};         // nodal rotations in local axes (rad, unscaled)
+      glm::vec3 rotation1{0.0f};
+      std::vector<float> stress;         // von Mises per station (Pa); empty without stresses
+      std::vector<float> displacement;   // |u| per station (m); empty without results
+      glm::vec3 axisX{0.0f};             // undeformed local axes
+      glm::vec3 axisY{0.0f};
+      glm::vec3 axisZ{0.0f};
+      std::vector<glm::vec3> stations;   // drawn positions (with the deformation scale)
+      std::vector<glm::vec3> frameY;     // drawn section axes per station: twist and bending
+      std::vector<glm::vec3> frameZ;     // rotation applied, scaled like the displacements
+      int fullMesh{-1};                  // the real section
+      int simpleMesh{-1};                // box or cylinder of the same size (level of detail)
+      float halfSize{0.0f};              // largest distance of the outline from the axis (m)
+    };
+    std::vector<BeamDrawElement> m_beamElements;
+    int m_lineMesh{-1};
+    std::shared_ptr<const anaf::BRIDGE::BeamMeshData> m_stationsMesh; // what m_beamElements was built from
+    double m_stationsScale{-1.0}; // deformation scale of the drawn shape
+    bool m_lodActive{false};          // many elements: far ones as boxes / cylinders / lines
+    glm::mat4 m_lodMatrix{0.0f};      // camera of the last level-of-detail pass
+    ImVec2 m_lodViewport{0.0f, 0.0f};
+
+    bool hasModel() const;
     void updateSceneBounds();
     void resetCamera();
     // Orbit camera basis: unit direction from the target to the eye, and the camera up vector.
@@ -73,6 +114,12 @@ namespace anaf::GUI{
     float farPlane() const;
     void handleCameraInput();
     void buildSceneBatches();
+    void buildTrussScene();
+    void buildBeamStations();
+    void applyBeamDeformation(); // drawn positions and frames of m_beamElements for m_deformScale
+    void buildBeamScene();
+    // Instances of every beam element for the current camera (level of detail by on-screen size).
+    void pushBeamInstances(const glm::mat4& mvp);
     void renderOverlay2D(const ImVec2& origin, const ImVec2& size);
 
   public:

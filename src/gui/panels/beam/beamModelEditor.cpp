@@ -748,6 +748,35 @@ namespace anaf::GUI {
   void BeamModelEditor::renderSolve() {
     auto& bridge = BRIDGE::buildBridge();
     const auto mesh = currentMesh(bridge);
+
+    // The viewport draws location + displacement * scale (rotations scaled the same way).
+    double scale = bridge.deformScale.load();
+    ImGui::SetNextItemWidth(140.0f);
+    if (ImGui::InputDouble("Deformation Scale##beam", &scale, 0.0, 0.0, "%.4g")) {
+      bridge.deformScale = std::max(scale, 0.0);
+      bridge.dataVersion.fetch_add(1, std::memory_order_release);
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!mesh || !mesh->hasResults);
+    if (ImGui::Button("Auto##beam_scale")) {
+      double size = 0.0, largest = 0.0;
+      Vec3 low{1e300, 1e300, 1e300}, high{-1e300, -1e300, -1e300};
+      for (const auto& node : mesh->nodes) {
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+          low[axis] = std::min(low[axis], node.getLocation()[axis]);
+          high[axis] = std::max(high[axis], node.getLocation()[axis]);
+        }
+        const auto& d = node.getDisplacement();
+        largest = std::max(largest, std::hypot(d[0], d[1], d[2]));
+      }
+      size = std::hypot(high[0] - low[0], high[1] - low[1], high[2] - low[2]);
+      if (largest > 0.0 && size > 0.0) {
+        bridge.deformScale = 0.05 * size / largest;
+        bridge.dataVersion.fetch_add(1, std::memory_order_release);
+      }
+    }
+    ImGui::SetItemTooltip("Draw the largest nodal displacement as 5 %% of the model size");
+    ImGui::EndDisabled();
     if (bridge.m_isRunning.load()) {
       ImGui::ProgressBar(bridge.m_progress.load(), ImVec2(-1.0f, 0.0f));
       ImGui::BeginDisabled();

@@ -19,17 +19,32 @@
 
 #include <guiMaterials/iPanel.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace anaf::GUI {
+
+  enum class NodeStyle : std::uint8_t {
+    Off,    // no nodes (no node picking, no labels)
+    Square, // screen-space squares of constant pixel size
+    Sphere  // 3D spheres, thicker than the elements at the node
+  };
+
+  enum class ElementColoring : std::uint8_t {
+    Off,         // one color for every element
+    Stress,      // truss: |axial stress|; beam: von Mises along the element
+    Displacement // displacement magnitude (beam: along the element)
+  };
 
   // What the viewport draws, written by ViewportToolbar and read by ViewportPanel (GUI thread only).
   struct ViewportDisplayOptions {
     bool showGrid{false};   // procedural x-z ground grid
     bool showAxes{false};   // 3D X / Y / Z axis lines (the corner gizmo is always drawn)
-    bool showNodes{false};  // node points, labels, picking and the displacement colorbar
-    bool showForces{true};  // applied force arrows
-    bool showStress{true};  // stress coloring of the elements and the stress colorbar
+    NodeStyle nodeStyle{NodeStyle::Square};             // nodes, labels, picking, displacement colorbar
+    bool showForces{true};  // applied force and moment arrows, distributed loads
+    ElementColoring coloring{ElementColoring::Stress};  // element colors and their colorbar
+
+    bool showNodes() const { return nodeStyle != NodeStyle::Off; }
 
     bool changed{false};              // set on every toggle; the viewport rebuilds its batches and clears it
     bool resetCameraRequested{false}; // the viewport fits the camera and clears it

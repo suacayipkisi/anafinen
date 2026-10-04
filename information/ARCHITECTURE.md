@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam GUI panels, beam file adapter, known issue 5 narrowed; beam stresses; beam cross-section library and catalogue; beam solver `FEM::BEAM` in `anaf_core` and [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), support bases moved to `FEM::SUPPORT`, known issues 5 and 6; linear solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`; Block-CG takes `dofsPerNode`; `check.sh` fails when no tests run; HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam rendering in the viewport; beam GUI panels, beam file adapter, known issue 5 narrowed; beam stresses; beam cross-section library and catalogue; beam solver `FEM::BEAM` in `anaf_core` and [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), support bases moved to `FEM::SUPPORT`, known issues 5 and 6; linear solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`; Block-CG takes `dofsPerNode`; `check.sh` fails when no tests run; HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -68,7 +68,7 @@ This document is the entry point for the project documentation. It describes how
 | Namespace | Location | Responsibility |
 |---|---|---|
 | `FEM::TRUSS` | `src/objectCalcs/truss_1D/` | Node, element, load types; truss generator; FEM container |
-| `FEM::BEAM` | `src/objectCalcs/beam/` | 3D beam node / element / load types, cross-section library (`beamSection/`: shapes, properties, stresses, catalogue `assets/bridge/sectionCatalog.json`), `solveStatic()`, container, results and stresses along the element ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md)); GUI: beam editor, Section Handler, diagrams ([GUI.md](GUI.md) sections 2.5-2.7) |
+| `FEM::BEAM` | `src/objectCalcs/beam/` | 3D beam node / element / load types, cross-section library (`beamSection/`: shapes, properties, stresses, catalogue `assets/bridge/sectionCatalog.json`), `solveStatic()`, container, results and stresses along the element ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md)); GUI: beam editor, Section Handler, diagrams, viewport drawing ([GUI.md](GUI.md) sections 2.5-2.7, 3.9) |
 | `FEM::BEAM::ADAPTER` | `src/objectCalcs/beam/beamIO/` | `MeshModel` ↔ beam model conversion; `isBeamModel()` routes beam files ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 11) |
 | `FEM::SUPPORT` | `src/objectCalcs/common/` | `orthonormalize`, `orthogonalComplement`, `componentOutside`: support bases of every node type and the GUI support editor |
 | `FEM::SOLVER` | `src/solvers/` (`direct/`, `iterative/`) | Linear solver portfolio and referee, shared by every element type; callers pass their DOF slots per node (truss 3, 3D beam 6), see [CALCULATIONS.md](CALCULATIONS.md) section 7 |

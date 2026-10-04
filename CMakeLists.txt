@@ -84,6 +84,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/beam/beamSection/beamSection.cpp
     src/objectCalcs/beam/beamSection/sectionLibrary.cpp
     src/objectCalcs/beam/beamSection/sectionStress.cpp
+    src/objectCalcs/beam/beamSection/sectionTriangulation.cpp
     src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.cpp
     src/objectCalcs/beam/beamEngine/beamSolver.cpp
     src/objectCalcs/beam/beamEngine/beamDiagrams.cpp
@@ -128,6 +129,7 @@ set(ANAFINEN_SOURCES
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
     src/gui/guiMaterials/framebuffer.cpp
+    src/gui/guiMaterials/shaderProgram.cpp
     src/gui/panels/logTerminal.cpp
     src/gui/panels/mainDockSpaceHost.cpp
     src/gui/panels/materialHandler.cpp
@@ -143,6 +145,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/viewportPanel.cpp
     src/gui/panels/viewportToolbar.cpp
     src/gui/panels/viewportRenderer.cpp
+    src/gui/panels/beamSceneRenderer.cpp
     src/gui/panels/fileIoPanel.cpp
     src/gui/panels/aboutPanel.cpp
     src/gui/panels/statusBar.cpp

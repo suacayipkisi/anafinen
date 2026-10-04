@@ -20,6 +20,9 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <string>
 #include <utility>
 
 namespace anaf::GUI {
@@ -36,6 +39,25 @@ namespace anaf::GUI {
       const bool pressed = ImGui::Button(label);
       ImGui::PopStyleColor(3);
       return pressed;
+    }
+    // Button that shows "label: current" and opens a list of choices; true when one was picked.
+    template <typename Enum, std::size_t N>
+    bool choiceButton(const char* label, Enum& value, const std::array<const char*, N>& names, const char* tooltip) {
+      const auto index = static_cast<std::size_t>(value);
+      const std::string text = std::string(label) + ": " + names[index] + "##" + label;
+      if (stateButton(text.c_str(), value != Enum{})) ImGui::OpenPopup(label);
+      ImGui::SetItemTooltip("%s", tooltip);
+      bool picked = false;
+      if (ImGui::BeginPopup(label)) {
+        for (std::size_t i = 0; i < N; ++i) {
+          if (ImGui::Selectable(names[i], i == index)) {
+            value = static_cast<Enum>(i);
+            picked = true;
+          }
+        }
+        ImGui::EndPopup();
+      }
+      return picked;
     }
   } // namespace end
 
@@ -80,11 +102,13 @@ namespace anaf::GUI {
     ImGui::SameLine();
     toggleButton("Axes", options.showAxes, "X / Y / Z axis lines");
     ImGui::SameLine();
-    toggleButton("Nodes", options.showNodes, "Node points, labels and picking");
+    constexpr std::array<const char*, 3> nodeStyles{"Off", "Square", "Sphere"};
+    if (choiceButton("Nodes", options.nodeStyle, nodeStyles, "Nodes as screen squares or 3D spheres; labels and picking")) options.changed = true;
     ImGui::SameLine();
-    toggleButton("Forces", options.showForces, "Applied force arrows");
+    toggleButton("Forces", options.showForces, "Applied forces, moments and distributed loads");
     ImGui::SameLine();
-    toggleButton("Stress", options.showStress, "Stress coloring of the elements");
+    constexpr std::array<const char*, 3> colorings{"Off", "Stress", "Displacement"};
+    if (choiceButton("Color", options.coloring, colorings, "Element colors: stress (truss axial, beam von Mises) or displacement")) options.changed = true;
 
     ImGui::End();
   }

@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
 
 ## 1. Overall flow (one frame)
 
@@ -67,7 +67,7 @@ Object type switch: selecting the type that is already active only reopens its p
 |---|---|---|---|
 | `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D, Beam / Frame 3D; Panels: reopen closed panels (section 2.0); Help: "About anafinen...". Builds the default dock layout once (left: analysis set, truss model editor and beam frame editor, right: model tree, bottom: console, center: viewport with the viewport toolbar strip above it). |
 | `ViewportToolbar` | `panels/viewportToolbar.cpp` | "Viewport Toolbar" | Reset Camera and the display toggles, docked above the viewport (section 3.7) |
-| `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking, overlays, legends |
+| `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking (nodes, beam elements), overlays, legends; truss as lines, beams with their sections (section 3.9) |
 | `TrussSelector` | `panels/truss/trussTypePanel.cpp` | "Select Truss Type" | "Imported / Self-Built" (first, preselected) or "Simple Quadrangle" (generated grid). Warns that a type change clears the model. |
 | `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). `resetState()` restores the default inputs. |
 | `TrussModelEditor` | `panels/truss/importedTruss/trussModelEditor.cpp` | "Truss(1D) Model Editor" | For `truss_imported_or_entered`, see section 2.4. |
@@ -219,13 +219,14 @@ File > Export Model... (Ctrl+E)
 +-------------------------------------------------------+
 ```
 
+0. "Deformation Scale" (next to Run Solver) sets `bridge.deformScale`; "Auto" picks the scale that draws the largest nodal displacement as 5 % of the model's bounding-box diagonal.
 1. Every edit copies `bridge.activeBeamMesh` (an empty one if there is none), changes it, drops stale results (displacements, rotations, section forces, stresses) and publishes it. Editing is disabled while a worker runs.
 2. Node ids stay `0..n-1`. "Delete Node" removes the node's elements, nodal loads and the distributed loads on those elements, and moves later ids down. "Delete Element" keeps the distributed loads of the other elements pointing at them.
 3. Supports: both modes of each group (translations, rotations) become one basis of allowed directions (`SupportInput::allowedBasis()`), written with `Node::setAllowedMotionDirections()` / `setAllowedRotationAxes()`: the global-axis checkboxes are turned into unit vectors the same way as inclined input, so the node only ever stores vectors. Inclined vectors are read as restrained or allowed directions, as in the truss editor (section 2.4 item 8); switching mode or reading keeps the support. A node whose stored basis is not along the global axes is shown in inclined mode. An inclined rotation support is solved as given, but files keep rotational fixity per global axis only, so export warns (the panel says so).
 4. "Add Element" checks the nodes (existing, different, no duplicate), the material and section, and the orientation with `FEM::BEAM::localAxes()` (zero length, v parallel to the axis). Selecting an element in the list copies its properties into the inputs and sets `bridge.selectedElementId`, shared with the diagram panel.
 5. "Run Solver for Beam" starts `BEAM_WORKER::startSolve()`: copies of the material and section lists, `FEM::BEAM::solveStatic()` on the worker thread, publication into `activeBeamMesh` unless the model was reset ([BRIDGE.md](BRIDGE.md) section 5).
 6. "Load Example Frame" builds a 3D portal frame (HEB 200 columns, IPE 300 girder with a uniform load, a lateral and an out-of-plane nodal load, clamped bases, self weight).
-7. The viewport does not draw beam models yet; node selection is by id.
+7. The viewport draws the beam model (section 3.9); nodes and elements can be picked there or selected by id.
 
 ### 2.6 Section Handler (`SectionHandler`)
 
@@ -248,6 +249,9 @@ File > Export Model... (Ctrl+E)
 | Offscreen target | `Framebuffer` (`guiMaterials/framebuffer.*`) | MSAA FBO: RGBA8 + R32I + D24S8 renderbuffers. Resolve FBO: RGBA8 + R32I textures (immutable storage). |
 | Batches | `ViewportRenderer` (`panels/viewportRenderer.*`) | 6 VAO/VBO pairs: grid, lines, glow lines, translucent triangles, points, text |
 | Programs | `ViewportRenderer` | `scene` (lines/points), `grid`, `text` |
+| Beam sections, node spheres | `BeamSceneRenderer` (`panels/beamSceneRenderer.*`) | per mesh (one per section and level of detail, plus a 2-vertex line mesh): VAO with the mesh vertices (binding 0, immutable storage) and an instance buffer (binding 1, divisor 1, re-specified on upload); one unit-sphere VAO with its instance buffer; programs `beam` and `sphere` |
+
+`buildShaderProgram()` (`guiMaterials/shaderProgram.*`) compiles and links every program of both renderers.
 
 Every GL object is owned by a move-only `GlHandle` (`guiMaterials/glHandle.hpp`) and created through DSA (`glCreate*`, `glNamed*`, `glVertexArray*`). No `glGen*` or bind-to-edit.
 
@@ -259,6 +263,8 @@ Every GL object is owned by a move-only `GlHandle` (`guiMaterials/glHandle.hpp`)
 | points | `Point3D` | vec3 position | vec4 color | int entityID | float size |
 | text | `TextVertex` | vec2 NDC position | vec2 uv | vec4 color | - |
 | grid | `glm::vec3` | vec3 NDC position (fullscreen triangle) | - | - | - |
+| beam meshes | `MeshVertex` (binding 0) + `BeamInstance` (binding 1) | vec3 local (x 0..1 along, y / z in m) | vec3 local normal | instance: start, end, axisY0, axisZ0, axisY1, axisZ1 (loc 2-7), color0, color1 (8, 9), int entityID (10) | - |
+| spheres | `glm::vec3` (unit sphere) + `SphereInstance` | vec3 position = normal | - | instance: vec4 centre + radius (2), color (3), int entityID (4) | - |
 
 Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (orphaning) only when the mesh or visibility changes. The grid's fullscreen triangle uses immutable `glNamedBufferStorage`.
 
@@ -269,24 +275,26 @@ Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (
 | `scene` | `u_MVP * pos`, passes color, flat entity ID, `gl_PointSize` | `location 0`: color, `location 1`: entity ID |
 | `grid` | view ray per vertex (`forward + x·right + y·up`) | Ray / y = 0 plane intersection per pixel, in coordinates relative to a grid-aligned origin near the eye; anti-aliased minor + major (×10) lines (`fract` + `fwidth`) that fade out once a cell is a few pixels wide (no moiré) and towards `fadeDistance`; axis gap around X/Z axes; entity ID = -1 |
 | `text` | NDC passthrough | Samples ImGui's font atlas (RGBA32, `.a` = coverage); entity ID = -1 |
+| `beam` | places the unit-length section between the instance's start and end; section axes `normalize(mix(axis0, axis1, x))` so a rotating section stays continuous; color mixed along x | shared lit stage: color × (0.38 + 0.62 \|n · view\|) (light at the eye, two-sided), entity ID |
+| `sphere` | `centre + radius × position` | the same lit stage |
 
-`buildProgram()` checks compile and link status and logs the driver's info log through `anaf::LOG::error`. A failing program leaves an empty handle, and the batch then draws nothing.
+`buildShaderProgram()` checks compile and link status and logs the driver's info log through `anaf::LOG::error`. A failing program leaves an empty handle, and the batch then draws nothing.
 
 ### 3.4 Draw order inside `renderSceneOpenGL()`
 
-1. If `dataVersion` changed or `m_meshNeedsUpdate` is set: copy `activeMesh` under `dataMutex`, then `buildSceneBatches()`:
-   - Elements become lines colored by `sqrt(|σ| / |σ|_max)` on a blue → green → red ramp. Color shows magnitude only; the sign is visible in the model tree.
-   - Nodes (if visible) become points colored by displacement magnitude. The selected node is orange and larger; fixed nodes are red.
+1. If `dataVersion` changed, `m_meshNeedsUpdate` is set or a bridge selection changed: copy `activeMesh` / `activeBeamMesh` under `dataMutex`, then `buildSceneBatches()` (truss: `buildTrussScene()`, beam: `buildBeamScene()`, section 3.9):
+   - Truss elements become lines. "Color: Stress": `sqrt(|σ| / |σ|_max)` on the jet ramp (magnitude only; the sign is in the model tree); "Displacement": mean of the end nodes' |u|; "Off": the unsolved element color.
+   - Nodes ("Nodes: Square") become points colored by displacement magnitude, or ("Sphere") instanced spheres. The selected node is orange and larger; supported nodes are red.
    - Inclined supports (`Node::hasInclinedSupport()`), drawn red at the drawn node position with a size of 4 % of the scene radius: an allowed plane as a translucent square (`addTriangle()`, blended after the lines without depth writes) with an outline, an allowed line as a double arrow with a glow line.
    - Applied forces become arrows with a fixed world length of 3 m: a shaft plus a 4-line head, each duplicated as a glow line.
    - Draw position = `location + displacement * deformScale`, with `deformScale` read from the bridge (`Gui_Calc_Bridge::deformScale`, a view setting) when the snapshot is reloaded.
 2. `fbo.bind()`, depth test on, `fbo.clear(color, entity = -1)`.
 3. `renderGrid(GridView)` (only while the "Grid" toggle is on, off by default): blended, depth writes off, minor spacing `10^floor(log10(distance/12))`, fade distance `max(40 × distance, 6 × scene radius)`. The grid used to be one ±8000 m quad; close to the camera its clipped, interpolated world positions lost precision and the lines bent and swam.
-4. `render()`:
+4. `BeamSceneRenderer::render()` (beam sections and node spheres, opaque, depth-tested), then `ViewportRenderer::render()`:
    - lines at 1.5 px with `GL_LINE_SMOOTH` + alpha blend
    - glow lines at 6 px with additive blend and depth writes off
    - translucent triangles with alpha blend and depth writes off
-   - points with `GL_PROGRAM_POINT_SIZE`
+   - points with `GL_PROGRAM_POINT_SIZE` and the depth test off: node squares are markers, never hidden inside a beam section, and therefore also first in line for picking
 5. Node ID labels: glyph quads from ImGui's baked font. Hidden when the camera distance is ≥ 15, except for the selected node.
 6. `renderText()`: depth test off, blended.
 7. `fbo.unbind()`: bind framebuffer 0 **first**, then `resolve()` blits color and entity ID from MSAA to the resolve FBO (`GL_NEAREST`).
@@ -312,11 +320,13 @@ Projection: `perspective(45°, aspect, near, far)` with `far = 2 × (distance + 
 left click in viewport
    -> mouse position relative to image origin, Y flipped (OpenGL origin bottom-left)
    -> Framebuffer::readEntityID(x, y)      glGetTextureSubImage on the R32I resolve texture
-   -> id >= 0 ? bridge.selectedNodeId = id : UINT32_MAX     (under dataMutex)
+   -> id >= 0  : bridge.selectedNodeId = id                     (under dataMutex)
+      id <= -2 : bridge.selectedElementId = -(id + 2)          (beam elements)
+      id == -1 : both selections cleared
    -> m_meshNeedsUpdate = true (re-color selection)
 ```
 
-Only node points write a real entity ID. Lines, grid, and text write -1, so only nodes are pickable, and only while the "Nodes" toggle is on. The ID is the integer `nodeID` stored in the R32I attachment; there is no color encoding. The read is synchronous and stalls the pipeline for one pixel, which is acceptable for click-rate reads.
+Node squares and spheres write the node ID, beam element instances `-(index + 2)`; truss lines, supports, arrows, grid and text write -1. Nodes are pickable while "Nodes" is not "Off", beam elements always. The selection is shared with the editors and the diagram panel through the bridge; the viewport compares it every frame, so a selection made in a panel redraws the highlight too. The ID is the integer `nodeID` stored in the R32I attachment; there is no color encoding. The read is synchronous and stalls the pipeline for one pixel, which is acceptable for click-rate reads.
 
 ### 3.7 Viewport toolbar
 
@@ -324,7 +334,7 @@ Only node points write a real entity ID. Lines, grid, and text write -1, so only
 
 ```text
 ViewportToolbar::onImGuiRender()        writes   ViewportDisplayOptions (shared_ptr, made in gui.cpp openPanels())
-   toggle      -> show* flipped, changed = true
+   toggle / choice -> field set, changed = true
    Reset Camera -> resetCameraRequested = true
 ViewportPanel::renderSceneOpenGL()       next frame, before the snapshot check
    changed              -> m_meshNeedsUpdate = true, changed = false
@@ -338,18 +348,43 @@ Both run on the GUI thread, so the struct needs no lock.
 | Reset Camera | - | - | `resetCamera()`, same as `R` |
 | Grid | `showGrid` | off | `renderGrid()` pass |
 | Axes | `showAxes` | off | 3D X / Y / Z axis lines in `buildSceneBatches()`; the corner gizmo is always drawn |
-| Nodes | `showNodes` | off | node points, node labels, picking, displacement colorbar |
-| Forces | `showForces` | on | force arrows |
-| Stress | `showStress` | on | jet stress coloring of the elements and the stress colorbar; off = the unsolved element color |
+| Nodes: Off / Square / Sphere | `nodeStyle` | Square | node squares (screen markers) or 3D spheres, node labels, picking, displacement colorbar |
+| Forces | `showForces` | on | force arrows; beam: also moments (double head) and distributed loads |
+| Color: Off / Stress / Displacement | `coloring` | Stress | element colors (truss: \|axial stress\|, beam: von Mises along the element; displacement magnitude) and their colorbar |
 
-Hover and press do not change a button's color: a toggle that is on is drawn in `ButtonActive`, everything else (off toggles, Reset Camera) in `Button`. Every toggle makes the viewport rebuild its batches on the next frame.
+Hover and press do not change a button's color: a toggle that is on (or a choice other than "Off") is drawn in `ButtonActive`, everything else in `Button`. The two choice buttons show "label: current" and open a popup list. Every change makes the viewport rebuild its batches on the next frame.
 
 ### 3.8 2D overlay (ImGui draw list)
 
 Drawn by `renderOverlay2D()` on top of the image:
 - axis gizmo (camera rotation only)
 - FPS counter, red below 30 FPS
-- stress colorbar (`|Stress| (MPa)`, 0 … max magnitude, with "Stress" on) and displacement colorbar (`Disp (mm)`, with "Nodes" on)
+- element colorbar with "Color: Stress" (`|Stress| (MPa)` for trusses, `von Mises (MPa)` for beams) and displacement colorbar (`Disp (mm)`) with "Color: Displacement" or visible nodes
+
+### 3.9 Beam models
+
+```text
+snapshot changed      -> buildBeamStations()       (sections and lists copied from the bridge)
+   per section in use: full mesh = extrudeSection(shape, 4 segments / quarter)
+                       simple mesh = 8-sided cylinder (circle, pipe) or box of the outline's extent
+   per element (OpenMP): local axes, sampleElement() at 9 stations (5 with level of detail):
+                       undeformed position, displacement, x / L, von Mises (sectionStress), |u|
+deformation scale changed -> applyBeamDeformation()
+   stations = base + scale × displacement
+   section frame per station: twist = scale × local rx, linear between the nodes; bending: the
+   frame turned (Rodrigues, smallest rotation) from the undeformed axis onto the drawn tangent,
+   which is x + scale × (rz y − ry z) at the nodes and a central difference inside
+every rebuild           -> buildBeamScene(): node squares / spheres, inclined supports, force,
+                           moment and distributed-load arrows, then pushBeamInstances()
+camera moved (level of detail only) -> pushBeamInstances() alone
+```
+
+1. `extrudeSection()`: side walls from `sectionOutline()` with normals smoothed across corners under 40° (arcs look round, corners stay sharp), end caps from `FEM::BEAM::triangulateSection()` (ear clipping with hole bridging). A general section is drawn as the rectangle with the same A, Iy, Iz.
+2. Every segment between two stations is one instance of its section mesh: start, end, both section frames and both colors, entity ID `-(element + 2)`. Colors per station: von Mises / |u| on the jet ramp over the model's maximum, a general section (no stress) gray, the selected element orange.
+3. The bending rotation shown is the slope of the drawn axis, exact for Euler-Bernoulli; for Timoshenko the section rotation differs from it by the shear angle. Rotations are scaled like the displacements, so a large scale over-twists visibly.
+4. Spheres: radius = 1.3 × the largest section half size at the node (larger than the elements), selected × 1.25.
+5. Level of detail, only above 4000 elements: the on-screen section size `2 × halfSize × focal / distance` picks the real section (≥ 10 px), the simple mesh (≥ 2 px) or a line; the selected element always gets the real section. Only the instance lists change with the camera (the meshes stay on the GPU); 13 120 elements drew at 59 FPS on a Radeon 680M.
+6. Arrows are sized from the scene radius (15 % for forces and moments, 45 % of that for distributed loads).
 
 ## 4. Window and platform details
 
@@ -381,6 +416,6 @@ Drawn by `renderOverlay2D()` on top of the image:
 
 - Frame loop and wiring: [src/gui/gui.hpp](../src/gui/gui.hpp), [src/gui/gui.cpp](../src/gui/gui.cpp)
 - Infrastructure: [iPanel.hpp](../src/gui/guiMaterials/iPanel.hpp), [imGuiLayer.hpp](../src/gui/guiMaterials/imGuiLayer.hpp), [imGuiLayer.cpp](../src/gui/guiMaterials/imGuiLayer.cpp), [glHandle.hpp](../src/gui/guiMaterials/glHandle.hpp), [framebuffer.hpp](../src/gui/guiMaterials/framebuffer.hpp), [framebuffer.cpp](../src/gui/guiMaterials/framebuffer.cpp)
-- Viewport: [viewportPanel.hpp](../src/gui/panels/viewportPanel.hpp), [viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [viewportRenderer.hpp](../src/gui/panels/viewportRenderer.hpp), [viewportRenderer.cpp](../src/gui/panels/viewportRenderer.cpp)
+- Viewport: [viewportPanel.hpp](../src/gui/panels/viewportPanel.hpp), [viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [viewportRenderer.hpp](../src/gui/panels/viewportRenderer.hpp), [viewportRenderer.cpp](../src/gui/panels/viewportRenderer.cpp), [beamSceneRenderer.hpp](../src/gui/panels/beamSceneRenderer.hpp), [beamSceneRenderer.cpp](../src/gui/panels/beamSceneRenderer.cpp), [shaderProgram.cpp](../src/gui/guiMaterials/shaderProgram.cpp)
 - Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp), [trussWorker.hpp](../src/gui/panels/truss/trussWorker.hpp), [trussTypePanel.cpp](../src/gui/panels/truss/trussTypePanel.cpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [beamModelEditor.cpp](../src/gui/panels/beam/beamModelEditor.cpp), [beamWorker.cpp](../src/gui/panels/beam/beamWorker.cpp), [sectionHandler.cpp](../src/gui/panels/beam/sectionHandler.cpp), [sectionCombo.hpp](../src/gui/panels/beam/sectionCombo.hpp), [beamDiagramPanel.cpp](../src/gui/panels/beam/beamDiagramPanel.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
 - Platform: [linuxCursor.hpp](../src/gui/linuxCursor.hpp), [getExecutableDirectory.cpp](../src/directory/getExecutableDirectory.cpp)

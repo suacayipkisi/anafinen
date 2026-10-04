@@ -3,7 +3,7 @@
 This document describes how truss mesh data is created (Simple Quadrangle generator, built-in library, import, model editor), stored, passed through the one solver pipeline, and finally displayed in the viewport.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam models, section 6.1).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam models and their rendering, section 6.1).
 > Part of the documentation set indexed in [ARCHITECTURE.md](ARCHITECTURE.md). Module details: [CALCULATIONS.md](CALCULATIONS.md), [BRIDGE.md](BRIDGE.md), [GUI.md](GUI.md).
 
 ## 1. Overall flow
@@ -128,7 +128,7 @@ Export:  activeBeamMesh --BEAM::ADAPTER::toMeshModel--> MeshModel --writeMesh-->
 Import:  file --readMesh--> MeshModel --isBeamModel? BEAM::ADAPTER::toMeshData--> activeBeamMesh (+ new user sections)
 ```
 
-The beam snapshot follows the same rules as the truss one (immutable, swapped under `dataMutex`, `dataVersion` bumped). The viewport does not draw it yet; the beam editor, the diagram panel and the model tree read it. Details: [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), [GUI.md](GUI.md) sections 2.5-2.7.
+The beam snapshot follows the same rules as the truss one (immutable, swapped under `dataMutex`, `dataVersion` bumped). The viewport draws it with the real sections: the exact displacement field is sampled once per snapshot, the deformation scale only moves the stations and turns the section frames (displacements and rotations scaled alike), all on the CPU ([GUI.md](GUI.md) section 3.9). The beam editor, the diagram panel and the model tree read the same snapshot. Details: [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), [GUI.md](GUI.md) sections 2.5-2.7.
 
 ## 7. Related source files
 

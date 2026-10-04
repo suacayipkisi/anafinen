@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "viewportRenderer.hpp"
+#include <guiMaterials/shaderProgram.hpp>
 
 #include <glad/gl.h>
 #include <glm/ext/vector_float2.hpp>
@@ -31,69 +32,10 @@
 #include <string_view>
 #include <vector>
 
-#include <log/anaf_info.hpp>
 
 namespace anaf::GUI {
 
   namespace {
-
-    // Drops the null terminator and trailing newlines drivers append to info logs.
-    void trimInfoLog(std::string& infoLog) {
-      while (!infoLog.empty() && (infoLog.back() == '\0' || infoLog.back() == '\n')) {
-        infoLog.pop_back();
-      }
-    }
-
-    // Returns an empty handle and logs the driver's info log when compilation fails.
-    GlShader compileStage(GLenum stage, const char* source, std::string_view programName) {
-      GlShader shader{glCreateShader(stage)};
-      glShaderSource(shader.get(), 1, &source, nullptr);
-      glCompileShader(shader.get());
-
-      GLint status = GL_FALSE;
-      glGetShaderiv(shader.get(), GL_COMPILE_STATUS, &status);
-      if (status != GL_TRUE) {
-        GLint logLength = 0;
-        glGetShaderiv(shader.get(), GL_INFO_LOG_LENGTH, &logLength);
-        std::string infoLog(static_cast<std::size_t>(std::max(logLength, 1)), '\0');
-        glGetShaderInfoLog(shader.get(), logLength, nullptr, infoLog.data());
-        trimInfoLog(infoLog);
-        anaf::LOG::error("{} {} shader compile failed: {}",
-          programName, stage == GL_VERTEX_SHADER ? "vertex" : "fragment", infoLog);
-        return {};
-      }
-      return shader;
-    }
-
-    // Returns an empty handle and logs the driver's info log when any stage or the link fails.
-    // Shader objects are released on return; a linked program does not need them.
-    GlProgram buildProgram(const char* vertexSource, const char* fragmentSource, std::string_view programName) {
-      const GlShader vs = compileStage(GL_VERTEX_SHADER, vertexSource, programName);
-      const GlShader fs = compileStage(GL_FRAGMENT_SHADER, fragmentSource, programName);
-      if (!vs || !fs) {
-        return {};
-      }
-
-      GlProgram program{glCreateProgram()};
-      glAttachShader(program.get(), vs.get());
-      glAttachShader(program.get(), fs.get());
-      glLinkProgram(program.get());
-      glDetachShader(program.get(), vs.get());
-      glDetachShader(program.get(), fs.get());
-
-      GLint status = GL_FALSE;
-      glGetProgramiv(program.get(), GL_LINK_STATUS, &status);
-      if (status != GL_TRUE) {
-        GLint logLength = 0;
-        glGetProgramiv(program.get(), GL_INFO_LOG_LENGTH, &logLength);
-        std::string infoLog(static_cast<std::size_t>(std::max(logLength, 1)), '\0');
-        glGetProgramInfoLog(program.get(), logLength, nullptr, infoLog.data());
-        trimInfoLog(infoLog);
-        anaf::LOG::error("{} shader program link failed: {}", programName, infoLog);
-        return {};
-      }
-      return program;
-    }
 
     // DSA vertex layout helpers: every VAO here reads from a single vertex buffer at binding 0.
     constexpr GLuint kVertexBinding = 0;
@@ -164,7 +106,7 @@ namespace anaf::GUI {
       }
     )";
 
-    m_program = buildProgram(vertexShaderSource, fragmentShaderSource, "scene");
+    m_program = buildShaderProgram(vertexShaderSource, fragmentShaderSource, "scene");
 
     m_mvpLoc = glGetUniformLocation(m_program.get(), "u_MVP");
   }
@@ -232,7 +174,7 @@ namespace anaf::GUI {
       }
     )";
 
-    m_gridProgram = buildProgram(vertexShaderSource, fragmentShaderSource, "grid");
+    m_gridProgram = buildShaderProgram(vertexShaderSource, fragmentShaderSource, "grid");
 
     const GLuint program = m_gridProgram.get();
     m_gridEyeLoc = glGetUniformLocation(program, "u_EyeLocal");
@@ -281,7 +223,7 @@ namespace anaf::GUI {
       }
     )";
 
-    m_textProgram = buildProgram(vertexShaderSource, fragmentShaderSource, "text");
+    m_textProgram = buildShaderProgram(vertexShaderSource, fragmentShaderSource, "text");
 
     // The font atlas is always bound to texture unit 0, so the sampler is set once here.
     glProgramUniform1i(m_textProgram.get(), glGetUniformLocation(m_textProgram.get(), "u_FontTex"), 0);
@@ -495,10 +437,14 @@ namespace anaf::GUI {
     glDisable(GL_BLEND);
     glDisable(GL_LINE_SMOOTH);
 
+    // Node squares are markers: drawn over everything (a beam section would hide them) and so
+    // also first in line for picking.
     if (m_pointVertexCount > 0) {
       glEnable(GL_PROGRAM_POINT_SIZE);
+      glDisable(GL_DEPTH_TEST);
       glBindVertexArray(m_pointVao.get());
       glDrawArrays(GL_POINTS, 0, m_pointVertexCount);
+      glEnable(GL_DEPTH_TEST);
     }
 
     glBindVertexArray(0);

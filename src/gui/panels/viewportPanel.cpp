@@ -16,6 +16,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "viewportPanel.hpp"
+#include <beam/beamEngine/beamDiagrams.hpp>
+#include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp>
+#include <beam/beamSection/sectionStress.hpp>
+#include <beam/beamSection/sectionTriangulation.hpp>
 #include <bridge/generalStatus.hpp>
 
 #include "imgui.h"
@@ -28,13 +32,16 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <numbers>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace anaf::GUI {
@@ -42,30 +49,174 @@ namespace anaf::GUI {
   ViewportPanel::ViewportPanel(std::shared_ptr<Framebuffer> fbo, std::shared_ptr<ViewportDisplayOptions> display) :
     m_fbo_(std::move(fbo)),
     m_renderer_(std::make_unique<ViewportRenderer>()),
+    m_beamRenderer_(std::make_unique<BeamSceneRenderer>()),
     m_display(std::move(display))
   {}
 
   namespace {
     constexpr float kFovY = std::numbers::pi_v<float> / 4.0f; // 45 deg
     constexpr float kMinCameraDistance = 1e-3f;
+    // Level of detail only for large beam models: below this count every element keeps its real
+    // section at any distance.
+    constexpr std::size_t kLodElementThreshold = 4000;
+    constexpr float kFullSectionPixels = 10.0f;  // section at least this tall on screen: real shape
+    constexpr float kSimpleSectionPixels = 2.0f; // at least this: box / cylinder; below: a line
+    constexpr int kSectionSegmentsPerQuarter = 4;
+
+    const glm::vec4 kBeamColor(0.62f, 0.70f, 0.80f, 1.0f);
+    const glm::vec4 kNoStressColor(0.55f, 0.55f, 0.55f, 1.0f);
+    const glm::vec4 kSelectedColor(1.0f, 0.7f, 0.2f, 1.0f);
+    const glm::vec4 kSupportColor(1.0f, 0.3f, 0.3f, 1.0f);
+
+    glm::vec3 toVec(const std::array<double, 3>& v) {
+      return glm::vec3(static_cast<float>(v[0]), static_cast<float>(v[1]), static_cast<float>(v[2]));
+    }
+
+    double magnitude(const std::array<double, 3>& v) { return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
+
+    // Jet colormap, t in [0, 1] (the colorbars use the same formula).
+    glm::vec4 jet(const double value) {
+      const float t = static_cast<float>(std::clamp(value, 0.0, 1.0));
+      return glm::vec4(std::clamp(1.5f - std::abs(4.0f * t - 3.0f), 0.0f, 1.0f), std::clamp(1.5f - std::abs(4.0f * t - 2.0f), 0.0f, 1.0f),
+                       std::clamp(1.5f - std::abs(4.0f * t - 1.0f), 0.0f, 1.0f), 1.0f);
+    }
+
+    bool alongGlobalAxes(const std::vector<std::array<double, 3>>& basis) {
+      return std::ranges::all_of(basis, [](const std::array<double, 3>& v) { return std::ranges::count(v, 0.0) == 2; });
+    }
+
+    // Line with a four-stroke head at tip, plus its glow copy.
+    void addArrow(ViewportRenderer& renderer, const glm::vec3& base, const glm::vec3& tip, const glm::vec4& color,
+                  const glm::vec4& glow, const float headLength, const float headRadius) {
+      renderer.addLine(base, tip, color, -1);
+      renderer.addGlowLine(base, tip, glow);
+      const glm::vec3 dir = glm::normalize(tip - base);
+      const glm::vec3 helper = std::abs(dir.y) > 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+      const glm::vec3 side1 = glm::normalize(glm::cross(dir, helper)) * headRadius;
+      const glm::vec3 side2 = glm::normalize(glm::cross(dir, side1)) * headRadius;
+      const glm::vec3 headBase = tip - dir * headLength;
+      for (const glm::vec3& side : {side1, -side1, side2, -side2}) {
+        renderer.addLine(tip, headBase + side, color, -1);
+        renderer.addGlowLine(tip, headBase + side, glow);
+      }
+    }
+
+    // Inclined / skewed support at pos (red): a plane the node slides on as a translucent square
+    // with outline, or a line it moves along as a double arrow. symbol sets the size.
+    void addInclinedSupport(ViewportRenderer& renderer, const glm::vec3& pos, const std::vector<std::array<double, 3>>& directions,
+                            const float symbol) {
+      const glm::vec4 supportColor(1.0f, 0.22f, 0.22f, 1.0f);
+      const glm::vec4 supportFill(1.0f, 0.22f, 0.22f, 0.28f);
+      const glm::vec4 supportGlow(1.0f, 0.3f, 0.3f, 0.35f);
+      if (directions.size() == 1) {
+        const glm::vec3 along = toVec(directions[0]);
+        const glm::vec3 a = pos - along * (1.6f * symbol), b = pos + along * (1.6f * symbol);
+        renderer.addLine(a, b, supportColor, -1);
+        renderer.addGlowLine(a, b, supportGlow);
+        const glm::vec3 helper = std::abs(along.y) > 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+        const glm::vec3 side = glm::normalize(glm::cross(along, helper)) * (0.25f * symbol);
+        const glm::vec3 side2 = glm::cross(along, side);
+        for (const auto& [tip, back] : {std::pair{a, along}, {b, -along}}) {
+          const glm::vec3 headBase = tip + back * (0.4f * symbol);
+          for (const glm::vec3& offset : {side, -side, side2, -side2}) renderer.addLine(tip, headBase + offset, supportColor, -1);
+        }
+      } else if (directions.size() == 2) {
+        const glm::vec3 u = toVec(directions[0]) * symbol, v = toVec(directions[1]) * symbol;
+        const std::array<glm::vec3, 4> corner{pos - u - v, pos + u - v, pos + u + v, pos - u + v};
+        renderer.addTriangle(corner[0], corner[1], corner[2], supportFill);
+        renderer.addTriangle(corner[0], corner[2], corner[3], supportFill);
+        for (std::size_t c = 0; c < 4; ++c) renderer.addLine(corner[c], corner[(c + 1) % 4], supportColor, -1);
+      }
+    }
+
+    // Shape drawn for a section: a general section (no shape) as the rectangle with the same A,
+    // Iy and Iz (h = sqrt(12 Iz / A), b = sqrt(12 Iy / A)).
+    FEM::BEAM::SectionShape drawnShape(const FEM::BEAM::SectionShape& shape) {
+      if (const auto* general = std::get_if<FEM::BEAM::GeneralSection>(&shape)) {
+        const auto& p = general->values;
+        return FEM::BEAM::RectangleSection{std::sqrt(12.0 * p.secondMomentZ / p.area), std::sqrt(12.0 * p.secondMomentY / p.area)};
+      }
+      return shape;
+    }
+
+    // Largest |y| and |z| of the outline.
+    std::array<double, 2> outlineExtent(const FEM::BEAM::SectionShape& shape) {
+      std::array<double, 2> extent{0.0, 0.0};
+      for (const auto& loop : FEM::BEAM::sectionOutline(shape, kSectionSegmentsPerQuarter)) {
+        for (const auto& p : loop) {
+          extent[0] = std::max(extent[0], std::abs(p[0]));
+          extent[1] = std::max(extent[1], std::abs(p[1]));
+        }
+      }
+      return extent;
+    }
+
+    // The section extruded over x = 0..1: side walls (normals smoothed across gentle corners,
+    // so arcs look round and sharp corners stay sharp) and both end caps.
+    std::vector<MeshVertex> extrudeSection(const FEM::BEAM::SectionShape& shape, const int segmentsPerQuarter) {
+      std::vector<MeshVertex> vertices;
+      const float smoothCos = std::cos(40.0f * std::numbers::pi_v<float> / 180.0f);
+      for (const auto& loop : FEM::BEAM::sectionOutline(shape, segmentsPerQuarter)) {
+        const std::size_t n = loop.size();
+        if (n < 3) continue;
+        // Outward normal of edge i (loop i -> i + 1) in (y, z); loops are counter-clockwise in
+        // the (z, y) plane and holes clockwise, so the same formula points out of the material.
+        std::vector<glm::vec2> edgeNormal(n);
+        for (std::size_t i = 0; i < n; ++i) {
+          const auto& a = loop[i];
+          const auto& b = loop[(i + 1) % n];
+          const glm::vec2 normal(static_cast<float>(-(b[1] - a[1])), static_cast<float>(b[0] - a[0]));
+          const float length = glm::length(normal);
+          edgeNormal[i] = length > 0.0f ? normal / length : glm::vec2(0.0f);
+        }
+        const auto vertexNormal = [&](const std::size_t vertex, const std::size_t edge) {
+          const glm::vec2 before = edgeNormal[(vertex + n - 1) % n];
+          const glm::vec2 after = edgeNormal[vertex % n];
+          if (glm::dot(before, after) < smoothCos) return edgeNormal[edge];
+          const glm::vec2 sum = before + after;
+          return glm::length(sum) > 0.0f ? glm::normalize(sum) : edgeNormal[edge];
+        };
+        for (std::size_t i = 0; i < n; ++i) {
+          const std::size_t j = (i + 1) % n;
+          const glm::vec2 na = vertexNormal(i, i), nb = vertexNormal(j, i);
+          const auto at = [&](const std::size_t k, const float x, const glm::vec2 normal) {
+            return MeshVertex{glm::vec3(x, static_cast<float>(loop[k][0]), static_cast<float>(loop[k][1])), glm::vec3(0.0f, normal.x, normal.y)};
+          };
+          vertices.insert(vertices.end(), {at(i, 0.0f, na), at(j, 0.0f, nb), at(j, 1.0f, nb), at(i, 0.0f, na), at(j, 1.0f, nb), at(i, 1.0f, na)});
+        }
+      }
+      const auto faces = FEM::BEAM::triangulateSection(shape, segmentsPerQuarter);
+      for (const float x : {0.0f, 1.0f}) {
+        const glm::vec3 normal(x == 0.0f ? -1.0f : 1.0f, 0.0f, 0.0f);
+        for (const auto& t : faces.triangles) {
+          for (const auto k : t) {
+            vertices.push_back({glm::vec3(x, static_cast<float>(faces.points[k][0]), static_cast<float>(faces.points[k][1])), normal});
+          }
+        }
+      }
+      return vertices;
+    }
   } // namespace end
+
+  bool ViewportPanel::hasModel() const {
+    return (m_currentBeamMesh && !m_currentBeamMesh->nodes.empty()) || (m_currentMesh && !m_currentMesh->trussNodes.empty());
+  }
 
   void ViewportPanel::updateSceneBounds() {
     m_sceneCenter = glm::vec3(0.0f);
     m_sceneRadius = 10.0f;
-    if (!m_currentMesh || m_currentMesh->trussNodes.empty()) return;
+    if (!hasModel()) return;
 
     glm::vec3 boundsMin(std::numeric_limits<float>::max());
     glm::vec3 boundsMax(std::numeric_limits<float>::lowest());
-    for (const auto& node : m_currentMesh->trussNodes) {
-      const auto& location = node.getLocation();
-      const glm::vec3 position(
-        static_cast<float>(location[0]),
-        static_cast<float>(location[1]),
-        static_cast<float>(location[2])
-      );
-      boundsMin = glm::min(boundsMin, position);
-      boundsMax = glm::max(boundsMax, position);
+    const auto include = [&](const std::array<double, 3>& location) {
+      boundsMin = glm::min(boundsMin, toVec(location));
+      boundsMax = glm::max(boundsMax, toVec(location));
+    };
+    if (m_currentBeamMesh) {
+      for (const auto& node : m_currentBeamMesh->nodes) include(node.getLocation());
+    } else {
+      for (const auto& node : m_currentMesh->trussNodes) include(node.getLocation());
     }
     m_sceneCenter = (boundsMin + boundsMax) * 0.5f;
     m_sceneRadius = std::max(0.5f * glm::length(boundsMax - boundsMin), 0.01f);
@@ -77,7 +228,7 @@ namespace anaf::GUI {
     m_draggingView = false;
     updateSceneBounds();
     m_target = m_sceneCenter;
-    m_cameraDistance = (m_currentMesh && !m_currentMesh->trussNodes.empty()) ? m_sceneRadius * 2.2f : 18.0f;
+    m_cameraDistance = hasModel() ? m_sceneRadius * 2.2f : 18.0f;
   }
 
   glm::vec3 ViewportPanel::orbitDirection() const {
@@ -160,6 +311,8 @@ namespace anaf::GUI {
 
   void ViewportPanel::buildSceneBatches() {
     m_renderer_->clearBuffers();
+    m_beamRenderer_->clearSpheres();
+    m_nodeLabels.clear();
 
     // Coordinate axes X, Y, Z (only with the axes toggle on), extended far past the camera's far clip plane so they appear infinite (EntityID = -1)
     // farPlane() stays below ~100 scene radii at the widest zoom, so 200 radii look infinite.
@@ -170,21 +323,25 @@ namespace anaf::GUI {
       m_renderer_->addLine(glm::vec3(0.0f, 0.0f, -axisReach), glm::vec3(0.0f, 0.0f, axisReach), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
     }
 
+    if (m_currentBeamMesh) {
+      buildBeamScene();
+    } else {
+      m_beamRenderer_->clearInstances();
+      buildTrussScene();
+    }
+    m_renderer_->uploadCurrentBuffer();
+    m_beamRenderer_->upload();
+  }
+
+  void ViewportPanel::buildTrussScene() {
     if (!m_currentMesh || m_currentMesh->trussNodes.empty()) {
       m_cachedMaxStress = 0.0;
       m_cachedMaxDisp = 0.0;
-      m_renderer_->uploadCurrentBuffer();
       return;
     }
 
     const auto& mesh = *m_currentMesh;
-    auto& bridge = BRIDGE::buildBridge();
-
-    std::uint32_t selectedId = std::numeric_limits<std::uint32_t>::max();
-    {
-      std::lock_guard<std::mutex> lock(bridge.dataMutex);
-      selectedId = bridge.selectedNodeId;
-    }
+    const std::uint32_t selectedId = m_selectedNode;
 
     m_renderer_->reserve(3 + mesh.trussElements.size() + mesh.appliedForces.size() * 3, mesh.trussNodes.size());
 
@@ -195,34 +352,32 @@ namespace anaf::GUI {
     m_cachedMaxStress = maxStress;
 
     const double deformScale = m_deformScale;
-    // Without stress coloring the elements keep the color of an unsolved model.
-    const bool colorByStress = m_display->showStress && maxStress > 1e-9;
-
-    auto stressColor = [&](double val) -> glm::vec4 {
-      if (!colorByStress) {
-        return glm::vec4(0.4f, 0.6f, 0.85f, 1.0f);
-      }
-      const float t = static_cast<float>(std::sqrt(std::clamp(std::abs(val) / maxStress, 0.0, 1.0)));
-      float r = std::clamp(1.5f - std::abs(4.0f * t - 3.0f), 0.0f, 1.0f);
-      float g = std::clamp(1.5f - std::abs(4.0f * t - 2.0f), 0.0f, 1.0f);
-      float b = std::clamp(1.5f - std::abs(4.0f * t - 1.0f), 0.0f, 1.0f);
-      return glm::vec4(r, g, b, 1.0f);
-    };
 
     uint32_t maxNodeId = 0;
     double maxDisp = 0.0;
     for (const auto& node : mesh.trussNodes) {
       maxNodeId = std::max(maxNodeId, node.getNodeID());
-      const auto disp = node.getDisplacement();
-      maxDisp = std::max(maxDisp, std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]));
+      maxDisp = std::max(maxDisp, magnitude(node.getDisplacement()));
     }
     m_cachedMaxDisp = maxDisp;
+
+    // Without coloring (or results) the elements keep the color of an unsolved model.
+    const auto coloring = m_display->coloring;
+    const auto elementColor = [&](const BRIDGE::RenderElement& element) -> glm::vec4 {
+      if (coloring == ElementColoring::Stress && maxStress > 1e-9) {
+        return jet(std::sqrt(std::clamp(std::abs(static_cast<double>(element.stress)) / maxStress, 0.0, 1.0)));
+      }
+      if (coloring == ElementColoring::Displacement && maxDisp > 0.0) {
+        const double mean = 0.5 * (magnitude(mesh.trussNodes[element.node1].getDisplacement()) + magnitude(mesh.trussNodes[element.node2].getDisplacement()));
+        return jet(mean / maxDisp);
+      }
+      return glm::vec4(0.4f, 0.6f, 0.85f, 1.0f);
+    };
 
     std::vector<glm::vec3> nodeLookup(maxNodeId + 1, glm::vec3(0.0f));
     for (const auto& node : mesh.trussNodes) {
       const auto& loc = node.getLocation();
       const auto disp = node.getDisplacement();
-
       nodeLookup[node.getNodeID()] = glm::vec3(
         loc[0] + disp[0] * deformScale,
         loc[1] + disp[1] * deformScale,
@@ -233,118 +388,361 @@ namespace anaf::GUI {
     // Truss Elements (Lines)
     for (const auto& element : mesh.trussElements) {
       if (element.node1 <= maxNodeId && element.node2 <= maxNodeId) {
-        glm::vec4 color = stressColor(element.stress);
-        m_renderer_->addLine(nodeLookup[element.node1], nodeLookup[element.node2], color, -1);
+        m_renderer_->addLine(nodeLookup[element.node1], nodeLookup[element.node2], elementColor(element), -1);
       }
     }
 
-    // Interactive Nodes (Points in FBO)
-    if (m_display->showNodes) {
-      auto displacementColor = [&](double magnitude) -> glm::vec4 {
-        const double t = (maxDisp > 0.0) ? std::clamp(magnitude / maxDisp, 0.0, 1.0) : 0.0;
+    // Interactive Nodes: squares (points in the FBO) or spheres
+    if (m_display->showNodes()) {
+      auto displacementColor = [&](double value) -> glm::vec4 {
+        const double t = (maxDisp > 0.0) ? std::clamp(value / maxDisp, 0.0, 1.0) : 0.0;
         float r = static_cast<float>(t);
         float g = static_cast<float>(1.0 - std::abs(t - 0.5) * 2.0);
         float b = static_cast<float>(1.0 - t);
         return glm::vec4(r, g, b, 1.0f);
       };
+      const float sphereRadius = std::max(m_sceneRadius * 0.012f, 1e-4f);
 
       for (const auto& node : mesh.trussNodes) {
         const uint32_t id = node.getNodeID();
         const glm::vec3& pos = nodeLookup[id];
 
-        const auto disp = node.getDisplacement();
-        const double mag = std::sqrt(disp[0] * disp[0] + disp[1] * disp[1] + disp[2] * disp[2]);
-
-        glm::vec4 pColor = displacementColor(mag);
+        glm::vec4 pColor = displacementColor(magnitude(node.getDisplacement()));
         float pSize = 12.0f;
 
         if (id == selectedId) {
-          pColor = glm::vec4(1.0f, 0.7f, 0.2f, 1.0f);
+          pColor = kSelectedColor;
           pSize = 18.0f;
         } else if (node.isSupported()) {
-          pColor = glm::vec4(1.0f, 0.3f, 0.3f, 1.0f);
+          pColor = kSupportColor;
         }
 
-        m_renderer_->addPoint(pos, pColor, static_cast<int>(id), pSize);
+        if (m_display->nodeStyle == NodeStyle::Sphere) {
+          m_beamRenderer_->addSphere(pos, sphereRadius * (id == selectedId ? 1.4f : 1.0f), pColor, static_cast<int>(id));
+        } else {
+          m_renderer_->addPoint(pos, pColor, static_cast<int>(id), pSize);
+        }
+        m_nodeLabels.emplace_back(id, pos);
       }
     }
 
-    // Inclined / skewed supports (red, at the drawn node position): a plane the node slides on
-    // as a translucent square with outline, or a line it moves along as a double arrow. Sized
-    // from the model, so they stay readable on a 1 m mount and on a 300 m stadium.
-    {
-      const float symbol = std::max(m_sceneRadius * 0.04f, 1e-3f);
-      const glm::vec4 supportColor(1.0f, 0.22f, 0.22f, 1.0f);
-      const glm::vec4 supportFill(1.0f, 0.22f, 0.22f, 0.28f);
-      const glm::vec4 supportGlow(1.0f, 0.3f, 0.3f, 0.35f);
-      const auto toVec = [](const std::array<double, 3>& v) {
-        return glm::vec3(static_cast<float>(v[0]), static_cast<float>(v[1]), static_cast<float>(v[2]));
-      };
-      for (const auto& node : mesh.trussNodes) {
-        if (!node.hasInclinedSupport()) continue;
-        const auto& directions = node.getAllowedMotionDirections();
-        const glm::vec3& pos = nodeLookup[node.getNodeID()];
-        if (directions.size() == 1) {
-          const glm::vec3 along = toVec(directions[0]);
-          const glm::vec3 a = pos - along * (1.6f * symbol), b = pos + along * (1.6f * symbol);
-          m_renderer_->addLine(a, b, supportColor, -1);
-          m_renderer_->addGlowLine(a, b, supportGlow);
-          const glm::vec3 helper = std::abs(along.y) > 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
-          const glm::vec3 side = glm::normalize(glm::cross(along, helper)) * (0.25f * symbol);
-          const glm::vec3 side2 = glm::cross(along, side);
-          for (const auto& [tip, back] : {std::pair{a, along}, {b, -along}}) {
-            const glm::vec3 headBase = tip + back * (0.4f * symbol);
-            for (const glm::vec3& offset : {side, -side, side2, -side2}) m_renderer_->addLine(tip, headBase + offset, supportColor, -1);
-          }
-        } else if (directions.size() == 2) {
-          const glm::vec3 u = toVec(directions[0]) * symbol, v = toVec(directions[1]) * symbol;
-          const std::array<glm::vec3, 4> corner{pos - u - v, pos + u - v, pos + u + v, pos - u + v};
-          m_renderer_->addTriangle(corner[0], corner[1], corner[2], supportFill);
-          m_renderer_->addTriangle(corner[0], corner[2], corner[3], supportFill);
-          for (std::size_t c = 0; c < 4; ++c) m_renderer_->addLine(corner[c], corner[(c + 1) % 4], supportColor, -1);
-        }
-      }
+    // Inclined / skewed supports at the drawn node position. Sized from the model, so they stay
+    // readable on a 1 m mount and on a 300 m stadium.
+    const float symbol = std::max(m_sceneRadius * 0.04f, 1e-3f);
+    for (const auto& node : mesh.trussNodes) {
+      if (node.hasInclinedSupport()) addInclinedSupport(*m_renderer_, nodeLookup[node.getNodeID()], node.getAllowedMotionDirections(), symbol);
     }
 
     // Force Arrows (Lines in FBO)
-    constexpr float arrowWorldLength = 3.0f;
-    constexpr float headLength = 0.1f;
-    constexpr float headRadius = 0.05f;
+    if (!m_display->showForces) return;
     const glm::vec4 forceArrowColor(1.0f, 0.25f, 0.25f, 1.0f);
     const glm::vec4 forceGlowColor(1.0f, 0.3f, 0.3f, 0.35f);
-
     for (const auto& force : mesh.appliedForces) {
-      if (!m_display->showForces) break;
       const uint32_t targetId = force.getAppliedNode();
       if (targetId > maxNodeId) continue;
-
       const auto forceVec = force.getForce();
-      const double fMag = std::sqrt(forceVec[0] * forceVec[0] + forceVec[1] * forceVec[1] + forceVec[2] * forceVec[2]);
-      if (fMag < 1e-6) continue;
-
-      const glm::vec3 dir = glm::normalize(glm::vec3(forceVec[0], forceVec[1], forceVec[2]));
+      if (magnitude(forceVec) < 1e-6) continue;
       const glm::vec3 basePos = nodeLookup[targetId];
-      const glm::vec3 tipPos = basePos + dir * arrowWorldLength;
+      addArrow(*m_renderer_, basePos, basePos + glm::normalize(toVec(forceVec)) * 3.0f, forceArrowColor, forceGlowColor, 0.1f, 0.05f);
+    }
+  }
 
-      m_renderer_->addLine(basePos, tipPos, forceArrowColor, -1);
-      m_renderer_->addGlowLine(basePos, tipPos, forceGlowColor);
+  void ViewportPanel::buildBeamStations() {
+    m_beamRenderer_->clearMeshes();
+    m_beamElements.clear();
+    m_lineMesh = -1;
+    m_stationsMesh = m_currentBeamMesh;
+    m_stationsScale = -1.0; // applyBeamDeformation() follows
+    m_cachedMaxStress = 0.0;
+    m_cachedMaxDisp = 0.0;
+    if (!m_currentBeamMesh) return;
+    const auto& mesh = *m_currentBeamMesh;
 
-      glm::vec3 arbitraryUp = (std::abs(dir.y) > 0.9f) ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
-      glm::vec3 side1 = glm::normalize(glm::cross(dir, arbitraryUp)) * headRadius;
-      glm::vec3 side2 = glm::normalize(glm::cross(dir, side1)) * headRadius;
-      glm::vec3 headBase = tipPos - dir * headLength;
+    auto& bridge = BRIDGE::buildBridge();
+    std::vector<MATERIAL::Material> materials;
+    std::vector<FEM::BEAM::BeamSection> sections;
+    {
+      std::lock_guard lock(bridge.dataMutex);
+      materials = bridge.allMaterials;
+      sections = bridge.allSections;
+    }
+    m_lodActive = mesh.elements.size() > kLodElementThreshold;
 
-      m_renderer_->addLine(tipPos, headBase + side1, forceArrowColor, -1);
-      m_renderer_->addLine(tipPos, headBase - side1, forceArrowColor, -1);
-      m_renderer_->addLine(tipPos, headBase + side2, forceArrowColor, -1);
-      m_renderer_->addLine(tipPos, headBase - side2, forceArrowColor, -1);
-      m_renderer_->addGlowLine(tipPos, headBase + side1, forceGlowColor);
-      m_renderer_->addGlowLine(tipPos, headBase - side1, forceGlowColor);
-      m_renderer_->addGlowLine(tipPos, headBase + side2, forceGlowColor);
-      m_renderer_->addGlowLine(tipPos, headBase - side2, forceGlowColor);
+    const std::array<MeshVertex, 2> line{MeshVertex{glm::vec3(0.0f), glm::vec3(0.0f)}, MeshVertex{glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f)}};
+    m_lineMesh = m_beamRenderer_->addMesh(line, GL_LINES);
+
+    // One full and one simple mesh per section in use.
+    std::vector<int> fullOf(sections.size(), -1), simpleOf(sections.size(), -1);
+    std::vector<float> halfOf(sections.size(), 0.0f);
+    for (const auto& element : mesh.elements) {
+      const auto id = element.sectionID;
+      if (id >= sections.size() || fullOf[id] >= 0) continue;
+      const auto shape = drawnShape(sections[id].getShape());
+      if (!FEM::BEAM::validateShape(shape)) continue;
+      fullOf[id] = m_beamRenderer_->addMesh(extrudeSection(shape, kSectionSegmentsPerQuarter), GL_TRIANGLES);
+      const auto extent = outlineExtent(shape);
+      const bool round = std::holds_alternative<FEM::BEAM::CircleSection>(shape) || std::holds_alternative<FEM::BEAM::PipeSection>(shape);
+      const FEM::BEAM::SectionShape simple = round ? FEM::BEAM::SectionShape{FEM::BEAM::CircleSection{2.0 * std::max(extent[0], extent[1])}}
+                                                   : FEM::BEAM::SectionShape{FEM::BEAM::RectangleSection{2.0 * extent[0], 2.0 * extent[1]}};
+      simpleOf[id] = m_beamRenderer_->addMesh(extrudeSection(simple, 2), GL_TRIANGLES);
+      halfOf[id] = static_cast<float>(std::max(extent[0], extent[1]));
     }
 
-    m_renderer_->uploadCurrentBuffer();
+    // The exact displacement field along each element (beamDiagrams), when there are results.
+    bool sampled = mesh.hasResults;
+    std::vector<Eigen::Vector3d> loads;
+    if (sampled) {
+      try {
+        const auto properties = FEM::BEAM::elementSectionProperties(mesh.elements, sections, materials);
+        loads = FEM::BEAM::elementLocalLoads(mesh.nodes, mesh.elements, properties, mesh.distributedLoads, mesh.gravity, materials);
+      } catch (const std::exception&) {
+        sampled = false; // the lists changed after the solve: straight elements
+      }
+    }
+    const std::size_t samples = m_lodActive ? 5 : 9;
+
+    m_beamElements.resize(mesh.elements.size());
+    const auto count = static_cast<long long>(mesh.elements.size());
+    #pragma omp parallel for schedule(dynamic, 64)
+    for (long long index = 0; index < count; ++index) {
+      auto& draw = m_beamElements[static_cast<std::size_t>(index)];
+      const auto& element = mesh.elements[static_cast<std::size_t>(index)];
+      if (element.sectionID >= sections.size() || fullOf[element.sectionID] < 0 || element.node1 >= mesh.nodes.size()
+          || element.node2 >= mesh.nodes.size()) {
+        continue;
+      }
+      try {
+        const auto& a = mesh.nodes[element.node1];
+        const auto& b = mesh.nodes[element.node2];
+        const auto axes = FEM::BEAM::localAxes(a.getLocation(), b.getLocation(), element.orientation);
+        draw.axisX = glm::vec3(static_cast<float>(axes(0, 0)), static_cast<float>(axes(0, 1)), static_cast<float>(axes(0, 2)));
+        draw.axisY = glm::vec3(static_cast<float>(axes(1, 0)), static_cast<float>(axes(1, 1)), static_cast<float>(axes(1, 2)));
+        draw.axisZ = glm::vec3(static_cast<float>(axes(2, 0)), static_cast<float>(axes(2, 1)), static_cast<float>(axes(2, 2)));
+        const auto local = [&](const std::array<double, 3>& v) {
+          const glm::vec3 g = toVec(v);
+          return glm::vec3(glm::dot(draw.axisX, g), glm::dot(draw.axisY, g), glm::dot(draw.axisZ, g));
+        };
+        draw.rotation0 = local(a.getRotation());
+        draw.rotation1 = local(b.getRotation());
+        draw.fullMesh = fullOf[element.sectionID];
+        draw.simpleMesh = simpleOf[element.sectionID];
+        draw.halfSize = halfOf[element.sectionID];
+        if (sampled) {
+          const auto states = FEM::BEAM::sampleElement(mesh, static_cast<std::size_t>(index), samples, loads[static_cast<std::size_t>(index)],
+                                                       materials, sections);
+          const auto& shape = sections[element.sectionID].getShape();
+          const double length = magnitude({b.getLocation()[0] - a.getLocation()[0], b.getLocation()[1] - a.getLocation()[1],
+                                           b.getLocation()[2] - a.getLocation()[2]});
+          for (const auto& state : states) {
+            const auto& d = state.displacement;
+            draw.base.push_back(toVec(state.location));
+            draw.offset.push_back(toVec(d));
+            draw.xi.push_back(static_cast<float>(state.position / length));
+            draw.displacement.push_back(static_cast<float>(magnitude(d)));
+            if (const auto stress = FEM::BEAM::sectionStress(shape, state.forces)) draw.stress.push_back(static_cast<float>(stress->vonMises));
+          }
+          if (draw.stress.size() != draw.base.size()) draw.stress.clear();
+        } else {
+          draw.base = {toVec(a.getLocation()), toVec(b.getLocation())};
+          draw.xi = {0.0f, 1.0f};
+          if (mesh.hasResults) draw.offset = {toVec(a.getDisplacement()), toVec(b.getDisplacement())};
+        }
+      } catch (const std::exception&) {
+        draw = BeamDrawElement{}; // not drawable (e.g. an orientation parallel to the axis)
+      }
+    }
+
+    for (const auto& draw : m_beamElements) {
+      for (const float s : draw.stress) m_cachedMaxStress = std::max(m_cachedMaxStress, static_cast<double>(s));
+      for (const float d : draw.displacement) m_cachedMaxDisp = std::max(m_cachedMaxDisp, static_cast<double>(d));
+    }
+    for (const auto& node : mesh.nodes) m_cachedMaxDisp = std::max(m_cachedMaxDisp, magnitude(node.getDisplacement()));
+  }
+
+  void ViewportPanel::applyBeamDeformation() {
+    m_stationsScale = m_deformScale;
+    const auto scale = static_cast<float>(m_deformScale);
+    const auto count = static_cast<long long>(m_beamElements.size());
+    #pragma omp parallel for schedule(static)
+    for (long long index = 0; index < count; ++index) {
+      auto& draw = m_beamElements[static_cast<std::size_t>(index)];
+      const std::size_t n = draw.base.size();
+      draw.stations.resize(n);
+      draw.frameY.resize(n);
+      draw.frameZ.resize(n);
+      for (std::size_t i = 0; i < n; ++i) draw.stations[i] = draw.base[i] + (draw.offset.empty() ? glm::vec3(0.0f) : draw.offset[i] * scale);
+      for (std::size_t i = 0; i < n; ++i) {
+        // Twist: linear between the nodes (no distributed torque). Bending: the section stays
+        // normal to the drawn axis; at the nodes the exact nodal rotation gives the tangent
+        // (x' = x + theta x x in local axes), inside a central difference of the stations.
+        const float xi = draw.xi.empty() ? 0.0f : draw.xi[i];
+        const glm::vec3 rotation = (1.0f - xi) * draw.rotation0 + xi * draw.rotation1;
+        glm::vec3 tangent = draw.axisX;
+        if (draw.offset.empty()) {
+          tangent = draw.axisX;
+        } else if (i == 0 || i + 1 == n) {
+          const glm::vec3 r = i == 0 ? draw.rotation0 : draw.rotation1;
+          tangent = draw.axisX + scale * (r.z * draw.axisY - r.y * draw.axisZ);
+        } else {
+          tangent = draw.stations[i + 1] - draw.stations[i - 1];
+        }
+        tangent = glm::length(tangent) > 0.0f ? glm::normalize(tangent) : draw.axisX;
+        const float twist = draw.offset.empty() ? 0.0f : rotation.x * scale;
+        glm::vec3 y = std::cos(twist) * draw.axisY + std::sin(twist) * draw.axisZ;
+        glm::vec3 z = -std::sin(twist) * draw.axisY + std::cos(twist) * draw.axisZ;
+        // Smallest rotation that turns the undeformed axis into the tangent (Rodrigues).
+        const glm::vec3 k = glm::cross(draw.axisX, tangent);
+        const float sine = glm::length(k);
+        if (sine > 1e-7f) {
+          const glm::vec3 unit = k / sine;
+          const float cosine = glm::dot(draw.axisX, tangent);
+          const auto turn = [&](const glm::vec3& v) {
+            return v * cosine + glm::cross(unit, v) * sine + unit * glm::dot(unit, v) * (1.0f - cosine);
+          };
+          y = turn(y);
+          z = turn(z);
+        }
+        draw.frameY[i] = glm::normalize(y);
+        draw.frameZ[i] = glm::normalize(z);
+      }
+    }
+  }
+
+  void ViewportPanel::buildBeamScene() {
+    if (m_stationsMesh != m_currentBeamMesh) buildBeamStations();
+    if (m_stationsScale != m_deformScale) applyBeamDeformation();
+    const auto& mesh = *m_currentBeamMesh;
+    const float scale = static_cast<float>(m_deformScale);
+
+    std::vector<glm::vec3> position(mesh.nodes.size());
+    for (std::size_t i = 0; i < mesh.nodes.size(); ++i) {
+      position[i] = toVec(mesh.nodes[i].getLocation()) + toVec(mesh.nodes[i].getDisplacement()) * scale;
+    }
+
+    // Nodes: a sphere is 1.3 times the largest section half size at the node, so it shows
+    // around the elements.
+    if (m_display->showNodes()) {
+      std::vector<float> radius(mesh.nodes.size(), std::max(m_sceneRadius * 0.01f, 1e-4f));
+      std::vector<bool> connected(mesh.nodes.size(), false);
+      for (std::size_t e = 0; e < mesh.elements.size() && e < m_beamElements.size(); ++e) {
+        const auto& element = mesh.elements[e];
+        for (const auto node : {element.node1, element.node2}) {
+          if (node >= radius.size()) continue;
+          radius[node] = connected[node] ? std::max(radius[node], 1.3f * m_beamElements[e].halfSize) : 1.3f * m_beamElements[e].halfSize;
+          connected[node] = true;
+        }
+      }
+      for (std::uint32_t id = 0; id < mesh.nodes.size(); ++id) {
+        const auto& node = mesh.nodes[id];
+        glm::vec4 color = m_cachedMaxDisp > 0.0 ? jet(magnitude(node.getDisplacement()) / m_cachedMaxDisp) : glm::vec4(0.85f, 0.87f, 0.9f, 1.0f);
+        if (node.isSupported()) color = kSupportColor;
+        const bool selected = id == m_selectedNode;
+        if (selected) color = kSelectedColor;
+        if (m_display->nodeStyle == NodeStyle::Sphere) {
+          m_beamRenderer_->addSphere(position[id], std::max(radius[id], 1e-4f) * (selected ? 1.25f : 1.0f), color, static_cast<int>(id));
+        } else {
+          m_renderer_->addPoint(position[id], color, static_cast<int>(id), selected ? 18.0f : 12.0f);
+        }
+        m_nodeLabels.emplace_back(id, position[id]);
+      }
+    }
+
+    const float symbol = std::max(m_sceneRadius * 0.04f, 1e-3f);
+    for (std::uint32_t id = 0; id < mesh.nodes.size(); ++id) {
+      const auto& motion = mesh.nodes[id].getAllowedMotionDirections();
+      if (!alongGlobalAxes(motion)) addInclinedSupport(*m_renderer_, position[id], motion, symbol);
+    }
+
+    if (m_display->showForces) {
+      const float arrow = std::max(m_sceneRadius * 0.15f, 1e-3f);
+      const glm::vec4 forceColor(1.0f, 0.25f, 0.25f, 1.0f), forceGlow(1.0f, 0.3f, 0.3f, 0.35f);
+      const glm::vec4 momentColor(1.0f, 0.45f, 0.85f, 1.0f), momentGlow(1.0f, 0.45f, 0.85f, 0.35f);
+      const glm::vec4 lineLoadColor(1.0f, 0.62f, 0.2f, 1.0f), lineLoadGlow(1.0f, 0.62f, 0.2f, 0.3f);
+      for (const auto& load : mesh.nodalLoads) {
+        if (load.node >= position.size()) continue;
+        const glm::vec3 base = position[load.node];
+        if (magnitude(load.force) > 1e-9) {
+          addArrow(*m_renderer_, base, base + glm::normalize(toVec(load.force)) * arrow, forceColor, forceGlow, arrow * 0.12f, arrow * 0.05f);
+        }
+        if (magnitude(load.moment) > 1e-9) { // moment vector: double head
+          const glm::vec3 dir = glm::normalize(toVec(load.moment));
+          const glm::vec3 tip = base + dir * arrow;
+          addArrow(*m_renderer_, base, tip, momentColor, momentGlow, arrow * 0.12f, arrow * 0.05f);
+          addArrow(*m_renderer_, base, tip - dir * (arrow * 0.12f), momentColor, momentGlow, arrow * 0.12f, arrow * 0.05f);
+        }
+      }
+      // Uniform loads: arrows pointing at the element, tails joined.
+      const float small = arrow * 0.45f;
+      for (const auto& load : mesh.distributedLoads) {
+        if (load.element >= m_beamElements.size() || m_beamElements[load.element].stations.size() < 2) continue;
+        const auto& draw = m_beamElements[load.element];
+        glm::vec3 direction = toVec(load.value);
+        if (load.frame == FEM::BEAM::LoadFrame::Local) {
+          const glm::vec3 axisX = glm::normalize(draw.stations.back() - draw.stations.front());
+          direction = axisX * direction.x + draw.axisY * direction.y + draw.axisZ * direction.z;
+        }
+        if (glm::length(direction) < 1e-12f) continue;
+        direction = glm::normalize(direction);
+        glm::vec3 previousTail{};
+        constexpr int arrows = 5;
+        for (int k = 0; k < arrows; ++k) {
+          const float t = static_cast<float>(k) / static_cast<float>(arrows - 1);
+          const auto stationIndex = static_cast<std::size_t>(std::lround(t * static_cast<float>(draw.stations.size() - 1)));
+          const glm::vec3 at = draw.stations[stationIndex];
+          const glm::vec3 tail = at - direction * small;
+          addArrow(*m_renderer_, tail, at, lineLoadColor, lineLoadGlow, small * 0.2f, small * 0.08f);
+          if (k > 0) m_renderer_->addLine(previousTail, tail, lineLoadColor, -1);
+          previousTail = tail;
+        }
+      }
+    }
+
+    pushBeamInstances(getViewProjectionMatrix());
+  }
+
+  void ViewportPanel::pushBeamInstances(const glm::mat4& mvp) {
+    m_beamRenderer_->clearInstances();
+    m_lodMatrix = mvp;
+    m_lodViewport = m_viewportSize;
+    const glm::vec3 eye = m_target + orbitDirection() * m_cameraDistance;
+    const float focal = std::max(m_viewportSize.y, 1.0f) / (2.0f * std::tan(kFovY * 0.5f));
+    const auto coloring = m_display->coloring;
+    const double maxStress = m_cachedMaxStress, maxDisp = m_cachedMaxDisp;
+
+    for (std::size_t e = 0; e < m_beamElements.size(); ++e) {
+      const auto& draw = m_beamElements[e];
+      if (draw.stations.size() < 2 || draw.fullMesh < 0) continue;
+      const bool selected = e == m_selectedElement;
+      const auto color = [&](const std::size_t i) -> glm::vec4 {
+        if (selected) return kSelectedColor;
+        if (coloring == ElementColoring::Stress) {
+          if (draw.stress.empty() || maxStress <= 0.0) return draw.stress.empty() && !draw.displacement.empty() ? kNoStressColor : kBeamColor;
+          return jet(draw.stress[i] / maxStress);
+        }
+        if (coloring == ElementColoring::Displacement && !draw.displacement.empty() && maxDisp > 0.0) return jet(draw.displacement[i] / maxDisp);
+        return kBeamColor;
+      };
+      const int entity = -static_cast<int>(e) - 2;
+      const std::size_t last = draw.stations.size() - 1;
+
+      enum class Tier { Full, Simple, Line } tier = Tier::Full;
+      if (m_lodActive && !selected) {
+        const float distance = std::max(glm::length(0.5f * (draw.stations.front() + draw.stations.back()) - eye), 1e-6f);
+        const float pixels = 2.0f * draw.halfSize * focal / distance;
+        tier = pixels >= kFullSectionPixels ? Tier::Full : (pixels >= kSimpleSectionPixels ? Tier::Simple : Tier::Line);
+      }
+      if (tier == Tier::Full) {
+        for (std::size_t i = 0; i < last; ++i) {
+          m_beamRenderer_->addInstance(draw.fullMesh, {draw.stations[i], draw.stations[i + 1], draw.frameY[i], draw.frameZ[i], draw.frameY[i + 1],
+                                                       draw.frameZ[i + 1], color(i), color(i + 1), entity});
+        }
+      } else {
+        const int meshIndex = tier == Tier::Simple ? draw.simpleMesh : m_lineMesh;
+        m_beamRenderer_->addInstance(meshIndex, {draw.stations.front(), draw.stations.back(), draw.frameY.front(), draw.frameZ.front(),
+                                                 draw.frameY.back(), draw.frameZ.back(), color(0), color(last), entity});
+      }
+    }
+    m_beamRenderer_->upload();
   }
 
   void ViewportPanel::renderSceneOpenGL() {
@@ -362,17 +760,27 @@ namespace anaf::GUI {
       m_display->resetCameraRequested = false;
       resetCamera();
     }
+    // A selection made in a panel (or by picking) redraws the highlight.
+    {
+      std::lock_guard<std::mutex> lock(bridge.dataMutex);
+      if (bridge.selectedNodeId != m_selectedNode || bridge.selectedElementId != m_selectedElement) {
+        m_selectedNode = bridge.selectedNodeId;
+        m_selectedElement = bridge.selectedElementId;
+        truss_1d_gui_prop.m_meshNeedsUpdate = true;
+      }
+    }
 
     if (truss_1d_gui_prop.m_meshNeedsUpdate || currentVersion != truss_1d_gui_prop.m_lastRenderedVersion) {
       {
         std::lock_guard<std::mutex> lock(bridge.dataMutex);
         m_currentMesh = bridge.activeMesh;
+        m_currentBeamMesh = bridge.activeBeamMesh;
       }
       m_deformScale = bridge.deformScale.load();
 
       truss_1d_gui_prop.m_meshNeedsUpdate = false;
       truss_1d_gui_prop.m_lastRenderedVersion = currentVersion;
-      if (m_fitRequested_ && m_currentMesh) {
+      if (m_fitRequested_ && hasModel()) {
         resetCamera();
         m_fitRequested_ = false;
       } else {
@@ -388,6 +796,10 @@ namespace anaf::GUI {
     m_fbo_->clear(0.08f, 0.09f, 0.11f, 1.0f, -1);
 
     const glm::mat4 mvp = getViewProjectionMatrix();
+    // Level of detail follows the camera: only the instance lists are rebuilt.
+    if (m_currentBeamMesh && m_lodActive && (mvp != m_lodMatrix || m_viewportSize.x != m_lodViewport.x || m_viewportSize.y != m_lodViewport.y)) {
+      pushBeamInstances(mvp);
+    }
     if (m_display->showGrid) {
       GridView grid;
       grid.spacing = std::pow(10.0f, std::floor(std::log10(m_cameraDistance / 12.0f)));
@@ -407,43 +819,22 @@ namespace anaf::GUI {
       grid.fadeDistance = std::max(m_cameraDistance * 40.0f, m_sceneRadius * 6.0f);
       m_renderer_->renderGrid(grid);
     }
+    m_beamRenderer_->render(mvp, -orbitDirection());
     m_renderer_->render(mvp);
 
     // Node number labels, rendered as OpenGL glyph quads (ImGui font atlas) instead of an ImGui 2D overlay.
     m_renderer_->clearTextBuffer();
-    if (m_display->showNodes && m_currentMesh && !m_currentMesh->trussNodes.empty()) {
-      std::uint32_t selectedId = std::numeric_limits<std::uint32_t>::max();
-      {
-        std::lock_guard<std::mutex> lock(bridge.dataMutex);
-        selectedId = bridge.selectedNodeId;
-      }
-
+    if (m_display->showNodes()) {
       const float fbWidth = static_cast<float>(m_fbo_->getWidth());
       const float fbHeight = static_cast<float>(m_fbo_->getHeight());
-      const double deformScale = m_deformScale;
-
-      for (const auto& node : m_currentMesh->trussNodes) {
-        const uint32_t id = node.getNodeID();
-        const bool isSelected = (selectedId == id);
-        if (m_cameraDistance >= 15.0f && !isSelected) continue;
-
-        const auto& loc = node.getLocation();
-        const auto disp = node.getDisplacement();
-        const glm::vec3 worldPos(
-          loc[0] + disp[0] * deformScale,
-          loc[1] + disp[1] * deformScale,
-          loc[2] + disp[2] * deformScale
-        );
-
+      for (const auto& [id, worldPos] : m_nodeLabels) {
+        if (m_cameraDistance >= 15.0f && id != m_selectedNode) continue;
         const glm::vec4 clipPos = mvp * glm::vec4(worldPos, 1.0f);
         if (clipPos.w <= 0.1f) continue;
-
         const glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
         const float screenX = (ndc.x * 0.5f + 0.5f) * fbWidth + 8.0f;
         const float screenY = (-ndc.y * 0.5f + 0.5f) * fbHeight - 8.0f;
-
-        m_renderer_->addText(glm::vec2(screenX, screenY), std::to_string(id),
-                   glm::vec4(0.9f, 0.9f, 0.9f, 1.0f), fbWidth, fbHeight);
+        m_renderer_->addText(glm::vec2(screenX, screenY), std::to_string(id), glm::vec4(0.9f, 0.9f, 0.9f, 1.0f), fbWidth, fbHeight);
       }
     }
     m_renderer_->uploadTextBuffer();
@@ -454,7 +845,6 @@ namespace anaf::GUI {
 
   void ViewportPanel::renderOverlay2D(const ImVec2& origin, const ImVec2& size) {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const auto currentMesh = m_currentMesh;
 
     // View orientation gizmo (top-right corner): 3 axes crossing at a point, rotating in sync with the camera.
     {
@@ -508,7 +898,7 @@ namespace anaf::GUI {
     }
 
     // Colorbars
-    if (currentMesh && !currentMesh->trussNodes.empty()) {
+    if (hasModel()) {
       constexpr float barWidth = 10.0f;
       constexpr float barHeight = 180.0f;
       constexpr int colorSteps = 30;
@@ -555,11 +945,12 @@ namespace anaf::GUI {
       const float startX = origin.x + 20.0f;
       const float startY = origin.y + size.y - barHeight - 25.0f;
       float nextTop = startY;
-      if (m_display->showStress) {
-        drawColorbar(startX, nextTop, "|Stress| (MPa)", m_cachedMaxStress / 1.0e6);
+      using enum ElementColoring;
+      if (m_display->coloring == Stress) {
+        drawColorbar(startX, nextTop, m_currentBeamMesh ? "von Mises (MPa)" : "|Stress| (MPa)", m_cachedMaxStress / 1.0e6);
         nextTop -= 220.0f;
       }
-      if (m_display->showNodes) {
+      if (m_display->coloring == Displacement || m_display->showNodes()) {
         drawColorbar(startX, nextTop, "Disp (mm)", m_cachedMaxDisp * 1000.0);
       }
     }
@@ -600,12 +991,16 @@ namespace anaf::GUI {
 
       const int pickedID = m_fbo_->readEntityID(mouseX, mouseY);
 
+      // Entity IDs: nodes >= 0, beam elements -(index + 2), nothing -1.
       auto& bridge = BRIDGE::buildBridge();
       std::lock_guard<std::mutex> lock(bridge.dataMutex);
       if (pickedID >= 0) {
         bridge.selectedNodeId = static_cast<std::uint32_t>(pickedID);
+      } else if (pickedID <= -2) {
+        bridge.selectedElementId = static_cast<std::uint32_t>(-(pickedID + 2));
       } else {
-        bridge.selectedNodeId = std::numeric_limits<std::uint32_t>::max();
+        bridge.selectedNodeId = kNone;
+        bridge.selectedElementId = kNone;
       }
       truss_1d_gui_prop.m_meshNeedsUpdate = true;
     }

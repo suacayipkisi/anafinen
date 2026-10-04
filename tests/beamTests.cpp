@@ -28,6 +28,7 @@
 #include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp>
 #include <beam/beamSection/sectionLibrary.hpp>
 #include <beam/beamSection/sectionStress.hpp>
+#include <beam/beamSection/sectionTriangulation.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <io/meshIo.hpp>
 #include <truss_1D/trussIO/trussMeshAdapter.hpp>
@@ -759,6 +760,43 @@ TEST(solverUsesTheSectionShape) {
   const double strong = FEM::BEAM::computeProperties((*catalog)[ipe].getShape(), 0.3).secondMomentZ;
   CHECK(near(strong * 1e8, 8356.0, 3e-3));
   CHECK(near(ipeSolved.mesh->nodes[1].getDisplacement()[1], P * std::pow(kL, 3) / (3.0 * kE * strong), 1e-10));
+}
+
+TEST(sectionFacesAreTriangulated) {
+  // The triangles of every shape (concave I, holes in box and pipe) cover exactly the outline
+  // polygon: all counter-clockwise, and their areas add up to the polygon's area.
+  using namespace FEM::BEAM;
+  const std::vector<SectionShape> shapes{
+    RectangleSection{0.3, 0.1}, CircleSection{0.2}, PipeSection{0.1143, 0.005}, BoxSection{0.2, 0.1, 0.008, 0.012, 0.008},
+    BoxSection{0.15, 0.1, 0.006, 0.0, 0.0}, BoxSection{0.1, 0.1, 0.0063, 0.00945, 0.0063}, ISection{0.3, 0.15, 0.0071, 0.0107, 0.015},
+    ISection{0.6, 0.22, 0.012, 0.019, 0.0},
+  };
+  for (const auto& shape : shapes) {
+    for (const int segments : {1, 4, 8}) {
+      const auto mesh = triangulateSection(shape, segments);
+      double area = 0.0;
+      bool counterClockwise = true;
+      for (const auto& t : mesh.triangles) {
+        const auto& a = mesh.points[t[0]];
+        const auto& b = mesh.points[t[1]];
+        const auto& c = mesh.points[t[2]];
+        const double twice = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]);
+        counterClockwise = counterClockwise && twice > 0.0;
+        area += twice / 2.0;
+      }
+      double outline = 0.0;
+      for (const auto& loop : sectionOutline(shape, segments)) {
+        for (std::size_t i = 0; i < loop.size(); ++i) {
+          const auto& a = loop[i];
+          const auto& b = loop[(i + 1) % loop.size()];
+          outline += (a[1] * b[0] - b[1] * a[0]) / 2.0;
+        }
+      }
+      if (!near(area, outline, 1e-10)) std::printf("      %s / %d: triangles %.9g, outline %.9g\n", shapeKey(shape), segments, area, outline);
+      CHECK(counterClockwise && near(area, outline, 1e-10));
+    }
+  }
+  CHECK(triangulateSection(GeneralSection{kSection}).triangles.empty());
 }
 
 // ---- stresses ---------------------------------------------------------------------------------
