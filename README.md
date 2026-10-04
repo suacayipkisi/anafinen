@@ -1,4 +1,4 @@
-# ANAFINEN (Analyze Finite Element Engineering) 
+# ANAFINEN  
 
 <!-- Release & Downloads Badges -->
 [![GitHub Release](https://img.shields.io/github/v/release/suacayipkisi/anafinen?include_prereleases&style=flat-square&color=blue)](https://github.com/suacayipkisi/anafinen/releases/latest)

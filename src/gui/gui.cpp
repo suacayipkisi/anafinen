@@ -41,6 +41,9 @@
 #include "guiMaterials/iPanel.hpp"
 
 #include "panels/aboutPanel.hpp"
+#include "panels/beam/beamDiagramPanel.hpp"
+#include "panels/beam/beamModelEditor.hpp"
+#include "panels/beam/sectionHandler.hpp"
 #include "panels/fileIoPanel.hpp"
 #include "panels/logTerminal.hpp"
 #include "panels/mainDockSpaceHost.hpp"
@@ -148,7 +151,16 @@ namespace anaf::GUI {
       FileIoPanel* fileIo = nullptr;
       AboutPanel* about = nullptr;
       TrussModelEditor* editor = nullptr;
+      BeamModelEditor* beamEditor = nullptr;
+      SectionHandler* sections = nullptr;
+      BeamDiagramPanel* diagrams = nullptr;
     };
+
+    void closeBeamPanels(const UIPanels& panels) {
+      panels.beamEditor->isOpen = false;
+      panels.diagrams->isOpen = false;
+      panels.sections->isOpen = false;
+    }
 
     void bindAnalysisFlow(UIPanels panels) {
       panels.dock->on_select_truss = [panels] { panels.selector->isOpen = true; };
@@ -168,7 +180,26 @@ namespace anaf::GUI {
         panels.control->isOpen = (type == simpleQuadranglePrism);
         panels.editor->isOpen = (type == nodeEntered);
         panels.tree->isOpen = true;
+        closeBeamPanels(panels);
       };
+
+      panels.dock->on_select_beam = [panels] {
+        auto& bridge = anaf::BRIDGE::buildBridge();
+        if (bridge.m_objectType.load() != anaf::BRIDGE::ObjectType::beam_frame) {
+          panels.fileIo->cancelImport();
+          bridge.resetModel(anaf::BRIDGE::ObjectType::beam_frame);
+          panels.control->resetState();
+          panels.editor->resetState();
+          panels.beamEditor->resetState();
+        }
+        panels.control->isOpen = false;
+        panels.editor->isOpen = false;
+        panels.beamEditor->isOpen = true;
+        panels.tree->isOpen = true;
+        panels.diagrams->isOpen = true;
+      };
+      panels.beamEditor->onOpenMaterialHandler = [panels] { panels.matWindow->isOpen = true; };
+      panels.beamEditor->onOpenSectionHandler = [panels] { panels.sections->isOpen = true; };
 
       panels.control->onOpenMaterialHandler = [panels] {
         panels.matWindow->isOpen = true;
@@ -188,17 +219,34 @@ namespace anaf::GUI {
       panels.dock->addPanelMenuEntry({"Truss(1D) Model Editor", panels.editor,
         [activeType] { return activeType() == anaf::BRIDGE::ObjectType::truss_imported_or_entered; },
         "Only for an imported / self-built truss (Analyze > Truss (1D Element))"});
+      const auto beamActive = [activeType] { return activeType() == anaf::BRIDGE::ObjectType::beam_frame; };
+      panels.dock->addPanelMenuEntry({"Beam(3D) Frame Editor", panels.beamEditor, beamActive,
+        "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))"});
+      panels.dock->addPanelMenuEntry({"Beam Diagrams", panels.diagrams, beamActive,
+        "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))"});
+      panels.dock->addPanelMenuEntry({"Section Handler", panels.sections, beamActive,
+        "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))"});
       panels.dock->addPanelMenuEntry({"Material Handler", panels.matWindow,
         [activeType] { return activeType() != anaf::BRIDGE::ObjectType::no_type; },
-        "Select an analysis first (Analyze > Truss (1D Element))"});
+        "Select an analysis first (Analyze menu)"});
       panels.dock->addPanelMenuEntry({"Model Tree", panels.tree,
         [activeType] { return activeType() != anaf::BRIDGE::ObjectType::no_type; },
-        "Select an analysis first (Analyze > Truss (1D Element))"});
+        "Select an analysis first (Analyze menu)"});
       panels.dock->addPanelMenuEntry({"Console", panels.console, {}, nullptr});
 
       panels.dock->on_show_about = [panels] { panels.about->isOpen = true; };
       panels.dock->on_import_mesh = [panels] { panels.fileIo->requestImport(); };
       panels.dock->on_export_results = [panels] { panels.fileIo->requestExport(); };
+      panels.fileIo->onImportedBeam = [panels] {
+        panels.control->resetState();
+        panels.editor->resetState();
+        panels.beamEditor->resetState();
+        panels.control->isOpen = false;
+        panels.editor->isOpen = false;
+        panels.beamEditor->isOpen = true;
+        panels.tree->isOpen = true;
+        panels.diagrams->isOpen = true;
+      };
       // The import itself reset the bridge to truss_imported_or_entered (FileIoPanel::pollTasks).
       panels.fileIo->onImported = [panels] {
         panels.control->resetState();
@@ -206,6 +254,7 @@ namespace anaf::GUI {
         panels.control->isOpen = false;
         panels.editor->isOpen = true;
         panels.tree->isOpen = true;
+        closeBeamPanels(panels);
         panels.viewport->requestFit();
       };
     }
@@ -224,6 +273,9 @@ namespace anaf::GUI {
       auto fileIo = panelManager.addPanel<FileIoPanel>();
       auto about = panelManager.addPanel<AboutPanel>();
       auto editor = panelManager.addPanel<TrussModelEditor>();
+      auto beamEditor = panelManager.addPanel<BeamModelEditor>();
+      auto sections = panelManager.addPanel<SectionHandler>();
+      auto diagrams = panelManager.addPanel<BeamDiagramPanel>();
 
       UIPanels panels{
         dock.get(),
@@ -235,7 +287,10 @@ namespace anaf::GUI {
         matWindow.get(),
         fileIo.get(),
         about.get(),
-        editor.get()
+        editor.get(),
+        beamEditor.get(),
+        sections.get(),
+        diagrams.get()
       };
 
       trussSelector->isOpen = false;
@@ -243,6 +298,9 @@ namespace anaf::GUI {
       editor->isOpen = false;
       tree->isOpen = false;
       matWindow->isOpen = false;
+      beamEditor->isOpen = false;
+      sections->isOpen = false;
+      diagrams->isOpen = false;
 
       bindAnalysisFlow(panels);
 

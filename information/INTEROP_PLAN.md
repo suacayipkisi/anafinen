@@ -5,7 +5,7 @@ This document is the plan for making ANAFINEN exchange complete models and resul
 Nothing in this document is implemented yet. The current state of every format is in [FILE_HANDLING.md](FILE_HANDLING.md).
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), plan written 2026-10-03 on top of `98d33d4` (phase 2.10), links checked 2026-10-04 (beam conventions moved to CALCULATIONS_BEAM.md). No code exists for any step below.
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), plan written 2026-10-03 on top of `98d33d4` (phase 2.10), links checked 2026-10-04 (beam conventions moved to CALCULATIONS_BEAM.md; beam files are routed to the beam adapter, which narrows P0 item 8). No code exists for any step below.
 > When a step is done, move its content into [FILE_HANDLING.md](FILE_HANDLING.md) / [IO_USAGE.md](IO_USAGE.md) and mark the step done in section 6.
 
 ## 1. Goal
@@ -111,7 +111,7 @@ Each step ends with `package/tools/check.sh all`, updated documents (ARCHITECTUR
 5. Reactions in `FEM::TRUSS::solveStatic()` (`StaticResult`), `FieldName::ReactionForce`, exported by `toMeshModel()`. Closed-form check in `anaf_core_tests` (sum of reactions = − sum of loads incl. self-weight).
 6. `ElementType:<name>` set convention (documentation and helper only; no reader change needed).
 7. Warning categories in `MeshModel` and the GUI import report modal.
-8. Truss adapter warning for rotational data and beam formulations (closes ARCHITECTURE.md section 8 item 5).
+8. Truss adapter warning for rotational data (closes ARCHITECTURE.md section 8 item 5). Beam formulations no longer reach the truss adapter: since 2026-10-04 `FEM::BEAM::ADAPTER::isBeamModel()` sends such files to the beam adapter.
 
 Tests: every new member round-trips through MSH 2.2 / 4.1, VTK, VTU, `.pvd` and the STEP sidecar; a 0.1.3 truss file still reads unchanged; files written by P0 still open in the 0.1.3 reader (unknown arrays ignored, no `validate()` failure).
 

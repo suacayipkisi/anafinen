@@ -88,6 +88,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/beam/beamEngine/beamSolver.cpp
     src/objectCalcs/beam/beamEngine/beamDiagrams.cpp
     src/objectCalcs/beam/beamEngine/beamStress.cpp
+    src/objectCalcs/beam/beamIO/beamMeshAdapter.cpp
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
@@ -135,6 +136,10 @@ set(ANAFINEN_SOURCES
     src/gui/panels/truss/trussWorker.cpp
     src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp
     src/gui/panels/truss/importedTruss/trussModelEditor.cpp
+    src/gui/panels/beam/beamWorker.cpp
+    src/gui/panels/beam/beamModelEditor.cpp
+    src/gui/panels/beam/sectionHandler.cpp
+    src/gui/panels/beam/beamDiagramPanel.cpp
     src/gui/panels/viewportPanel.cpp
     src/gui/panels/viewportToolbar.cpp
     src/gui/panels/viewportRenderer.cpp

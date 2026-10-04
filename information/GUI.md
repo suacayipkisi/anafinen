@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
 
 ## 1. Overall flow (one frame)
 
@@ -52,20 +52,29 @@ TrussControlPanel --onOpenMaterialHandler()----------------> MaterialHandler.isO
 TrussModelEditor  --onOpenMaterialHandler / onRequestImport-> MaterialHandler.isOpen / FileIoPanel.requestImport()
 MainDockSpaceHost --on_import_mesh / on_export_results-----> FileIoPanel.requestImport() / requestExport()
 FileIoPanel       --onImported()---------------------------> panels resetState(), TrussModelEditor + ModelTree open,
-                                                              ViewportPanel.requestFit()
+                                                              beam panels closed, ViewportPanel.requestFit()
+MainDockSpaceHost --on_select_beam()-----------------------> type changed? FileIoPanel.cancelImport(),
+                                                              resetModel(beam_frame), panels resetState();
+                                                              BeamModelEditor + ModelTree + BeamDiagramPanel open,
+                                                              truss panels closed
+BeamModelEditor   --onOpenMaterialHandler / onOpenSectionHandler-> MaterialHandler / SectionHandler .isOpen = true
+FileIoPanel       --onImportedBeam()-----------------------> panels resetState(), beam panels + ModelTree open
 ```
 
 Object type switch: selecting the type that is already active only reopens its panel. Selecting a different type goes through `Gui_Calc_Bridge::resetModel()` ([BRIDGE.md](BRIDGE.md) section 4.1), so no model, fixity, selection, result or panel input of the previous type survives, and a solve still running for it cannot publish.
 
 | Panel | File | Window title | Status |
 |---|---|---|---|
-| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D; Panels: reopen closed panels (section 2.0); Help: "About anafinen...". Builds the default dock layout once (left: analysis set and model editor, right: model tree, bottom: console, center: viewport with the viewport toolbar strip above it). |
+| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D, Beam / Frame 3D; Panels: reopen closed panels (section 2.0); Help: "About anafinen...". Builds the default dock layout once (left: analysis set, truss model editor and beam frame editor, right: model tree, bottom: console, center: viewport with the viewport toolbar strip above it). |
 | `ViewportToolbar` | `panels/viewportToolbar.cpp` | "Viewport Toolbar" | Reset Camera and the display toggles, docked above the viewport (section 3.7) |
 | `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking, overlays, legends |
 | `TrussSelector` | `panels/truss/trussTypePanel.cpp` | "Select Truss Type" | "Imported / Self-Built" (first, preselected) or "Simple Quadrangle" (generated grid). Warns that a type change clears the model. |
 | `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). `resetState()` restores the default inputs. |
 | `TrussModelEditor` | `panels/truss/importedTruss/trussModelEditor.cpp` | "Truss(1D) Model Editor" | For `truss_imported_or_entered`, see section 2.4. |
-| `ModelTree` | `panels/modelTree.cpp` | "Model Tree" | Boundary conditions, elements over yield (MPa), node displacements (mm). Every list is drawn with `ImGuiListClipper` (only visible rows); the filtered row indices (supported nodes, bars over yield) are rebuilt only when the snapshot pointer changes. |
+| `BeamModelEditor` | `panels/beam/beamModelEditor.cpp` | "Beam(3D) Frame Editor" | For `beam_frame`, see section 2.5. |
+| `SectionHandler` | `panels/beam/sectionHandler.cpp` | "Section Handler" (floating, not dockable) | Beam sections, see section 2.6. |
+| `BeamDiagramPanel` | `panels/beam/beamDiagramPanel.cpp` | "Beam Diagrams" | ImPlot diagrams of one beam element, docked under the model tree, see section 2.7. |
+| `ModelTree` | `panels/modelTree.cpp` | "Model Tree" | Truss: boundary conditions, elements over yield (MPa), node displacements (mm). Beam (`renderBeamTree`): supports (free translations / rotations), nodal and distributed loads, self weight, max von Mises per element (red over yield), node displacement (mm) and rotation (mrad). Every list is drawn with `ImGuiListClipper` (only visible rows); the filtered row indices (supported nodes, bars over yield) are rebuilt only when the snapshot pointer changes. |
 | `MaterialHandler` | `panels/materialHandler.cpp` | "Material Handler" (floating, not dockable) | Table of all materials (E, G, K in GPa; yield / ultimate in MPa; density; ν; ductility in %). Form to add a user material (engineering units, converted to SI); user materials are saved to the user config directory. "Delete" only on user materials; refusals (in use, worker running) are shown in the panel. See [BRIDGE.md](BRIDGE.md) section 5.1. |
 | `LogTerminal` | `panels/logTerminal.cpp` | "Console" | Colored log view (max 10,000 lines, trimmed under the log mutex). "Wrap lines" (default on) wraps at the panel width; off gives one row per entry and a horizontal scrollbar. With wrapping off the rows go through `ImGuiListClipper`; wrapped rows differ in height, so then every line is laid out. |
 | `StatusBar` (component, not a panel) | `panels/statusBar.cpp` | footer of "Console" | One line under the log, so it spans the console's width. Left: worker state (IDLE / SOLVING n% / PREVIEW) and, right next to it, a hardware summary built once on the first frame (`Ryzen 7 7735HS 16T  \|  Radeon 680M 2 GB  \|  13.3 GB RAM`, also logged at startup). Right: process CPU %, process memory, system RAM % from `PLATFORM::ResourceMonitor`, sampled every 500 ms (system RAM through `PLATFORM::queryMemory()`, the same reading the solver referee logs). GPU name: `GL_RENDERER` shortened; VRAM: `GL_NVX_gpu_memory_info` (NVIDIA, Mesa), else amdgpu sysfs (Linux) or DXGI (Windows). |
@@ -81,6 +90,9 @@ The menu bar's "Panels" menu reopens (or closes) the panels that have a close bu
 | 3D Simulation Viewport | always | - |
 | Truss(1D) Analysis Set | `truss_SQPT` | Simple Quadrangle only |
 | Truss(1D) Model Editor | `truss_imported_or_entered` | imported / self-built only |
+| Beam(3D) Frame Editor | `beam_frame` | beam / frame only |
+| Beam Diagrams | `beam_frame` | beam / frame only |
+| Section Handler | `beam_frame` | beam / frame only |
 | Material Handler | any type selected | select an analysis first |
 | Model Tree | any type selected | select an analysis first |
 | Console | always | - |
@@ -93,6 +105,7 @@ The type selector is reopened through Analyze. The status bar is the console's f
 - Fonts: `Inter-Medium.ttf` for the UI and `CascadiaMono.ttf` for the console, both 18 px. Falls back to the ImGui default font when the files are missing.
 - Custom theme: `setupSpecialTheme()`.
 - OpenGL backend initialized with `#version 460`.
+- ImPlot context created right after the ImGui context and destroyed before it (beam diagrams).
 
 ### 2.2 Log sink
 
@@ -104,22 +117,27 @@ The type selector is reopened through Analyze. The status bar is the console's f
 File > Import Mesh / CAD... (Ctrl+O)
   -> NativeFileDialog::openFile     OS chooser; ready() polled each frame (returns in ~0.2 ms)
   -> CAD file? -> "CAD Import Options" modal: bars / surfaces / volumes, element size, order
-  -> IoService::runAsync: readMesh + ADAPTER::toMeshData       (I/O thread)
+  -> IoService::runAsync: readMesh, then                       (I/O thread)
+       BEAM::ADAPTER::isBeamModel()? BEAM::ADAPTER::toMeshData (materials + sections copied at start)
+                                   : TRUSS::ADAPTER::toMeshData
   -> overlay: description, progress bar, stage, Cancel
-  -> done: model reset meanwhile (modelGeneration)? discard. Else resetModel(truss_imported_or_entered),
-           activeMesh, dataVersion++ (GUI thread, under dataMutex); log notes / warnings;
-           model editor and tree open, camera fits
+  -> done: model reset meanwhile (modelGeneration)? discard.
+     truss: resetModel(truss_imported_or_entered), activeMesh, dataVersion++; model editor and tree open, camera fits
+     beam:  section list changed meanwhile? discard. Else resetModel(beam_frame), the file's new sections
+            added as user sections (addUserSection), activeBeamMesh, dataVersion++; beam panels open
+     both:  notes / warnings logged
 
 File > Export Model... (Ctrl+E)
   -> "Export Model" modal: MSH 4.1 / MSH 2.2 / VTU / VTK 5.1 / VTK 4.2 / STEP, binary, zlib
   -> NativeFileDialog::saveFile (extension added when missing)
-  -> snapshot pointer + fixity copied under dataMutex
-  -> IoService::runAsync: ADAPTER::toMeshModel + writeMesh     (I/O thread)
+  -> snapshot pointer (truss or beam), materials and sections copied under dataMutex
+  -> IoService::runAsync: TRUSS / BEAM ADAPTER::toMeshModel + writeMesh   (I/O thread);
+     the beam adapter's model.warnings (inclined rotation supports) go into the WriteReport warnings
 ```
 
 - **Native dialogs:** `portable-file-dialogs` behind `fileDialogs/nativeFileDialog.*`. It is the only translation unit that includes the header. On Linux it runs `zenity` / `kdialog` as a child process; closing the application kills an open chooser. When no backend exists the panel reports it instead of failing.
 - **Blocking during a calculation:** import is refused while the solver or preview worker runs, so the worker cannot overwrite the imported snapshot.
-- **Object type:** an import always switches to `truss_imported_or_entered` (from `no_type` or `truss_SQPT` too) and opens the model editor. An import still running when the model is reset (type change, Clear) is discarded: `FileIoPanel` compares `modelGeneration` with the value taken at start.
+- **Object type:** a file with beam elements (`ElementFormulation` 1 / 2) becomes a `beam_frame` model; every other file switches to `truss_imported_or_entered` (from any type) and opens the truss model editor. An import still running when the model is reset (type change, Clear) is discarded: `FileIoPanel` compares `modelGeneration` with the value taken at start.
 - **Solving imported models:** bars are solved in the model editor (section 2.4). Surface / volume meshes are shown as wireframe edges (`RenderElement::isWireframe`) and are never solved.
 
 ### 2.4 Model editor (`TrussModelEditor`)
@@ -165,6 +183,61 @@ File > Export Model... (Ctrl+E)
 6. "Run Solver for Truss" solves the snapshot with `FEM::TRUSS::solveStatic()` through `TRUSS_WORKER::startSolve()` ([CALCULATIONS.md](CALCULATIONS.md) section 3.1). If the model cannot be solved, the reason is logged as "Solver failed: ...".
 7. "Clear Model" calls `resetModel(truss_imported_or_entered)` and `resetState()`.
 8. Supports: "Global axes" fixes x / y / z (`Node::setMovable`). "Inclined / skewed" takes 1 to 3 direction vectors, read as the restrained directions (1 = roller on a plane, 2 = guide along a line, 3 = pin) or as the allowed motion (1 = line, 2 = plane); `FEM::SUPPORT::orthonormalize()` / `orthogonalComplement()` turn them into the allowed-motion basis for `Node::setAllowedMotionDirections()`. Switching between the two readings replaces the vectors by their complement, so the support stays the same. Dependent or zero vectors disable "Apply Support". The support is stored on the node only (red point, model tree, export and the solve read it there). The SQPT control panel keeps its X / Y / Z checkboxes; its supports are panel input put on every grid it builds.
+
+### 2.5 Beam frame editor (`BeamModelEditor`)
+
+```text
++-- Beam(3D) Frame Editor ------------------------------+
+| Nodes / Elements / Supported / loads / self weight     |
+| results: energy check, max displacement, max von Mises |
+|   (element), elements over yield, last edit message    |
+|-- Nodes ----------------------------------------------|
+| Position [m] x y z            [Add Node]              |
+| Selected node (typed id)                              |
+| Position [m] x y z  [Move Node] [Delete Node]         |
+|-- Supports & Nodal Loads (selected node) -------------|
+| [Fixed] [Pinned] [Free]                               |
+| Translation: (o) Global axes ( ) Inclined / skewed    |
+|   axes: Fix Ux Uy Uz | inclined: Restrained / Allowed,|
+|   Vectors 1 2 3, d1..d3, "Held along ..." summary     |
+| Rotation: the same with Rx Ry Rz                      |
+|                               [Apply Support]         |
+| Force [N], Moment [N m]  [Apply Load] [Remove Load]   |
+|-- Elements -------------------------------------------|
+| Material, Section, [Materials...] [Sections...]       |
+| Formulation, Orientation v, Node A - B  [Add Element] |
+| element list (section, EB/TI, max von Mises; red over |
+|   yield), [Apply to Selected] [Delete Element]        |
+|-- Distributed Loads & Self Weight --------------------|
+| [x] Self weight; loads of the selected element        |
+| q [N/m], Axes global / local  [Add Load] [Remove]     |
+|-- Whole Model (collapsed) ----------------------------|
+| Formulation for all; material and section for all     |
+|-------------------------------------------------------|
+| [Run Solver for Beam], progress                       |
+| [Load Example Frame] [Clear Model]                    |
++-------------------------------------------------------+
+```
+
+1. Every edit copies `bridge.activeBeamMesh` (an empty one if there is none), changes it, drops stale results (displacements, rotations, section forces, stresses) and publishes it. Editing is disabled while a worker runs.
+2. Node ids stay `0..n-1`. "Delete Node" removes the node's elements, nodal loads and the distributed loads on those elements, and moves later ids down. "Delete Element" keeps the distributed loads of the other elements pointing at them.
+3. Supports: both modes of each group (translations, rotations) become one basis of allowed directions (`SupportInput::allowedBasis()`), written with `Node::setAllowedMotionDirections()` / `setAllowedRotationAxes()`: the global-axis checkboxes are turned into unit vectors the same way as inclined input, so the node only ever stores vectors. Inclined vectors are read as restrained or allowed directions, as in the truss editor (section 2.4 item 8); switching mode or reading keeps the support. A node whose stored basis is not along the global axes is shown in inclined mode. An inclined rotation support is solved as given, but files keep rotational fixity per global axis only, so export warns (the panel says so).
+4. "Add Element" checks the nodes (existing, different, no duplicate), the material and section, and the orientation with `FEM::BEAM::localAxes()` (zero length, v parallel to the axis). Selecting an element in the list copies its properties into the inputs and sets `bridge.selectedElementId`, shared with the diagram panel.
+5. "Run Solver for Beam" starts `BEAM_WORKER::startSolve()`: copies of the material and section lists, `FEM::BEAM::solveStatic()` on the worker thread, publication into `activeBeamMesh` unless the model was reset ([BRIDGE.md](BRIDGE.md) section 5).
+6. "Load Example Frame" builds a 3D portal frame (HEB 200 columns, IPE 300 girder with a uniform load, a lateral and an out-of-plane nodal load, clamped bases, self weight).
+7. The viewport does not draw beam models yet; node selection is by id.
+
+### 2.6 Section Handler (`SectionHandler`)
+
+- Table of `bridge.allSections` with a name filter: name, catalogue / user, shape, A (cm²), Iy, Iz, J (cm⁴); "Remove" on user sections (refused while the beam model uses it or a worker runs, see [BRIDGE.md](BRIDGE.md) section 5.2).
+- "Selected": the clicked section's outline (`sectionOutline()`, local z to the right, local y up, seen from node 1 towards node 2) and its properties (shear areas shown for ν = 0.3; the solve uses each element's material).
+- "New Section": name, shape (general, rectangle, circle, pipe, box, I / H), dimensions in mm (general: cm² / cm⁴), live outline and properties, the `validateShape()` message when invalid; "Add Section" calls `addUserSection()` (saved to `userSections.json`).
+
+### 2.7 Beam diagrams (`BeamDiagramPanel`)
+
+- Element chooser (typed id, ◀ ▶, "Highest stress" = largest von Mises), synchronised with the editor through `bridge.selectedElementId`.
+- Quantities: N, Vy, Vz, T, My, Mz (kN, kN m), local displacement u / v / w (mm), normal stress max / min and von Mises (MPa); 61 samples from `sampleElement()` and `sectionStress()`, rebuilt only when the snapshot or the element changes. Below the plot: end forces (one row per component, so it fits a narrow column) and the element's stress summary.
+- Docking: the default layout has no node for it. When the panel opens (also after it was closed: a gap in its frame counter), it splits the Model Tree's dock node at runtime (`DockBuilderSplitNode(..., ImGuiDir_Down, 0.5)`) and docks itself into the lower half; closing it merges the node back, so the Model Tree gets the full height again in truss mode. A panel the user docked elsewhere stays there.
 
 ## 3. Viewport render pipeline
 
@@ -302,12 +375,12 @@ Drawn by `renderOverlay2D()` on top of the image:
 - GL-owning objects must be destroyed while the context is current. Keep them inside the scope in `initgui()` that ends before `imguiLayer.shutdown()` / `glfwDestroyWindow()`.
 - Only the GUI thread may call GL or ImGui.
 - Do not use legacy or fixed-function GL (`glBegin`, `glMatrixMode`, client arrays).
-- ImGuizmo and ImPlot are built and linked but not used yet (kept for planned gizmo / plot panels).
+- ImGuizmo is built and linked but not used yet (kept for planned gizmo work). ImPlot draws the beam diagrams.
 
 ## 7. Related source files
 
 - Frame loop and wiring: [src/gui/gui.hpp](../src/gui/gui.hpp), [src/gui/gui.cpp](../src/gui/gui.cpp)
 - Infrastructure: [iPanel.hpp](../src/gui/guiMaterials/iPanel.hpp), [imGuiLayer.hpp](../src/gui/guiMaterials/imGuiLayer.hpp), [imGuiLayer.cpp](../src/gui/guiMaterials/imGuiLayer.cpp), [glHandle.hpp](../src/gui/guiMaterials/glHandle.hpp), [framebuffer.hpp](../src/gui/guiMaterials/framebuffer.hpp), [framebuffer.cpp](../src/gui/guiMaterials/framebuffer.cpp)
 - Viewport: [viewportPanel.hpp](../src/gui/panels/viewportPanel.hpp), [viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [viewportRenderer.hpp](../src/gui/panels/viewportRenderer.hpp), [viewportRenderer.cpp](../src/gui/panels/viewportRenderer.cpp)
-- Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp), [trussWorker.hpp](../src/gui/panels/truss/trussWorker.hpp), [trussTypePanel.cpp](../src/gui/panels/truss/trussTypePanel.cpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
+- Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp), [trussWorker.hpp](../src/gui/panels/truss/trussWorker.hpp), [trussTypePanel.cpp](../src/gui/panels/truss/trussTypePanel.cpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [beamModelEditor.cpp](../src/gui/panels/beam/beamModelEditor.cpp), [beamWorker.cpp](../src/gui/panels/beam/beamWorker.cpp), [sectionHandler.cpp](../src/gui/panels/beam/sectionHandler.cpp), [sectionCombo.hpp](../src/gui/panels/beam/sectionCombo.hpp), [beamDiagramPanel.cpp](../src/gui/panels/beam/beamDiagramPanel.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
 - Platform: [linuxCursor.hpp](../src/gui/linuxCursor.hpp), [getExecutableDirectory.cpp](../src/directory/getExecutableDirectory.cpp)

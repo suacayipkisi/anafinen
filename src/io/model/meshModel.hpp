@@ -182,6 +182,25 @@ namespace anaf::IO {
     inline constexpr const char* ShearAreaY = "ShearAreaY";             // m^2, effective shear area k*A along local y; 0 / missing = shear-rigid
     inline constexpr const char* ShearAreaZ = "ShearAreaZ";             // m^2, effective shear area k*A along local z; 0 / missing = shear-rigid
     inline constexpr const char* ElementFormulation = "ElementFormulation"; // ElementFormulation code; missing = Bar
+    // Beam section shape (anafinen sections, FEM::BEAM::SectionShape) so a shape survives a round
+    // trip: code 0 general, 1 rectangle, 2 circle, 3 pipe, 4 box, 5 I; dimensions in m:
+    //   rectangle: 1 height, 2 width | circle: 1 diameter | pipe: 1 outer diameter, 2 wall
+    //   box: 1 height, 2 width, 3 wall, 4 outer corner radius, 5 inner corner radius
+    //   I: 1 height, 2 flange width, 3 web, 4 flange thickness, 5 root radius; unused = 0.
+    inline constexpr const char* SectionShape = "SectionShape";
+    inline constexpr const char* SectionDimension1 = "SectionDimension1";
+    inline constexpr const char* SectionDimension2 = "SectionDimension2";
+    inline constexpr const char* SectionDimension3 = "SectionDimension3";
+    inline constexpr const char* SectionDimension4 = "SectionDimension4";
+    inline constexpr const char* SectionDimension5 = "SectionDimension5";
+    // Uniform line load over a beam element, N/m: sum of the loads given in global axes and sum
+    // of those given in the element's local axes (see beamOrientation).
+    inline constexpr const char* UniformLoadGlobalX = "UniformLoadGlobalX";
+    inline constexpr const char* UniformLoadGlobalY = "UniformLoadGlobalY";
+    inline constexpr const char* UniformLoadGlobalZ = "UniformLoadGlobalZ";
+    inline constexpr const char* UniformLoadLocalX = "UniformLoadLocalX";
+    inline constexpr const char* UniformLoadLocalY = "UniformLoadLocalY";
+    inline constexpr const char* UniformLoadLocalZ = "UniformLoadLocalZ";
   }
 
   // Values of the "ElementFormulation" attribute. A Line2 / Line3 element is a bar (axial only,
@@ -212,6 +231,7 @@ namespace anaf::IO {
     inline constexpr const char* AngularVelocity = "AngularVelocity";             // node, 3 components, rad/s
     inline constexpr const char* AngularAcceleration = "AngularAcceleration";     // node, 3 components, rad/s^2
     inline constexpr const char* BeamSectionForce = "BeamSectionForce";           // element, 12 components, N and N*m (see below)
+    inline constexpr const char* VonMisesStress = "VonMisesStress";               // element, Pa, largest equivalent stress along a beam (upper bound)
   }
   // BeamSectionForce: N, Vy, Vz, T, My, Mz at node 0, then the same at node 1, in the local frame
   // of MeshModel::beamOrientation. Section sign convention, not element end forces: the value at
@@ -221,6 +241,7 @@ namespace anaf::IO {
   // Well-known global array names.
   namespace GlobalName {
     inline constexpr const char* NaturalFrequency = "NaturalFrequency"; // 1 component per mode, Hz
+    inline constexpr const char* Gravity = "Gravity";                   // 3 components, m/s^2, global axes (self weight); zero = none
   }
 
   std::string_view stepKindName(StepKind kind) noexcept;              // "Time", "Frequency", "Mode", "LoadCase"

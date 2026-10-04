@@ -77,6 +77,7 @@ namespace anaf::GUI {
 
       if (ImGui::BeginMenu("Analyze")) {
         if (ImGui::MenuItem("Truss (1D Element)") && on_select_truss) on_select_truss();
+        if (ImGui::MenuItem("Beam / Frame (3D Element)") && on_select_beam) on_select_beam();
         ImGui::EndMenu();
       }
 
@@ -130,6 +131,8 @@ namespace anaf::GUI {
       // Dock windows into respective nodes
       ImGui::DockBuilderDockWindow("Truss(1D) Analysis Set", dock_left_id);
       ImGui::DockBuilderDockWindow("Truss(1D) Model Editor", dock_left_id);
+      ImGui::DockBuilderDockWindow("Beam(3D) Frame Editor", dock_left_id);
+      // "Beam Diagrams" splits the Model Tree's node itself when it opens (BeamDiagramPanel).
       ImGui::DockBuilderDockWindow("Model Tree", dock_right_id);
       ImGui::DockBuilderDockWindow("Console", dock_bottom_id);
       ImGui::DockBuilderDockWindow(ViewportToolbar::kWindowName, dock_toolbar_id);

@@ -33,11 +33,16 @@ namespace anaf::GUI {
     std::shared_ptr<const anaf::BRIDGE::MeshData> m_indexedMesh;
     std::vector<std::uint32_t> m_supportedNodes;   // node indices with a support
     std::vector<std::uint32_t> m_overstressedBars; // bar indices with |stress| > yield
+    std::shared_ptr<const anaf::BRIDGE::BeamMeshData> m_indexedBeamMesh;
+    std::vector<std::uint32_t> m_supportedBeamNodes;
+    std::vector<std::uint32_t> m_overstressedBeams; // von Mises > yield
 
 
     // Boundary conditions, overstressed bars and nodal displacements of the active snapshot.
     // Every object type publishes the same MeshData, so one tree serves all of them.
     void renderMeshTree(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
+    // Supports, loads, element stresses and nodal results of the beam snapshot.
+    void renderBeamTree(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
   public:
     void onImGuiRender() override;
   };

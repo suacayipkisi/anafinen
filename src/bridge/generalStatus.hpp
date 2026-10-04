@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <beam/beamProperties/meshData.hpp>
+#include <beam/beamSection/beamSection.hpp>
 #include <material/properties.hpp>
 #include <truss_1D/trussProperties/meshData.hpp>
 
@@ -37,6 +39,7 @@ namespace anaf::BRIDGE {
   enum ObjectType {
     truss_SQPT,
     truss_imported_or_entered,
+    beam_frame,
     no_type
   };
 
@@ -45,6 +48,7 @@ namespace anaf::BRIDGE {
   // The model types live in the FEM core (anaf_core), so a CLI can use them without the GUI bridge.
   using RenderElement = FEM::TRUSS::RenderElement;
   using MeshData = FEM::TRUSS::MeshData;
+  using BeamMeshData = FEM::BEAM::MeshData;
 
   struct Gui_Calc_Bridge {
     std::atomic<bool> m_isRunning{false};
@@ -60,6 +64,9 @@ namespace anaf::BRIDGE {
     // running when the model was reset never brings the old model back.
     std::atomic<std::uint64_t> modelGeneration{0};
     std::shared_ptr<const MeshData> activeMesh{nullptr};
+    // The beam / frame model (object type beam_frame), published like activeMesh: immutable
+    // snapshots swapped under dataMutex, dataVersion bumped. Only one of the two is set.
+    std::shared_ptr<const BeamMeshData> activeBeamMesh{nullptr};
     std::atomic<bool> m_isValid{false};
     std::atomic<double> m_energyDiff{0.0};
     // View setting, not part of the model: the viewport draws location + displacement * deformScale.
@@ -72,7 +79,14 @@ namespace anaf::BRIDGE {
     // selection across removals. Guarded by dataMutex.
     std::vector<anaf::MATERIAL::Material> allMaterials;
 
+    // Beam sections, the same scheme as allMaterials: BeamElement::sectionID is an index into
+    // this vector; the catalogue comes first, user sections follow; BeamSection::getSectionID()
+    // is a stable ID. Guarded by dataMutex.
+    std::vector<FEM::BEAM::BeamSection> allSections;
+
     std::uint32_t selectedNodeId{std::numeric_limits<std::uint32_t>::max()};
+    // Beam element shared by the beam editor and the diagram panel. Guarded by dataMutex.
+    std::uint32_t selectedElementId{std::numeric_limits<std::uint32_t>::max()};
 
     // Drops the whole model (snapshot with its supports and loads, selection, solve status)
     // and switches to type.
@@ -104,12 +118,28 @@ namespace anaf::BRIDGE {
     // Index of the material with this ID in allMaterials. Caller holds dataMutex.
     std::optional<std::uint32_t> findMaterialIndex(std::uint32_t materialID) const;
 
+    // Loads the section catalogue (assets/bridge/sectionCatalog.json). Returns false on failure.
+    bool loadSectionCatalog();
+    // Loads the user sections saved in path and saves every later add / remove there.
+    void loadUserSections(std::filesystem::path path);
+    // Appends a user section (validated, unique name) and returns its ID.
+    std::expected<std::uint32_t, std::string> addUserSection(const FEM::BEAM::BeamSection& section);
+    // Removes a user section. Refused for catalogue sections, while a worker runs and while the
+    // active beam model uses it; indices above it in the beam model are shifted down.
+    std::expected<void, std::string> removeUserSection(std::uint32_t sectionID);
+    // Index of the section with this ID in allSections. Caller holds dataMutex.
+    std::optional<std::uint32_t> findSectionIndex(std::uint32_t sectionID) const;
+
   private:
     std::uint32_t m_nextMaterialID{0};
     std::filesystem::path m_userMaterialPath; // empty: user materials are not persisted
+    std::uint32_t m_nextSectionID{0};
+    std::filesystem::path m_userSectionPath;  // empty: user sections are not persisted
 
     void saveUserMaterials();
     std::uint32_t appendUserMaterialLocked(const anaf::MATERIAL::Material& material);
+    void saveUserSections();
+    std::uint32_t appendUserSectionLocked(const FEM::BEAM::BeamSection& section);
   };
 
   Gui_Calc_Bridge& buildBridge();

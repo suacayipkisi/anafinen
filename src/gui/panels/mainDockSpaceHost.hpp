@@ -44,6 +44,7 @@ namespace anaf::GUI {
 
   public:
     std::function<void()> on_select_truss; // Analyze > Truss (1D Element)
+    std::function<void()> on_select_beam;  // Analyze > Beam / Frame (3D Element)
     std::function<void()> on_import_mesh;
     std::function<void()> on_export_results;
     std::function<void()> on_show_about;

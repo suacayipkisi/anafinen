@@ -3,9 +3,9 @@
 This document describes the linear static calculation of 3D frames built from two-node beam elements (Euler-Bernoulli and Timoshenko): data types, local axes, element matrices, loads, supports, results along the element and the tests.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (file adapter: section 11; GUI: [GUI.md](GUI.md) sections 2.5-2.7; stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
 > Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 82 standard profiles; normal, shear and von Mises stresses with a yield check.
-> Not implemented yet: `anaf_io` adapter (`MeshModel` ↔ `FEM::BEAM::MeshData`), GUI (Section Handler, bridge loading of the catalogue), point-wise stresses inside the section, channels / angles / tees, end releases (hinges), mass matrix, reactions.
+> Not implemented yet: drawing beams in the viewport, point-wise stresses inside the section, channels / angles / tees, end releases (hinges), mass matrix, reactions.
 
 ## 1. Overall flow
 
@@ -252,9 +252,14 @@ The same energy balance as the truss ([CALCULATIONS.md](CALCULATIONS.md) section
 | `normalStressExtremesMatchTheOutline` | No outline vertex exceeds the support-function extremes and the returned points carry them (every shape, four load cases) |
 | `shearAndTorsionStressesMatchClosedForms` | 1.5 V/A, 4V/3A, thin pipe 2V/A, sharp box and I Jourawski; Q with fillets / radii against the clipped outline integral; torsion formulas; von Mises limits |
 | `elementStressAlongTheElement` | IPE 300 cantilever P L c / I at the clamp and the yield check; simply supported beam q L²/8 at mid span (found as a stationary point without samples), 1.5 (qL/2)/A shear at the supports; general section without stresses |
+| `beamModelSurvivesEveryWritableFormat` | A solved frame (every section shape, mixed formulations, inclined translational supports, nodal force and moment, global and local line loads, gravity, results) bit-exact through MSH 4.1 / 2.2, VTU and VTK legacy; sections found again by name and shape; the imported model solves the same |
+| `beamModelSurvivesStepWithSidecar` | The same through STEP + `.anafFields` (meshing may renumber): counts, sections, loads, results, solve |
+| `beamImportAddsUnknownSections` | A missing section and one with the same name but other dimensions come back as new sections ("My I (imported)"); known ones are reused; the solve with the extended list matches |
+| `inclinedRotationSupportIsReported` | An inclined rotation support is written as fixed about all global axes outside its span, with a warning; the translational basis is kept |
+| `beamFilesAreTellApartFromTrussFiles` | `isBeamModel()` false for a truss export; a beam without section data is refused; A, Iy, Iz, J alone give a general "Imported section 1" |
 | `solverUsesTheSectionShape` | Timoshenko rectangle with Cowper's κ(ν = 0.3); catalogue IPE 300 bending about its strong axis |
 
-The tests were checked against injected faults: in the stresses the Mz sign, a support function without the corner radius, the I fillet in Q (caught after the clipped outline integral was added), a box corner term in Q, the Bredt factor and a missing stationary point; in the sections a wrong J coefficient of the I formula (caught after the table tolerance went from 0.5 % to 0.1 %), the corner disc sign and swapped κ axes of the box, the spandrel's own inertia, and the box corner radius in J (caught only after the Dlubal value was added); in the solver φ built from the wrong inertia, the sign of the x-z fixed-end moment (caught only after `cantileverUnderUniformLoadInBothPlanes` was added), the section sign, and in the diagrams the w rotation sign, the Mz load term, the Timoshenko particular part and a wrong shape function; each makes tests fail.
+The tests were checked against injected faults: in the adapter local loads written as global, swapped box corner radii, lost rotational fixity and lost Timoshenko formulation; in the stresses the Mz sign, a support function without the corner radius, the I fillet in Q (caught after the clipped outline integral was added), a box corner term in Q, the Bredt factor and a missing stationary point; in the sections a wrong J coefficient of the I formula (caught after the table tolerance went from 0.5 % to 0.1 %), the corner disc sign and swapped κ axes of the box, the spandrel's own inertia, and the box corner radius in J (caught only after the Dlubal value was added); in the solver φ built from the wrong inertia, the sign of the x-z fixed-end moment (caught only after `cantileverUnderUniformLoadInBothPlanes` was added), the section sign, and in the diagrams the w rotation sign, the Mz load term, the Timoshenko particular part and a wrong shape function; each makes tests fail.
 
 ## 10. Known issues
 
@@ -263,7 +268,31 @@ The tests were checked against injected faults: in the stresses the Mz sign, a s
 - The von Mises value is an upper bound (largest σ and largest τ combined, both shear directions added). Point-wise stresses at stress points of the section (as RFEM reports them) are future work.
 - Asy of an I-section comes from Cowper's thin-walled I (IPE 300: 20.3 cm², about the web area h t_w = 21.3 cm²). It is a stiffness value for shear deformation, not the larger plastic shear area A_v of EN 1993-1-1 (25.7 cm²), which is a design resistance quantity.
 
-## 11. Related source files
+## 11. File adapter (`beamIO/beamMeshAdapter.*`)
+
+`FEM::BEAM::ADAPTER` converts between `anaf::IO::MeshModel` and `FEM::BEAM::MeshData`, like the truss adapter. The file layout and the reasons behind it are in [FILE_HANDLING.md](FILE_HANDLING.md) section 3.3.
+
+| Model data | In the file |
+|---|---|
+| Element, formulation, orientation | Line2, `ElementFormulation` 1 / 2, `beamOrientation` |
+| Material | `Material:<name>` set (+ `MaterialID`) |
+| Section | `Section:<name>` set, `SectionShape` + `SectionDimension1..5`; numbers `CrossSectionArea`, `SecondMomentY/Z`, `TorsionConstant`, `ShearAreaY/Z` (shear areas with the element's ν) |
+| Supports | `NodeConstraint`: `fixed` + `allowedMotion` (inclined), `fixedRotation` (global axes only) |
+| Loads | `NodalLoad` force + moment; `UniformLoadGlobalX/Y/Z`, `UniformLoadLocalX/Y/Z` (sums per element); global `Gravity` |
+| Results | `Displacement`, `Rotation`, `BeamSectionForce`, `AxialForce` (mean of the ends), `VonMisesStress` |
+
+Import (`toMeshData(model, materials, sections)`):
+
+1. `isBeamModel()` decides first: any element with `ElementFormulation` ≥ 1. The GUI routes such files here, every other file to the truss adapter.
+2. Only Line2 elements become beams; others are skipped with a warning. A bar (formulation 0) in a beam file becomes an Euler-Bernoulli beam (note).
+3. Materials by name, as in the truss adapter (unknown name: material 0 with a warning).
+4. Sections: the shape comes from `SectionShape` (or, without it, a general section from the numbers; A, Iy, Iz, J must be positive, otherwise the import fails). A section with a known name and the same shape (relative 1e-9) reuses the list entry; anything else becomes a new section in `ImportedBeam::newSections` (one per distinct name and shape), named after the file (or "Imported section N"), with " (imported)" added when the name is taken. Element indices from `sections.size()` on refer to them; the GUI appends them as user sections.
+5. Supports: `allowedMotion` (or the free axes of `fixed`) and the free axes of `fixedRotation`. Prescribed values and amplitudes are reported as ignored.
+6. Results need `Displacement` and `BeamSectionForce`; the stresses are recomputed with `elementStress()`.
+
+Export (`toMeshModel(mesh, materials, sections)`) writes everything above; an inclined rotation support goes out as fixed about every global axis outside its span, with a message in `model.warnings` (the GUI adds it to the export report).
+
+## 12. Related source files
 
 - Entry point: [beamSolver.hpp](../src/objectCalcs/beam/beamEngine/beamSolver.hpp), [beamSolver.cpp](../src/objectCalcs/beam/beamEngine/beamSolver.cpp)
 - Container and element math: [deformationUnderConstForce.hpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.cpp)
@@ -273,5 +302,7 @@ The tests were checked against injected faults: in the stresses the Mz sign, a s
 - Types: [node.hpp](../src/objectCalcs/beam/beamProperties/node.hpp), [node.cpp](../src/objectCalcs/beam/beamProperties/node.cpp), [element.hpp](../src/objectCalcs/beam/beamProperties/element.hpp), [loads.hpp](../src/objectCalcs/beam/beamProperties/loads.hpp), [meshData.hpp](../src/objectCalcs/beam/beamProperties/meshData.hpp)
 - Support bases (shared with the truss): [supportBasis.hpp](../src/objectCalcs/common/supportBasis.hpp), [supportBasis.cpp](../src/objectCalcs/common/supportBasis.cpp)
 - Solvers: [solverPortfolio.hpp](../src/solvers/solverPortfolio.hpp)
+- File adapter: [beamMeshAdapter.hpp](../src/objectCalcs/beam/beamIO/beamMeshAdapter.hpp), [beamMeshAdapter.cpp](../src/objectCalcs/beam/beamIO/beamMeshAdapter.cpp)
+- GUI: [beamModelEditor.cpp](../src/gui/panels/beam/beamModelEditor.cpp), [sectionHandler.cpp](../src/gui/panels/beam/sectionHandler.cpp), [beamDiagramPanel.cpp](../src/gui/panels/beam/beamDiagramPanel.cpp), [beamWorker.cpp](../src/gui/panels/beam/beamWorker.cpp)
 - Tests: [tests/beamTests.cpp](../tests/beamTests.cpp)
 - File side of the beam data: [FILE_HANDLING.md](FILE_HANDLING.md) section 3.3

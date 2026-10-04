@@ -49,6 +49,8 @@ int main() {
   GUI_CALC_BRIDGE.setStaticInfo();
   // Outside assets/ on purpose: materials added while testing a build never reach a package.
   GUI_CALC_BRIDGE.loadUserMaterials(anaf::DIRECTORY::getUserConfigDirectory() / "userMaterials.json");
+  GUI_CALC_BRIDGE.loadSectionCatalog();
+  GUI_CALC_BRIDGE.loadUserSections(anaf::DIRECTORY::getUserConfigDirectory() / "userSections.json");
 
   anaf::GUI::TRUSS_WORKER::configureOpenMPForWorker();
   anaf::LOG::info("OpenMP thread limit set to {} of {} available threads", omp_get_max_threads(), omp_get_num_procs());

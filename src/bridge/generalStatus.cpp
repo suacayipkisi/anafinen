@@ -19,6 +19,7 @@
 #include <directory/getExecutableDirectory.hpp>
 #include <io/core/pathUtf8.hpp>
 #include <log/anaf_info.hpp>
+#include <beam/beamSection/sectionLibrary.hpp>
 #include <material/materialLibrary.hpp>
 
 #include <algorithm>
@@ -34,6 +35,8 @@ namespace anaf::BRIDGE {
         return "truss_SQPT";
       case truss_imported_or_entered:
         return "truss_imported_or_entered";
+      case beam_frame:
+        return "beam_frame";
       default:
         return "no_type";
     }
@@ -48,7 +51,9 @@ namespace anaf::BRIDGE {
     {
       std::lock_guard lock(dataMutex);
       activeMesh = nullptr;
+      activeBeamMesh = nullptr;
       selectedNodeId = std::numeric_limits<std::uint32_t>::max();
+      selectedElementId = std::numeric_limits<std::uint32_t>::max();
       m_isValid = false;
       m_energyDiff = 0.0;
       deformScale = 1.0;
@@ -177,8 +182,10 @@ namespace anaf::BRIDGE {
         return std::unexpected("wait until the running solve / preview has finished");
       }
 
-      const bool usedByMesh = activeMesh && std::ranges::any_of(
-        activeMesh->trussElements, [i = *index](const RenderElement& element) { return element.materialID == i; });
+      const bool usedByMesh = (activeMesh && std::ranges::any_of(
+        activeMesh->trussElements, [i = *index](const RenderElement& element) { return element.materialID == i; }))
+        || (activeBeamMesh && std::ranges::any_of(
+        activeBeamMesh->elements, [i = *index](const FEM::BEAM::BeamElement& element) { return element.materialID == i; }));
       if (usedByMesh) {
         return std::unexpected(std::format("'{}' is used by the current model", material.getMaterialType()));
       }
@@ -195,6 +202,15 @@ namespace anaf::BRIDGE {
         }
         activeMesh = std::move(shifted);
       }
+      if (activeBeamMesh && std::ranges::any_of(
+            activeBeamMesh->elements, [i = *index](const FEM::BEAM::BeamElement& element) { return element.materialID > i; })) {
+        auto shifted = std::make_shared<BeamMeshData>(*activeBeamMesh);
+        for (auto& element : shifted->elements) {
+          if (element.materialID > *index) --element.materialID;
+        }
+        activeBeamMesh = std::move(shifted);
+        meshShifted = true;
+      }
     }
     if (meshShifted) dataVersion.fetch_add(1, std::memory_order_release);
     saveUserMaterials();
@@ -205,6 +221,132 @@ namespace anaf::BRIDGE {
     const auto it = std::ranges::find(allMaterials, materialID, &anaf::MATERIAL::Material::getMaterialID);
     if (it == allMaterials.end()) return std::nullopt;
     return static_cast<std::uint32_t>(it - allMaterials.begin());
+  }
+
+  bool Gui_Calc_Bridge::loadSectionCatalog() {
+    const std::filesystem::path path = anaf::DIRECTORY::findAssetPath(FEM::BEAM::kSectionCatalogAsset);
+    if (path.empty()) {
+      anaf::LOG::error("Section catalogue not found: assets/{}", FEM::BEAM::kSectionCatalogAsset);
+      return false;
+    }
+    auto loaded = FEM::BEAM::loadSectionLibrary(path);
+    if (!loaded) {
+      anaf::LOG::error("Section catalogue not loaded: {}", loaded.error());
+      return false;
+    }
+    std::lock_guard lock(dataMutex);
+    allSections = std::move(*loaded);
+    m_nextSectionID = static_cast<std::uint32_t>(allSections.size()); // IDs are 0..n-1
+    anaf::LOG::info("Loaded {} catalogue sections from {}", allSections.size(), anaf::IO::pathToUtf8(path));
+    return true;
+  }
+
+  void Gui_Calc_Bridge::loadUserSections(std::filesystem::path path) {
+    if (path.empty()) {
+      anaf::LOG::warn("No user config directory; user sections will not be saved");
+      return;
+    }
+    m_userSectionPath = std::move(path);
+
+    auto loaded = FEM::BEAM::loadUserSectionFile(m_userSectionPath);
+    if (!loaded) {
+      auto backup = m_userSectionPath;
+      backup += ".corrupt";
+      std::error_code ec;
+      std::filesystem::rename(m_userSectionPath, backup, ec);
+      anaf::LOG::error("User sections not loaded: {}. The file was moved to {}", loaded.error(),
+                       ec ? std::string("(move failed: ") + ec.message() + ")" : anaf::IO::pathToUtf8(backup));
+      return;
+    }
+
+    std::size_t added = 0;
+    {
+      std::lock_guard lock(dataMutex);
+      for (const auto& section : *loaded) {
+        const auto sameName = [&](const FEM::BEAM::BeamSection& other) {
+          return FEM::BEAM::sameSectionName(other.getName(), section.getName());
+        };
+        if (std::ranges::any_of(allSections, sameName)) {
+          anaf::LOG::warn("User section '{}' skipped: a section with that name already exists", section.getName());
+          continue;
+        }
+        appendUserSectionLocked(section);
+        ++added;
+      }
+    }
+    if (added > 0) anaf::LOG::info("Loaded {} user sections from {}", added, anaf::IO::pathToUtf8(m_userSectionPath));
+  }
+
+  std::uint32_t Gui_Calc_Bridge::appendUserSectionLocked(const FEM::BEAM::BeamSection& section) {
+    const std::uint32_t id = m_nextSectionID++;
+    allSections.emplace_back(section.getName(), section.getShape(), false, id);
+    return id;
+  }
+
+  void Gui_Calc_Bridge::saveUserSections() {
+    if (m_userSectionPath.empty()) return;
+    std::vector<FEM::BEAM::BeamSection> snapshot;
+    {
+      std::lock_guard lock(dataMutex);
+      snapshot = allSections;
+    }
+    if (const auto saved = FEM::BEAM::saveUserSectionFile(m_userSectionPath, snapshot); !saved) {
+      anaf::LOG::warn("User sections not saved (kept for this session): {}", saved.error());
+    }
+  }
+
+  std::expected<std::uint32_t, std::string> Gui_Calc_Bridge::addUserSection(const FEM::BEAM::BeamSection& section) {
+    if (const auto valid = FEM::BEAM::validateSection(section); !valid) return std::unexpected(valid.error());
+    std::uint32_t id{};
+    {
+      std::lock_guard lock(dataMutex);
+      const auto sameName = [&](const FEM::BEAM::BeamSection& other) {
+        return FEM::BEAM::sameSectionName(other.getName(), section.getName());
+      };
+      if (std::ranges::any_of(allSections, sameName)) {
+        return std::unexpected(std::format("a section named '{}' already exists", section.getName()));
+      }
+      id = appendUserSectionLocked(section);
+    }
+    saveUserSections();
+    return id;
+  }
+
+  std::expected<void, std::string> Gui_Calc_Bridge::removeUserSection(const std::uint32_t sectionID) {
+    bool meshShifted = false;
+    {
+      std::lock_guard lock(dataMutex);
+      const auto index = findSectionIndex(sectionID);
+      if (!index) return std::unexpected(std::format("no section with ID {}", sectionID));
+      const auto& section = allSections[*index];
+      if (section.getIsBuiltin()) return std::unexpected(std::format("'{}' is a catalogue section", section.getName()));
+      if (m_isRunning.load() || m_isGeneratingPreview.load()) {
+        return std::unexpected("wait until the running solve has finished");
+      }
+      const auto uses = [i = *index](const FEM::BEAM::BeamElement& element) { return element.sectionID == i; };
+      if (activeBeamMesh && std::ranges::any_of(activeBeamMesh->elements, uses)) {
+        return std::unexpected(std::format("'{}' is used by the current model", section.getName()));
+      }
+      allSections.erase(allSections.begin() + *index);
+      const auto above = [i = *index](const FEM::BEAM::BeamElement& element) { return element.sectionID > i; };
+      if (activeBeamMesh && std::ranges::any_of(activeBeamMesh->elements, above)) {
+        auto shifted = std::make_shared<BeamMeshData>(*activeBeamMesh);
+        for (auto& element : shifted->elements) {
+          if (element.sectionID > *index) --element.sectionID;
+        }
+        activeBeamMesh = std::move(shifted);
+        meshShifted = true;
+      }
+    }
+    if (meshShifted) dataVersion.fetch_add(1, std::memory_order_release);
+    saveUserSections();
+    return {};
+  }
+
+  std::optional<std::uint32_t> Gui_Calc_Bridge::findSectionIndex(const std::uint32_t sectionID) const {
+    const auto it = std::ranges::find(allSections, sectionID, &FEM::BEAM::BeamSection::getSectionID);
+    if (it == allSections.end()) return std::nullopt;
+    return static_cast<std::uint32_t>(it - allSections.begin());
   }
 
   Gui_Calc_Bridge& buildBridge() {

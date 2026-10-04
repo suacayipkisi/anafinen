@@ -24,10 +24,13 @@
 #include <beam/beamEngine/beamDiagrams.hpp>
 #include <beam/beamEngine/beamSolver.hpp>
 #include <beam/beamEngine/beamStress.hpp>
+#include <beam/beamIO/beamMeshAdapter.hpp>
 #include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp>
 #include <beam/beamSection/sectionLibrary.hpp>
 #include <beam/beamSection/sectionStress.hpp>
 #include <directory/getExecutableDirectory.hpp>
+#include <io/meshIo.hpp>
+#include <truss_1D/trussIO/trussMeshAdapter.hpp>
 
 #include <Eigen/Eigenvalues>
 #include <Eigen/Geometry>
@@ -38,6 +41,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <map>
 #include <numbers>
 #include <stop_token>
 #include <string>
@@ -908,6 +912,214 @@ TEST(elementStressAlongTheElement) {
   CHECK(near(span.stress.maxShear, 1.5 * q * kL / 2.0 / 0.03, 1e-9));
   // A general section has no stresses.
   CHECK(!solve(cantilever(Formulation::EulerBernoulli)).mesh->elements[0].stress.available);
+}
+
+// ---- file adapter ------------------------------------------------------------------------------
+
+namespace {
+  // Every shape kind with a name, as a user would have them.
+  const std::vector<FEM::BEAM::BeamSection>& fileSections() {
+    static const std::vector<FEM::BEAM::BeamSection> list{
+      FEM::BEAM::BeamSection{"Test general", FEM::BEAM::GeneralSection{kSection}},
+      FEM::BEAM::BeamSection{"Rectangle 300x100", FEM::BEAM::RectangleSection{0.3, 0.1}},
+      FEM::BEAM::BeamSection{"My box", FEM::BEAM::BoxSection{0.2, 0.1, 0.008, 0.012, 0.008}},
+      FEM::BEAM::BeamSection{"My I", FEM::BEAM::ISection{0.3, 0.15, 0.0071, 0.0107, 0.015}},
+      FEM::BEAM::BeamSection{"My pipe", FEM::BEAM::PipeSection{0.1143, 0.005}},
+    };
+    return list;
+  }
+
+  // frameModel() with one section per element and a rotation support along a global axis
+  // (an inclined one cannot be stored, see inclinedRotationSupportIsReported), solved.
+  FEM::BEAM::StaticResult solvedFileFrame() {
+    auto mesh = frameModel(Eigen::Matrix3d::Identity());
+    mesh.nodes[4].setAllowedRotationAxes({{0.0, 0.0, 1.0}});
+    mesh.elements.push_back(beam(1, 3, Formulation::Timoshenko, {0, 1, 0}, 1)); // a brace, for the fifth shape
+    for (std::uint32_t e = 0; e < mesh.elements.size(); ++e) mesh.elements[e].sectionID = e; // general, rectangle, box, I, pipe
+    mesh.nodalLoads.push_back({4, {0.0, 0.0, 0.0}, {0.0, 0.0, 1.5e3}});
+    return solve(mesh, fileSections());
+  }
+
+  // Same span (projector) of two orthonormal bases.
+  bool sameSpan(const std::vector<Vec>& a, const std::vector<Vec>& b) {
+    if (a.size() != b.size()) return false;
+    Eigen::Matrix3d pa = Eigen::Matrix3d::Zero(), pb = Eigen::Matrix3d::Zero();
+    for (const auto& v : a) pa += Eigen::Vector3d(v[0], v[1], v[2]) * Eigen::Vector3d(v[0], v[1], v[2]).transpose();
+    for (const auto& v : b) pb += Eigen::Vector3d(v[0], v[1], v[2]) * Eigen::Vector3d(v[0], v[1], v[2]).transpose();
+    return (pa - pb).norm() <= 1e-12;
+  }
+
+  // Sum of the uniform loads per element and frame (the file stores the sums).
+  std::map<std::pair<std::uint32_t, int>, Vec> loadSums(const MeshData& mesh) {
+    std::map<std::pair<std::uint32_t, int>, Vec> sums;
+    for (const auto& load : mesh.distributedLoads) {
+      auto& sum = sums[{load.element, static_cast<int>(load.frame)}];
+      for (std::size_t k = 0; k < 3; ++k) sum[k] += load.value[k];
+    }
+    return sums;
+  }
+
+  void compareBeamModels(const MeshData& a, const MeshData& b, const char* what) {
+    bool ok = a.nodes.size() == b.nodes.size() && a.elements.size() == b.elements.size() && a.hasResults == b.hasResults
+      && a.gravity == b.gravity && a.nodalLoads.size() == b.nodalLoads.size() && loadSums(a) == loadSums(b);
+    for (std::size_t i = 0; ok && i < a.nodes.size(); ++i) {
+      const auto& x = a.nodes[i];
+      const auto& y = b.nodes[i];
+      ok = x.getLocation() == y.getLocation() && sameSpan(x.getAllowedMotionDirections(), y.getAllowedMotionDirections())
+        && sameSpan(x.getAllowedRotationAxes(), y.getAllowedRotationAxes()) && x.getDisplacement() == y.getDisplacement()
+        && x.getRotation() == y.getRotation();
+    }
+    for (std::size_t e = 0; ok && e < a.elements.size(); ++e) {
+      const auto& x = a.elements[e];
+      const auto& y = b.elements[e];
+      ok = x.node1 == y.node1 && x.node2 == y.node2 && x.materialID == y.materialID && x.sectionID == y.sectionID
+        && x.formulation == y.formulation && x.orientation == y.orientation && x.sectionForces == y.sectionForces
+        && x.stress.available == y.stress.available && near(x.stress.maxVonMises, y.stress.maxVonMises, 1e-12, 1e-6);
+    }
+    for (std::size_t l = 0; ok && l < a.nodalLoads.size(); ++l) {
+      ok = a.nodalLoads[l].node == b.nodalLoads[l].node && a.nodalLoads[l].force == b.nodalLoads[l].force
+        && a.nodalLoads[l].moment == b.nodalLoads[l].moment;
+    }
+    if (!ok) std::printf("      %s: beam model differs after the round trip\n", what);
+    CHECK(ok);
+  }
+
+  std::filesystem::path beamWorkDir() {
+    const auto dir = std::filesystem::temp_directory_path() / "anaf_beam_tests";
+    std::filesystem::create_directories(dir);
+    return dir;
+  }
+} // namespace end
+
+TEST(beamModelSurvivesEveryWritableFormat) {
+  // Sections of every shape, mixed formulations, inclined translational supports, nodal force
+  // and moment, global and local uniform loads, self weight and results: bit-exact through
+  // every format (shortest round-trip doubles), and the imported model solves the same.
+  namespace IO = anaf::IO;
+  const auto solved = solvedFileFrame();
+  const auto model = FEM::BEAM::ADAPTER::toMeshModel(*solved.mesh, materials(), fileSections());
+  CHECK(model.validate().empty() && model.warnings.empty());
+  CHECK(FEM::BEAM::ADAPTER::isBeamModel(model));
+
+  struct Variant { const char* file; IO::WriteOptions options; };
+  const Variant variants[] = {
+    {"b41b.msh", {.encoding = IO::Encoding::Binary}}, {"b41a.msh", {}}, {"b22a.msh", {.mshVersion = IO::MshVersion::V2_2}},
+    {"bz.vtu", {.encoding = IO::Encoding::Binary, .compress = true}}, {"ba.vtu", {}},
+    {"b51b.vtk", {.encoding = IO::Encoding::Binary}}, {"b42a.vtk", {.vtkVersion = IO::VtkLegacyVersion::V4_2}},
+  };
+  for (const auto& v : variants) {
+    const auto path = beamWorkDir() / v.file;
+    REQUIRE(IO::writeMesh(path, model, v.options).has_value());
+    const auto read = IO::readMesh(path);
+    if (!read) std::printf("      %s: %s\n", v.file, read.error().message.c_str());
+    REQUIRE(read.has_value());
+    const auto imported = FEM::BEAM::ADAPTER::toMeshData(*read, materials(), fileSections());
+    if (!imported) std::printf("      %s: %s\n", v.file, imported.error().c_str());
+    REQUIRE(imported.has_value());
+    CHECK(imported->newSections.empty()); // every section found by name and shape
+    compareBeamModels(*solved.mesh, *imported->mesh, v.file);
+  }
+
+  // The imported model, solved again, gives the same results.
+  const auto read = IO::readMesh(beamWorkDir() / "b41b.msh");
+  REQUIRE(read.has_value());
+  auto imported = FEM::BEAM::ADAPTER::toMeshData(*read, materials(), fileSections());
+  REQUIRE(imported.has_value());
+  const auto again = solve(*imported->mesh, fileSections());
+  for (std::size_t n = 0; n < again.mesh->nodes.size(); ++n) {
+    CHECK(nearVec(again.mesh->nodes[n].getDisplacement(), solved.mesh->nodes[n].getDisplacement(), 1e-12));
+  }
+}
+
+TEST(beamModelSurvivesStepWithSidecar) {
+  // CAD export: geometry as edges, everything else in the .anafFields sidecar; meshing may
+  // renumber, so compare counts, sections and the solve.
+  namespace IO = anaf::IO;
+  const auto solved = solvedFileFrame();
+  const auto model = FEM::BEAM::ADAPTER::toMeshModel(*solved.mesh, materials(), fileSections());
+  const auto path = beamWorkDir() / "frame.step";
+  REQUIRE(IO::writeMesh(path, model, {}).has_value());
+  const auto read = IO::readMesh(path);
+  REQUIRE(read.has_value());
+  const auto imported = FEM::BEAM::ADAPTER::toMeshData(*read, materials(), fileSections());
+  if (!imported) std::printf("      %s\n", imported.error().c_str());
+  REQUIRE(imported.has_value());
+  CHECK(imported->newSections.empty());
+  CHECK(imported->mesh->nodes.size() == solved.mesh->nodes.size() && imported->mesh->elements.size() == solved.mesh->elements.size());
+  CHECK(imported->mesh->distributedLoads.size() == solved.mesh->distributedLoads.size() && imported->mesh->hasResults);
+  double before = 0.0, after = 0.0;
+  for (const auto& node : solved.mesh->nodes) before = std::max(before, std::hypot(node.getDisplacement()[0], node.getDisplacement()[1], node.getDisplacement()[2]));
+  const auto again = solve(*imported->mesh, fileSections());
+  for (const auto& node : again.mesh->nodes) after = std::max(after, std::hypot(node.getDisplacement()[0], node.getDisplacement()[1], node.getDisplacement()[2]));
+  CHECK(near(after, before, 1e-9));
+}
+
+TEST(beamImportAddsUnknownSections) {
+  // The importing list lacks "My box" and has another "My I": both come back as new sections
+  // (the second under a new name); known ones are reused.
+  const auto solved = solvedFileFrame();
+  const auto model = FEM::BEAM::ADAPTER::toMeshModel(*solved.mesh, materials(), fileSections());
+  const std::vector<FEM::BEAM::BeamSection> other{
+    FEM::BEAM::BeamSection{"Rectangle 300x100", FEM::BEAM::RectangleSection{0.3, 0.1}},
+    FEM::BEAM::BeamSection{"my i", FEM::BEAM::ISection{0.3, 0.15, 0.0071, 0.0107, 0.0}}, // no root radius: another section
+  };
+  const auto imported = FEM::BEAM::ADAPTER::toMeshData(model, materials(), other);
+  REQUIRE(imported.has_value());
+  const auto& added = imported->newSections;
+  REQUIRE(added.size() == 4); // general, box, I, pipe
+  const auto& elements = imported->mesh->elements;
+  CHECK(elements[1].sectionID == 0); // the rectangle is reused
+  const auto nameOf = [&](const std::uint32_t id) { return id < other.size() ? other[id].getName() : added[id - other.size()].getName(); };
+  CHECK(nameOf(elements[0].sectionID) == "Test general" && nameOf(elements[2].sectionID) == "My box");
+  CHECK(nameOf(elements[3].sectionID) == "My I (imported)" && nameOf(elements[4].sectionID) == "My pipe");
+  for (const auto& section : added) CHECK(FEM::BEAM::validateSection(section).has_value());
+  // The shapes came through intact: the solve with the extended list matches.
+  std::vector<FEM::BEAM::BeamSection> extended = other;
+  extended.insert(extended.end(), added.begin(), added.end());
+  const auto again = solve(*imported->mesh, extended);
+  for (std::size_t n = 0; n < again.mesh->nodes.size(); ++n) {
+    CHECK(nearVec(again.mesh->nodes[n].getDisplacement(), solved.mesh->nodes[n].getDisplacement(), 1e-9));
+  }
+}
+
+TEST(inclinedRotationSupportIsReported) {
+  // Rotation free about (0, 1, 1) only: no global axis is free, so the file holds all three,
+  // with a warning.
+  const auto mesh = frameModel(Eigen::Matrix3d::Identity());
+  const auto model = FEM::BEAM::ADAPTER::toMeshModel(mesh, materials(), sections());
+  REQUIRE(model.warnings.size() == 1);
+  CHECK(contains(model.warnings[0], "node 4"));
+  const auto it = std::ranges::find_if(model.constraints, [](const anaf::IO::NodeConstraint& c) { return c.node == 4; });
+  REQUIRE(it != model.constraints.end());
+  CHECK(it->fixedRotation == (std::array<bool, 3>{true, true, true}) && it->allowedMotion.size() == 2);
+}
+
+TEST(beamFilesAreTellApartFromTrussFiles) {
+  // A truss export has no beam formulation; a beam file without section data is refused.
+  FEM::TRUSS::MeshData truss;
+  truss.trussNodes = {FEM::TRUSS::Node(0, 0, 0, 0), FEM::TRUSS::Node(1, 1, 0, 0)};
+  truss.trussElements = {{0, 1, 0.0f, false, 0, 1e-4, false}};
+  CHECK(!FEM::BEAM::ADAPTER::isBeamModel(FEM::TRUSS::ADAPTER::toMeshModel(truss, materials())));
+
+  anaf::IO::MeshModel bare;
+  bare.nodes = {anaf::IO::Node{1, {0, 0, 0}}, anaf::IO::Node{2, {1, 0, 0}}};
+  auto& line = bare.blockFor(anaf::IO::ElementType::Line2);
+  line.tags = {1};
+  line.connectivity = {0, 1};
+  line.entityTags = {0};
+  bare.elementAttributes[anaf::IO::Attribute::ElementFormulation] = {1.0};
+  CHECK(FEM::BEAM::ADAPTER::isBeamModel(bare));
+  const auto refused = FEM::BEAM::ADAPTER::toMeshData(bare, materials(), sections());
+  CHECK(!refused && contains(refused.error(), "no usable section"));
+  // With A, Iy, Iz, J it becomes a general section.
+  bare.elementAttributes[anaf::IO::Attribute::CrossSectionArea] = {0.01};
+  bare.elementAttributes[anaf::IO::Attribute::SecondMomentY] = {2e-5};
+  bare.elementAttributes[anaf::IO::Attribute::SecondMomentZ] = {8e-5};
+  bare.elementAttributes[anaf::IO::Attribute::TorsionConstant] = {1e-5};
+  const auto accepted = FEM::BEAM::ADAPTER::toMeshData(bare, materials(), sections());
+  REQUIRE(accepted.has_value() && accepted->newSections.size() == 1);
+  CHECK(std::holds_alternative<FEM::BEAM::GeneralSection>(accepted->newSections[0].getShape()));
+  CHECK(accepted->newSections[0].getName() == "Imported section 1");
 }
 
 // ---- errors -----------------------------------------------------------------------------------

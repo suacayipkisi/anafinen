@@ -17,39 +17,17 @@
 
 #pragma once
 
-#include <glad/gl.h>
-#include <GLFW/glfw3.h>
+// Solve path of the beam panels, the same pattern as TRUSS_WORKER::startSolve().
 
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include "implot.h"
+#include <bridge/generalStatus.hpp>
 
-namespace anaf::GUI {
+#include <memory>
 
-  void setupSpecialTheme();
+namespace anaf::GUI::BEAM_WORKER {
 
-  class ImGuiLayer {
-  public:
-    static inline ImFont* font_ui = nullptr;
-    static inline ImFont* font_console = nullptr;
+  // Runs FEM::BEAM::solveStatic() on bridge.workerThread with copies of the material and
+  // section lists taken now, and publishes the solved snapshot into bridge.activeBeamMesh
+  // unless the model was reset meanwhile (modelGeneration). Call from the GUI thread.
+  void startSolve(BRIDGE::Gui_Calc_Bridge& bridge, std::shared_ptr<const BRIDGE::BeamMeshData> mesh);
 
-    void init(GLFWwindow* window);
-
-    void beginFrame();
-
-    void endFrame() {
-      ImGui::Render();
-      ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    }
-
-    void shutdown() {
-      ImGui_ImplOpenGL3_Shutdown();
-      ImGui_ImplGlfw_Shutdown();
-      ImPlot::DestroyContext();
-      ImGui::DestroyContext();
-    }
-
-  };
-
-} // namespace anaf::GUI end
+} // namespace anaf::GUI::BEAM_WORKER end

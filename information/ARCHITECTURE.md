@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam stresses; beam cross-section library and catalogue; beam solver `FEM::BEAM` in `anaf_core` and [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), support bases moved to `FEM::SUPPORT`, known issues 5 and 6; linear solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`; Block-CG takes `dofsPerNode`; `check.sh` fails when no tests run; HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam GUI panels, beam file adapter, known issue 5 narrowed; beam stresses; beam cross-section library and catalogue; beam solver `FEM::BEAM` in `anaf_core` and [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), support bases moved to `FEM::SUPPORT`, known issues 5 and 6; linear solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`; Block-CG takes `dofsPerNode`; `check.sh` fails when no tests run; HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -42,6 +42,7 @@ This document is the entry point for the project documentation. It describes how
 |  | anaf_core (static library)                                         |   |
 |  |  FEM::TRUSS: generator, container (truss_1D/)                      |   |
 |  |  FEM::BEAM: 3D beam / frame solver and diagrams (beam/)            |   |
+|  |  FEM::BEAM::ADAPTER: MeshModel <-> beam MeshData (beam/beamIO/)    |   |
 |  |  FEM::SOLVER: linear solver portfolio + referee (solvers/)         |   |
 |  |  FEM::SUPPORT: support bases shared by truss and beam (common/)    |   |
 |  |  FEM::TRUSS::ADAPTER: MeshModel <-> MeshData (truss_1D/trussIO/)   |   |
@@ -67,7 +68,8 @@ This document is the entry point for the project documentation. It describes how
 | Namespace | Location | Responsibility |
 |---|---|---|
 | `FEM::TRUSS` | `src/objectCalcs/truss_1D/` | Node, element, load types; truss generator; FEM container |
-| `FEM::BEAM` | `src/objectCalcs/beam/` | 3D beam node / element / load types, cross-section library (`beamSection/`: shapes, properties, stresses, catalogue `assets/bridge/sectionCatalog.json`), `solveStatic()`, container, results and stresses along the element ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md)); no adapter or GUI yet |
+| `FEM::BEAM` | `src/objectCalcs/beam/` | 3D beam node / element / load types, cross-section library (`beamSection/`: shapes, properties, stresses, catalogue `assets/bridge/sectionCatalog.json`), `solveStatic()`, container, results and stresses along the element ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md)); GUI: beam editor, Section Handler, diagrams ([GUI.md](GUI.md) sections 2.5-2.7) |
+| `FEM::BEAM::ADAPTER` | `src/objectCalcs/beam/beamIO/` | `MeshModel` ↔ beam model conversion; `isBeamModel()` routes beam files ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 11) |
 | `FEM::SUPPORT` | `src/objectCalcs/common/` | `orthonormalize`, `orthogonalComplement`, `componentOutside`: support bases of every node type and the GUI support editor |
 | `FEM::SOLVER` | `src/solvers/` (`direct/`, `iterative/`) | Linear solver portfolio and referee, shared by every element type; callers pass their DOF slots per node (truss 3, 3D beam 6), see [CALCULATIONS.md](CALCULATIONS.md) section 7 |
 | `anaf::BRIDGE` | `src/bridge/` | Shared state between GUI thread and worker thread |
@@ -86,7 +88,7 @@ This document is the entry point for the project documentation. It describes how
 | Thread | Created by | Work | Talks to others through |
 |---|---|---|---|
 | Main (GUI) thread | OS | GLFW events, ImGui frame, OpenGL rendering | `Gui_Calc_Bridge` (mutex + atomics) |
-| Worker thread | `TrussControlPanel` or `TrussModelEditor` (`bridge.workerThread`, `std::jthread`) | Preview mesh generation or a full solve | Publishes a new `MeshData`, bumps `dataVersion` |
+| Worker thread | `TrussControlPanel`, `TrussModelEditor` or `BeamModelEditor` (`bridge.workerThread`, `std::jthread`) | Preview mesh generation or a full solve | Publishes a new `MeshData`, bumps `dataVersion` |
 | OpenMP team | Inside the worker (`#pragma omp parallel`) | Mesh generation, assembly, reductions, Block-CG | Joins before the worker continues |
 | I/O thread | `IoService` owned by `FileIoPanel` | Import / export: parsing, writing, snapshot ↔ model conversion | `IoTask` polled every frame; results published through the bridge on the GUI thread |
 
@@ -144,7 +146,7 @@ Update the documents when any of the following happens:
 |---|---|---|---|
 | 2 | The Gmsh 4.15 build on Fedora aborts when it opens any binary MSH 4.1 file (its own too). | Gmsh (external) | Only affects opening our binary 4.1 files **in Gmsh**; anafinen reads MSH natively. |
 | 4 | Debian 13's `libgmsh4.13` (4.13.1+ds1) is built with Eigen assertions on and aborts inside its own second-order 3D meshing (`gmsh::model::mesh::generate` → `MElement::signedInvCondNumRange` → Eigen `invalid matrix product`). | Gmsh (external), Debian package | `anaf_io_tests` aborts in `highOrderNodeOrderingMatchesGmshVtkWriter` on Debian; the other tests pass when run one by one. A CAD import with element order 2 may abort the application on Debian as well. Fedora and Arch are not affected. |
-| 5 | The truss adapter (`trussMeshAdapter.cpp` `toMeshData`) reads only `NodeConstraint::fixed` and `NodalLoad::force`. Rotational fixity, prescribed rotations, nodal moments and `ElementFormulation` (beam) are dropped without a warning. | `anaf_core`, truss adapter | A frame file imported into the truss solver loses its moments; the energy check still passes, because the dropped loads never enter the work term. Fix: warn on (or reject) rotational data and beam formulations in the truss adapter, and route beam files to a beam adapter. The beam solver exists in `anaf_core` since 2026-10-04 ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md)), the beam adapter does not yet. Planned as [INTEROP_PLAN.md](INTEROP_PLAN.md) P0 item 8. |
+| 5 | The truss adapter (`trussMeshAdapter.cpp` `toMeshData`) reads only `NodeConstraint::fixed` and `NodalLoad::force`. Since 2026-10-04 files with beam elements go to the beam adapter instead (`isBeamModel()`), so this only concerns files without a beam formulation that still carry rotational fixity, prescribed rotations or nodal moments: those are dropped without a warning. | `anaf_core`, truss adapter | Such a file loses its moments in the truss solver; the energy check still passes, because the dropped loads never enter the work term. Fix: a warning in the truss adapter for rotational data. Planned as [INTEROP_PLAN.md](INTEROP_PLAN.md) P0 item 8. |
 | 6 | An unloaded mechanism is not detected. `solveSelected()` does not check the stiffness matrix for singularity: when the loads have no component on the mechanism mode (verified: axial load on a beam pinned at both ends that may spin about its own axis), CHOLMOD / LDLT see a pivot that is round-off sized instead of zero, the solution stays finite, the residual is small and the result is accepted. A mechanism the loads do excite is reported ("stiffness solve failed"). | `src/solvers/` (shared by truss and beam) | A model that is not stable is reported as solved; any load change on the mechanism mode would give huge or infinite displacements. Fix: a pivot / rank check in the referee (smallest pivot relative to the largest diagonal entry), or a rigid body mode check before the solve. |
 
 ### 8.1 Deferred by design

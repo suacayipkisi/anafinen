@@ -3,7 +3,7 @@
 This document describes how truss mesh data is created (Simple Quadrangle generator, built-in library, import, model editor), stored, passed through the one solver pipeline, and finally displayed in the viewport.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-02.
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam models, section 6.1).
 > Part of the documentation set indexed in [ARCHITECTURE.md](ARCHITECTURE.md). Module details: [CALCULATIONS.md](CALCULATIONS.md), [BRIDGE.md](BRIDGE.md), [GUI.md](GUI.md).
 
 ## 1. Overall flow
@@ -118,6 +118,17 @@ Import:  file --readMesh--> anaf::IO::MeshModel --ADAPTER::toMeshData--> new Mes
 - Both directions run on the `IoService` thread; only the final pointer swap happens on the GUI thread ([BRIDGE.md](BRIDGE.md) section 5).
 - A solved snapshot survives every writable format bit-exactly: positions, displacements, stresses, materials, areas, fixity and loads (`anaf_truss_io_tests`).
 - Details: [FILE_HANDLING.md](FILE_HANDLING.md).
+
+### 6.1 Beam models
+
+```text
+beam editor edits / Load Example / File > Import (beam file) --> activeBeamMesh (shared_ptr<const FEM::BEAM::MeshData>)
+Run Solver for Beam --> BEAM_WORKER::startSolve --> FEM::BEAM::solveStatic (copies of materials, sections) --> activeBeamMesh
+Export:  activeBeamMesh --BEAM::ADAPTER::toMeshModel--> MeshModel --writeMesh--> file
+Import:  file --readMesh--> MeshModel --isBeamModel? BEAM::ADAPTER::toMeshData--> activeBeamMesh (+ new user sections)
+```
+
+The beam snapshot follows the same rules as the truss one (immutable, swapped under `dataMutex`, `dataVersion` bumped). The viewport does not draw it yet; the beam editor, the diagram panel and the model tree read it. Details: [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), [GUI.md](GUI.md) sections 2.5-2.7.
 
 ## 7. Related source files
 

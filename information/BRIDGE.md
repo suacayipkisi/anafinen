@@ -3,7 +3,7 @@
 This document describes `anaf::BRIDGE`, the shared state between the GUI thread and the calculation worker. It covers what the bridge stores, who reads and writes each field, and which synchronization rule protects it.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-02.
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam: `beam_frame`, `activeBeamMesh`, `allSections`, `selectedElementId`, section 5.2).
 
 ## 1. Overall flow
 
@@ -43,7 +43,9 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `activeMesh` | `shared_ptr<const MeshData>` | Worker (publish), control panel (loads, supports), model editor (every edit), `resetModel()`, File > Import | Viewport, model tree, both truss panels, File > Export | `dataMutex` |
 | `modelGeneration` | `atomic<uint64_t>` | `resetModel()` | Workers (taken at start, compared before publishing) | atomic; the comparison runs under `dataMutex` |
 | `dataVersion` | `atomic<uint64_t>` | Every publisher, after swapping `activeMesh` | Viewport (reload check) | atomic, `memory_order_release` on increment |
-| `selectedNodeId` | `uint32_t`, `UINT32_MAX` = none | Viewport picking, both truss panels, `resetModel()` | Both truss panels, viewport | `dataMutex` |
+| `activeBeamMesh` | `shared_ptr<const BeamMeshData>` (`FEM::BEAM::MeshData`) | Beam worker (publish), beam editor (every edit), `resetModel()`, File > Import of a beam file, section / material removal (index shift) | Beam editor, beam diagrams, model tree, File > Export | `dataMutex`; only one of `activeMesh` / `activeBeamMesh` is set |
+| `selectedNodeId` | `uint32_t`, `UINT32_MAX` = none | Viewport picking, both truss panels, beam editor, `resetModel()` | Truss panels, beam editor, viewport | `dataMutex` |
+| `selectedElementId` | `uint32_t`, `UINT32_MAX` = none | Beam editor (element list), beam diagrams (chooser), `resetModel()` | Beam editor, beam diagrams | `dataMutex` |
 | `m_isRunning` | `atomic<bool>` | Truss panels (set), worker (clear), `resetModel()` | Truss panels (button state), File > Import, material removal | atomic |
 | `m_isGeneratingPreview` | `atomic<bool>` | Control panel, preview worker, `resetModel()` | Control panel | atomic |
 | `m_progress` | `atomic<float>` 0..1 | Worker (solver steps) | Progress bars | atomic |
@@ -54,16 +56,19 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `allMaterials` | `vector<Material>` | `setStaticInfo()` (built-ins from JSON), `addUserMaterial()`, `removeUserMaterial()` | Control panel (material combo, copies it for the worker), Material Handler, File > Import | `dataMutex`; the solver worker only sees a copy |
 | `m_nextMaterialID` (private) | `uint32_t` | `setStaticInfo()`, `addUserMaterial()`, `loadUserMaterials()` | - | `dataMutex` |
 | `m_userMaterialPath` (private) | `filesystem::path` | `loadUserMaterials()` (startup) | `saveUserMaterials()` | GUI thread only; empty = not persisted |
+| `allSections` | `vector<FEM::BEAM::BeamSection>` | `loadSectionCatalog()`, `loadUserSections()`, `addUserSection()`, `removeUserSection()` | Beam editor (section combos), Section Handler, beam worker and File > Import / Export (copies), beam diagrams (copy) | `dataMutex` |
+| `m_nextSectionID`, `m_userSectionPath` (private) | `uint32_t`, `filesystem::path` | catalogue / user section loading, `addUserSection()` | `saveUserSections()` | as for materials |
 
-`ObjectType` is `truss_SQPT`, `truss_imported_or_entered` or `no_type`. `getObjectTypeName()` converts it to a string for the model tree.
+`ObjectType` is `truss_SQPT`, `truss_imported_or_entered`, `beam_frame` or `no_type`. `getObjectTypeName()` converts it to a string for the model tree.
 
 | Object type | Model comes from | Panel | Import | Export |
 |---|---|---|---|---|
 | `no_type` (start) | - | none | yes (switches to `truss_imported_or_entered`) | yes, once a model exists |
 | `truss_SQPT` | Grid generator (Generate Preview / Run Solver) | `TrussControlPanel` | yes (switches to `truss_imported_or_entered`) | yes |
 | `truss_imported_or_entered` | File > Import, or node / bar edits | `TrussModelEditor` | yes (replaces the model) | yes |
+| `beam_frame` | Analyze > Beam / Frame, beam editor edits, File > Import of a file with beam elements | `BeamModelEditor`, `BeamDiagramPanel` | yes (a beam file stays a beam model, any other file switches to `truss_imported_or_entered`) | yes (beam adapter) |
 
-Both types solve the same way: `TRUSS_WORKER::startSolve()` runs `FEM::TRUSS::solveStatic()` on the snapshot ([CALCULATIONS.md](CALCULATIONS.md) section 1). An import that finishes after the model was reset (type change, Clear) is discarded by its `modelGeneration`.
+The beam type solves with `BEAM_WORKER::startSolve()` (`panels/beam/beamWorker.cpp`): the same pattern with copies of the material and section lists, `FEM::BEAM::solveStatic()`, publication into `activeBeamMesh`. Both truss types solve the same way: `TRUSS_WORKER::startSolve()` runs `FEM::TRUSS::solveStatic()` on the snapshot ([CALCULATIONS.md](CALCULATIONS.md) section 1). An import that finishes after the model was reset (type change, Clear) is discarded by its `modelGeneration`.
 
 ## 3. `MeshData`: the published snapshot
 
@@ -192,6 +197,19 @@ Persistence (`loadUserMaterials(path)`, called by `main()` right after `setStati
 
 Without a `loadUserMaterials()` call (the tests), user materials are session-only and nothing is written.
 
+### 5.2 Beam sections
+
+Sections follow the material scheme: `BeamElement::sectionID` is an index into `allSections`; `BeamSection::getSectionID()` is a stable ID.
+
+| IDs | Source | Built-in | Removable |
+|---|---|---|---|
+| `0 .. n-1` | [assets/bridge/sectionCatalog.json](../assets/bridge/sectionCatalog.json) (`loadSectionCatalog()`) | `true` | No |
+| `n ..` | `<user config>/userSections.json` (`loadUserSections()`), the Section Handler, sections added by a beam import | `false` | Yes, unless the beam model uses it or a worker runs |
+
+1. `main()` calls `loadSectionCatalog()` and `loadUserSections()` after the materials. An unreadable user file is renamed to `.corrupt`, as for materials.
+2. `removeUserSection()` shifts the `sectionID` of the beam model's elements above the removed index (a new snapshot, `dataVersion` bump). `removeUserMaterial()` checks and shifts the beam model's `materialID` values too.
+3. A beam import copies the list at start and is discarded if the list changed before it finished; the file's new sections are appended with `addUserSection()` in order, so the element indices stay valid.
+
 ## 6. Rules for new worker code
 
 - Copy every mutable bridge container the worker needs under `dataMutex` **before** creating the `std::jthread`, and move the copies into the lambda. Never read `bridge.<container>` from the worker.
@@ -207,6 +225,7 @@ Without a `loadUserMaterials()` call (the tests), user materials are session-onl
 - Object type switch and panel resets: [src/gui/gui.cpp](../src/gui/gui.cpp) (`bindAnalysisFlow`)
 - Snapshot consumer: [src/gui/panels/viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [src/gui/panels/modelTree.cpp](../src/gui/panels/modelTree.cpp) (copies the pointer under the lock; no deep copy per frame)
 - Import / export publisher: [src/gui/panels/fileIoPanel.cpp](../src/gui/panels/fileIoPanel.cpp)
+- Beam worker: [src/gui/panels/beam/beamWorker.cpp](../src/gui/panels/beam/beamWorker.cpp); sections: [sectionLibrary.hpp](../src/objectCalcs/beam/beamSection/sectionLibrary.hpp)
 - Materials: [src/material/properties.hpp](../src/material/properties.hpp), [src/material/materialLibrary.hpp](../src/material/materialLibrary.hpp), [src/material/materialLibrary.cpp](../src/material/materialLibrary.cpp), [assets/bridge/materialProperties.json](../assets/bridge/materialProperties.json)
 - Material editor: [src/gui/panels/materialHandler.cpp](../src/gui/panels/materialHandler.cpp)
 - Asset lookup: [src/directory/getExecutableDirectory.cpp](../src/directory/getExecutableDirectory.cpp)

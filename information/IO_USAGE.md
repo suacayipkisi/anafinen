@@ -5,7 +5,7 @@ This guide shows how code outside `src/io/` reads and writes model files through
 For the file formats themselves (which data goes where in MSH, VTK, VTU, `.pvd` and the STEP sidecar), see [FILE_HANDLING.md](FILE_HANDLING.md).
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam solver default orientation; HDF5 array store, section 9; 2026-10-03: rotational constraints, nodal moments, beam section data and orientation, beam / dynamic result names).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam adapter, its well-known names, section 7; beam solver default orientation; HDF5 array store, section 9; 2026-10-03: rotational constraints, nodal moments, beam section data and orientation, beam / dynamic result names).
 
 ## 1. Overview
 
@@ -285,10 +285,10 @@ An empty `amplitude` name means a constant factor of 1. `validate()` rejects ref
 
 | Namespace | Names |
 |---|---|
-| `FieldName` | `Displacement` (node, 3, m), `Rotation` (node, 3, rad), `Velocity` / `Acceleration` / `AngularVelocity` / `AngularAcceleration` (node, 3), `Stress` (element, Pa, tension > 0), `AxialForce` (element, N, tension > 0), `BeamSectionForce` (element, 12: N, Vy, Vz, T, My, Mz at node 0 then node 1, local axes, section sign convention) |
-| `Attribute` | `MaterialId`, `CrossSectionArea`, `HeatGeneration`, `SecondMomentY`, `SecondMomentZ`, `TorsionConstant`, `ShearAreaY`, `ShearAreaZ`, `ElementFormulation` |
+| `FieldName` | `Displacement` (node, 3, m), `Rotation` (node, 3, rad), `Velocity` / `Acceleration` / `AngularVelocity` / `AngularAcceleration` (node, 3), `Stress` (element, Pa, tension > 0), `AxialForce` (element, N, tension > 0), `BeamSectionForce` (element, 12: N, Vy, Vz, T, My, Mz at node 0 then node 1, local axes, section sign convention), `VonMisesStress` (element, Pa, largest along a beam, upper bound) |
+| `Attribute` | `MaterialId`, `CrossSectionArea`, `HeatGeneration`, `SecondMomentY`, `SecondMomentZ`, `TorsionConstant`, `ShearAreaY`, `ShearAreaZ`, `ElementFormulation`, `SectionShape` (0 general, 1 rectangle, 2 circle, 3 pipe, 4 box, 5 I) + `SectionDimension1..5` (m, meaning per shape in `meshModel.hpp`), `UniformLoadGlobalX/Y/Z`, `UniformLoadLocalX/Y/Z` (N/m) |
 | `InitialQuantity` | `Displacement` (3, m), `Velocity` (3, m/s), `Rotation` (3, rad), `AngularVelocity` (3, rad/s), `Temperature` (1, K) |
-| `GlobalName` | `NaturalFrequency` (1 component per mode, Hz) |
+| `GlobalName` | `NaturalFrequency` (1 component per mode, Hz), `Gravity` (3 components, m/s², self weight) |
 
 Any other name also round-trips. The well-known names are the ones other solvers and viewers look for.
 
@@ -433,7 +433,7 @@ for (const auto& block : model.blocks) {
 
 ## 7. Adding a solver: the adapter pattern
 
-`anaf_io` must stay free of solver and GUI types. Each solver gets an adapter in its own module, like the truss adapter:
+`anaf_io` must stay free of solver and GUI types. Each solver gets an adapter in its own module: `FEM::TRUSS::ADAPTER` (`truss_1D/trussIO/`) and `FEM::BEAM::ADAPTER` (`beam/beamIO/`). A front end picks one with `FEM::BEAM::ADAPTER::isBeamModel(model)` (any element with `ElementFormulation` 1 / 2):
 
 | Function | Direction | Used for |
 |---|---|---|
@@ -445,8 +445,8 @@ Rules:
 1. Put the adapter next to the solver (`src/objectCalcs/<solver>/<solver>IO/`) and its sources in `ANAF_CORE_SOURCES`.
 2. Write the well-known names from section 6.3, so that other solvers and ParaView find the data.
 3. On import, check `components` and `steps.empty()` before using a field. Collect user-facing remarks (such as ignored element types) instead of failing.
-4. Read the BC and load data the solver supports. The truss adapter reads only `fixed`, `allowedMotion` and `force` so far. Prescribed displacements, amplitudes, thermal BCs, initial conditions and damping are stored and round-trip through every format, but no solver uses them yet.
-5. Add a round-trip test in `tests/` (see `anaf_truss_io_tests`).
+4. Read the BC and load data the solver supports. The truss adapter reads only `fixed`, `allowedMotion` and `force`; the beam adapter also reads `fixedRotation`, moments, the uniform line loads and `Gravity` (and reports prescribed values and amplitudes as ignored). Prescribed displacements, amplitudes, thermal BCs, initial conditions and damping are stored and round-trip through every format, but no solver uses them yet.
+5. Add a round-trip test in `tests/` (see `anaf_truss_io_tests`, and the adapter tests in `anaf_beam_tests`).
 
 ## 8. Paths on Windows
 

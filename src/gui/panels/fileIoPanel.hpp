@@ -21,6 +21,7 @@
 #include <fileDialogs/nativeFileDialog.hpp>
 
 #include <io/service/ioService.hpp>
+#include <beam/beamIO/beamMeshAdapter.hpp>
 #include <truss_1D/trussIO/trussMeshAdapter.hpp>
 
 #include <chrono>
@@ -28,9 +29,18 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace anaf::GUI {
+
+  // Result of an import: a file with beam elements (ElementFormulation) becomes a beam model,
+  // any other file a truss model.
+  struct ImportedModel {
+    std::optional<FEM::TRUSS::ADAPTER::ImportedTruss> truss;
+    std::optional<FEM::BEAM::ADAPTER::ImportedBeam> beam;
+  };
 
   // Import / export front end: native file chooser, CAD and export options, progress and
   // cancellation. All file work runs on the IoService thread; this panel only polls.
@@ -47,7 +57,8 @@ namespace anaf::GUI {
     // anyway is discarded when the model was reset after it started (modelGeneration).
     void cancelImport();
 
-    std::function<void()> onImported; // e.g. show the model tree
+    std::function<void()> onImported;     // a truss model was imported, e.g. show the model tree
+    std::function<void()> onImportedBeam; // a beam model was imported
 
     void onImGuiRender() override;
 
@@ -63,14 +74,18 @@ namespace anaf::GUI {
     void renderExportOptions();
     void renderProgress();
     void notify(std::string message, bool error);
+    void logNotes(const std::vector<std::string>& notes);
+    // Publishes an imported beam model: switches to beam_frame and appends its new sections.
+    void finishBeamImport(const FEM::BEAM::ADAPTER::ImportedBeam& imported);
 
     std::unique_ptr<anaf::IO::IoService> m_service;
     std::unique_ptr<NativeFileDialog> m_dialog;
-    std::shared_ptr<anaf::IO::IoTask<FEM::TRUSS::ADAPTER::ImportedTruss>> m_importTask;
+    std::shared_ptr<anaf::IO::IoTask<ImportedModel>> m_importTask;
     std::shared_ptr<anaf::IO::IoTask<anaf::IO::WriteReport>> m_exportTask;
     Stage m_stage{Stage::Idle};
     std::filesystem::path m_pendingImport;
     std::uint64_t m_importGeneration{0}; // bridge.modelGeneration when the running import started
+    std::vector<std::uint32_t> m_importSectionIDs; // section list the running import resolved against
 
     anaf::IO::ReadOptions m_cadOptions;
     int m_exportFormat{0};

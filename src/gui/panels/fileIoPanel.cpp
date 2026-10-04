@@ -148,7 +148,7 @@ namespace anaf::GUI {
     auto& bridge = BRIDGE::buildBridge();
     {
       std::lock_guard lock(bridge.dataMutex);
-      if (!bridge.activeMesh) {
+      if (!bridge.activeMesh && !bridge.activeBeamMesh) {
         notify("Nothing to export: create or import a model first", true);
         return;
       }
@@ -164,21 +164,34 @@ namespace anaf::GUI {
       return;
     }
     std::vector<anaf::MATERIAL::Material> materials;
+    std::vector<FEM::BEAM::BeamSection> sections;
     {
       std::lock_guard lock(bridge.dataMutex);
       materials = bridge.allMaterials;
+      sections = bridge.allSections;
       m_importGeneration = bridge.modelGeneration.load();
     }
+    m_importSectionIDs.clear();
+    for (const auto& section : sections) m_importSectionIDs.push_back(section.getSectionID());
     const anaf::IO::ReadOptions options = isCad(path) ? m_cadOptions : anaf::IO::ReadOptions{};
-    m_importTask = m_service->runAsync<FEM::TRUSS::ADAPTER::ImportedTruss>(
+    m_importTask = m_service->runAsync<ImportedModel>(
       "Import " + anaf::IO::pathToUtf8(path.filename()),
-      [path, options, materials = std::move(materials)](const anaf::IO::IoContext& context)
-        -> std::expected<FEM::TRUSS::ADAPTER::ImportedTruss, anaf::IO::IoError> {
+      [path, options, materials = std::move(materials), sections = std::move(sections)](const anaf::IO::IoContext& context)
+        -> std::expected<ImportedModel, anaf::IO::IoError> {
         auto model = anaf::IO::readMesh(path, options, context);
         if (!model) return std::unexpected(model.error());
         context.progress(0.97f, "preparing view");
-        auto imported = FEM::TRUSS::ADAPTER::toMeshData(*model, materials);
-        for (const auto& warning : model->warnings) imported.notes.push_back("warning: " + warning);
+        ImportedModel imported;
+        if (FEM::BEAM::ADAPTER::isBeamModel(*model)) {
+          auto beam = FEM::BEAM::ADAPTER::toMeshData(*model, materials, sections);
+          if (!beam) return std::unexpected(anaf::IO::IoError{anaf::IO::IoError::Code::InvalidModel, "beam model: " + beam.error()});
+          for (const auto& warning : model->warnings) beam->notes.push_back("warning: " + warning);
+          imported.beam = std::move(*beam);
+        } else {
+          auto truss = FEM::TRUSS::ADAPTER::toMeshData(*model, materials);
+          for (const auto& warning : model->warnings) truss.notes.push_back("warning: " + warning);
+          imported.truss = std::move(truss);
+        }
         return imported;
       });
     m_stage = Stage::Importing;
@@ -196,13 +209,17 @@ namespace anaf::GUI {
 
     auto& bridge = BRIDGE::buildBridge();
     std::shared_ptr<const BRIDGE::MeshData> mesh;
+    std::shared_ptr<const BRIDGE::BeamMeshData> beamMesh;
     std::vector<anaf::MATERIAL::Material> materials; // names for the snapshot's material indices
+    std::vector<FEM::BEAM::BeamSection> sections;
     {
       std::lock_guard lock(bridge.dataMutex);
       mesh = bridge.activeMesh;
+      beamMesh = bridge.activeBeamMesh;
       materials = bridge.allMaterials;
+      sections = bridge.allSections;
     }
-    if (!mesh) {
+    if (!mesh && !beamMesh) {
       notify("Nothing to export", true);
       m_stage = Stage::Idle;
       return;
@@ -217,10 +234,14 @@ namespace anaf::GUI {
     // The snapshot is immutable and the conversion runs on the I/O thread as well.
     m_exportTask = m_service->runAsync<anaf::IO::WriteReport>(
       "Export " + anaf::IO::pathToUtf8(path.filename()),
-      [mesh = std::move(mesh), materials = std::move(materials), path, options](const anaf::IO::IoContext& context) {
-        const auto model = FEM::TRUSS::ADAPTER::toMeshModel(*mesh, materials);
+      [mesh = std::move(mesh), beamMesh = std::move(beamMesh), materials = std::move(materials), sections = std::move(sections), path,
+       options](const anaf::IO::IoContext& context) {
+        const auto model = beamMesh ? FEM::BEAM::ADAPTER::toMeshModel(*beamMesh, materials, sections)
+                                    : FEM::TRUSS::ADAPTER::toMeshModel(*mesh, materials);
         context.progress(0.1f, "writing");
-        return anaf::IO::writeMesh(path, model, options, context);
+        auto report = anaf::IO::writeMesh(path, model, options, context);
+        if (report) report->warnings.insert(report->warnings.end(), model.warnings.begin(), model.warnings.end());
+        return report;
       });
     m_stage = Stage::Exporting;
   }
@@ -245,6 +266,48 @@ namespace anaf::GUI {
     }
   }
 
+  void FileIoPanel::logNotes(const std::vector<std::string>& notes) {
+    for (const auto& note : notes) {
+      if (note.starts_with("warning: ")) anaf::LOG::warn("{}", note.substr(9));
+      else anaf::LOG::info("{}", note);
+    }
+  }
+
+  void FileIoPanel::finishBeamImport(const FEM::BEAM::ADAPTER::ImportedBeam& imported) {
+    auto& bridge = BRIDGE::buildBridge();
+    // The element section indices refer to the list the import saw, plus its new sections.
+    bool listChanged = false;
+    {
+      std::lock_guard lock(bridge.dataMutex);
+      listChanged = bridge.allSections.size() != m_importSectionIDs.size();
+      for (std::size_t i = 0; !listChanged && i < m_importSectionIDs.size(); ++i) {
+        listChanged = bridge.allSections[i].getSectionID() != m_importSectionIDs[i];
+      }
+    }
+    if (listChanged) {
+      anaf::LOG::warn("{} discarded: the section list changed while the file was read", m_importTask->description());
+      notify("Import discarded (section list changed); import again", true);
+      return;
+    }
+    bridge.resetModel(BRIDGE::ObjectType::beam_frame);
+    for (const auto& section : imported.newSections) {
+      if (const auto added = bridge.addUserSection(section); !added) {
+        anaf::LOG::error("{} failed: section '{}' not added: {}", m_importTask->description(), section.getName(), added.error());
+        notify("Import failed: a section of the file could not be added", true);
+        return;
+      }
+    }
+    {
+      std::lock_guard lock(bridge.dataMutex);
+      bridge.activeBeamMesh = imported.mesh;
+    }
+    bridge.dataVersion.fetch_add(1, std::memory_order_release);
+    anaf::LOG::success("{} finished (beam model)", m_importTask->description());
+    logNotes(imported.notes);
+    notify(m_importTask->description() + " finished", false);
+    if (onImportedBeam) onImportedBeam();
+  }
+
   void FileIoPanel::pollTasks() {
     auto& bridge = BRIDGE::buildBridge();
     if (m_importTask && m_importTask->ready()) {
@@ -253,19 +316,18 @@ namespace anaf::GUI {
         // The object type was changed (or the model cleared) while the file was read.
         anaf::LOG::warn("{} discarded: the model was reset meanwhile", m_importTask->description());
         notify("Import discarded (model reset)", true);
+      } else if (result && result->beam) {
+        finishBeamImport(*result->beam);
       } else if (result) {
         // Replaces the whole previous model: stops a running solve and drops its results.
         bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
         {
           std::lock_guard lock(bridge.dataMutex);
-          bridge.activeMesh = result->mesh;
+          bridge.activeMesh = result->truss->mesh;
         }
         bridge.dataVersion.fetch_add(1, std::memory_order_release);
         anaf::LOG::success("{} finished", m_importTask->description());
-        for (const auto& note : result->notes) {
-          if (note.starts_with("warning: ")) anaf::LOG::warn("{}", note.substr(9));
-          else anaf::LOG::info("{}", note);
-        }
+        logNotes(result->truss->notes);
         notify(m_importTask->description() + " finished", false);
         if (onImported) onImported();
       } else if (result.error().code == anaf::IO::IoError::Code::Cancelled) {
