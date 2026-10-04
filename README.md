@@ -21,7 +21,7 @@
 - **Solvers:** sparse direct (SuiteSparse CHOLMOD or Eigen LDLT) and an OpenMP block conjugate gradient solver for large models; every solve is checked by an energy balance (external work = 2 × strain energy).
 - **File formats:** Gmsh MSH, legacy VTK, VTU and ParaView `.pvd`; STEP, IGES and BREP through Gmsh + OpenCASCADE (import and export); HDF5 array store readable from Python / MATLAB.
 - **GUI:** Dear ImGui docking interface, instanced rendering of real beam sections with level of detail, picking, model and section editors, diagrams with ImPlot.
-- **Built-in models:** 46 beam / frame models (buildings, bridges, machines, aerospace, hinged structures) and a truss library, each tested against the generator.
+- **Built-in models:** 49 beam / frame models (buildings, bridges, machines, aerospace, hinged structures, and large structures of about 3000 elements: a stadium, an airport terminal, a complete airliner airframe) and a truss library, each tested against the generator.
 - **Tests:** closed-form checks (cantilevers, clamped beams, three-hinged frame, published section tables) and file round trips through every format, on GCC and Clang with zero warnings.
 
 Documentation, design decisions and progress are in the [`information/`](information/ARCHITECTURE.md) folder.

@@ -47,7 +47,7 @@ namespace FEM::BEAM::LIBRARY {
   struct Entry {
     std::string id;          // file name without ".msh": [a-z0-9_]+
     std::string name;        // shown in the GUI
-    std::string category;    // Building, Bridge, Industrial, Energy & Tower, Machine & Vehicle, Aerospace, Hinges & Pins
+    std::string category;    // Building, Bridge, Industrial, Energy & Tower, Machine & Vehicle, Aerospace, Hinges & Pins, Large Structures
     std::string description; // geometry, supports, loads, sections, material
   };
 

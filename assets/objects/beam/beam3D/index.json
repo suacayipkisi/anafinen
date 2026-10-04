@@ -278,6 +278,24 @@
       "name": "Main landing gear (pinned braces)",
       "category": "Hinges & Pins",
       "description": "Cantilever main gear leg CHS 168.3x8 hung from a trunnion that is free about the fore-aft axis (retraction); a side brace and a drag brace (CHS 76.1x4) pinned at both ends to the knee lock it. Landing load at the wheel: 40 kN up, 12 kN drag, 6 kN side. AISI 4130, Timoshenko leg, self weight."
+    },
+    {
+      "id": "large_stadium",
+      "name": "Football stadium (bowl and cantilever roof)",
+      "category": "Large Structures",
+      "description": "Elliptical bowl around a 120 x 80 m inner edge, 48 radial frames: raking beams HEA 600 on HEB 400 columns carry the stands (35 kN/m), HEB 600 back columns carry 40 m cantilever roof trusses (CHS 323.9 / 273 chords, CHS 168.3 web, 6 to 1.5 m deep) tied down at the back. Ring beams at every chord node and the stands, a compression ring at the roof tip, roof bracing in every fourth bay. Roof 6 kN/m per truss. S355, self weight."
+    },
+    {
+      "id": "large_airport_terminal",
+      "name": "Airport terminal hall",
+      "category": "Large Structures",
+      "description": "144 x 72 m hall on a 12 m column grid (91 columns: HEB 400 to the departures floor at 6 m, CHS 323.9x12.5 to the roof). Floor grillage HEB 600 on the column lines, HEB 500 between, 4 kN/m^2. Roof: 3 m deep square-on-square-offset space frame on 6 m modules (CHS 139.7x6.3 chords, CHS 114.3x5 diagonals), 1.5 kN/m^2, wind 12 kN per facade node. S355, self weight."
+    },
+    {
+      "id": "large_airliner_airframe",
+      "name": "Narrow-body airliner airframe",
+      "category": "Large Structures",
+      "description": "Generic narrow-body with A320 / 737-class proportions, not a real aircraft's structure: the skin is represented by diagonals, and only a 1 g ground case is applied (no pressurisation, no flight loads). Complete 38 m airframe on its landing gear: 37 fuselage frames (Box 80x40x3, heavy wing frames Box 200x100x6, 4 m diameter, tapered nose and upswept tail), 20 stringers (Box 60x40x3, 7075-T6), skin panels as diagonals, floor beams. Swept tapered wing boxes (4 spar caps, ribs, spar webs and skins as diagonals) with a centre box and fuel (3 kN per station and spar), horizontal tail and fin boxes, engines (30 kN) on pylons, nose and main gear legs clamped to the ground. Cabin 6 kN/m. Aluminium 2024-T3 / 7075-T6, steel gear and pylons, self weight."
     }
   ]
 }

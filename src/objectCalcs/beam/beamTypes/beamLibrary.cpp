@@ -22,6 +22,7 @@
 #include <io/core/pathUtf8.hpp>
 #include <io/meshIo.hpp>
 
+#include <Eigen/Core>
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -33,6 +34,7 @@
 #include <numbers>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace FEM::BEAM::LIBRARY {
 
@@ -1249,6 +1251,277 @@ namespace FEM::BEAM::LIBRARY {
                   "6 kN side. AISI 4130, Timoshenko leg, self weight.");
     }
 
+    // ---- Large Structures ------------------------------------------------------------------------
+    // Thousands of elements: realistic sizes for the solver, the level of detail and the GUI.
+
+    LibraryBeam stadium(const Lists& l) {
+      Draft d(l.materials, l.sections);
+      constexpr int frames = 48;
+      const double aIn = 60.0, bIn = 40.0; // inner edge of the stands: an ellipse around the pitch
+      const std::vector<double> standS{0.0, 10.0, 20.0, 30.0};
+      const std::vector<double> roofS{30.0, 25.0, 20.0, 15.0, 10.0, 5.0, 0.0, -5.0, -10.0}; // the roof reaches 10 m over the pitch
+      const auto topY = [](const double s) { return 40.0 - 0.05 * (30.0 - s); };
+      const auto depth = [](const double s) { return 1.5 + 4.5 * (s + 10.0) / 40.0; };
+      struct Frame { std::vector<std::uint32_t> stand, top, bottom; };
+      std::vector<Frame> frame(frames);
+      for (int f = 0; f < frames; ++f) {
+        const double angle = 2.0 * kPi * f / frames, c = std::cos(angle), sn = std::sin(angle);
+        const P radial{c, 0.0, sn};
+        const auto at = [&](const double s, const double y) { return d.node((aIn + s) * c, y, (bIn + s) * sn); };
+        auto& fr = frame[static_cast<std::size_t>(f)];
+        for (const double s : standS) fr.stand.push_back(at(s, 2.0 + 0.6 * s));
+        d.line(d.chain(fr.stand, "HEA 600", kS355), {0, -35 * kKN, 0}); // raking beam: crowd 4 kN/m^2 + seating
+        for (std::size_t i = 0; i < 3; ++i) {
+          const auto base = at(standS[i], 0.0);
+          d.clamp(base);
+          d.beam(base, fr.stand[i], "HEB 400", kS355, radial);
+        }
+        fr.top.push_back(at(36.0, topY(30.0)));
+        for (const double s : roofS) {
+          fr.top.push_back(at(s, topY(s)));
+          fr.bottom.push_back(at(s, topY(s) - depth(s)));
+        }
+        // Back column: ground, stand top, roof bottom chord, roof top chord.
+        const auto back = at(30.0, 0.0);
+        d.clamp(back);
+        d.chain({back, fr.stand.back(), fr.bottom.front(), fr.top[1]}, "HEB 600", kS355, radial);
+        // Rear tie holding the cantilever down.
+        const auto anchor = at(36.0, 0.0);
+        d.clamp(anchor);
+        d.beam(anchor, fr.top.front(), "CHS 323.9x12.5", kS355, radial);
+        d.beam(fr.top.front(), fr.bottom.front(), "CHS 323.9x12.5", kS355); // back panel strut: carries the tie-down force
+        // Cantilever roof truss: tapered from 6 m at the back column to 1.5 m at the tip.
+        const auto topChord = d.chain(fr.top, "CHS 323.9x12.5", kS355);
+        d.line(std::vector<std::uint32_t>(topChord.begin() + 1, topChord.end()), {0, -6 * kKN, 0}); // cladding and snow
+        d.chain(fr.bottom, "CHS 273x10", kS355);
+        for (std::size_t i = 1; i < fr.bottom.size(); ++i) {
+          d.beam(fr.bottom[i], fr.top[i + 1], "CHS 168.3x8", kS355, radial);
+          d.beam(fr.top[i], fr.bottom[i], "CHS 168.3x8", kS355);
+        }
+      }
+      for (int f = 0; f < frames; ++f) {
+        const auto& a = frame[static_cast<std::size_t>(f)];
+        const auto& b = frame[static_cast<std::size_t>((f + 1) % frames)];
+        for (std::size_t i = 0; i < a.stand.size(); ++i) d.beam(a.stand[i], b.stand[i], "IPE 400", kS355);
+        for (std::size_t i = 0; i < a.top.size(); ++i) d.beam(a.top[i], b.top[i], i + 1 == a.top.size() ? "CHS 273x10" : "CHS 168.3x8", kS355);
+        for (std::size_t i = 0; i < a.bottom.size(); ++i) d.beam(a.bottom[i], b.bottom[i], i + 1 == a.bottom.size() ? "CHS 273x10" : "CHS 168.3x8", kS355);
+        if (f % 4 == 0) { // roof plane bracing
+          for (std::size_t i = 1; i + 1 < a.top.size(); ++i) d.beam(a.top[i], b.top[i + 1], "CHS 114.3x5", kS355);
+        }
+      }
+      return make(std::move(d), "large_stadium", "Football stadium (bowl and cantilever roof)", "Large Structures",
+                  "Elliptical bowl around a 120 x 80 m inner edge, 48 radial frames: raking beams HEA 600 on HEB 400 columns carry the "
+                  "stands (35 kN/m), HEB 600 back columns carry 40 m cantilever roof trusses (CHS 323.9 / 273 chords, CHS 168.3 web, 6 to "
+                  "1.5 m deep) tied down at the back. Ring beams at every chord node and the stands, a compression ring at the roof tip, "
+                  "roof bracing in every fourth bay. Roof 6 kN/m per truss. S355, self weight.");
+    }
+
+    LibraryBeam airportTerminal(const Lists& l) {
+      Draft d(l.materials, l.sections);
+      constexpr int nx = 24, nz = 12; // 6 m modules: 144 x 72 m
+      const double module = 6.0, floorY = 6.0, bottomY = 15.0, topY = 18.0;
+      using Grid2 = std::vector<std::vector<std::uint32_t>>;
+      const auto grid = [&](const int countX, const int countZ, const double y, const double offset) {
+        Grid2 g(static_cast<std::size_t>(countX), std::vector<std::uint32_t>(static_cast<std::size_t>(countZ)));
+        for (int i = 0; i < countX; ++i) {
+          for (int j = 0; j < countZ; ++j) g[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = d.node(offset + module * i, y, offset + module * j);
+        }
+        return g;
+      };
+      const auto floorGrid = grid(nx + 1, nz + 1, floorY, 0.0);
+      const auto bottom = grid(nx + 1, nz + 1, bottomY, 0.0);
+      const auto top = grid(nx, nz, topY, module / 2.0);
+      const auto at = [](const Grid2& g, const int i, const int j) { return g[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]; };
+
+      // Departures floor: a grillage on the 12 m column grid, 4 kN/m^2 on the x beams.
+      for (int j = 0; j <= nz; ++j) {
+        for (int i = 0; i < nx; ++i) {
+          const double share = (j == 0 || j == nz) ? 0.5 : 1.0;
+          d.line(d.beam(at(floorGrid, i, j), at(floorGrid, i + 1, j), j % 2 == 0 ? "HEB 600" : "HEB 500", kS355), {0, -24 * kKN * share, 0});
+        }
+      }
+      for (int i = 0; i <= nx; ++i) {
+        for (int j = 0; j < nz; ++j) d.beam(at(floorGrid, i, j), at(floorGrid, i, j + 1), i % 2 == 0 ? "HEB 600" : "HEB 500", kS355);
+      }
+      // Roof: square-on-square-offset space frame, 3 m deep.
+      for (int j = 0; j <= nz; ++j) {
+        for (int i = 0; i < nx; ++i) d.beam(at(bottom, i, j), at(bottom, i + 1, j), "CHS 139.7x6.3", kS355);
+      }
+      for (int i = 0; i <= nx; ++i) {
+        for (int j = 0; j < nz; ++j) d.beam(at(bottom, i, j), at(bottom, i, j + 1), "CHS 139.7x6.3", kS355);
+      }
+      for (int i = 0; i < nx; ++i) {
+        for (int j = 0; j < nz; ++j) {
+          if (i + 1 < nx) d.beam(at(top, i, j), at(top, i + 1, j), "CHS 139.7x6.3", kS355);
+          if (j + 1 < nz) d.beam(at(top, i, j), at(top, i, j + 1), "CHS 139.7x6.3", kS355);
+          for (const auto& [di, dj] : {std::pair{0, 0}, std::pair{1, 0}, std::pair{0, 1}, std::pair{1, 1}}) {
+            d.beam(at(top, i, j), at(bottom, i + di, j + dj), "CHS 114.3x5", kS355);
+          }
+          d.load(at(top, i, j), {0, -54 * kKN, 0}); // roof 1.5 kN/m^2 over a 6 x 6 m module
+        }
+      }
+      // Columns on the 12 m grid: HEB 400 below the floor, CHS 323.9x12.5 up to the roof.
+      for (int i = 0; i <= nx; i += 2) {
+        for (int j = 0; j <= nz; j += 2) {
+          const auto base = d.node(module * i, 0.0, module * j);
+          d.clamp(base);
+          d.beam(base, at(floorGrid, i, j), "HEB 400", kS355, {1, 0, 0});
+          d.beam(at(floorGrid, i, j), at(bottom, i, j), "CHS 323.9x12.5", kS355, {1, 0, 0});
+        }
+      }
+      for (int i = 0; i <= nx; ++i) d.load(at(bottom, i, 0), {0, 0, 12 * kKN}); // wind on the airside facade
+      return make(std::move(d), "large_airport_terminal", "Airport terminal hall", "Large Structures",
+                  "144 x 72 m hall on a 12 m column grid (91 columns: HEB 400 to the departures floor at 6 m, CHS 323.9x12.5 to the roof). "
+                  "Floor grillage HEB 600 on the column lines, HEB 500 between, 4 kN/m^2. Roof: 3 m deep square-on-square-offset space "
+                  "frame on 6 m modules (CHS 139.7x6.3 chords, CHS 114.3x5 diagonals), 1.5 kN/m^2, wind 12 kN per facade node. S355, "
+                  "self weight.");
+    }
+
+    LibraryBeam airliner(const Lists& l) {
+      Draft d(l.materials, l.sections);
+      // x aft from the nose, y up, z to the right wing; ground at y = 0.
+      constexpr int ringPoints = 20, firstFrame = 1, lastFrame = 37;
+      const auto radius = [](const double x) { return x < 6.0 ? 2.0 * std::sqrt(x / 6.0) : (x > 28.0 ? 2.0 * (1.0 - 0.65 * (x - 28.0) / 9.0) : 2.0); };
+      const auto centre = [](const double x) { return 3.2 + (x > 28.0 ? 0.11 * (x - 28.0) : 0.0); };
+      std::vector<std::vector<std::uint32_t>> rings;
+      for (int f = firstFrame; f <= lastFrame; ++f) {
+        const double x = f, r = radius(x), yc = centre(x);
+        auto& ring = rings.emplace_back();
+        for (int k = 0; k < ringPoints; ++k) {
+          const double angle = 2.0 * kPi * k / ringPoints;
+          ring.push_back(d.node(x, yc + r * std::sin(angle), r * std::cos(angle)));
+        }
+        const bool wingFrame = f == 15 || f == 17;
+        for (int k = 0; k < ringPoints; ++k) {
+          const double mid = 2.0 * kPi * (k + 0.5) / ringPoints;
+          d.beam(ring[static_cast<std::size_t>(k)], ring[static_cast<std::size_t>((k + 1) % ringPoints)], wingFrame ? "Box 200x100x6" : "Box 80x40x3",
+                 kAl2024, {0, std::sin(mid), std::cos(mid)}); // frame depth radial
+        }
+        const auto floor = d.beam(ring[11], ring[19], "Box 120x60x4", kAl2024);
+        if (x >= 6.0 && x <= 30.0) d.line(floor, {0, -1.6 * kKN, 0}); // passengers, seats and cargo: 6 kN per metre of cabin
+      }
+      for (std::size_t f = 0; f + 1 < rings.size(); ++f) {
+        for (std::size_t k = 0; k < ringPoints; ++k) {
+          const std::size_t next = (k + 1) % ringPoints;
+          d.beam(rings[f][k], rings[f + 1][k], "Box 60x40x3", kAl7075); // stringers
+          // Skin shear panels as one diagonal each, alternating.
+          if ((f + k) % 2 == 0) d.beam(rings[f][k], rings[f + 1][next], "Box 40x40x2", kAl2024);
+          else d.beam(rings[f][next], rings[f + 1][k], "Box 40x40x2", kAl2024);
+        }
+      }
+      const auto nearestFuselageNode = [&](const std::uint32_t node) {
+        const auto& p = d.mesh.nodes[node].getLocation();
+        std::uint32_t best = rings.front().front();
+        double bestDistance = 1e300;
+        for (const auto& ring : rings) {
+          for (const auto candidate : ring) {
+            const auto& q = d.mesh.nodes[candidate].getLocation();
+            const double distance = std::hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+            if (distance < bestDistance) {
+              bestDistance = distance;
+              best = candidate;
+            }
+          }
+        }
+        return best;
+      };
+
+      // Torsion box of a lifting surface: four spar caps (front / rear, upper / lower), a rib at every
+      // station, the spar webs and skins as diagonals. thick = the box depth direction.
+      using Corners = std::array<std::uint32_t, 4>; // front upper, front lower, rear upper, rear lower
+      // Stations below `heavy` get heavier spar webs (gear and engine loads enter there).
+      const auto liftingBox = [&](const int stations, const auto& frontAt, const auto& chordAt, const auto& depthAt, const P thick,
+                                  const auto& capSection, const int heavy = 0) {
+        std::vector<Corners> box;
+        const Eigen::Vector3d t(thick[0], thick[1], thick[2]);
+        for (int i = 0; i <= stations; ++i) {
+          const Eigen::Vector3d front = frontAt(i), rear = front + Eigen::Vector3d(chordAt(i), 0.0, 0.0);
+          const Eigen::Vector3d half = 0.5 * depthAt(i) * t;
+          const auto node = [&](const Eigen::Vector3d& v) { return d.node(v[0], v[1], v[2]); };
+          box.push_back({node(front + half), node(front - half), node(rear + half), node(rear - half)});
+          const auto& c = box.back();
+          d.beam(c[0], c[2], "Box 60x40x3", kAl2024, thick); // rib caps
+          d.beam(c[1], c[3], "Box 60x40x3", kAl2024, thick);
+          const char* web = i < heavy ? "Box 120x60x4" : "Box 80x40x3";
+          d.beam(c[0], c[1], web, kAl2024, {1, 0, 0}); // spar webs
+          d.beam(c[2], c[3], web, kAl2024, {1, 0, 0});
+          d.beam(c[0], c[3], "Box 40x40x2", kAl2024, thick); // rib web
+        }
+        for (int i = 0; i < stations; ++i) {
+          const auto& a = box[static_cast<std::size_t>(i)];
+          const auto& b = box[static_cast<std::size_t>(i + 1)];
+          for (std::size_t corner = 0; corner < 4; ++corner) d.beam(a[corner], b[corner], capSection(i), kAl7075, thick);
+          const char* web = i < heavy ? "Box 120x60x4" : "Box 60x40x3";
+          d.beam(a[0], b[1], web, kAl2024, {1, 0, 0}); // spar webs
+          d.beam(a[2], b[3], web, kAl2024, {1, 0, 0});
+          d.beam(a[0], b[2], "Box 60x40x3", kAl2024, thick);     // skins
+          d.beam(a[1], b[3], "Box 60x40x3", kAl2024, thick);
+        }
+        return box;
+      };
+      const auto linkRoot = [&](const Corners& root) {
+        for (const auto corner : root) d.beam(corner, nearestFuselageNode(corner), "Box 200x100x6", kAl7075);
+      };
+
+      // Wings: 15.1 m semi-span, 25 deg sweep, taper 2.0 -> 1.0 m box chord, 0.8 -> 0.25 m depth, dihedral.
+      constexpr int wingStations = 15;
+      std::array<std::vector<Corners>, 2> wings;
+      for (std::size_t side = 0; side < 2; ++side) {
+        const double sign = side == 0 ? 1.0 : -1.0;
+        const auto spanAt = [](const int i) { return 1.9 + 15.1 * i / wingStations; };
+        wings[side] = liftingBox(
+          wingStations,
+          [&](const int i) { const double z = spanAt(i); return Eigen::Vector3d(15.0 + 0.45 * (z - 1.9), 1.75 + 0.08 * (z - 1.9), sign * z); },
+          [](const int i) { return 2.0 - 1.0 * i / wingStations; },
+          [](const int i) { return 0.8 - 0.55 * i / wingStations; },
+          P{0, 1, 0},
+          [](const int i) { return i < 6 ? "Box 200x100x6" : (i < 11 ? "Box 120x60x4" : "Box 80x40x3"); }, 5);
+        linkRoot(wings[side].front());
+        for (std::size_t i = 0; i <= 10; ++i) { // fuel in the inner tanks: 3 kN per station on each lower spar cap
+          d.load(wings[side][i][1], {0, -3 * kKN, 0});
+          d.load(wings[side][i][3], {0, -3 * kKN, 0});
+        }
+        // Main gear under the rear spar at station 2, engine on a pylon at station 4.
+        const auto gearTop = wings[side][2][3];
+        const auto& g = d.mesh.nodes[gearTop].getLocation();
+        const auto ground = d.node(g[0], 0.0, g[2]);
+        d.clamp(ground);
+        d.beam(gearTop, ground, "CHS 168.3x8", kSteel4130, {1, 0, 0});
+        const auto& front = d.mesh.nodes[wings[side][4][1]].getLocation();
+        const auto engine = d.node(front[0] - 2.2, front[1] - 1.1, front[2]);
+        d.beam(wings[side][4][1], engine, "CHS 114.3x5", kSteel4130);
+        d.beam(wings[side][4][3], engine, "CHS 114.3x5", kSteel4130);
+        d.load(engine, {0, -30 * kKN, 0}); // engine weight
+      }
+      for (std::size_t corner = 0; corner < 4; ++corner) d.beam(wings[0][0][corner], wings[1][0][corner], "Box 200x100x6", kAl7075); // centre box
+
+      // Horizontal tail (two halves) and fin.
+      for (const double sign : {1.0, -1.0}) {
+        linkRoot(liftingBox(
+          6, [&](const int i) { const double z = 1.0 + 5.0 * i / 6.0; return Eigen::Vector3d(34.0 + 0.5 * (z - 1.0), centre(34.0), sign * z); },
+          [](const int i) { return 2.0 - 1.1 * i / 6.0; }, [](const int i) { return 0.3 - 0.18 * i / 6.0; }, P{0, 1, 0},
+          [](const int) { return "Box 80x40x3"; }).front());
+      }
+      linkRoot(liftingBox(
+        7, [&](const int i) { const double y = 5.0 + 6.0 * i / 7.0; return Eigen::Vector3d(32.0 + 0.7 * (y - 5.0), y, 0.0); },
+        [](const int i) { return 3.0 - 1.8 * i / 7.0; }, [](const int i) { return 0.35 - 0.23 * i / 7.0; }, P{0, 0, 1},
+        [](const int) { return "Box 80x40x3"; }).front());
+
+      // Nose gear under frame 4.
+      const auto noseTop = rings[3][15];
+      const auto& n = d.mesh.nodes[noseTop].getLocation();
+      const auto noseGround = d.node(n[0], 0.0, n[2]);
+      d.clamp(noseGround);
+      d.beam(noseTop, noseGround, "CHS 114.3x5", kSteel4130, {1, 0, 0});
+      return make(std::move(d), "large_airliner_airframe", "Narrow-body airliner airframe", "Large Structures",
+                  "Generic narrow-body with A320 / 737-class proportions, not a real aircraft's structure: the skin is represented by "
+                  "diagonals, and only a 1 g ground case is applied (no pressurisation, no flight loads). Complete 38 m airframe on its landing gear: 37 fuselage frames (Box 80x40x3, heavy wing frames Box 200x100x6, 4 m "
+                  "diameter, tapered nose and upswept tail), 20 stringers (Box 60x40x3, 7075-T6), skin panels as diagonals, floor beams. "
+                  "Swept tapered wing boxes (4 spar caps, ribs, spar webs and skins as diagonals) with a centre box and fuel (3 kN per "
+                  "station and spar), horizontal tail and fin boxes, engines (30 kN) on pylons, nose and main gear legs clamped to the ground. Cabin 6 kN/m. Aluminium 2024-T3 / "
+                  "7075-T6, steel gear and pylons, self weight.");
+    }
+
   } // namespace end
 
   std::vector<LibraryBeam> buildLibrary(const std::span<const anaf::MATERIAL::Material> materials, const std::span<const BeamSection> sections) {
@@ -1261,7 +1534,8 @@ namespace FEM::BEAM::LIBRARY {
                         machineFrame, ladderChassis, bicycleFrame, rollCage, cncGantry, robotArm,
                         wingSpar, strutBracedWing, skidGear, enginePylon, satelliteBus, spaceTruss, lunarLander, thrustFrame,
                         quadcopter, fuselageSection, tailBoom, solarArrayBoom,
-                        threeHingedFrame, gerberGirder, simpleConnectionFrame, pinnedWebTruss, loaderCrane, bracedLandingGear}) {
+                        threeHingedFrame, gerberGirder, simpleConnectionFrame, pinnedWebTruss, loaderCrane, bracedLandingGear,
+                        stadium, airportTerminal, airliner}) {
       library.push_back(build(lists));
     }
     return library;

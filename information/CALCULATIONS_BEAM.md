@@ -3,7 +3,7 @@
 This document describes the linear static calculation of 3D frames built from two-node beam elements (Euler-Bernoulli and Timoshenko): data types, local axes, element matrices, loads, supports, results along the element and the tests.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (end releases / hinges: section 6.1, `BeamElement::endReleases`, library category Hinges & Pins with 6 models, 46 in all; built-in beam library `FEM::BEAM::LIBRARY`, section 12, catalogue grown to 118 profiles; section face triangulation for rendering, section 2.2; file adapter: section 11; GUI: [GUI.md](GUI.md) sections 2.5-2.7; stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (end releases / hinges: section 6.1, `BeamElement::endReleases`, library category Hinges & Pins with 6 models, Large Structures with 3 (stadium, airport terminal, airliner airframe, about 3000 elements each), 49 in all; built-in beam library `FEM::BEAM::LIBRARY`, section 12, catalogue grown to 118 profiles; section face triangulation for rendering, section 2.2; file adapter: section 11; GUI: [GUI.md](GUI.md) sections 2.5-2.7; stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
 > Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; end releases (hinges) by static condensation; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 118 standard profiles; normal, shear and von Mises stresses with a yield check.
 > Not implemented yet: point-wise stresses inside the section, channels / angles / tees, partial (spring) end fixity, mass matrix, reactions.
 
@@ -338,7 +338,7 @@ Export (`toMeshModel(mesh, materials, sections)`) writes everything above; an in
 
 ## 12. Built-in beam library (`beamTypes/beamLibrary.*`)
 
-`FEM::BEAM::LIBRARY` builds 46 ready-made frames in seven categories (Building, Bridge, Industrial, Energy & Tower, Machine & Vehicle, Aerospace, Hinges & Pins; 12 of them aerospace / space: wing spar, strut-braced wing, skid gear, engine pylon, satellite bus, station truss, lunar lander legs, thrust frame, quadcopter, fuselage frame, tail boom, solar array boom).
+`FEM::BEAM::LIBRARY` builds 49 ready-made frames in eight categories (Building, Bridge, Industrial, Energy & Tower, Machine & Vehicle, Aerospace, Hinges & Pins, Large Structures; 12 of them aerospace / space: wing spar, strut-braced wing, skid gear, engine pylon, satellite bus, station truss, lunar lander legs, thrust frame, quadcopter, fuselage frame, tail boom, solar array boom).
 
 Hinges & Pins (end releases, section 6.1):
 
@@ -349,10 +349,20 @@ Hinges & Pins (end releases, section 6.1):
 | `hinge_simple_connection_frame` | Beams pinned at both ends (shear connections), pinned base plates, pin-ended vertical and plan bracing |
 | `hinge_pinned_web_truss` | Pratt trusses: continuous chords, pin-ended posts and diagonals, rigid end posts |
 | `hinge_loader_crane` | Boom pinned to the column head, luffing cylinder pinned at both ends and free to spin |
-| `hinge_braced_landing_gear` | Gear leg on a trunnion, side and drag braces pinned to clamped airframe fittings | Sections and materials are referenced by catalogue / built-in name; a missing name throws.
+| `hinge_braced_landing_gear` | Gear leg on a trunnion, side and drag braces pinned to clamped airframe fittings |
+
+Large Structures (rigid joints, about 1000 nodes and 3000 elements each; every one passes the same library checks):
+
+| id | Nodes / elements | Shows |
+|---|---|---|
+| `large_stadium` | 1344 / 3312 | Elliptical bowl, 48 radial frames: raking beams on columns, 40 m tapered cantilever roof trusses tied down at the back, ring beams, a compression ring, roof bracing |
+| `large_airport_terminal` | 1029 / 3098 | 144 x 72 m hall: 91 columns on a 12 m grid, departures floor grillage, 3 m deep square-on-square-offset roof space frame |
+| `large_airliner_airframe` | 961 / 2910 | 38 m airframe on its gear: frames, stringers and skin diagonals; swept wing boxes with a centre box, tail boxes, engines on pylons. Generic, A320 / 737-class proportions only: not a real aircraft's structure (skin as diagonals, far weaker than a skin-stringer shell; 1 g ground case only, no pressurisation or flight loads) |
+
+Their files take about 8.6 MB (MSH 4.1 ASCII, model and solved results); all 49 models solve in about 1.5 s on 16 threads. Sections and materials are referenced by catalogue / built-in name; a missing name throws.
 
 ```
-beamLibrary.cpp --buildLibrary()--> MeshData x 46
+beamLibrary.cpp --buildLibrary()--> MeshData x 49
       |                                  |
 anaf_beam_library_tool          ADAPTER::toMeshModel  /  solveStatic + toMeshModel
       v                                  v
