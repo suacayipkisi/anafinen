@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (`anaf_beam_library_tool`, beam library sources in `anaf_core`; section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
 
 ## 1. Overall flow
 
@@ -22,6 +22,7 @@ CMakeLists.txt
    +-- tests/ (ANAFINEN_BUILD_TESTS=ON)    anaf_core_tests, anaf_beam_tests (anaf_core only), anaf_io_tests, anaf_array_tests, anaf_io_tool,
    |                                       anaf_truss_io_tests, vtk_reference_check,
    |                                       anaf_truss_library_tool (regenerates assets/objects/truss/truss1D)
+   |                                       anaf_beam_library_tool  (regenerates assets/objects/beam/beam3D)
    |        |
    |        +-- POST_BUILD: copy assets/ (+ generated icon, + gmsh DLL on Windows)
    |

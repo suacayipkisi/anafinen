@@ -90,6 +90,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/beam/beamEngine/beamDiagrams.cpp
     src/objectCalcs/beam/beamEngine/beamStress.cpp
     src/objectCalcs/beam/beamIO/beamMeshAdapter.cpp
+    src/objectCalcs/beam/beamTypes/beamLibrary.cpp
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})

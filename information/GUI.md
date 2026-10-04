@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (Frame Editor "Built-in Models" (40 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
 
 ## 1. Overall flow (one frame)
 
@@ -185,6 +185,8 @@ File > Export Model... (Ctrl+E)
 8. Supports: "Global axes" fixes x / y / z (`Node::setMovable`). "Inclined / skewed" takes 1 to 3 direction vectors, read as the restrained directions (1 = roller on a plane, 2 = guide along a line, 3 = pin) or as the allowed motion (1 = line, 2 = plane); `FEM::SUPPORT::orthonormalize()` / `orthogonalComplement()` turn them into the allowed-motion basis for `Node::setAllowedMotionDirections()`. Switching between the two readings replaces the vectors by their complement, so the support stays the same. Dependent or zero vectors disable "Apply Support". The support is stored on the node only (red point, model tree, export and the solve read it there). The SQPT control panel keeps its X / Y / Z checkboxes; its supports are panel input put on every grid it builds.
 
 ### 2.5 Beam frame editor (`BeamModelEditor`)
+
+Built-in Models (top collapsing header): a combo grouped by category from `assets/objects/beam/beam3D/index.json`, the model description, and two buttons. "Load Model" imports `<id>.msh`, "Load Solved Results" imports `<id>_solved.msh`; both call `onLoadBuiltin`, which `gui.cpp` binds to `FileIoPanel::importFile`. File > Export refuses targets inside the truss or beam library folders ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 12).
 
 ```text
 +-- Beam(3D) Frame Editor ------------------------------+

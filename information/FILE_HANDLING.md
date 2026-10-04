@@ -10,7 +10,7 @@ This document describes `anaf_io`, the mesh import/export library:
 For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam adapter `FEM::BEAM::ADAPTER`: section shapes, uniform line loads and gravity as well-known names, section 3.3; beam files are routed to it; HDF5 array store `src/io/array/`; 2026-10-03: rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names, link to the interoperability plan; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (built-in beam library files `assets/objects/beam/beam3D/` written through the beam adapter, [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 12; beam adapter `FEM::BEAM::ADAPTER`: section shapes, uniform line loads and gravity as well-known names, section 3.3; beam files are routed to it; HDF5 array store `src/io/array/`; 2026-10-03: rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names, link to the interoperability plan; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow

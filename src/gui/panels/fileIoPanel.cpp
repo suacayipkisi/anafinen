@@ -22,6 +22,7 @@
 #include <io/core/pathUtf8.hpp>
 #include <io/meshIo.hpp>
 #include <log/anaf_info.hpp>
+#include <beam/beamTypes/beamLibrary.hpp>
 #include <truss_1D/trussTypes/trussLibrary.hpp>
 
 #include <imgui.h>
@@ -87,11 +88,14 @@ namespace anaf::GUI {
     // Built-in models are never overwritten: nothing may be written into the library folder
     // (Linux packages install it read-only anyway; portable / source builds do not).
     bool isInBuiltinLibrary(const std::filesystem::path& path) {
-      const auto library = anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::TRUSS::LIBRARY::kLibrarySubdir));
-      if (library.empty()) return false;
       std::error_code ec;
       const auto folder = std::filesystem::weakly_canonical(std::filesystem::absolute(path, ec).parent_path(), ec);
-      return !ec && std::filesystem::equivalent(folder, library, ec) && !ec;
+      if (ec) return false;
+      for (const auto subdir : {FEM::TRUSS::LIBRARY::kLibrarySubdir, FEM::BEAM::LIBRARY::kLibrarySubdir}) {
+        const auto library = anaf::DIRECTORY::findAssetPath(std::filesystem::path(subdir));
+        if (!library.empty() && std::filesystem::equivalent(folder, library, ec) && !ec) return true;
+      }
+      return false;
     }
 
   } // namespace end
@@ -201,8 +205,8 @@ namespace anaf::GUI {
     const auto& choice = kExportChoices[static_cast<std::size_t>(m_exportFormat)];
     if (path.extension().empty()) path += choice.extension;
     if (isInBuiltinLibrary(path)) {
-      anaf::LOG::warn("Export refused: '{}' is in the read-only built-in truss library", anaf::IO::pathToUtf8(path));
-      notify("The built-in library is read-only: export to another folder", true);
+      anaf::LOG::warn("Export refused: '{}' is in a read-only built-in library", anaf::IO::pathToUtf8(path));
+      notify("The built-in libraries are read-only: export to another folder", true);
       m_stage = Stage::Idle;
       return;
     }

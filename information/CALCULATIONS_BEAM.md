@@ -3,8 +3,8 @@
 This document describes the linear static calculation of 3D frames built from two-node beam elements (Euler-Bernoulli and Timoshenko): data types, local axes, element matrices, loads, supports, results along the element and the tests.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (section face triangulation for rendering, section 2.2; file adapter: section 11; GUI: [GUI.md](GUI.md) sections 2.5-2.7; stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
-> Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 82 standard profiles; normal, shear and von Mises stresses with a yield check.
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (built-in beam library `FEM::BEAM::LIBRARY`, section 12, catalogue grown to 118 profiles; section face triangulation for rendering, section 2.2; file adapter: section 11; GUI: [GUI.md](GUI.md) sections 2.5-2.7; stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
+> Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 118 standard profiles; normal, shear and von Mises stresses with a yield check.
 > Not implemented yet: point-wise stresses inside the section, channels / angles / tees, end releases (hinges), mass matrix, reactions.
 
 ## 1. Overall flow
@@ -295,7 +295,32 @@ Import (`toMeshData(model, materials, sections)`):
 
 Export (`toMeshModel(mesh, materials, sections)`) writes everything above; an inclined rotation support goes out as fixed about every global axis outside its span, with a message in `model.warnings` (the GUI adds it to the export report).
 
-## 12. Related source files
+## 12. Built-in beam library (`beamTypes/beamLibrary.*`)
+
+`FEM::BEAM::LIBRARY` builds 40 ready-made frames in six categories (Building, Bridge, Industrial, Energy & Tower, Machine & Vehicle, Aerospace; 12 of them aerospace / space: wing spar, strut-braced wing, skid gear, engine pylon, satellite bus, station truss, lunar lander legs, thrust frame, quadcopter, fuselage frame, tail boom, solar array boom). Sections and materials are referenced by catalogue / built-in name; a missing name throws.
+
+```
+beamLibrary.cpp --buildLibrary()--> MeshData x 40
+      |                                  |
+anaf_beam_library_tool          ADAPTER::toMeshModel  /  solveStatic + toMeshModel
+      v                                  v
+assets/objects/beam/beam3D/  <id>.msh (model)   <id>_solved.msh (model + results)   index.json
+```
+
+| Where | What |
+| --- | --- |
+| `assets/objects/beam/beam3D/<id>.msh` | MSH 4.1 ASCII model, no results |
+| `assets/objects/beam/beam3D/<id>_solved.msh` | the same model with displacement, rotation, section force and stress fields |
+| `assets/objects/beam/beam3D/index.json` | id, name, category, description per model |
+
+1. Never edit the files by hand: change `beamLibrary.cpp` (or the catalogue), run `anaf_beam_library_tool`, commit the result.
+2. `builtInBeamLibraryMatchesTheGenerator` compares index.json byte-exact and the `.msh` files by content (fields with a relative tolerance).
+3. `builtInBeamsAreStableAndReasonable` imports and solves every model: no warnings, energy check passes, a 1 N / 1 N·m probe at every node finds no mechanism (displacement < 0.1 × extent), deflection < extent / 10, von Mises utilisation < 1, and the `_solved` displacements match a fresh solve.
+4. The GUI loads both files through the Frame Editor's "Built-in Models" section ([GUI.md](GUI.md) section 2.5); export into the library folder is refused.
+
+## 13. Related source files
+
+- Built-in library: [beamLibrary.hpp](../src/objectCalcs/beam/beamTypes/beamLibrary.hpp), [beamLibrary.cpp](../src/objectCalcs/beam/beamTypes/beamLibrary.cpp), tool [beamLibraryTool.cpp](../tests/beamLibraryTool.cpp)
 
 - Entry point: [beamSolver.hpp](../src/objectCalcs/beam/beamEngine/beamSolver.hpp), [beamSolver.cpp](../src/objectCalcs/beam/beamEngine/beamSolver.cpp)
 - Container and element math: [deformationUnderConstForce.hpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.cpp)

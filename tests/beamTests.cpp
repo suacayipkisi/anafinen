@@ -29,6 +29,8 @@
 #include <beam/beamSection/sectionLibrary.hpp>
 #include <beam/beamSection/sectionStress.hpp>
 #include <beam/beamSection/sectionTriangulation.hpp>
+#include <beam/beamTypes/beamLibrary.hpp>
+#include <material/materialLibrary.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <io/meshIo.hpp>
 #include <truss_1D/trussIO/trussMeshAdapter.hpp>
@@ -42,6 +44,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <numbers>
 #include <stop_token>
@@ -688,7 +692,7 @@ TEST(catalogMatchesPublishedTables) {
   for (const auto& section : *catalog) {
     CHECK(section.getIsBuiltin() && validateSection(section).has_value());
     const auto p = computeProperties(section.getShape(), 0.3);
-    CHECK(p.area > 1e-5 && p.area < 0.1); // 0.1 cm^2 .. 1000 cm^2
+    CHECK(p.area > 1e-5 && p.area < 1.0); // 0.1 cm^2 .. 10 000 cm^2 (wind turbine tower tubes)
   }
 }
 
@@ -1158,6 +1162,160 @@ TEST(beamFilesAreTellApartFromTrussFiles) {
   REQUIRE(accepted.has_value() && accepted->newSections.size() == 1);
   CHECK(std::holds_alternative<FEM::BEAM::GeneralSection>(accepted->newSections[0].getShape()));
   CHECK(accepted->newSections[0].getName() == "Imported section 1");
+}
+
+// ---- built-in library ----------------------------------------------------------------------
+
+namespace {
+  struct BuiltInLists {
+    std::vector<anaf::MATERIAL::Material> materials;
+    std::vector<FEM::BEAM::BeamSection> sections;
+  };
+  const BuiltInLists& builtInLists() {
+    static const BuiltInLists lists = [] {
+      BuiltInLists l;
+      auto materials = anaf::MATERIAL::loadMaterialLibrary(anaf::DIRECTORY::findAssetPath("bridge/materialProperties.json"));
+      auto sections = FEM::BEAM::loadSectionLibrary(anaf::DIRECTORY::findAssetPath(FEM::BEAM::kSectionCatalogAsset));
+      if (materials) l.materials = std::move(*materials);
+      if (sections) l.sections = std::move(*sections);
+      return l;
+    }();
+    return lists;
+  }
+  std::filesystem::path beamLibraryDir() { return anaf::DIRECTORY::findAssetPath(FEM::BEAM::LIBRARY::kLibrarySubdir); }
+
+  std::string readText(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  }
+} // namespace end
+
+TEST(builtInBeamLibraryMatchesTheGenerator) {
+  // The committed files must be what anaf_beam_library_tool writes (regenerate after changing
+  // beamLibrary.cpp or the catalogue; never edit them by hand). Compared by content with a
+  // tolerance: compilers and the solver back end (CHOLMOD / LDLT) may change the last bits.
+  namespace IO = anaf::IO;
+  const auto& lists = builtInLists();
+  REQUIRE(!lists.materials.empty() && !lists.sections.empty());
+  const auto generated = beamWorkDir() / "library";
+  const auto entries = FEM::BEAM::LIBRARY::writeLibrary(generated, lists.materials, lists.sections);
+  if (!entries) std::printf("      %s\n", entries.error().c_str());
+  REQUIRE(entries.has_value());
+  CHECK(entries->size() >= 30 && entries->size() <= 50);
+  const auto indexName = std::filesystem::path(FEM::BEAM::LIBRARY::kIndexFile);
+  CHECK_MSG(readText(beamLibraryDir() / indexName) == readText(generated / indexName), "index.json is stale");
+
+  const auto close = [](const double a, const double b, const double scale) { return std::abs(a - b) <= 1e-9 * (1.0 + std::abs(a)) + 1e-7 * scale; };
+  for (const auto& entry : *entries) {
+    for (const bool solved : {false, true}) {
+      const auto committedPath = solved ? FEM::BEAM::LIBRARY::solvedFile(beamLibraryDir(), entry) : FEM::BEAM::LIBRARY::modelFile(beamLibraryDir(), entry);
+      const auto freshPath = solved ? FEM::BEAM::LIBRARY::solvedFile(generated, entry) : FEM::BEAM::LIBRARY::modelFile(generated, entry);
+      const auto committed = IO::readMesh(committedPath);
+      const auto fresh = IO::readMesh(freshPath);
+      CHECK_MSG(committed.has_value(), entry.id + (solved ? "_solved" : "") + " missing");
+      if (!committed || !fresh) continue;
+      bool same = committed->nodes.size() == fresh->nodes.size() && committed->blocks.size() == fresh->blocks.size()
+        && committed->constraints.size() == fresh->constraints.size() && committed->loads.size() == fresh->loads.size()
+        && committed->sets.size() == fresh->sets.size() && committed->elementAttributes.size() == fresh->elementAttributes.size()
+        && committed->fields.size() == fresh->fields.size();
+      for (std::size_t i = 0; same && i < fresh->nodes.size(); ++i) {
+        for (std::size_t axis = 0; axis < 3; ++axis) same = close(committed->nodes[i].position[axis], fresh->nodes[i].position[axis], 0.0);
+      }
+      for (std::size_t b = 0; same && b < fresh->blocks.size(); ++b) same = committed->blocks[b].connectivity == fresh->blocks[b].connectivity;
+      for (const auto& [name, values] : fresh->elementAttributes) {
+        const auto it = committed->elementAttributes.find(name);
+        same = same && it != committed->elementAttributes.end() && it->second.size() == values.size();
+        for (std::size_t e = 0; same && e < values.size(); ++e) same = close(it->second[e], values[e], 0.0);
+      }
+      for (std::size_t s = 0; same && s < fresh->sets.size(); ++s) same = committed->sets[s].name == fresh->sets[s].name && committed->sets[s].members == fresh->sets[s].members;
+      for (std::size_t f = 0; same && f < fresh->fields.size(); ++f) {
+        const auto& a = committed->fields[f].steps.back();
+        const auto& b = fresh->fields[f].steps.back();
+        double scale = 0.0;
+        for (const double v : b) scale = std::max(scale, std::abs(v));
+        same = committed->fields[f].name == fresh->fields[f].name && a.size() == b.size();
+        for (std::size_t k = 0; same && k < b.size(); ++k) same = close(a[k], b[k], scale);
+      }
+      CHECK_MSG(same, entry.id + (solved ? "_solved" : "") + " is stale: regenerate with anaf_beam_library_tool");
+    }
+  }
+}
+
+TEST(builtInBeamsAreStableAndReasonable) {
+  // Every model imports with catalogue sections only (no new user sections, no warnings),
+  // solves with a passing energy check, stays elastic (von Mises below yield) and is no
+  // mechanism: small loads on every DOF must give small displacements (an unloaded mechanism
+  // would not show in the design load case, ARCHITECTURE.md known issue 6). Its _solved file
+  // carries the same results.
+  namespace IO = anaf::IO;
+  const auto& lists = builtInLists();
+  const auto index = FEM::BEAM::LIBRARY::loadIndex(beamLibraryDir() / std::filesystem::path(FEM::BEAM::LIBRARY::kIndexFile));
+  REQUIRE(index.has_value());
+  for (const auto& entry : *index) {
+    const auto read = IO::readMesh(FEM::BEAM::LIBRARY::modelFile(beamLibraryDir(), entry));
+    REQUIRE(read.has_value());
+    const auto imported = FEM::BEAM::ADAPTER::toMeshData(*read, lists.materials, lists.sections);
+    if (!imported) std::printf("      %s: %s\n", entry.id.c_str(), imported.error().c_str());
+    REQUIRE(imported.has_value());
+    CHECK_MSG(imported->newSections.empty(), entry.id + " needs sections outside the catalogue");
+    CHECK_MSG(std::ranges::none_of(imported->notes, [](const std::string& n) { return n.starts_with("warning"); }), entry.id + " import warnings");
+
+    const auto solved = FEM::BEAM::solveStatic(*imported->mesh, lists.materials, lists.sections);
+    if (!solved) std::printf("      %s: %s\n", entry.id.c_str(), solved.error().c_str());
+    REQUIRE(solved.has_value());
+    CHECK_MSG(solved->energyCheckPassed, entry.id + " energy check");
+
+    std::array<double, 3> low{1e300, 1e300, 1e300}, high{-1e300, -1e300, -1e300};
+    double maxDisp = 0.0, maxStress = 0.0, utilisation = 0.0;
+    for (const auto& node : solved->mesh->nodes) {
+      const auto& d = node.getDisplacement();
+      maxDisp = std::max(maxDisp, std::hypot(d[0], d[1], d[2]));
+      for (std::size_t axis = 0; axis < 3; ++axis) {
+        low[axis] = std::min(low[axis], node.getLocation()[axis]);
+        high[axis] = std::max(high[axis], node.getLocation()[axis]);
+      }
+    }
+    for (const auto& element : solved->mesh->elements) {
+      maxStress = std::max(maxStress, element.stress.maxVonMises);
+      utilisation = std::max(utilisation, element.stress.maxVonMises / lists.materials[element.materialID].getYieldTensile());
+    }
+    const double extent = std::max({high[0] - low[0], high[1] - low[1], high[2] - low[2]});
+
+    // Mechanism probe: 1 N and 1 N m on every node in every direction.
+    auto probe = *imported->mesh;
+    probe.nodalLoads.clear();
+    probe.distributedLoads.clear();
+    probe.gravity = {0.0, 0.0, 0.0};
+    for (std::uint32_t n = 0; n < probe.nodes.size(); ++n) probe.nodalLoads.push_back({n, {1.0, 0.7, 0.4}, {0.3, 0.6, 0.9}});
+    const auto probed = FEM::BEAM::solveStatic(probe, lists.materials, lists.sections);
+    double probeDisp = 0.0;
+    if (probed) {
+      for (const auto& node : probed->mesh->nodes) probeDisp = std::max(probeDisp, std::hypot(node.getDisplacement()[0], node.getDisplacement()[1], node.getDisplacement()[2]));
+    }
+    std::printf("      %-30s %4zu nodes %4zu elements  max disp %9.2f mm (L/%.0f)  von Mises %6.1f MPa (%3.0f %%)  probe %.1e m\n",
+                entry.id.c_str(), solved->mesh->nodes.size(), solved->mesh->elements.size(), maxDisp * 1e3, extent / maxDisp,
+                maxStress / 1e6, utilisation * 100.0, probeDisp);
+    // A mechanism answers 1 N with displacements far beyond the model (1e7 m and more); a
+    // flexible but sound structure stays well inside it.
+    CHECK_MSG(probed.has_value() && probeDisp < 0.1 * extent, entry.id + " is a mechanism");
+    CHECK_MSG(std::isfinite(maxDisp) && maxDisp > 0.0 && maxDisp < extent / 10.0, entry.id + " deflection");
+    CHECK_MSG(utilisation < 1.0, entry.id + " exceeds the yield strength");
+
+    // The solved file has the same results.
+    const auto results = IO::readMesh(FEM::BEAM::LIBRARY::solvedFile(beamLibraryDir(), entry));
+    REQUIRE(results.has_value());
+    const auto withResults = FEM::BEAM::ADAPTER::toMeshData(*results, lists.materials, lists.sections);
+    REQUIRE(withResults.has_value() && withResults->mesh->hasResults);
+    // Relative to the largest displacement: the file was written by another build (compiler,
+    // -ffast-math, CHOLMOD or LDLT), so nodes that barely move differ in their last digits.
+    bool same = true;
+    for (std::size_t n = 0; n < solved->mesh->nodes.size(); ++n) {
+      const auto& a = withResults->mesh->nodes[n].getDisplacement();
+      const auto& b = solved->mesh->nodes[n].getDisplacement();
+      for (std::size_t axis = 0; axis < 3; ++axis) same = same && std::abs(a[axis] - b[axis]) <= 1e-6 * maxDisp;
+    }
+    CHECK_MSG(same, entry.id + "_solved does not match the solve");
+  }
 }
 
 // ---- errors -----------------------------------------------------------------------------------

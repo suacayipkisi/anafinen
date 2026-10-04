@@ -1,0 +1,521 @@
+$MeshFormat
+4.1 0 8
+$EndMeshFormat
+$PhysicalNames
+4
+1 1 "Material:Structural Steel S355 (EN 10025)"
+1 2 "Section:Tube 600x12"
+1 3 "Section:Tube 1000x16"
+1 4 "Section:Box 120x60x4"
+$EndPhysicalNames
+$Entities
+0 3 0 0
+1 0 0 0 0 18 0 2 1 3 0
+2 0 18 0 0 36 0 2 1 2 0
+3 -0.7500000000000007 36 -1.2990381056766576 1.5 36 1.299038105676658 2 1 4 0
+$EndEntities
+$Nodes
+1 10 1 10
+1 1 0 10
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+0 0 0
+0 6 0
+0 12 0
+0 18 0
+0 24 0
+0 30 0
+0 36 0
+1.5 36 0
+-0.7499999999999997 36 1.299038105676658
+-0.7500000000000007 36 -1.2990381056766576
+$EndNodes
+$Elements
+3 9 1 9
+1 1 1 3
+1 1 2
+2 2 3
+3 3 4
+1 2 1 3
+4 4 5
+5 5 6
+6 6 7
+1 3 1 3
+7 7 8
+8 7 9
+9 7 10
+$EndElements
+$NodeData
+1
+"Fixity"
+1
+0
+3
+0
+3
+10
+1 1 1 1
+2 0 0 0
+3 0 0 0
+4 0 0 0
+5 0 0 0
+6 0 0 0
+7 0 0 0
+8 0 0 0
+9 0 0 0
+10 0 0 0
+$EndNodeData
+$NodeData
+1
+"FixityRotation"
+1
+0
+3
+0
+3
+10
+1 1 1 1
+2 0 0 0
+3 0 0 0
+4 0 0 0
+5 0 0 0
+6 0 0 0
+7 0 0 0
+8 0 0 0
+9 0 0 0
+10 0 0 0
+$EndNodeData
+$NodeData
+1
+"NodalForce"
+1
+0
+3
+0
+3
+10
+1 0 0 0
+2 0 0 0
+3 0 0 0
+4 0 0 0
+5 0 0 0
+6 0 0 0
+7 0 0 0
+8 3000 -600 0
+9 3000 -600 0
+10 3000 -600 0
+$EndNodeData
+$ElementData
+1
+"CrossSectionArea"
+1
+0
+3
+0
+1
+9
+1 0.049461234738117726
+2 0.049461234738117726
+3 0.049461234738117726
+4 0.0221670777637296
+5 0.0221670777637296
+6 0.0221670777637296
+7 0.0013347964473723111
+8 0.0013347964473723111
+9 0.0013347964473723111
+$EndElementData
+$ElementData
+1
+"Attribute:ElementFormulation"
+1
+0
+3
+0
+1
+9
+1 1
+2 1
+3 1
+4 1
+5 1
+6 1
+7 1
+8 1
+9 1
+$EndElementData
+$ElementData
+1
+"MaterialID"
+1
+0
+3
+0
+1
+9
+1 3
+2 3
+3 3
+4 3
+5 3
+6 3
+7 3
+8 3
+9 3
+$EndElementData
+$ElementData
+1
+"Attribute:SecondMomentY"
+1
+0
+3
+0
+1
+9
+1 0.005987974922335487
+2 0.005987974922335487
+3 0.005987974922335487
+4 0.0009584157741926139
+5 0.0009584157741926139
+6 0.0009584157741926139
+7 8.124707428089777e-07
+8 8.124707428089777e-07
+9 8.124707428089777e-07
+$EndElementData
+$ElementData
+1
+"Attribute:SecondMomentZ"
+1
+0
+3
+0
+1
+9
+1 0.005987974922335487
+2 0.005987974922335487
+3 0.005987974922335487
+4 0.0009584157741926139
+5 0.0009584157741926139
+6 0.0009584157741926139
+7 2.40739885597551e-06
+8 2.40739885597551e-06
+9 2.40739885597551e-06
+$EndElementData
+$ElementData
+1
+"Attribute:SectionDimension1"
+1
+0
+3
+0
+1
+9
+1 1
+2 1
+3 1
+4 0.6
+5 0.6
+6 0.6
+7 0.12
+8 0.12
+9 0.12
+$EndElementData
+$ElementData
+1
+"Attribute:SectionDimension2"
+1
+0
+3
+0
+1
+9
+1 0.016
+2 0.016
+3 0.016
+4 0.012
+5 0.012
+6 0.012
+7 0.06
+8 0.06
+9 0.06
+$EndElementData
+$ElementData
+1
+"Attribute:SectionDimension3"
+1
+0
+3
+0
+1
+9
+1 0
+2 0
+3 0
+4 0
+5 0
+6 0
+7 0.004
+8 0.004
+9 0.004
+$EndElementData
+$ElementData
+1
+"Attribute:SectionDimension4"
+1
+0
+3
+0
+1
+9
+1 0
+2 0
+3 0
+4 0
+5 0
+6 0
+7 0.008
+8 0.008
+9 0.008
+$EndElementData
+$ElementData
+1
+"Attribute:SectionDimension5"
+1
+0
+3
+0
+1
+9
+1 0
+2 0
+3 0
+4 0
+5 0
+6 0
+7 0.004
+8 0.004
+9 0.004
+$EndElementData
+$ElementData
+1
+"Attribute:SectionShape"
+1
+0
+3
+0
+1
+9
+1 3
+2 3
+3 3
+4 3
+5 3
+6 3
+7 4
+8 4
+9 4
+$EndElementData
+$ElementData
+1
+"Attribute:ShearAreaY"
+1
+0
+3
+0
+1
+9
+1 0.026255875674694704
+2 0.026255875674694704
+3 0.026255875674694704
+4 0.01176998641119943
+5 0.01176998641119943
+6 0.01176998641119943
+7 0.0008489283664454384
+8 0.0008489283664454384
+9 0.0008489283664454384
+$EndElementData
+$ElementData
+1
+"Attribute:ShearAreaZ"
+1
+0
+3
+0
+1
+9
+1 0.026255875674694704
+2 0.026255875674694704
+3 0.026255875674694704
+4 0.01176998641119943
+5 0.01176998641119943
+6 0.01176998641119943
+7 0.0003105200387595582
+8 0.0003105200387595582
+9 0.0003105200387595582
+$EndElementData
+$ElementData
+1
+"Attribute:TorsionConstant"
+1
+0
+3
+0
+1
+9
+1 0.011975949844670973
+2 0.011975949844670973
+3 0.011975949844670973
+4 0.0019168315483852278
+5 0.0019168315483852278
+6 0.0019168315483852278
+7 2.0111989769075784e-06
+8 2.0111989769075784e-06
+9 2.0111989769075784e-06
+$EndElementData
+$ElementData
+1
+"Attribute:UniformLoadGlobalX"
+1
+0
+3
+0
+1
+9
+1 1500
+2 1500
+3 1500
+4 1500
+5 1500
+6 1500
+7 0
+8 0
+9 0
+$EndElementData
+$ElementData
+1
+"Attribute:UniformLoadGlobalY"
+1
+0
+3
+0
+1
+9
+1 0
+2 0
+3 0
+4 0
+5 0
+6 0
+7 0
+8 0
+9 0
+$EndElementData
+$ElementData
+1
+"Attribute:UniformLoadGlobalZ"
+1
+0
+3
+0
+1
+9
+1 0
+2 0
+3 0
+4 0
+5 0
+6 0
+7 0
+8 0
+9 0
+$EndElementData
+$ElementData
+1
+"Attribute:UniformLoadLocalX"
+1
+0
+3
+0
+1
+9
+1 0
+2 0
+3 0
+4 0
+5 0
+6 0
+7 0
+8 0
+9 0
+$EndElementData
+$ElementData
+1
+"Attribute:UniformLoadLocalY"
+1
+0
+3
+0
+1
+9
+1 0
+2 0
+3 0
+4 0
+5 0
+6 0
+7 0
+8 0
+9 0
+$EndElementData
+$ElementData
+1
+"Attribute:UniformLoadLocalZ"
+1
+0
+3
+0
+1
+9
+1 0
+2 0
+3 0
+4 0
+5 0
+6 0
+7 0
+8 0
+9 0
+$EndElementData
+$ElementData
+1
+"BeamOrientation"
+1
+0
+3
+0
+3
+9
+1 0 0 0
+2 0 0 0
+3 0 0 0
+4 0 0 0
+5 0 0 0
+6 0 0 0
+7 0 0 0
+8 0 0 0
+9 0 0 0
+$EndElementData
+$AnafData
+1
+1
+GLOBAL 3 1
+"Gravity"
+0 -9.80665 0
+$EndAnafData

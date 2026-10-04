@@ -61,6 +61,11 @@ if(ANAFINEN_HAS_CHOLMOD)
 endif()
 add_test(NAME anaf_truss_io_tests COMMAND anaf_truss_io_tests)
 
+# Regenerates assets/objects/beam/beam3D (built-in beam library, models and solved results) from beamLibrary.cpp.
+add_executable(anaf_beam_library_tool beamLibraryTool.cpp)
+target_compile_definitions(anaf_beam_library_tool PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(anaf_beam_library_tool PRIVATE anaf_core project_warnings_and_optimizations)
+
 # Regenerates assets/objects/truss/truss1D (built-in truss library) from trussLibrary.cpp.
 # anaf_truss_io_tests fails when the committed files differ from the generator.
 add_executable(anaf_truss_library_tool trussLibraryTool.cpp)

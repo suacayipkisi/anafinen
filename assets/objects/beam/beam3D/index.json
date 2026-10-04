@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "generator": "anaf_beam_library_tool (do not edit; regenerate instead)",
+  "files": "<id>.msh: model; <id>_solved.msh: the same model with its results",
+  "models": [
+    {
+      "id": "building_portal_frame",
+      "name": "Portal frame (pitched roof)",
+      "category": "Building",
+      "description": "Span 15 m, eaves 6 m, ridge 7.5 m; 3 frames at 6 m tied at the eaves and the ridge (IPE 200). Columns HEB 300 clamped, rafters IPE 400. Roof 1.2 kN/m^2 (7.2 kN/m on the inner rafters), wind 0.6 kN/m^2 on the windward columns. S355, self weight."
+    },
+    {
+      "id": "building_two_storey",
+      "name": "Two-storey frame (2 x 2 bays)",
+      "category": "Building",
+      "description": "Bays 5 x 5 m, storeys 3.5 m, rigid joints. Columns HEB 200 clamped, beams IPE 300 both ways. Floor 12 kN/m on the x beams, 6 kN/m on the z beams. S235, self weight."
+    },
+    {
+      "id": "building_office_5_storey",
+      "name": "Office building frame (5 storeys)",
+      "category": "Building",
+      "description": "3 bays of 6 m by 2 bays of 7.5 m, 5 storeys of 3.6 m, moment frame. Columns HEB 340 clamped, beams IPE 450 (x) and IPE 400 (z). Floors 24 kN/m (x) and 8 kN/m (z), wind 12 kN per node of the z = 0 face. S355, self weight."
+    },
+    {
+      "id": "building_braced_frame",
+      "name": "X-braced frame (3 storeys)",
+      "category": "Building",
+      "description": "One 6 x 6 m bay, 3 storeys of 4 m, X bracing (CHS 114.3x5) in both x frames. Columns HEA 240 clamped, beams IPE 330. Floors 15 kN/m, lateral 40 kN per floor node in x. S355, self weight."
+    },
+    {
+      "id": "building_cantilever_canopy",
+      "name": "Cantilever canopy",
+      "category": "Building",
+      "description": "4 columns HEB 260 at 6 m, 4.5 m high, clamped; IPE 360 cantilevers 5 m with a 1.5 m back span and a CHS backstay to the column base; IPE 200 edge beam. Snow 1 kN/m^2 (6 kN/m per inner cantilever). S355, self weight."
+    },
+    {
+      "id": "building_mezzanine",
+      "name": "Mezzanine floor",
+      "category": "Building",
+      "description": "3 x 2 bays of 4 m on 12 columns HEB 160 (3 m, clamped); main beams IPE 240 both ways on the column lines, joists IPE 160 at mid bay. Floor 4 kN/m on the main beams, 8 kN/m on the joists (2 kN/m^2). S235, self weight."
+    },
+    {
+      "id": "building_timber_pergola",
+      "name": "Timber pergola",
+      "category": "Building",
+      "description": "5 x 3 m, 2.7 m high. Posts 200x100 (clamped footings), beams 300x120 along x, 7 rafters 140x60 with 0.4 m overhangs. Climbing plants / shade cloth 0.8 kN/m on the rafters. Douglas fir along the grain, self weight."
+    },
+    {
+      "id": "bridge_footbridge_girder",
+      "name": "Footbridge (twin girder)",
+      "category": "Bridge",
+      "description": "Span 18 m, width 2.5 m: two IPE 600 girders, IPE 200 cross beams every 2 m. Fork supports (torsion held), pin / rollers. Crowd 5 kN/m^2 plus deck: 8 kN/m per girder. S355, self weight."
+    },
+    {
+      "id": "bridge_continuous_girder",
+      "name": "Continuous girder bridge (3 spans)",
+      "category": "Bridge",
+      "description": "Spans 15 + 20 + 15 m, two HEB 500 girders 3 m apart, IPE 300 cross beams every 5 m and at the piers. Fork supports at the abutments and piers. Lane load 20 kN/m per girder. S355, self weight."
+    },
+    {
+      "id": "bridge_vierendeel",
+      "name": "Vierendeel truss bridge",
+      "category": "Bridge",
+      "description": "Span 16 m, 8 panels, depth 2.5 m, two planes 3 m apart: no diagonals, the rigid joints carry the shear by bending. Chords HEB 280, verticals HEB 240, deck cross beams IPE 270, top struts IPE 200. Pins / rollers. Deck 8 kN/m per plane. S355."
+    },
+    {
+      "id": "bridge_tied_arch",
+      "name": "Tied-arch footbridge",
+      "category": "Bridge",
+      "description": "Span 30 m, parabolic arches (CHS 323.9x12.5, rise 6 m) tied by the HEB 400 deck girders, 2 x 11 hangers (round bar D40), IPE 240 cross beams, CHS 168.3x8 arch struts. Fork supports, pin / rollers. Deck 8 kN/m per girder. S355, self weight."
+    },
+    {
+      "id": "bridge_grillage_deck",
+      "name": "Grillage road deck",
+      "category": "Bridge",
+      "description": "Span 14 m: four HEB 600 girders 2 m apart, IPE 400 cross girders every 2 m. Fork supports. Surfacing 10 kN/m per girder and a 200 kN truck (4 wheel loads of 50 kN) at mid-span on the inner girders. S355, self weight."
+    },
+    {
+      "id": "industrial_pipe_rack",
+      "name": "Pipe rack (2 tiers)",
+      "category": "Industrial",
+      "description": "5 frames at 6 m, width 6 m, tiers at 4 and 8 m. Columns HEB 260 clamped, tier beams IPE 300, longitudinal ties IPE 200. Pipes 15 kN/m (lower tier) and 12 kN/m (upper tier). S355, self weight."
+    },
+    {
+      "id": "industrial_gantry_crane",
+      "name": "Gantry crane",
+      "category": "Industrial",
+      "description": "Span 12 m, height 9 m: two HEB 600 girders 2.5 m apart (Timoshenko) on four CHS 323.9x12.5 legs (clamped on the rails), IPE 360 end ties. Trolley at mid-span: 60 kN per girder. S355, self weight."
+    },
+    {
+      "id": "industrial_pallet_rack",
+      "name": "Pallet racking",
+      "category": "Industrial",
+      "description": "3 bays of 2.7 m, depth 1.1 m, 4 beam levels at 1.5 m. Uprights RHS 100x50x5 (clamped base plates), frame bracing Box 40x40x2, pallet beams Box 120x60x4. Two 1000 kg pallets per bay and level (3.6 kN/m per beam). S355, self weight."
+    },
+    {
+      "id": "industrial_sign_gantry",
+      "name": "Highway sign gantry",
+      "category": "Industrial",
+      "description": "Span 18 m, clearance 7 m: CHS 323.9x12.5 columns clamped on foundations, RHS 300x200x12.5 girder. Sign weight 3 kN/m and wind on the sign 2 kN/m (z). S355, self weight."
+    },
+    {
+      "id": "industrial_scaffold_tower",
+      "name": "Scaffold tower",
+      "category": "Industrial",
+      "description": "2.5 x 1.3 m, 4 lifts of 2 m: standards, ledgers and face diagonals in CHS 48.3x3.2, base plates clamped. Working platform 2 kN/m^2 (1.5 kN per standard at the top). S235, self weight."
+    },
+    {
+      "id": "industrial_crane_runway",
+      "name": "Crane runway girder",
+      "category": "Industrial",
+      "description": "Continuous HEB 450 runway girder over 4 spans of 6 m on HEB 300 columns (7 m, clamped). Two crane wheels 3 m apart: 120 kN vertical and 12 kN lateral (10 %) each. S355, self weight."
+    },
+    {
+      "id": "tower_wind_turbine",
+      "name": "Wind turbine tower",
+      "category": "Energy & Tower",
+      "description": "90 m tubular tower in three cans: 4200x30 (0-30 m), 3500x26 (30-60 m), 2500x22 (60-90 m), clamped on the foundation. Rotor and nacelle 300 t (2943 kN) with 4 m overhang (11.8 MNm) and 400 kN rotor thrust at the top. S355, self weight."
+    },
+    {
+      "id": "tower_telecom_monopole",
+      "name": "Telecom monopole",
+      "category": "Energy & Tower",
+      "description": "36 m monopole: Tube 1000x16 (0-18 m), Tube 600x12 (18-36 m), clamped; three 1.5 m antenna arms (Box 120x60x4). Wind 1.5 kN/m on the pole and 3 kN per antenna, antenna weight 0.6 kN. S355, self weight."
+    },
+    {
+      "id": "energy_solar_tracker",
+      "name": "Single-axis solar tracker",
+      "category": "Energy & Tower",
+      "description": "30 m torque tube CHS 139.7x6.3 at 1.5 m on six IPE 200 posts every 6 m (clamped, rigid bearings). Panels 0.6 kN/m; wind uplift (2.4 kN) and the wind torque of the tilted panels (1.5 kNm) at the tube nodes between the posts. S355, self weight."
+    },
+    {
+      "id": "offshore_jacket",
+      "name": "Offshore jacket (4 legs)",
+      "category": "Energy & Tower",
+      "description": "40 m four-legged jacket, battered from 20 x 20 m at the mudline to 12 x 12 m: legs Tube 1000x16 (piled, clamped), horizontal frames and X braces Tube 600x12, HEB 600 deck girders with topsides 50 kN/m. Wave and current 150 kN per upstream leg node. S355, self weight."
+    },
+    {
+      "id": "machine_welded_frame",
+      "name": "Welded machine base frame",
+      "category": "Machine & Vehicle",
+      "description": "3 x 1.5 m base at 0.8 m: rails RHS 150x100x8, cross members RHS 120x60x6.3, six SHS 100x100x6.3 legs (clamped). Motor 15 kN with 3 kNm reaction torque at the centre, 5 kN gearbox and pump. Timoshenko elements (short, deep members). S355."
+    },
+    {
+      "id": "vehicle_ladder_chassis",
+      "name": "Truck ladder chassis",
+      "category": "Machine & Vehicle",
+      "description": "7 m ladder frame: rails RHS 200x100x10 0.9 m apart, six Box 120x60x4 cross members. Supported at the front axle (0.7 m) and rear axle (5.6 m). Payload 8 kN/m per rail behind the cab, engine 12 kN. S355, self weight."
+    },
+    {
+      "id": "vehicle_bicycle_frame",
+      "name": "Bicycle frame (diamond)",
+      "category": "Machine & Vehicle",
+      "description": "Diamond road frame in 4130 chromoly tubing: top tube 25.4x0.89, down tube 31.75x1.24, seat tube 25.4x1.24, head tube 38.1x1.24, seat stays 19.05x0.89, chain stays 22.2x0.89. Axle at the dropouts, fork at the head tube. Rider 0.8 kN on the saddle, standing pedal force 1.2 kN with 0.15 kN side load at the bottom bracket."
+    },
+    {
+      "id": "vehicle_roll_cage",
+      "name": "Motorsport roll cage",
+      "category": "Machine & Vehicle",
+      "description": "Six-point cage in 4130 tubing: main hoop 50.8x1.65, front hoops, roof bars, door bars, rear stays and diagonals 44.45x1.65, welded to floor plates (clamped). Static roof load after the FIA main hoop test: 74 kN (7.5 t) vertical at the top of the main hoop."
+    },
+    {
+      "id": "machine_cnc_gantry",
+      "name": "CNC router gantry",
+      "category": "Machine & Vehicle",
+      "description": "2 m aluminium gantry beam Box 200x100x6 on two 0.6 m uprights Box 120x60x4 (clamped to the bed), Timoshenko. Spindle carriage 2 kN at mid-span with 0.5 kN cutting force and 0.3 kNm torque. Aluminium 6061-T6, self weight."
+    },
+    {
+      "id": "machine_robot_arm",
+      "name": "Articulated robot arm",
+      "category": "Machine & Vehicle",
+      "description": "Arm held in a reach pose: 0.6 m base column, 1.0 m upper arm at 30 deg (Tube 101.6x2.11), 0.8 m forearm (Tube 76.2x2.11), 0.3 m wrist (Tube 63.5x1.65), base clamped. Motors 150 N and 80 N at the joints, 20 kg payload with 50 N side force and 20 Nm at the tool. Aluminium 7075-T6, self weight."
+    },
+    {
+      "id": "aero_wing_spar",
+      "name": "Wing main spar (tapered)",
+      "category": "Aerospace",
+      "description": "6 m semi-span cantilever spar in three extruded I steps (Spar I 250, 180, 120 mm), root clamped to the centre box, Timoshenko. Lift in steps that follow an elliptical spanwise distribution (5.5 / 4.5 / 2.8 kN/m), engine 8 kN at 2 m. Aluminium 7075-T6, self weight."
+    },
+    {
+      "id": "aero_strut_braced_wing",
+      "name": "Strut-braced high wing",
+      "category": "Aerospace",
+      "description": "Light aircraft high wing: 5 m spar (Spar I 180, aluminium 2024-T3) hinged to the cabin roof for flapping (fore-aft and torsion held by the drag fitting), lift strut Tube 50.8x1.65 (4130) from the lower fuselage to mid-span. Lift 2.5 kN/m (3.8 g at 650 kg). Self weight."
+    },
+    {
+      "id": "aero_helicopter_skid_gear",
+      "name": "Helicopter skid landing gear",
+      "category": "Aerospace",
+      "description": "Skids Tube 76.2x2.11 (6061-T6) 2.5 m long, 2.2 m apart; two arched cross tubes 114.3x5 (7075-T6) bolted to the fuselage at 0.6 m. Level landing at 2 g with 1600 kg: 7.85 kN per attachment, skids on the ground under the cross tubes."
+    },
+    {
+      "id": "aero_engine_pylon",
+      "name": "Engine pylon frame",
+      "category": "Aerospace",
+      "description": "Under-wing pylon as a welded titanium frame (Box 120x60x4, Ti-6Al-4V), clamped to the wing front and rear spar fittings, engine mounts 0.8 m below. Engine 25 kN at 1.5 g (37.5 kN) and 120 kN take-off thrust over the four mounts."
+    },
+    {
+      "id": "space_satellite_bus",
+      "name": "Small satellite bus frame",
+      "category": "Aerospace",
+      "description": "1.2 x 1.2 x 1.4 m bus: corner posts Box 80x40x3, deck edges Box 60x40x3 (7075-T6), clamped at the launch adapter. Quasi-static launch load 6 g axial + 2 g lateral (gravity vector) on the structure, 160 kg of equipment on the mid deck and 60 kg on the top deck."
+    },
+    {
+      "id": "space_station_truss",
+      "name": "Space station truss segment",
+      "category": "Aerospace",
+      "description": "16 m integrated truss segment, 3 x 3 m section, 4 bays: longerons Tube 101.6x2.11, frames and face diagonals Tube 63.5x1.65 (2024-T3), clamped to the module. In orbit (no gravity): solar array interface loads at the free end, 8 kN lateral and 3 kNm torque from a reboost."
+    },
+    {
+      "id": "space_lunar_lander_legs",
+      "name": "Lunar lander legs",
+      "category": "Aerospace",
+      "description": "3 x 3 m body frame (Box 200x100x6, Ti-6Al-4V) on four inverted-tripod legs: primary strut Tube 101.6x2.11 and two secondary struts Tube 63.5x1.65 to each footpad (pinned on the regolith, 5.25 m apart). Touchdown at 3 lunar g with 10 t: 12.2 kN per upper corner, structure at 3 x 1.62 m/s^2."
+    },
+    {
+      "id": "space_rocket_thrust_frame",
+      "name": "Rocket engine thrust frame",
+      "category": "Aerospace",
+      "description": "Eight struts Tube 101.6x2.11 from the engine gimbal to a 2.4 m thrust ring (Box 200x100x6), titanium Ti-6Al-4V, ring bolted to the tank skirt (clamped). 900 kN engine thrust with 1 % side load from gimbal misalignment. Self weight."
+    },
+    {
+      "id": "aero_quadcopter_frame",
+      "name": "Quadcopter frame",
+      "category": "Aerospace",
+      "description": "Four 0.35 m arms Tube 25.4x1.24 (7075-T6) from the body (clamped), X layout. Full-throttle climb: 30 N thrust per motor minus 2.5 N motor weight, rotor reaction torque 0.6 Nm alternating with the spin direction. Self weight."
+    },
+    {
+      "id": "aero_fuselage_section",
+      "name": "Fuselage barrel section",
+      "category": "Aerospace",
+      "description": "2 m diameter barrel, 4 frames at 0.5 m (Box 80x40x3, depth radial) joined by 16 stringers (Tube 25.4x1.24), floor beams Box 60x40x3. Cabin floor 3 kN/m, keel fittings at the first and last frame clamped. Aluminium 2024-T3, self weight."
+    },
+    {
+      "id": "aero_tail_boom",
+      "name": "Helicopter tail boom",
+      "category": "Aerospace",
+      "description": "4.5 m tapered boom in three tubes (139.7x6.3, 114.3x5, 101.6x2.11, 2024-T3), clamped to the fuselage. Tail rotor thrust 1.2 kN sideways, stabiliser download 0.6 kN and fin torque 0.4 kNm at the tip. Self weight."
+    },
+    {
+      "id": "space_solar_array_boom",
+      "name": "Solar array boom",
+      "category": "Aerospace",
+      "description": "10 m deployed boom Tube 76.2x2.11 (6061-T6) clamped at the spacecraft. In orbit (no gravity): attitude manoeuvre inertia of the array at the tip, 40 N and 20 N lateral."
+    }
+  ]
+}

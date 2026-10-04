@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "units": {
     "length": "m",
-    "notes": "Dimensions only; A, I, J and shear areas are computed (FEM::BEAM::computeProperties). IPE / HEA / HEB: EN 10365 (h, b, tw, tf, root radius r). CHS / SHS / RHS: EN 10210-2 hot finished (outer corner radius 1.5 t, inner 1.0 t). RHS height is the longer side (local y). Channels, angles and tees are not in the catalogue: the beam element needs doubly symmetric sections."
+    "notes": "Dimensions only; A, I, J and shear areas are computed (FEM::BEAM::computeProperties). IPE / HEA / HEB: EN 10365 (h, b, tw, tf, root radius r). CHS / SHS / RHS: EN 10210-2 hot finished (outer corner radius 1.5 t, inner 1.0 t). RHS height is the longer side (local y). Tube: thin round tubes in inch sizes (aircraft, vehicle, bicycle) and large rolled tubes (towers). Rect / Bar: solid rectangles (timber, glulam, flat bars) and round bars. Box: light rectangular tubes (outer radius 2 t, inner 1 t). Spar I: extruded wing spar sections (root radius 3 mm). Channels, angles and tees are not in the catalogue: the beam element needs doubly symmetric sections."
   },
   "sections": [
     {
@@ -794,6 +794,279 @@
       "wallThickness": 0.0125,
       "outerCornerRadius": 0.01875,
       "innerCornerRadius": 0.0125
+    },
+    {
+      "id": 82,
+      "name": "Tube 12.7x0.89",
+      "shape": "pipe",
+      "outerDiameter": 0.0127,
+      "wallThickness": 0.00089
+    },
+    {
+      "id": 83,
+      "name": "Tube 19.05x0.89",
+      "shape": "pipe",
+      "outerDiameter": 0.01905,
+      "wallThickness": 0.00089
+    },
+    {
+      "id": 84,
+      "name": "Tube 22.2x0.89",
+      "shape": "pipe",
+      "outerDiameter": 0.0222,
+      "wallThickness": 0.00089
+    },
+    {
+      "id": 85,
+      "name": "Tube 25.4x0.89",
+      "shape": "pipe",
+      "outerDiameter": 0.0254,
+      "wallThickness": 0.00089
+    },
+    {
+      "id": 86,
+      "name": "Tube 25.4x1.24",
+      "shape": "pipe",
+      "outerDiameter": 0.0254,
+      "wallThickness": 0.00124
+    },
+    {
+      "id": 87,
+      "name": "Tube 31.75x1.24",
+      "shape": "pipe",
+      "outerDiameter": 0.03175,
+      "wallThickness": 0.00124
+    },
+    {
+      "id": 88,
+      "name": "Tube 38.1x1.24",
+      "shape": "pipe",
+      "outerDiameter": 0.0381,
+      "wallThickness": 0.00124
+    },
+    {
+      "id": 89,
+      "name": "Tube 44.45x1.65",
+      "shape": "pipe",
+      "outerDiameter": 0.04445,
+      "wallThickness": 0.00165
+    },
+    {
+      "id": 90,
+      "name": "Tube 50.8x1.65",
+      "shape": "pipe",
+      "outerDiameter": 0.0508,
+      "wallThickness": 0.00165
+    },
+    {
+      "id": 91,
+      "name": "Tube 63.5x1.65",
+      "shape": "pipe",
+      "outerDiameter": 0.0635,
+      "wallThickness": 0.00165
+    },
+    {
+      "id": 92,
+      "name": "Tube 76.2x2.11",
+      "shape": "pipe",
+      "outerDiameter": 0.0762,
+      "wallThickness": 0.00211
+    },
+    {
+      "id": 93,
+      "name": "Tube 101.6x2.11",
+      "shape": "pipe",
+      "outerDiameter": 0.1016,
+      "wallThickness": 0.00211
+    },
+    {
+      "id": 94,
+      "name": "Tube 600x12",
+      "shape": "pipe",
+      "outerDiameter": 0.6,
+      "wallThickness": 0.012
+    },
+    {
+      "id": 95,
+      "name": "Tube 1000x16",
+      "shape": "pipe",
+      "outerDiameter": 1.0,
+      "wallThickness": 0.016
+    },
+    {
+      "id": 96,
+      "name": "Tube 1500x20",
+      "shape": "pipe",
+      "outerDiameter": 1.5,
+      "wallThickness": 0.02
+    },
+    {
+      "id": 97,
+      "name": "Tube 2500x22",
+      "shape": "pipe",
+      "outerDiameter": 2.5,
+      "wallThickness": 0.022
+    },
+    {
+      "id": 98,
+      "name": "Tube 3500x26",
+      "shape": "pipe",
+      "outerDiameter": 3.5,
+      "wallThickness": 0.026
+    },
+    {
+      "id": 99,
+      "name": "Tube 4200x30",
+      "shape": "pipe",
+      "outerDiameter": 4.2,
+      "wallThickness": 0.03
+    },
+    {
+      "id": 100,
+      "name": "Rect 50x30",
+      "shape": "rectangle",
+      "height": 0.05,
+      "width": 0.03
+    },
+    {
+      "id": 101,
+      "name": "Rect 100x50",
+      "shape": "rectangle",
+      "height": 0.1,
+      "width": 0.05
+    },
+    {
+      "id": 102,
+      "name": "Rect 140x60",
+      "shape": "rectangle",
+      "height": 0.14,
+      "width": 0.06
+    },
+    {
+      "id": 103,
+      "name": "Rect 200x100",
+      "shape": "rectangle",
+      "height": 0.2,
+      "width": 0.1
+    },
+    {
+      "id": 104,
+      "name": "Rect 300x120",
+      "shape": "rectangle",
+      "height": 0.3,
+      "width": 0.12
+    },
+    {
+      "id": 105,
+      "name": "Rect 400x160",
+      "shape": "rectangle",
+      "height": 0.4,
+      "width": 0.16
+    },
+    {
+      "id": 106,
+      "name": "Rect 60x8",
+      "shape": "rectangle",
+      "height": 0.06,
+      "width": 0.008
+    },
+    {
+      "id": 107,
+      "name": "Bar D16",
+      "shape": "circle",
+      "diameter": 0.016
+    },
+    {
+      "id": 108,
+      "name": "Bar D25",
+      "shape": "circle",
+      "diameter": 0.025
+    },
+    {
+      "id": 109,
+      "name": "Bar D40",
+      "shape": "circle",
+      "diameter": 0.04
+    },
+    {
+      "id": 110,
+      "name": "Box 40x40x2",
+      "shape": "box",
+      "height": 0.04,
+      "width": 0.04,
+      "wallThickness": 0.002,
+      "outerCornerRadius": 0.004,
+      "innerCornerRadius": 0.002
+    },
+    {
+      "id": 111,
+      "name": "Box 60x40x3",
+      "shape": "box",
+      "height": 0.06,
+      "width": 0.04,
+      "wallThickness": 0.003,
+      "outerCornerRadius": 0.006,
+      "innerCornerRadius": 0.003
+    },
+    {
+      "id": 112,
+      "name": "Box 80x40x3",
+      "shape": "box",
+      "height": 0.08,
+      "width": 0.04,
+      "wallThickness": 0.003,
+      "outerCornerRadius": 0.006,
+      "innerCornerRadius": 0.003
+    },
+    {
+      "id": 113,
+      "name": "Box 120x60x4",
+      "shape": "box",
+      "height": 0.12,
+      "width": 0.06,
+      "wallThickness": 0.004,
+      "outerCornerRadius": 0.008,
+      "innerCornerRadius": 0.004
+    },
+    {
+      "id": 114,
+      "name": "Box 200x100x6",
+      "shape": "box",
+      "height": 0.2,
+      "width": 0.1,
+      "wallThickness": 0.006,
+      "outerCornerRadius": 0.012,
+      "innerCornerRadius": 0.006
+    },
+    {
+      "id": 115,
+      "name": "Spar I 120x60x2.5x6",
+      "shape": "i",
+      "height": 0.12,
+      "flangeWidth": 0.06,
+      "webThickness": 0.0025,
+      "flangeThickness": 0.006,
+      "rootRadius": 0.003
+    },
+    {
+      "id": 116,
+      "name": "Spar I 180x70x3x8",
+      "shape": "i",
+      "height": 0.18,
+      "flangeWidth": 0.07,
+      "webThickness": 0.003,
+      "flangeThickness": 0.008,
+      "rootRadius": 0.003
+    },
+    {
+      "id": 117,
+      "name": "Spar I 250x80x4x10",
+      "shape": "i",
+      "height": 0.25,
+      "flangeWidth": 0.08,
+      "webThickness": 0.004,
+      "flangeThickness": 0.01,
+      "rootRadius": 0.003
     }
   ]
 }

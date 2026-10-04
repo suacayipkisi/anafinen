@@ -200,6 +200,7 @@ namespace anaf::GUI {
       };
       panels.beamEditor->onOpenMaterialHandler = [panels] { panels.matWindow->isOpen = true; };
       panels.beamEditor->onOpenSectionHandler = [panels] { panels.sections->isOpen = true; };
+      panels.beamEditor->onLoadBuiltin = [panels](const std::filesystem::path& path) { panels.fileIo->importFile(path); };
 
       panels.control->onOpenMaterialHandler = [panels] {
         panels.matWindow->isOpen = true;

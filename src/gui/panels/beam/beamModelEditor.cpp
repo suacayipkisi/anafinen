@@ -19,6 +19,7 @@
 
 #include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp> // localAxes()
 #include <bridge/generalStatus.hpp>
+#include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
 #include <objectCalcs/common/supportBasis.hpp>
 #include <panels/beam/beamWorker.hpp>
@@ -29,6 +30,7 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cstddef>
 #include <exception>
@@ -745,6 +747,67 @@ namespace anaf::GUI {
     setStatus("Example frame loaded (material: the first in the list)", false);
   }
 
+  void BeamModelEditor::readLibrary() {
+    m_libraryRead = true;
+    m_library.clear();
+    m_libraryDir = anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::BEAM::LIBRARY::kLibrarySubdir));
+    if (m_libraryDir.empty()) {
+      m_libraryError = std::format("assets/{} not found", FEM::BEAM::LIBRARY::kLibrarySubdir);
+      anaf::LOG::warn("Built-in beam library: {}", m_libraryError);
+      return;
+    }
+    auto index = FEM::BEAM::LIBRARY::loadIndex(m_libraryDir / std::filesystem::path(FEM::BEAM::LIBRARY::kIndexFile));
+    if (!index) {
+      m_libraryError = index.error();
+      anaf::LOG::warn("Built-in beam library: {}", m_libraryError);
+      return;
+    }
+    std::ranges::stable_sort(*index, {}, &FEM::BEAM::LIBRARY::Entry::category); // grouped in the combo
+    m_library = std::move(*index);
+    m_libraryError.clear();
+  }
+
+  void BeamModelEditor::renderLibrary() {
+    if (!ImGui::CollapsingHeader("Built-in Models")) return;
+    if (!m_libraryRead) readLibrary();
+    if (m_library.empty()) {
+      ImGui::TextDisabled("%s", m_libraryError.empty() ? "No built-in models" : m_libraryError.c_str());
+      return;
+    }
+    m_librarySelected = std::clamp(m_librarySelected, 0, static_cast<int>(m_library.size()) - 1);
+    const auto& selected = m_library[static_cast<std::size_t>(m_librarySelected)];
+    const std::string preview = selected.category + ": " + selected.name;
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##builtin_beam", preview.c_str(), ImGuiComboFlags_HeightLarge)) {
+      std::string_view category;
+      for (int i = 0; i < static_cast<int>(m_library.size()); ++i) {
+        const auto& entry = m_library[static_cast<std::size_t>(i)];
+        if (entry.category != category) {
+          category = entry.category;
+          ImGui::SeparatorText(entry.category.c_str());
+        }
+        ImGui::PushID(i);
+        if (ImGui::Selectable(entry.name.c_str(), i == m_librarySelected)) m_librarySelected = i;
+        ImGui::PopID();
+      }
+      ImGui::EndCombo();
+    }
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", selected.description.c_str());
+    ImGui::PopTextWrapPos();
+    const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+    if (ImGui::Button("Load Model##builtin_beam", ImVec2(half, 0.0f)) && onLoadBuiltin) {
+      onLoadBuiltin(FEM::BEAM::LIBRARY::modelFile(m_libraryDir, selected));
+    }
+    ImGui::SetItemTooltip("The model only: loads, supports, sections; run the solver yourself.");
+    ImGui::SameLine();
+    if (ImGui::Button("Load Solved Results##builtin_beam", ImVec2(-FLT_MIN, 0.0f)) && onLoadBuiltin) {
+      onLoadBuiltin(FEM::BEAM::LIBRARY::solvedFile(m_libraryDir, selected));
+    }
+    ImGui::SetItemTooltip("The same model with its results (solved by anaf_beam_library_tool).");
+    ImGui::TextDisabled("Read-only: loading makes a copy; save changes with File > Export.");
+  }
+
   void BeamModelEditor::renderSolve() {
     auto& bridge = BRIDGE::buildBridge();
     const auto mesh = currentMesh(bridge);
@@ -819,6 +882,7 @@ namespace anaf::GUI {
     ImGui::Separator();
     // The solve works on a copy; edits made meanwhile would be overwritten by its result.
     ImGui::BeginDisabled(bridge.m_isRunning.load());
+    renderLibrary();
     renderNodes(node);
     renderSupportsAndLoads(node);
     renderElements(element);

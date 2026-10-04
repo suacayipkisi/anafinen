@@ -17,10 +17,12 @@
 
 #pragma once
 
+#include <beam/beamTypes/beamLibrary.hpp>
 #include <guiMaterials/iPanel.hpp>
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -77,6 +79,13 @@ namespace anaf::GUI {
     std::string m_status;
     bool m_statusIsError{false};
 
+    // Built-in library (assets/objects/beam/beam3D), read once on first use.
+    bool m_libraryRead{false};
+    std::filesystem::path m_libraryDir;
+    std::vector<FEM::BEAM::LIBRARY::Entry> m_library;
+    std::string m_libraryError;
+    int m_librarySelected{0};
+
     void setStatus(std::string message, bool error);
     void syncSelection(std::uint32_t node, std::uint32_t element);
     void renderSummary();
@@ -89,12 +98,16 @@ namespace anaf::GUI {
     void renderWholeModel();
     void renderSolve();
     void loadExample();
+    void readLibrary();
+    void renderLibrary();
 
   public:
     ~BeamModelEditor() override = default;
 
     std::function<void()> onOpenMaterialHandler;
     std::function<void()> onOpenSectionHandler;
+    // Imports a built-in model or solved-result file (the file is only read; edits stay in memory).
+    std::function<void(const std::filesystem::path&)> onLoadBuiltin;
 
     // Back to the default inputs. The model itself is cleared with Gui_Calc_Bridge::resetModel().
     void resetState();
