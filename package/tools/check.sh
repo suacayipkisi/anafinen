@@ -46,7 +46,8 @@ build() {
     cmake -S "$REPO_ROOT" -B "$dir" -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_BUILD_TESTS=ON "$@" > "$dir/check-configure.log" 2>&1 \
       || { echo "[$name] configure FAILED (see ${dir#$REPO_ROOT/}/check-configure.log)"; tail -5 "$dir/check-configure.log"; FAILED=1; return 1; }
   else
-    cmake -S "$REPO_ROOT" -B "$dir" > "$dir/check-configure.log" 2>&1 \
+    # An existing tree may have been configured without tests (e.g. by hand); turn them on.
+    cmake -S "$REPO_ROOT" -B "$dir" -DANAFINEN_BUILD_TESTS=ON > "$dir/check-configure.log" 2>&1 \
       || { echo "[$name] configure FAILED"; tail -5 "$dir/check-configure.log"; FAILED=1; return 1; }
   fi
 
@@ -71,6 +72,11 @@ run_ctest() {
   local log="$dir/check-test.log"
   (cd "$dir" && ctest --output-on-failure > "$log" 2>&1)
   local status=$?
+  if grep -q "No tests were found" "$log"; then
+    echo "[$name] no tests were found (ANAFINEN_BUILD_TESTS is off?)"
+    FAILED=1
+    return
+  fi
   echo "[$name] $(grep -E "tests passed|tests failed" "$log" | tail -1)"
   if [[ $status -ne 0 ]]; then
     grep -E "FAIL|Failed|\*\*\*" "$log" | head -n "$MAX_LINES"

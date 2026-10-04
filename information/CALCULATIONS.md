@@ -3,7 +3,7 @@
 This document describes the finite element calculation for 3D truss structures built from 1D two-node bar elements. It covers the data types, the math, the solver portfolio, and the energy validator.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`, section 7; 2026-10-03: beam data in `anaf_io`, section 13).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`, Block-CG takes `dofsPerNode`, sections 7 and 11; 2026-10-03: beam data in `anaf_io`, section 13).
 > Implemented: static displacement under nodal loads + self-weight.
 > Not implemented yet: mass matrix, modal analysis (Spectra), beam/frame elements, CST.
 
@@ -191,7 +191,7 @@ The modulus used is `Material::getElasticityModulus()` (E).
 
 Each node owns one reduced DOF `q_k` per allowed-motion direction `b_k` (orthonormal, 0 to 3 of them). The global displacements follow from `u = T q`, with `T(3 n + axis, k) = b_k[axis]`, and the reduced system is `(Tᵀ K T) q = Tᵀ f` (inclined supports, Logan ch. 3). For supports along the global axes `T` only selects columns, so this is the classic fixed-DOF removal with the same matrix.
 
-1. Reduced DOFs are numbered node by node. `nodeDofSlots[3 n + k]` is the reduced DOF of direction k of node n (`-1` when unused); Block-CG uses it for its node blocks.
+1. Reduced DOFs are numbered node by node. `nodeDofSlots[3 n + k]` is the reduced DOF of direction k of node n (`-1` when unused); Block-CG uses it for its node blocks (the container passes `dofsPerNode = 3`).
 2. Every global DOF gets its links `(reduced DOF, b_k[axis])`, one for an axis-aligned node and up to three for an inclined one.
 3. Each stored upper triplet `K(i, j)` and its mirror `K(j, i)` are expanded over the links of i and j; only upper-triangle entries of `Tᵀ K T` are kept. This is done in parallel: per-thread count, prefix sum, parallel scatter.
 4. A reduced `SparseMatrix` (upper triangle only) and `Tᵀ f` are built.
@@ -213,7 +213,14 @@ src/solvers/
   iterative/              solver_iterative.cpp (Block-CG)
 ```
 
-The direct solvers do not care how DOFs map to nodes. Block-CG does: its preconditioner reads `remapTable[3 * node + k]` and inverts 3x3 node blocks, so it is only correct for 3 translational DOFs per node. A beam model (6 DOFs per node) must not reach it until the block size is a parameter.
+The direct solvers do not care how DOFs map to nodes. Block-CG does: `solveSelected()` and `solveBlockCG()` take `totalNodes`, `dofsPerNode` and a `remapTable` with `totalNodes * dofsPerNode` entries, where `remapTable[dofsPerNode * node + k]` is the reduced DOF of slot k of that node (`-1` when the slot is fixed or unused).
+
+| Element | `dofsPerNode` | Slots |
+|---|---|---|
+| Truss (3D bar) | 3 | allowed motion directions (`u = T q`, section 6) |
+| 3D beam (planned) | 6 | 3 translations + 3 rotations |
+
+The preconditioner inverts one `dofsPerNode x dofsPerNode` block per node over its used slots; the rows and columns of unused slots stay zero. `FEM::SOLVER::maxDofsPerNode = 6` bounds the block (a stack array per node, no allocation in the CG loop). A `dofsPerNode` outside 1 … 6 or a remap table of the wrong size returns `converged = false` with a message instead of reading out of range.
 
 `solveSelected()` is the referee:
 
@@ -234,7 +241,7 @@ dofs <= 400,000 ?
 |---|---|---|---|
 | `solveCholmod` | `direct/solver_cholmod.cpp` | Eigen `CholmodSupernodalLLT<..., Upper>` | Only when `ANAFINEN_HAS_CHOLMOD`, otherwise a stub that returns "not available" |
 | `solveSimplicialLDLT` | `direct/solver_simplicial.cpp` | Eigen `SimplicialLDLT<..., Upper>` | Always available |
-| `solveBlockCG` | `iterative/solver_iterative.cpp` | Preconditioned CG, 3x3 per-node block-Jacobi preconditioner | Tolerance 1e-8, max 50,000 iterations, logs every 200, honors `stop_token` |
+| `solveBlockCG` | `iterative/solver_iterative.cpp` | Preconditioned CG, per-node block-Jacobi preconditioner (`dofsPerNode x dofsPerNode` blocks) | Tolerance 1e-8, max 50,000 iterations, logs every 200, honors `stop_token` |
 
 Every result is a `Result` record: `type` (`SOLVER::Type`), `available`, `converged`, `iterations`, `relativeResidual = ‖f − K u‖ / ‖f‖`, `elapsedSeconds`, `message`. The referee also logs a hardware summary: CPU name, hardware / OpenMP / Eigen threads, and available / total RAM. It reads them from `anaf::PLATFORM` (`querySystemInfo()` once, `queryMemory()` per solve; Linux and Windows), the same source as the GUI status bar. "Available" is the memory the OS can hand out without swapping (Linux `MemAvailable`, page cache included).
 
@@ -299,7 +306,8 @@ The result is written to `bridge.m_isValid` and `bridge.m_energyDiff` and logged
 | `inclinedRailCarriesTheLoadAlongItself` | `u = T q` with a skewed rail: s = 2 P / k for a rail at 45° to the bar |
 | `unsolvableModelsAreReported`, `mechanismIsAnErrorNotAResult` | Error texts instead of results (no nodes / bars, area, material, ids, a mechanism) |
 | `cancelledSolveAndProgress` | A stop request returns "cancelled"; progress is non-decreasing and ends at 1 |
-| `blockCgMatchesTheDirectSolver` | Block-CG against SimplicialLDLT on an SPD 600-DOF system (the referee picks Block-CG only above 400k DOFs) |
+| `blockCgMatchesTheDirectSolver` | Block-CG against SimplicialLDLT on SPD 200-node chains with 3 and 6 DOFs per node, each with and without unused slots (`-1` in the remap table); the referee picks Block-CG only above 400k DOFs |
+| `blockCgRejectsABadNodeLayout` | `dofsPerNode` of 0 or above `maxDofsPerNode`, or a remap table of the wrong size, is refused instead of read out of range |
 | `materialValidation` | `validateMaterial()` limits and name rules, `sameMaterialName()` |
 
 The tests were checked against injected faults: a wrong self-weight split and a wrong energy balance each make tests fail. `anaf_truss_io_tests` covers the paths through files, the bridge and the built-in library (section 3.2).

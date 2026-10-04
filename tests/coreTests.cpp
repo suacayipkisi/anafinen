@@ -346,34 +346,65 @@ TEST(cancelledSolveAndProgress) {
 
 // ---- solver portfolio ------------------------------------------------------------------------
 
-TEST(blockCgMatchesTheDirectSolver) {
+namespace {
   // Block-CG is only picked above 400k DOFs, so the referee never runs it in the other tests.
-  // System: a chain of 200 nodes, 3 DOFs each, every DOF coupled to the same DOF of the next
-  // node plus a small coupling between the axes of one node. The diagonal 2.5 exceeds the sum
-  // of the off-diagonal magnitudes of every row (at most 2.2), so the matrix is SPD (with 2.0
-  // it is indefinite and CG rightly stops on a non-positive curvature).
-  constexpr std::uint32_t nodes = 200;
-  constexpr Eigen::Index dofs = 3 * nodes;
-  std::vector<Eigen::Triplet<double>> upper;
-  for (Eigen::Index i = 0; i < dofs; ++i) {
-    upper.emplace_back(i, i, 2.5);
-    if (i + 3 < dofs) upper.emplace_back(i, i + 3, -1.0);
-    if (i % 3 != 2) upper.emplace_back(i, i + 1, 0.1);
-  }
-  Eigen::SparseMatrix<double> matrix(dofs, dofs);
-  matrix.setFromTriplets(upper.begin(), upper.end());
-  Eigen::VectorXd force(dofs);
-  for (Eigen::Index i = 0; i < dofs; ++i) force[i] = std::sin(0.1 * static_cast<double>(i));
-  std::vector<std::int32_t> remap(dofs);
-  for (Eigen::Index i = 0; i < dofs; ++i) remap[static_cast<std::size_t>(i)] = static_cast<std::int32_t>(i);
+  // System: a chain of 200 nodes with dofsPerNode slots each, every slot coupled to the same
+  // slot of the next node plus a small coupling between neighboring slots of one node. The
+  // diagonal 2.5 exceeds the sum of the off-diagonal magnitudes of every row (at most 2.2), so
+  // the matrix is SPD (with 2.0 it is indefinite and CG rightly stops on a non-positive
+  // curvature). With dropSlots, the last slot of every fifth node is unused (-1 in the remap
+  // table, like a fixed DOF), which only removes entries and keeps the matrix SPD.
+  void checkBlockCgAgainstLdlt(const std::uint32_t dofsPerNode, const bool dropSlots) {
+    constexpr std::uint32_t nodes = 200;
+    const std::size_t slots = static_cast<std::size_t>(nodes) * dofsPerNode;
+    std::vector<std::int32_t> remap(slots, -1);
+    std::int32_t dofs = 0;
+    for (std::size_t slot = 0; slot < slots; ++slot) {
+      const bool unused = dropSlots && (slot / dofsPerNode) % 5 == 0 && slot % dofsPerNode == dofsPerNode - 1;
+      if (!unused) remap[slot] = dofs++;
+    }
 
-  Eigen::VectorXd direct, iterative;
-  const auto ldlt = FEM::SOLVER::solveSimplicialLDLT(matrix, force, direct);
-  const auto cg = FEM::SOLVER::solveBlockCG(matrix, force, nodes, remap, {}, iterative);
-  if (!ldlt.converged || !cg.converged) std::printf("      LDLT: %s, Block-CG: %s\n", ldlt.message.c_str(), cg.message.c_str());
-  REQUIRE(ldlt.converged && cg.converged);
-  CHECK(cg.iterations > 0 && cg.relativeResidual < 1e-8);
-  CHECK((iterative - direct).norm() <= 1e-6 * direct.norm());
+    std::vector<Eigen::Triplet<double>> upper;
+    const auto couple = [&](const std::size_t a, const std::size_t b, const double value) {
+      if (b < slots && remap[a] >= 0 && remap[b] >= 0) upper.emplace_back(remap[a], remap[b], value);
+    };
+    for (std::size_t slot = 0; slot < slots; ++slot) {
+      couple(slot, slot, 2.5);
+      couple(slot, slot + dofsPerNode, -1.0);
+      if (slot % dofsPerNode != dofsPerNode - 1) couple(slot, slot + 1, 0.1);
+    }
+    Eigen::SparseMatrix<double> matrix(dofs, dofs);
+    matrix.setFromTriplets(upper.begin(), upper.end());
+    Eigen::VectorXd force(dofs);
+    for (Eigen::Index i = 0; i < dofs; ++i) force[i] = std::sin(0.1 * static_cast<double>(i));
+
+    Eigen::VectorXd direct, iterative;
+    const auto ldlt = FEM::SOLVER::solveSimplicialLDLT(matrix, force, direct);
+    const auto cg = FEM::SOLVER::solveBlockCG(matrix, force, nodes, dofsPerNode, remap, {}, iterative);
+    if (!ldlt.converged || !cg.converged) std::printf("      LDLT: %s, Block-CG: %s\n", ldlt.message.c_str(), cg.message.c_str());
+    REQUIRE(ldlt.converged && cg.converged);
+    CHECK(cg.iterations > 0 && cg.relativeResidual < 1e-8);
+    CHECK((iterative - direct).norm() <= 1e-6 * direct.norm());
+  }
+}
+
+TEST(blockCgMatchesTheDirectSolver) {
+  checkBlockCgAgainstLdlt(3, false); // truss
+  checkBlockCgAgainstLdlt(3, true);
+  checkBlockCgAgainstLdlt(6, false); // 3D beam
+  checkBlockCgAgainstLdlt(6, true);
+}
+
+TEST(blockCgRejectsABadNodeLayout) {
+  Eigen::SparseMatrix<double> matrix(6, 6);
+  matrix.setIdentity();
+  const Eigen::VectorXd force = Eigen::VectorXd::Ones(6);
+  Eigen::VectorXd displacement;
+  const std::vector<std::int32_t> remap{0, 1, 2, 3, 4, 5};
+  CHECK(!FEM::SOLVER::solveBlockCG(matrix, force, 1, 7, remap, {}, displacement).converged); // > maxDofsPerNode
+  CHECK(!FEM::SOLVER::solveBlockCG(matrix, force, 1, 0, remap, {}, displacement).converged);
+  CHECK(!FEM::SOLVER::solveBlockCG(matrix, force, 1, 3, remap, {}, displacement).converged); // table size
+  CHECK(FEM::SOLVER::solveBlockCG(matrix, force, 2, 3, remap, {}, displacement).converged);
 }
 
 // ---- materials -------------------------------------------------------------------------------

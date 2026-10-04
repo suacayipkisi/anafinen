@@ -224,6 +224,7 @@ namespace FEM::TRUSS {
       reducedStiffnessMatrix,
       reducedForce,
       nodeCount,
+      3, // DOF slots per node in nodeDofSlots (translations only)
       nodeDofSlots,
       stopToken,
       reducedDisplacements

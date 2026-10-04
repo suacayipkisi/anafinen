@@ -55,12 +55,17 @@ namespace FEM::SOLVER {
     Eigen::VectorXd& displacement
   );
 
-  // remapTable holds, at 3 * node + k, the reduced DOF of the k-th allowed direction of
-  // that node (-1 when unused); Block-CG uses it for its node-block Jacobi preconditioner.
+  // Largest node block Block-CG accepts: 3 translations + 3 rotations (beam, shell).
+  inline constexpr std::uint32_t maxDofsPerNode = 6;
+
+  // remapTable holds, at dofsPerNode * node + k, the reduced DOF of the k-th DOF slot of that
+  // node (-1 when unused); Block-CG inverts one dofsPerNode x dofsPerNode block per node for
+  // its Jacobi preconditioner. dofsPerNode is 3 for a truss, 6 for a 3D beam.
   Result solveBlockCG(
     const Eigen::SparseMatrix<double>& upperMatrix,
     const Eigen::VectorXd& force,
     std::uint32_t totalNodes,
+    std::uint32_t dofsPerNode,
     const std::vector<std::int32_t>& remapTable,
     std::stop_token stopToken,
     Eigen::VectorXd& displacement
@@ -70,6 +75,7 @@ namespace FEM::SOLVER {
     const Eigen::SparseMatrix<double>& upperMatrix,
     const Eigen::VectorXd& force,
     std::uint32_t totalNodes,
+    std::uint32_t dofsPerNode,
     const std::vector<std::int32_t>& remapTable,
     std::stop_token stopToken,
     Eigen::VectorXd& displacement

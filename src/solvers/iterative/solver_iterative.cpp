@@ -24,6 +24,9 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <format>
 #include <limits>
 #include <omp.h>
 
@@ -33,6 +36,7 @@ namespace FEM::SOLVER {
     const Eigen::SparseMatrix<double>& upperMatrix,
     const Eigen::VectorXd& force,
     const std::uint32_t totalNodes,
+    const std::uint32_t dofsPerNode,
     const std::vector<std::int32_t>& remapTable,
     const std::stop_token stopToken,
     Eigen::VectorXd& displacement
@@ -44,34 +48,47 @@ namespace FEM::SOLVER {
     constexpr Eigen::Index logInterval = 200;
     constexpr double tolerance = 1e-8;
 
+    if (dofsPerNode == 0 || dofsPerNode > maxDofsPerNode) {
+      result.message = std::format("Block-CG supports 1 to {} DOFs per node, got {}", maxDofsPerNode, dofsPerNode);
+      return result;
+    }
+    if (remapTable.size() != static_cast<std::size_t>(totalNodes) * dofsPerNode) {
+      result.message = std::format(
+        "Block-CG remap table has {} entries, expected {} nodes x {} DOFs",
+        remapTable.size(), totalNodes, dofsPerNode
+      );
+      return result;
+    }
+
     Eigen::SparseMatrix<double, Eigen::RowMajor> matrix = upperMatrix.selfadjointView<Eigen::Upper>();
     displacement = Eigen::VectorXd::Zero(activeDofs);
 
-    struct NodeBlock { std::array<double, 9> inverse{}; };
-    std::vector<NodeBlock> blocks(totalNodes);
+    // One dofsPerNode x dofsPerNode inverse per node, row-major, indexed by DOF slot; the rows
+    // and columns of unused slots stay zero.
+    const std::size_t blockSize = static_cast<std::size_t>(dofsPerNode) * dofsPerNode;
+    std::vector<double> inverses(static_cast<std::size_t>(totalNodes) * blockSize, 0.0);
 
     #pragma omp parallel for schedule(static)
     for (long long node = 0; node < totalNodes; ++node) {
-      std::array<std::int32_t, 3> dofs{
-        remapTable[3 * node], remapTable[3 * node + 1], remapTable[3 * node + 2]
-      };
-      std::array<int, 3> axes{};
+      const std::size_t first = static_cast<std::size_t>(node) * dofsPerNode;
+      std::array<std::uint32_t, maxDofsPerNode> slots{};
       int count = 0;
-      for (int axis = 0; axis < 3; ++axis) {
-        if (dofs[axis] >= 0) axes[count++] = axis;
+      for (std::uint32_t slot = 0; slot < dofsPerNode; ++slot) {
+        if (remapTable[first + slot] >= 0) slots[count++] = slot;
       }
       if (count == 0) continue;
 
       Eigen::MatrixXd block(count, count);
       for (int row = 0; row < count; ++row) {
         for (int col = 0; col < count; ++col) {
-          block(row, col) = matrix.coeff(dofs[axes[row]], dofs[axes[col]]);
+          block(row, col) = matrix.coeff(remapTable[first + slots[row]], remapTable[first + slots[col]]);
         }
       }
       const Eigen::MatrixXd inverse = block.inverse();
+      double* nodeInverse = inverses.data() + static_cast<std::size_t>(node) * blockSize;
       for (int row = 0; row < count; ++row) {
         for (int col = 0; col < count; ++col) {
-          blocks[node].inverse[axes[row] * 3 + axes[col]] = inverse(row, col);
+          nodeInverse[slots[row] * dofsPerNode + slots[col]] = inverse(row, col);
         }
       }
     }
@@ -79,16 +96,18 @@ namespace FEM::SOLVER {
     auto applyPreconditioner = [&](const Eigen::VectorXd& input, Eigen::VectorXd& output) {
       #pragma omp parallel for schedule(static)
       for (long long node = 0; node < totalNodes; ++node) {
-        const auto d0 = remapTable[3 * node];
-        const auto d1 = remapTable[3 * node + 1];
-        const auto d2 = remapTable[3 * node + 2];
-        const double x0 = d0 >= 0 ? input[d0] : 0.0;
-        const double x1 = d1 >= 0 ? input[d1] : 0.0;
-        const double x2 = d2 >= 0 ? input[d2] : 0.0;
-        const auto& inverse = blocks[node].inverse;
-        if (d0 >= 0) output[d0] = inverse[0] * x0 + inverse[1] * x1 + inverse[2] * x2;
-        if (d1 >= 0) output[d1] = inverse[3] * x0 + inverse[4] * x1 + inverse[5] * x2;
-        if (d2 >= 0) output[d2] = inverse[6] * x0 + inverse[7] * x1 + inverse[8] * x2;
+        const std::int32_t* dofs = remapTable.data() + static_cast<std::size_t>(node) * dofsPerNode;
+        const double* nodeInverse = inverses.data() + static_cast<std::size_t>(node) * blockSize;
+        std::array<double, maxDofsPerNode> local{};
+        for (std::uint32_t slot = 0; slot < dofsPerNode; ++slot) {
+          if (dofs[slot] >= 0) local[slot] = input[dofs[slot]];
+        }
+        for (std::uint32_t row = 0; row < dofsPerNode; ++row) {
+          if (dofs[row] < 0) continue;
+          double sum = 0.0;
+          for (std::uint32_t col = 0; col < dofsPerNode; ++col) sum += nodeInverse[row * dofsPerNode + col] * local[col];
+          output[dofs[row]] = sum;
+        }
       }
     };
 

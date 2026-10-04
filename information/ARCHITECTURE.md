@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (linear solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`; HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (linear solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`; Block-CG takes `dofsPerNode`; `check.sh` fails when no tests run; HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -64,7 +64,7 @@ This document is the entry point for the project documentation. It describes how
 | Namespace | Location | Responsibility |
 |---|---|---|
 | `FEM::TRUSS` | `src/objectCalcs/truss_1D/` | Node, element, load types; truss generator; FEM container |
-| `FEM::SOLVER` | `src/solvers/` (`direct/`, `iterative/`) | Linear solver portfolio and referee, shared by every element type (Block-CG still assumes 3 DOFs per node, see [CALCULATIONS.md](CALCULATIONS.md) section 7) |
+| `FEM::SOLVER` | `src/solvers/` (`direct/`, `iterative/`) | Linear solver portfolio and referee, shared by every element type; callers pass their DOF slots per node (truss 3, 3D beam 6), see [CALCULATIONS.md](CALCULATIONS.md) section 7 |
 | `anaf::BRIDGE` | `src/bridge/` | Shared state between GUI thread and worker thread |
 | `anaf::GUI` | `src/gui/` | Window, ImGui layer, panels, OpenGL renderer |
 | `anaf::IO` | `src/io/` | Format-neutral mesh model, readers / writers, async I/O service (library `anaf_io`) |
@@ -149,6 +149,7 @@ Update the documents when any of the following happens:
 
 | Issue | Fixed on | Fix |
 |---|---|---|
+| `package/tools/check.sh` printed "ALL OK" when a build tree had been configured with `ANAFINEN_BUILD_TESTS=OFF`: ctest found no tests and the script only grepped for a pass / fail summary | 2026-10-04 | Existing trees are reconfigured with `-DANAFINEN_BUILD_TESTS=ON`; "No tests were found" is a failure ([BUILD_SYSTEM.md](BUILD_SYSTEM.md) section 9). |
 | Logged floating-point values went through a global fixed-point precision (`setFloatPrecision`, a `FloatArg` wrapper with its own `std::formatter`), so round-off sized values printed as zero (an energy difference of 4e-15 J as `0.0000000000`) and small displacements lost their digits | 2026-10-02 | Wrapper and global setting removed; every floating-point log argument has an explicit format (`{:.3e}`, `{:.6g}`, `{:.1f}`). |
 | `anaf_core` could not be linked on its own: the solver took `Gui_Calc_Bridge&`, and the log / asset lookup sources were compiled into the GUI executable (tests added them by hand) | 2026-10-02 | `FEM::TRUSS::solveStatic()` with a progress callback and a `StaticResult`; `MeshData` / `RenderElement` moved to `trussProperties/meshData.hpp` (bridge aliases); log and directory sources in `anaf_core`; the log's `ANAF_GUI` / `ANAF_CLI` macros replaced by a run-time console switch. A failed stiffness solve is an error now instead of zero displacements with a trivially passing energy check, and the logged max displacement is the vector magnitude (was the largest component). |
 | Inclined supports (allowed-motion basis) were stored but not solved: the solver used only the axis flags, so a roller on an inclined rail was locked in every axis its rail is not parallel to, and the basis was lost in `setModel()` and on export | 2026-09-29 | The container solves `(Tᵀ K T) q = Tᵀ f` over the allowed directions; `setModel()` and `toMeshModel()` keep the basis ([CALCULATIONS.md](CALCULATIONS.md) section 6). |

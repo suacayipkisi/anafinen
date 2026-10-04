@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (solver sources in `src/solvers/`; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
 
 ## 1. Overall flow
 
@@ -243,7 +243,9 @@ Without zenity / kdialog on Linux, the application works; only File > Import / E
 ## 9. Common commands
 
 ```bash
-# Build + test with a short summary (warnings, errors, test results); full logs in <dir>/check-*.log
+# Build + test with a short summary (warnings, errors, test results); full logs in <dir>/check-*.log.
+# Tests are always turned on (an existing tree is reconfigured with ANAFINEN_BUILD_TESTS=ON);
+# a tree in which ctest finds no tests is reported as a failure, not as "ALL OK".
 package/tools/check.sh            # Linux GCC in build/
 package/tools/check.sh all        # + Clang (build-clang/)
 

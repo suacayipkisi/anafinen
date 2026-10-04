@@ -73,6 +73,7 @@ namespace FEM::SOLVER {
     const Eigen::SparseMatrix<double>& upperMatrix,
     const Eigen::VectorXd& force,
     const std::uint32_t totalNodes,
+    const std::uint32_t dofsPerNode,
     const std::vector<std::int32_t>& remapTable,
     const std::stop_token stopToken,
     Eigen::VectorXd& displacement
@@ -101,7 +102,7 @@ namespace FEM::SOLVER {
     }
     else {
       anaf::LOG::info("Solver referee selected OpenMP Block-CG: {} DOFs > {}", dofs, directLimit);
-      result = solveBlockCG(upperMatrix, force, totalNodes, remapTable, stopToken, displacement);
+      result = solveBlockCG(upperMatrix, force, totalNodes, dofsPerNode, remapTable, stopToken, displacement);
       if (result.relativeResidual > 1e-7) {
         result.converged = false;
         result.message = "Block-CG residual is above acceptance threshold";
