@@ -865,7 +865,8 @@ TEST(sectionPropertiesMatchTheirOutline) {
 }
 
 TEST(catalogMatchesPublishedTables) {
-  // Values from the EN 10365 / EN 10210-2 tables (cm units). Our y / z are the tables' z / y:
+  // Reference values from freely available manufacturer section tables (e.g. the ArcelorMittal
+  // sales programme), cm units. Our y / z are the tables' z / y:
   // the strong axis of an I-section is local z here.
   using namespace FEM::BEAM;
   const auto catalog = loadSectionLibrary(sourceAsset(kSectionCatalogAsset));
@@ -894,8 +895,8 @@ TEST(catalogMatchesPublishedTables) {
   const auto chs = computeProperties(find("CHS 114.3x5").getShape(), 0.3);
   CHECK(near(chs.area * 1e4, 17.2, 3e-3) && near(chs.secondMomentY * 1e8, 257.0, 3e-3));
   CHECK(near(computeProperties(find("SHS 100x100x6.3").getShape(), 0.3).area * 1e4, 23.2, 5e-3));
-  // Box torsion with corner radii (EN 10210-2, hot finished: outer 1.5 t, inner 1.0 t), It from
-  // the Dlubal cross-section table "SHS EN 10210-2" (alukonigstahl series).
+  // Box torsion with corner radii (hot finished: outer 1.5 t, inner 1.0 t), It cross-checked
+  // against the freely available Dlubal online cross-section table for hot finished SHS.
   CHECK(near(computeProperties(find("SHS 100x100x6.3").getShape(), 0.3).torsionConstant * 1e8, 534.00, 1e-3));
   CHECK(near(computeProperties(BoxSection{0.1, 0.1, 0.0056, 0.0084, 0.0056}, 0.3).torsionConstant * 1e8, 484.00, 1e-3));
   // Every entry is a valid doubly symmetric shape with dimensions in metres.
