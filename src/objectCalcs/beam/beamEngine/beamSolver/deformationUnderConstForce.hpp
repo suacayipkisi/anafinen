@@ -18,6 +18,7 @@
 #pragma once
 
 #include <beam/beamProperties/meshData.hpp>
+#include <beam/beamSection/beamSection.hpp>
 #include <material/properties.hpp>
 
 #include <Eigen/Core>
@@ -45,18 +46,28 @@ namespace FEM::BEAM {
   // 12x12 local stiffness, DOF order per node {ux, uy, uz, rx, ry, rz} (Przemieniecki).
   // Timoshenko uses the interdependent interpolation element: phi = 12 E I / (G As L^2) per
   // bending plane; phi = 0 gives Euler-Bernoulli exactly, and there is no shear locking.
-  Matrix12 localStiffness(double E, double G, const Section& section, Formulation formulation, double length);
+  Matrix12 localStiffness(double E, double G, const SectionProperties& section, Formulation formulation, double length);
 
   // Work equivalent nodal loads of a uniform load q (local axes, N/m) over the element. The
   // same for both formulations: the Timoshenko shape functions integrate to wL/2 and wL^2/12.
   Vector12 equivalentNodalLoads(const Eigen::Vector3d& localLoad, double length);
 
+  // Section properties of every element: its section's shape with its material's Poisson's
+  // ratio (the shear coefficients depend on it). Indices must be valid (checked by solveStatic).
+  std::vector<SectionProperties> elementSectionProperties(
+    std::span<const BeamElement> elements,
+    std::span<const BeamSection> sections,
+    std::span<const anaf::MATERIAL::Material> materials
+  );
+
   // Total uniform load on every element in its local axes (N/m): the distributed loads on it
-  // plus self weight (density * area * gravity). Throws std::invalid_argument for an element
-  // whose local axes cannot be built. Indices must be valid (checked by solveStatic).
+  // plus self weight (density * area * gravity). properties[e] belongs to elements[e]. Throws
+  // std::invalid_argument for an element whose local axes cannot be built. Indices must be
+  // valid (checked by solveStatic).
   std::vector<Eigen::Vector3d> elementLocalLoads(
     std::span<const Node> nodes,
     std::span<const BeamElement> elements,
+    std::span<const SectionProperties> properties,
     std::span<const DistributedLoad> distributedLoads,
     const std::array<double, 3>& gravity,
     std::span<const anaf::MATERIAL::Material> materials
@@ -77,6 +88,7 @@ namespace FEM::BEAM {
 
     std::span<Node> m_nodes;
     std::span<BeamElement> m_elements;
+    std::span<const SectionProperties> m_properties; // one per element
     std::vector<ElementFrame> m_frames;
     std::vector<double> m_force; // 6 per node, global: fx fy fz mx my mz
 
@@ -87,9 +99,10 @@ namespace FEM::BEAM {
     double m_elasticDeformationEnergy_internal{};
 
   public:
-    void set(std::span<Node> nodes, std::span<BeamElement> elements) {
+    void set(std::span<Node> nodes, std::span<BeamElement> elements, std::span<const SectionProperties> properties) {
       m_nodes = nodes;
       m_elements = elements;
+      m_properties = properties;
     }
 
     // Local axes and stiffness of every element. Fails on a zero length element or an

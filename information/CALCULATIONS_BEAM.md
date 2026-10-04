@@ -3,19 +3,20 @@
 This document describes the linear static calculation of 3D frames built from two-node beam elements (Euler-Bernoulli and Timoshenko): data types, local axes, element matrices, loads, supports, results along the element and the tests.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (first version: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
-> Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; section forces; displacement and internal forces at any point of an element.
-> Not implemented yet: `anaf_io` adapter (`MeshModel` ↔ `FEM::BEAM::MeshData`), GUI, stresses, end releases (hinges), mass matrix, reactions.
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
+> Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 82 standard profiles.
+> Not implemented yet: `anaf_io` adapter (`MeshModel` ↔ `FEM::BEAM::MeshData`), GUI (Section Handler, bridge loading of the catalogue), stresses, channels / angles / tees, end releases (hinges), mass matrix, reactions.
 
 ## 1. Overall flow
 
-`FEM::BEAM::solveStatic(mesh, materials, stop_token, progress)` (`beam/beamEngine/beamSolver.hpp`) takes a `FEM::BEAM::MeshData` and returns a `StaticResult` (solved copy + energy check) or the reason it cannot solve. It has no GUI types, like the truss entry point ([CALCULATIONS.md](CALCULATIONS.md) section 1).
+`FEM::BEAM::solveStatic(mesh, materials, sections, stop_token, progress)` (`beam/beamEngine/beamSolver.hpp`) takes a `FEM::BEAM::MeshData` and returns a `StaticResult` (solved copy + energy check) or the reason it cannot solve. It has no GUI types, like the truss entry point ([CALCULATIONS.md](CALCULATIONS.md) section 1).
 
 ```text
-solveStatic(mesh, materials, st, progress)  (beamSolver.cpp)                 progress
+solveStatic(mesh, materials, sections, st, progress)  (beamSolver.cpp)       progress
    |
-   +-- buildSolverModel()   copy of the model; ids, sections, materials,        0.20
-   |                        load indices checked; unused nodes fixed
+   +-- buildSolverModel()   copy of the model; ids, materials, sections and     0.20
+   |                        load indices checked; computeProperties(shape, v)
+   |                        per element; unused nodes fixed
    +-- Beam_3D_Container                                (deformationUnderConstForce.cpp)
    |     +-- buildElements()     local axes R, k (12x12), T^T k T per element    0.40
    |     +-- applyLoads()        nodal F / M; elementLocalLoads() -> wL/2,       0.50
@@ -38,9 +39,11 @@ after the solve (beamDiagrams.cpp):
 | Type | File | Holds |
 |---|---|---|
 | `Node` | `beamProperties/node.hpp` | id (= position), location, displacement [m], rotation [rad, rotation vector in global axes], `allowedMotionDirections` and `allowedRotationAxes` (orthonormal bases, 0..3 vectors each) |
-| `Section` | `beamProperties/element.hpp` | A, Iy, Iz, J (St. Venant), Asy, Asz (= κA); local principal axes |
+| `SectionProperties` | `beamProperties/element.hpp` | A, Iy, Iz, J (St. Venant), Asy, Asz (= κA); local principal axes; what the solver uses, computed per element |
+| `SectionShape` | `beamSection/beamSection.hpp` | `std::variant` of `GeneralSection`, `RectangleSection`, `CircleSection`, `PipeSection`, `BoxSection`, `ISection` (dimensions in m) |
+| `BeamSection` | `beamSection/beamSection.hpp` | name, `SectionShape`, built-in flag, stable ID: the library object elements reference |
 | `Formulation` | `beamProperties/element.hpp` | `EulerBernoulli`, `Timoshenko` |
-| `BeamElement` | `beamProperties/element.hpp` | node1, node2, material index, `Section`, `Formulation`, orientation vector v, result `sectionForces[12]` |
+| `BeamElement` | `beamProperties/element.hpp` | node1, node2, material index, section index, `Formulation`, orientation vector v, result `sectionForces[12]` |
 | `NodalLoad` | `beamProperties/loads.hpp` | node, force [N], moment [N m], global axes |
 | `DistributedLoad` | `beamProperties/loads.hpp` | element, uniform value [N/m], `LoadFrame::Global` or `Local` |
 | `MeshData` | `beamProperties/meshData.hpp` | nodes, elements, nodal loads, distributed loads, `gravity` (default {0, −9.80665, 0}; zero = no self weight), `hasResults` |
@@ -52,6 +55,8 @@ Where the data is stored:
 | Data | Owner | Lifetime |
 |---|---|---|
 | Input model | caller's `MeshData` | never changed by the solve |
+| Section list | caller (`std::span<const BeamSection>`, like the material list) | the catalogue from `assets/bridge/sectionCatalog.json`, user sections later from the user config folder |
+| Element section properties | `solveStatic()` local vector | one solve; diagrams compute them again |
 | Solved model | `StaticResult::mesh` (`shared_ptr<MeshData>`) | copy of the input with displacements, rotations, section forces, `hasResults = true` |
 | Element matrices, load vector | `Beam_3D_Container` | one solve |
 | Diagram samples | return value of `sampleAllElements()` | caller |
@@ -59,6 +64,37 @@ Where the data is stored:
 ### 2.1 Choosing the formulation
 
 The formulation is per element, as in `anaf_io` (`ElementFormulation`). `setFormulationForAll(mesh, formulation)` sets one formulation on every element; single elements are changed afterwards (for example all Timoshenko and one element Euler-Bernoulli). Euler-Bernoulli ignores the shear areas; Timoshenko requires Asy, Asz > 0.
+
+### 2.2 Cross-sections (`beamSection/`)
+
+Sections are library objects, like materials: an element stores `sectionID`, an index into the list given to `solveStatic()`. The solver never sees a shape; `computeProperties(shape, ν)` turns it into `SectionProperties` for each element, with the element's material.
+
+```text
+assets/bridge/sectionCatalog.json --loadSectionLibrary()--> vector<BeamSection> (built-in, IDs 0..n-1)
+user file (later, Section Handler) --loadUserSectionFile()--> appended user sections
+BeamElement::sectionID --> BeamSection::getShape() --computeProperties(shape, material ν)--> SectionProperties
+                                                   --sectionOutline()--> loops for preview / extrusion
+```
+
+Section plane: origin at the centroid, local y along the height (the web of an I-section), local z along the width. With the default orientation (section 3) a horizontal I-beam therefore stands upright and bends about its strong axis z under gravity.
+
+| Shape | Dimensions | A, I | J | Asy, Asz (Cowper 1966, depends on ν) |
+|---|---|---|---|---|
+| general | A, Iy, Iz, J, Asy, Asz | given | given | given (0 allowed for Euler-Bernoulli) |
+| rectangle | height, width | exact | a c³ [1/3 − 0.21 (c/a)(1 − c⁴/12a⁴)] (Roark) | 10(1+ν)/(12+11ν) · A |
+| circle | diameter | exact | exact | 6(1+ν)/(7+6ν) · A |
+| pipe | outer diameter, wall | exact | exact (2I) | hollow circle, m = d/D |
+| box (RHS / SHS) | height, width, wall, outer / inner corner radius | exact with radii (composite parts) | EN 10219-2 / 10210-2: t³p/3 + 2 K A_h, centre line with R_c = (r_o + r_i)/2 | thin-walled box per direction, centre-line dimensions |
+| I (IPE, HEA, HEB) | height, flange width, web, flange, root radius | exact with the fillets (composite parts) | ArcelorMittal fillet formula | Asy: thin-walled I (shear along the web); Asz = κ_rect · 2 b t_f |
+
+| Decision | Reason |
+|---|---|
+| Doubly symmetric shapes only | The element assumes principal axes and the shear center at the centroid. Channels and angles need a principal angle and a shear center offset; a silently wrong U-section is worse than none. |
+| Catalogue stores dimensions only | One formula set; tests compare it with published tables instead of copying their numbers. |
+| Shear areas from ν at solve time | Cowper's coefficients depend on Poisson's ratio, which belongs to the material. |
+| Exact A and I with fillets / radii instead of the rounded catalogue formulas | The composite of rectangles, quarter discs and spandrels is exact; the outline integral checks it. |
+
+Catalogue (`assets/bridge/sectionCatalog.json`, schema 1, lengths in m): IPE 80–600, HEA 100–600, HEB 100–600 (EN 10365), 10 CHS, 10 SHS, 6 RHS (EN 10210-2 hot finished: outer corner radius 1.5 t, inner 1.0 t). The file format and the user file follow the material library (`sectionLibrary.hpp`): built-in IDs 0..n−1, names unique ignoring ASCII case, no quotes or control characters, user file written next to the target and renamed over it.
 
 ## 3. Local axes
 
@@ -165,7 +201,7 @@ The same energy balance as the truss ([CALCULATIONS.md](CALCULATIONS.md) section
 
 ## 9. Tests
 
-`anaf_beam_tests` (`tests/beamTests.cpp`) links `anaf_core` only. The section has Iy ≠ Iz and Asy ≠ Asz, so a swapped axis gives a wrong number. Every closed-form test runs with both formulations.
+`anaf_beam_tests` (`tests/beamTests.cpp`) links `anaf_core` only. Most solver tests use a general section with Iy ≠ Iz and Asy ≠ Asz, so a swapped axis gives a wrong number. Every closed-form test runs with both formulations.
 
 | Test | Checks |
 |---|---|
@@ -185,19 +221,27 @@ The same energy balance as the truss ([CALCULATIONS.md](CALCULATIONS.md) section
 | `diagramArgumentsAreChecked` | No results, bad element, ξ outside [0, 1] or NaN, fewer than 2 samples |
 | `invalidModelsAreReported` | Error texts: no nodes / elements, J, Iy / Iz, area, missing shear areas, material, node references, parallel v, missing load targets, node ids, mechanisms |
 | `cancelledSolveAndProgress` | Stop request, non-decreasing progress, input unchanged |
+| `sectionPropertiesMatchClosedForms` | Rectangle (J against Roark's β for a/c = 1 and 3), circle, pipe, sharp box (subtraction, Bredt), sharp I; Cowper limits: thin pipe, square tube 20(1+ν)/(48+39ν), I without flanges = rectangle |
+| `sectionPropertiesMatchTheirOutline` | A, Iy, Iz of every shape (fillets and corner radii included) equal the Green's theorem integral over its own outline (2048-gon, 5e-6); centroid at the origin |
+| `catalogMatchesPublishedTables` | IPE 200 / 300, HEA 200, HEB 200 / 300: A, I strong / weak, J within 0.1 %; CHS 114.3x5 A and I; SHS 100x100x6.3 A and J (534.00 cm⁴), SHS 100x100x5.6 J (484.00 cm⁴), from the Dlubal table "SHS EN 10210-2"; every entry valid |
+| `invalidSectionsAreRefused` | Dimension limits of every shape, names |
+| `userSectionFileRoundTrip` | Every shape written and read back; built-ins are not saved; a missing file is an empty list |
+| `solverUsesTheSectionShape` | Timoshenko rectangle with Cowper's κ(ν = 0.3); catalogue IPE 300 bending about its strong axis |
 
-The tests were checked against injected faults: φ built from the wrong inertia, the sign of the x-z fixed-end moment (caught only after `cantileverUnderUniformLoadInBothPlanes` was added), the section sign, and in the diagrams the w rotation sign, the Mz load term, the Timoshenko particular part and a wrong shape function; each makes tests fail.
+The tests were checked against injected faults: in the sections a wrong J coefficient of the I formula (caught after the table tolerance went from 0.5 % to 0.1 %), the corner disc sign and swapped κ axes of the box, the spandrel's own inertia, and the box corner radius in J (caught only after the Dlubal value was added); in the solver φ built from the wrong inertia, the sign of the x-z fixed-end moment (caught only after `cantileverUnderUniformLoadInBothPlanes` was added), the section sign, and in the diagrams the w rotation sign, the Mz load term, the Timoshenko particular part and a wrong shape function; each makes tests fail.
 
 ## 10. Known issues
 
 - An unloaded mechanism is not detected: when the loads do not excite a mechanism (axial load on a beam pinned at both ends that may spin about its own axis) the singular system still gets a finite answer, because the referee has no singularity check; it is shared with the truss solver ([ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 6). `invalidModelsAreReported` loads its torsion mechanism with a torque on purpose.
 - Reactions and stresses are not computed.
+- Asy of an I-section comes from Cowper's thin-walled I (IPE 300: 20.3 cm², about the web area h t_w = 21.3 cm²). It is a stiffness value for shear deformation, not the larger plastic shear area A_v of EN 1993-1-1 (25.7 cm²), which is a design resistance quantity.
 
 ## 11. Related source files
 
 - Entry point: [beamSolver.hpp](../src/objectCalcs/beam/beamEngine/beamSolver.hpp), [beamSolver.cpp](../src/objectCalcs/beam/beamEngine/beamSolver.cpp)
 - Container and element math: [deformationUnderConstForce.hpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.cpp)
 - Results along the element: [beamDiagrams.hpp](../src/objectCalcs/beam/beamEngine/beamDiagrams.hpp), [beamDiagrams.cpp](../src/objectCalcs/beam/beamEngine/beamDiagrams.cpp)
+- Cross-sections: [beamSection.hpp](../src/objectCalcs/beam/beamSection/beamSection.hpp), [beamSection.cpp](../src/objectCalcs/beam/beamSection/beamSection.cpp), [sectionLibrary.hpp](../src/objectCalcs/beam/beamSection/sectionLibrary.hpp), [sectionLibrary.cpp](../src/objectCalcs/beam/beamSection/sectionLibrary.cpp), [assets/bridge/sectionCatalog.json](../assets/bridge/sectionCatalog.json)
 - Types: [node.hpp](../src/objectCalcs/beam/beamProperties/node.hpp), [node.cpp](../src/objectCalcs/beam/beamProperties/node.cpp), [element.hpp](../src/objectCalcs/beam/beamProperties/element.hpp), [loads.hpp](../src/objectCalcs/beam/beamProperties/loads.hpp), [meshData.hpp](../src/objectCalcs/beam/beamProperties/meshData.hpp)
 - Support bases (shared with the truss): [supportBasis.hpp](../src/objectCalcs/common/supportBasis.hpp), [supportBasis.cpp](../src/objectCalcs/common/supportBasis.cpp)
 - Solvers: [solverPortfolio.hpp](../src/solvers/solverPortfolio.hpp)

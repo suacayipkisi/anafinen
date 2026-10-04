@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
 
 ## 1. Overall flow
 
@@ -168,7 +168,7 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
   2. `/usr/share/anafinen/assets`
   3. `./assets`
   4. `MAIN_DIR/assets`
-- `assets/bridge/materialProperties.json` is the built-in material library. The `POST_BUILD` copy runs only when `anafinen` relinks, so the custom target `anafinen_material_library` (ALL) copies this one file with `copy_if_different` on every build; editing the JSON needs no relink.
+- `assets/bridge/materialProperties.json` is the built-in material library and `assets/bridge/sectionCatalog.json` the beam section catalogue. The `POST_BUILD` copy runs only when `anafinen` relinks, so the custom target `anafinen_material_library` (ALL) copies these two files with `copy_if_different` on every build; editing them needs no relink.
 - `anafinen_run.log` is written to the current working directory.
 
 ## 8. Install and packaging (`cmake/Packaging.cmake`)

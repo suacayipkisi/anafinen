@@ -33,6 +33,7 @@
 // so dMz/dx = -Vy and dMy/dx = Vz, and the values at x = L are the node 2 section forces.
 
 #include <beam/beamProperties/meshData.hpp>
+#include <beam/beamSection/beamSection.hpp>
 #include <material/properties.hpp>
 
 #include <Eigen/Core>
@@ -54,15 +55,17 @@ namespace FEM::BEAM {
   };
 
   // State at xi = x / L in [0, 1] of element `element` of a solved model (MeshData from
-  // solveStatic, hasResults = true). localLoad is the element's total uniform load in local
-  // axes, from elementLocalLoads(). Throws std::invalid_argument for a model without
-  // results, an element index out of range or xi outside [0, 1].
+  // solveStatic, hasResults = true) with the material and section lists of the solve.
+  // localLoad is the element's total uniform load in local axes, from elementLocalLoads().
+  // Throws std::invalid_argument for a model without results, an element, material or
+  // section index out of range or xi outside [0, 1].
   SectionState sectionAt(
     const MeshData& solved,
     std::size_t element,
     double xi,
     const Eigen::Vector3d& localLoad,
-    std::span<const anaf::MATERIAL::Material> materials
+    std::span<const anaf::MATERIAL::Material> materials,
+    std::span<const BeamSection> sections
   );
 
   // `count` (>= 2) evenly spaced sections of one element, both ends included.
@@ -71,14 +74,16 @@ namespace FEM::BEAM {
     std::size_t element,
     std::size_t count,
     const Eigen::Vector3d& localLoad,
-    std::span<const anaf::MATERIAL::Material> materials
+    std::span<const anaf::MATERIAL::Material> materials,
+    std::span<const BeamSection> sections
   );
 
   // sampleElement() for every element; the local loads are computed once.
   std::vector<std::vector<SectionState>> sampleAllElements(
     const MeshData& solved,
     std::size_t countPerElement,
-    std::span<const anaf::MATERIAL::Material> materials
+    std::span<const anaf::MATERIAL::Material> materials,
+    std::span<const BeamSection> sections
   );
 
 } // namespace FEM::BEAM end

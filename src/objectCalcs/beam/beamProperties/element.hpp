@@ -27,9 +27,11 @@ namespace FEM::BEAM {
     Timoshenko      // shear deformation through ShearAreaY / ShearAreaZ
   };
 
-  // Section values in the element's local axes (principal axes, no product of inertia).
-  // Names match the anaf_io attributes (SecondMomentY/Z, TorsionConstant, ShearAreaY/Z).
-  struct Section {
+  // Section values the solver uses, in the element's local axes (principal axes through the
+  // centroid = shear center: doubly symmetric sections only). Names match the anaf_io
+  // attributes (SecondMomentY/Z, TorsionConstant, ShearAreaY/Z). Computed from a BeamSection
+  // (beamSection/beamSection.hpp) for each element's material.
+  struct SectionProperties {
     double area{};            // A, m^2
     double secondMomentY{};   // Iy, m^4: bending about local y (deflection along local z)
     double secondMomentZ{};   // Iz, m^4: bending about local z (deflection along local y)
@@ -49,7 +51,7 @@ namespace FEM::BEAM {
     std::uint32_t node1{};
     std::uint32_t node2{};
     std::uint32_t materialID{}; // index into the material list
-    Section section{};
+    std::uint32_t sectionID{};  // index into the section list (like materialID)
     Formulation formulation{Formulation::EulerBernoulli};
     std::array<double, 3> orientation{}; // v; zero = default rule above
 

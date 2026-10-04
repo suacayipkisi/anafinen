@@ -107,7 +107,7 @@ namespace FEM::BEAM {
   Matrix12 localStiffness(
     const double E,
     const double G,
-    const Section& section,
+    const SectionProperties& section,
     const Formulation formulation,
     const double length
   ) {
@@ -163,9 +163,23 @@ namespace FEM::BEAM {
     return f;
   }
 
+  std::vector<SectionProperties> elementSectionProperties(
+    const std::span<const BeamElement> elements,
+    const std::span<const BeamSection> sections,
+    const std::span<const anaf::MATERIAL::Material> materials
+  ) {
+    std::vector<SectionProperties> properties;
+    properties.reserve(elements.size());
+    for (const auto& element : elements) {
+      properties.push_back(computeProperties(sections[element.sectionID].getShape(), materials[element.materialID].getPoisson()));
+    }
+    return properties;
+  }
+
   std::vector<Eigen::Vector3d> elementLocalLoads(
     const std::span<const Node> nodes,
     const std::span<const BeamElement> elements,
+    const std::span<const SectionProperties> properties,
     const std::span<const DistributedLoad> distributedLoads,
     const std::array<double, 3>& gravity,
     const std::span<const anaf::MATERIAL::Material> materials
@@ -176,7 +190,7 @@ namespace FEM::BEAM {
     for (std::size_t index = 0; index < elements.size(); ++index) {
       const auto& element = elements[index];
       axes[index] = localAxes(nodes[element.node1].getLocation(), nodes[element.node2].getLocation(), element.orientation);
-      const double massPerLength = materials[element.materialID].getDensity() * element.section.area;
+      const double massPerLength = materials[element.materialID].getDensity() * properties[index].area;
       if (massPerLength != 0.0) loads[index] = axes[index] * (massPerLength * g);
     }
     // Several loads may act on one element, so they are added serially.
@@ -212,7 +226,7 @@ namespace FEM::BEAM {
       frame.length = std::sqrt(dx * dx + dy * dy + dz * dz);
       const auto& material = materials[element.materialID];
       frame.localStiffness = localStiffness(
-        material.getElasticityModulus(), material.getShearModulus(), element.section, element.formulation, frame.length
+        material.getElasticityModulus(), material.getShearModulus(), m_properties[index], element.formulation, frame.length
       );
       const Matrix12 transformation = elementTransformation(frame.axes);
       frame.globalStiffness = transformation.transpose() * frame.localStiffness * transformation;
@@ -243,7 +257,7 @@ namespace FEM::BEAM {
       }
     }
 
-    const auto localLoads = elementLocalLoads(m_nodes, m_elements, distributedLoads, gravity, materials);
+    const auto localLoads = elementLocalLoads(m_nodes, m_elements, m_properties, distributedLoads, gravity, materials);
     const auto elementCount = static_cast<long long>(m_elements.size());
     #pragma omp parallel for schedule(static)
     for (long long index = 0; index < elementCount; ++index) {

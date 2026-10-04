@@ -10,7 +10,7 @@ This document describes `anaf_io`, the mesh import/export library:
 For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam solver exists in `anaf_core`, adapter still missing, its default orientation rule; HDF5 array store `src/io/array/`; 2026-10-03: rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names, link to the interoperability plan; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (section shapes not in the files yet, section 3.3; beam solver exists in `anaf_core`, adapter still missing, its default orientation rule; HDF5 array store `src/io/array/`; 2026-10-03: rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names, link to the interoperability plan; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -171,6 +171,7 @@ The beam / frame data was added without breaking files, readers or callers of an
 | Rotation results | Separate `Rotation` field (node, 3); mode shapes = `Displacement` + `Rotation` with `StepKind::Mode` | A 6-component displacement | ParaView "Warp By Vector" needs a 3-component displacement. |
 
 Not covered yet, left for later work:
+- section shapes: the beam solver references sections by index into a library of shapes (`FEM::BEAM::BeamSection`, [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 2.2); files carry only the numbers (`SecondMomentY/Z`, ...). Planned: `Section:<name>` element sets matched by name like `Material:<name>`, plus a section table (shape key and dimensions) so user sections survive a round trip;
 - beam end releases (hinges), e.g. two bit-mask attributes `ReleaseNode0` / `ReleaseNode1`;
 - distributed element loads on beams (part of the element-face load gap);
 - concentrated nodal mass and rotary inertia;

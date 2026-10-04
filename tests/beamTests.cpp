@@ -24,6 +24,8 @@
 #include <beam/beamEngine/beamDiagrams.hpp>
 #include <beam/beamEngine/beamSolver.hpp>
 #include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp>
+#include <beam/beamSection/sectionLibrary.hpp>
+#include <directory/getExecutableDirectory.hpp>
 
 #include <Eigen/Eigenvalues>
 #include <Eigen/Geometry>
@@ -33,6 +35,8 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <numbers>
 #include <stop_token>
 #include <string>
 #include <utility>
@@ -50,7 +54,7 @@ namespace {
   constexpr double kL = 3.0;    // m
   constexpr double kDensity = 7850.0;
   // Iy != Iz and Asy != Asz, so a swapped axis shows up as a wrong number.
-  constexpr FEM::BEAM::Section kSection{
+  constexpr FEM::BEAM::SectionProperties kSection{
     .area = 0.01, .secondMomentY = 2e-5, .secondMomentZ = 8e-5, .torsionConstant = 1e-5,
     .shearAreaY = 0.008, .shearAreaZ = 0.007
   };
@@ -64,6 +68,15 @@ namespace {
       anaf::MATERIAL::Material{{.name = "Steel", .elasticityModulus = kE, .shearModulus = kG, .bulkModulus = 175e9,
                                 .yieldTensileStrength = 250e6, .ultimateTensileStrength = 400e6, .density = kDensity,
                                 .poissonsRatio = 0.3, .ductility = 0.2}},
+    };
+    return list;
+  }
+
+  // Index 0: kSection as a general section (most tests), index 1: a solid rectangle.
+  const std::vector<FEM::BEAM::BeamSection>& sections() {
+    static const std::vector<FEM::BEAM::BeamSection> list{
+      FEM::BEAM::BeamSection{"Test general", FEM::BEAM::GeneralSection{kSection}},
+      FEM::BEAM::BeamSection{"Rectangle 300x100", FEM::BEAM::RectangleSection{0.3, 0.1}},
     };
     return list;
   }
@@ -87,7 +100,7 @@ namespace {
     element.node1 = a;
     element.node2 = b;
     element.materialID = material;
-    element.section = kSection;
+    element.sectionID = 0;
     element.formulation = formulation;
     element.orientation = orientation;
     return element;
@@ -103,8 +116,8 @@ namespace {
     return mesh;
   }
 
-  FEM::BEAM::StaticResult solve(const MeshData& mesh) {
-    auto solved = FEM::BEAM::solveStatic(mesh, materials());
+  FEM::BEAM::StaticResult solve(const MeshData& mesh, std::span<const FEM::BEAM::BeamSection> list = sections()) {
+    auto solved = FEM::BEAM::solveStatic(mesh, materials(), list);
     if (!solved) {
       std::printf("      %s\n", solved.error().c_str());
       throw anaf::TESTING::RequireFailure{};
@@ -112,8 +125,8 @@ namespace {
     return std::move(*solved);
   }
 
-  std::string errorOf(const MeshData& mesh) {
-    const auto solved = FEM::BEAM::solveStatic(mesh, materials());
+  std::string errorOf(const MeshData& mesh, std::span<const FEM::BEAM::BeamSection> list = sections()) {
+    const auto solved = FEM::BEAM::solveStatic(mesh, materials(), list);
     return solved ? std::string{} : solved.error();
   }
 
@@ -148,6 +161,30 @@ namespace {
       {2, {2e2, -8e2, 3e2}, FEM::BEAM::LoadFrame::Local}, // local loads do not turn
     };
     return mesh;
+  }
+
+  // A, Iy, Iz and the centroid of a section from its outline (Green's theorem over the
+  // polygon loops; holes are clockwise and subtract themselves).
+  struct OutlineIntegrals { double area{}, Iy{}, Iz{}, centroidY{}, centroidZ{}; };
+  OutlineIntegrals integrateOutline(const FEM::BEAM::SectionShape& shape) {
+    OutlineIntegrals result;
+    double firstY = 0.0, firstZ = 0.0;
+    for (const auto& loop : FEM::BEAM::sectionOutline(shape, 512)) {
+      for (std::size_t i = 0; i < loop.size(); ++i) {
+        const auto& a = loop[i];
+        const auto& b = loop[(i + 1) % loop.size()];
+        const double u0 = a[1], v0 = a[0], u1 = b[1], v1 = b[0]; // (z, y) plane
+        const double cross = u0 * v1 - u1 * v0;
+        result.area += cross / 2.0;
+        firstZ += cross * (u0 + u1) / 6.0;
+        firstY += cross * (v0 + v1) / 6.0;
+        result.Iy += cross * (u0 * u0 + u0 * u1 + u1 * u1) / 12.0;
+        result.Iz += cross * (v0 * v0 + v0 * v1 + v1 * v1) / 12.0;
+      }
+    }
+    result.centroidY = firstY / result.area;
+    result.centroidZ = firstZ / result.area;
+    return result;
   }
 
   bool contains(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
@@ -392,7 +429,7 @@ TEST(diagramsAlongACantileverMatchTheHandSolution) {
     mesh.nodalLoads = {{1, {Px, Py, Pz}, {T, 0.0, 0.0}}};
     const auto solved = solve(mesh);
     const bool timoshenko = formulation == Formulation::Timoshenko;
-    const auto states = FEM::BEAM::sampleElement(*solved.mesh, 0, 7, Eigen::Vector3d::Zero(), materials());
+    const auto states = FEM::BEAM::sampleElement(*solved.mesh, 0, 7, Eigen::Vector3d::Zero(), materials(), sections());
     REQUIRE(states.size() == 7);
     for (const auto& state : states) {
       const double x = state.position;
@@ -424,7 +461,7 @@ TEST(diagramsOfAClampedBeamUnderUniformLoad) {
     mesh.distributedLoads = {{0, {qx, qy, qz}, FEM::BEAM::LoadFrame::Local}};
     const auto solved = solve(mesh);
     const bool timoshenko = formulation == Formulation::Timoshenko;
-    const auto all = FEM::BEAM::sampleAllElements(*solved.mesh, 5, materials());
+    const auto all = FEM::BEAM::sampleAllElements(*solved.mesh, 5, materials(), sections());
     REQUIRE(all.size() == 1 && all[0].size() == 5);
     const auto& mid = all[0][2];
     const double L2 = kL * kL;
@@ -452,7 +489,7 @@ TEST(diagramsOfACantileverUnderItsOwnWeight) {
   mesh.elements[0].materialID = 1;
   const auto solved = solve(mesh);
   const double w = kDensity * kSection.area * 9.80665;
-  const auto states = FEM::BEAM::sampleAllElements(*solved.mesh, 4, materials())[0];
+  const auto states = FEM::BEAM::sampleAllElements(*solved.mesh, 4, materials(), sections())[0];
   for (const auto& state : states) {
     const double x = state.position;
     CHECK(near(state.displacement[1], -w * x * x * (6.0 * kL * kL - 4.0 * kL * x + x * x) / (24.0 * kE * kSection.secondMomentZ), 1e-9, 1e-18));
@@ -467,8 +504,8 @@ TEST(diagramsTurnWithTheFrame) {
   const Eigen::Matrix3d R = Eigen::AngleAxisd(-1.1, Eigen::Vector3d(0.3, -1.0, 2.0).normalized()).toRotationMatrix();
   const auto base = solve(frameModel(Eigen::Matrix3d::Identity()));
   const auto turned = solve(frameModel(R));
-  const auto a = FEM::BEAM::sampleAllElements(*base.mesh, 9, materials());
-  const auto b = FEM::BEAM::sampleAllElements(*turned.mesh, 9, materials());
+  const auto a = FEM::BEAM::sampleAllElements(*base.mesh, 9, materials(), sections());
+  const auto b = FEM::BEAM::sampleAllElements(*turned.mesh, 9, materials(), sections());
   for (std::size_t e = 0; e < a.size(); ++e) {
     const auto& element = base.mesh->elements[e];
     CHECK(nearVec(a[e].front().displacement, base.mesh->nodes[element.node1].getDisplacement(), 1e-12));
@@ -478,12 +515,13 @@ TEST(diagramsTurnWithTheFrame) {
       CHECK(nearVec(b[e][i].displacement, {d[0], d[1], d[2]}, 1e-9));
       for (std::size_t k = 0; k < 6; ++k) CHECK(near(b[e][i].forces[k], a[e][i].forces[k], 1e-8, 1e-6));
     }
-    const auto loads = FEM::BEAM::elementLocalLoads(base.mesh->nodes, base.mesh->elements, base.mesh->distributedLoads,
+    const auto properties = FEM::BEAM::elementSectionProperties(base.mesh->elements, sections(), materials());
+    const auto loads = FEM::BEAM::elementLocalLoads(base.mesh->nodes, base.mesh->elements, properties, base.mesh->distributedLoads,
                                                     base.mesh->gravity, materials());
     const double h = 1e-4;
-    const auto left = FEM::BEAM::sectionAt(*base.mesh, e, 0.5 - h, loads[e], materials());
-    const auto centre = FEM::BEAM::sectionAt(*base.mesh, e, 0.5, loads[e], materials());
-    const auto right = FEM::BEAM::sectionAt(*base.mesh, e, 0.5 + h, loads[e], materials());
+    const auto left = FEM::BEAM::sectionAt(*base.mesh, e, 0.5 - h, loads[e], materials(), sections());
+    const auto centre = FEM::BEAM::sectionAt(*base.mesh, e, 0.5, loads[e], materials(), sections());
+    const auto right = FEM::BEAM::sectionAt(*base.mesh, e, 0.5 + h, loads[e], materials(), sections());
     const double dx = right.position - left.position;
     CHECK(near((right.forces[5] - left.forces[5]) / dx, -centre.forces[1], 1e-6, 1e-6));
     CHECK(near((right.forces[4] - left.forces[4]) / dx, centre.forces[2], 1e-6, 1e-6));
@@ -494,13 +532,197 @@ TEST(diagramArgumentsAreChecked) {
   auto mesh = cantilever(Formulation::EulerBernoulli);
   mesh.nodalLoads = {{1, {0, -1e3, 0}, {}}};
   const auto zero = Eigen::Vector3d::Zero();
-  CHECK(throws([&] { (void)FEM::BEAM::sectionAt(mesh, 0, 0.5, zero, materials()); })); // not solved
+  CHECK(throws([&] { (void)FEM::BEAM::sectionAt(mesh, 0, 0.5, zero, materials(), sections()); })); // not solved
   const auto solved = solve(mesh);
-  CHECK(throws([&] { (void)FEM::BEAM::sectionAt(*solved.mesh, 1, 0.5, zero, materials()); }));
-  CHECK(throws([&] { (void)FEM::BEAM::sectionAt(*solved.mesh, 0, 1.5, zero, materials()); }));
-  CHECK(throws([&] { (void)FEM::BEAM::sectionAt(*solved.mesh, 0, std::nan(""), zero, materials()); }));
-  CHECK(throws([&] { (void)FEM::BEAM::sampleElement(*solved.mesh, 0, 1, zero, materials()); }));
-  CHECK(throws([&] { (void)FEM::BEAM::sampleAllElements(*solved.mesh, 1, materials()); }));
+  CHECK(throws([&] { (void)FEM::BEAM::sectionAt(*solved.mesh, 1, 0.5, zero, materials(), sections()); }));
+  CHECK(throws([&] { (void)FEM::BEAM::sectionAt(*solved.mesh, 0, 1.5, zero, materials(), sections()); }));
+  CHECK(throws([&] { (void)FEM::BEAM::sectionAt(*solved.mesh, 0, std::nan(""), zero, materials(), sections()); }));
+  CHECK(throws([&] { (void)FEM::BEAM::sampleElement(*solved.mesh, 0, 1, zero, materials(), sections()); }));
+  CHECK(throws([&] { (void)FEM::BEAM::sampleAllElements(*solved.mesh, 1, materials(), sections()); }));
+}
+
+// ---- cross-sections ---------------------------------------------------------------------------
+
+TEST(sectionPropertiesMatchClosedForms) {
+  using namespace FEM::BEAM;
+  constexpr double v = 0.3;
+  constexpr double pi = std::numbers::pi;
+  // Rectangle 300 x 100: J = beta a c^3 with beta = 0.263 for a/c = 3 (Roark), 0.1406 for a square.
+  auto p = computeProperties(RectangleSection{0.3, 0.1}, v);
+  CHECK(near(p.area, 0.03, 1e-14) && near(p.secondMomentZ, 0.1 * 0.027 / 12.0, 1e-14) && near(p.secondMomentY, 0.3 * 0.001 / 12.0, 1e-14));
+  CHECK(near(p.torsionConstant, 0.263 * 0.3 * 0.001, 2e-3));
+  CHECK(near(computeProperties(RectangleSection{0.1, 0.1}, v).torsionConstant, 0.1406 * 1e-4, 3e-3));
+  CHECK(near(p.shearAreaY, 10.0 * 1.3 / (12.0 + 3.3) * 0.03, 1e-14) && p.shearAreaY == p.shearAreaZ);
+  // Circle and pipe: exact.
+  p = computeProperties(CircleSection{0.2}, v);
+  CHECK(near(p.area, pi * 0.01, 1e-14) && near(p.secondMomentY, pi * 1e-4 / 4.0, 1e-14) && near(p.torsionConstant, pi * 1e-4 / 2.0, 1e-14));
+  CHECK(near(p.shearAreaY, 6.0 * 1.3 / (7.0 + 1.8) * p.area, 1e-14));
+  p = computeProperties(PipeSection{0.2, 0.01}, v);
+  CHECK(near(p.area, pi * (0.01 - 0.0081), 1e-13) && near(p.secondMomentZ, pi * (1e-4 - 0.09 * 0.09 * 0.09 * 0.09) / 4.0, 1e-13));
+  CHECK(near(p.torsionConstant, 2.0 * p.secondMomentY, 1e-14));
+  // Thin pipe tends to Cowper's thin-walled tube 2(1+v)/(4+3v).
+  p = computeProperties(PipeSection{1.0, 1e-4}, v);
+  CHECK(near(p.shearAreaY / p.area, 2.0 * 1.3 / (4.0 + 0.9), 1e-6));
+  // Sharp-cornered box: A, I by subtraction, J by Bredt + the open part; square tube kappa = 20(1+v)/(48+39v).
+  const double h = 0.2, b = 0.1, t = 0.008;
+  p = computeProperties(BoxSection{h, b, t, 0.0, 0.0}, v);
+  CHECK(near(p.area, h * b - (h - 2 * t) * (b - 2 * t), 1e-13));
+  CHECK(near(p.secondMomentZ, (b * h * h * h - (b - 2 * t) * std::pow(h - 2 * t, 3)) / 12.0, 1e-13));
+  CHECK(near(p.secondMomentY, (h * b * b * b - (h - 2 * t) * std::pow(b - 2 * t, 3)) / 12.0, 1e-13));
+  const double perimeter = 2.0 * ((b - t) + (h - t));
+  const double enclosed = (b - t) * (h - t);
+  CHECK(near(p.torsionConstant, t * t * t * perimeter / 3.0 + 4.0 * t * enclosed * enclosed / perimeter, 1e-13));
+  CHECK(p.shearAreaY > p.shearAreaZ); // the tall webs carry Vy
+  p = computeProperties(BoxSection{0.1, 0.1, 0.005, 0.0, 0.0}, v);
+  CHECK(near(p.shearAreaY / p.area, 20.0 * 1.3 / (48.0 + 39.0 * 0.3), 1e-14) && near(p.shearAreaY, p.shearAreaZ, 1e-14));
+  // Sharp I: plates only; Cowper's I tends to the rectangle when the flanges vanish.
+  p = computeProperties(ISection{0.3, 0.15, 0.007, 0.01, 0.0}, v);
+  CHECK(near(p.area, 2 * 0.15 * 0.01 + 0.28 * 0.007, 1e-13));
+  CHECK(near(p.secondMomentZ, (0.15 * 0.027 - 0.143 * std::pow(0.28, 3)) / 12.0, 1e-13));
+  CHECK(near(p.secondMomentY, (2 * 0.01 * std::pow(0.15, 3) + 0.28 * std::pow(0.007, 3)) / 12.0, 1e-13));
+  CHECK(near(p.shearAreaZ, 10.0 * 1.3 / (12.0 + 3.3) * 2 * 0.15 * 0.01, 1e-14));
+  p = computeProperties(ISection{0.3, 0.010001, 0.01, 1e-7, 0.0}, v);
+  CHECK(near(p.shearAreaY / p.area, 10.0 * 1.3 / (12.0 + 3.3), 1e-4));
+  // General: unchanged.
+  const auto general = computeProperties(GeneralSection{kSection}, v);
+  CHECK(general.area == kSection.area && general.shearAreaZ == kSection.shearAreaZ);
+}
+
+TEST(sectionPropertiesMatchTheirOutline) {
+  // A, Iy, Iz of every shape (fillets and corner radii included) against the integral over
+  // its own outline: the formulas and the drawing describe the same section.
+  using namespace FEM::BEAM;
+  const std::vector<SectionShape> shapes{
+    RectangleSection{0.3, 0.1}, CircleSection{0.2}, PipeSection{0.1143, 0.005},
+    BoxSection{0.2, 0.1, 0.008, 0.012, 0.008}, BoxSection{0.1, 0.1, 0.0063, 0.00945, 0.0063}, BoxSection{0.15, 0.1, 0.006, 0.0, 0.0},
+    ISection{0.3, 0.15, 0.0071, 0.0107, 0.015}, ISection{0.2, 0.2, 0.009, 0.015, 0.018}, ISection{0.6, 0.22, 0.012, 0.019, 0.0},
+  };
+  // 512 chords per quarter: a polygon of N = 2048 sides misses (2 pi / N)^2 / 6 = 1.6e-6 of a
+  // circle's area and twice that of its second moment.
+  for (const auto& shape : shapes) {
+    REQUIRE(validateShape(shape).has_value());
+    const auto p = computeProperties(shape, 0.3);
+    const auto o = integrateOutline(shape);
+    if (!near(o.area, p.area, 5e-6) || !near(o.Iy, p.secondMomentY, 5e-6) || !near(o.Iz, p.secondMomentZ, 5e-6)) {
+      std::printf("      %s: A %.9g / %.9g, Iy %.9g / %.9g, Iz %.9g / %.9g\n", shapeKey(shape), o.area, p.area, o.Iy, p.secondMomentY, o.Iz, p.secondMomentZ);
+    }
+    CHECK(near(o.area, p.area, 5e-6) && near(o.Iy, p.secondMomentY, 5e-6) && near(o.Iz, p.secondMomentZ, 5e-6));
+    CHECK(std::abs(o.centroidY) < 1e-12 && std::abs(o.centroidZ) < 1e-12);
+  }
+  CHECK(sectionOutline(GeneralSection{kSection}).empty());
+  CHECK(sectionOutline(PipeSection{0.1, 0.01}).size() == 2 && sectionOutline(ISection{0.3, 0.15, 0.007, 0.01, 0.015}).size() == 1);
+}
+
+TEST(catalogMatchesPublishedTables) {
+  // Values from the EN 10365 / EN 10210-2 tables (cm units). Our y / z are the tables' z / y:
+  // the strong axis of an I-section is local z here.
+  using namespace FEM::BEAM;
+  const auto catalog = loadSectionLibrary(anaf::DIRECTORY::findAssetPath(kSectionCatalogAsset));
+  if (!catalog) std::printf("      %s\n", catalog.error().c_str());
+  REQUIRE(catalog.has_value() && catalog->size() > 50);
+  const auto find = [&](const char* name) -> const BeamSection& {
+    for (const auto& section : *catalog) {
+      if (sameSectionName(section.getName(), name)) return section;
+    }
+    std::printf("      missing '%s'\n", name);
+    throw anaf::TESTING::RequireFailure{};
+  };
+  struct Published { const char* name; double area, strong, weak, torsion; }; // cm^2, cm^4
+  // The tables give four significant digits; 1e-3 still catches a 0.63 -> 0.6 slip in the J formula.
+  for (const auto& row : {Published{"IPE 200", 28.48, 1943.0, 142.4, 6.98},
+                          Published{"IPE 300", 53.81, 8356.0, 603.8, 20.12},
+                          Published{"HEA 200", 53.83, 3692.0, 1336.0, 20.98},
+                          Published{"HEB 200", 78.08, 5696.0, 2003.0, 59.28},
+                          Published{"HEB 300", 149.1, 25170.0, 8563.0, 185.0}}) {
+    const auto p = computeProperties(find(row.name).getShape(), 0.3);
+    const bool ok = near(p.area * 1e4, row.area, 1e-3) && near(p.secondMomentZ * 1e8, row.strong, 1e-3)
+      && near(p.secondMomentY * 1e8, row.weak, 1e-3) && near(p.torsionConstant * 1e8, row.torsion, 1e-3);
+    if (!ok) std::printf("      %s: A %.4g, Iz %.5g, Iy %.5g, J %.4g\n", row.name, p.area * 1e4, p.secondMomentZ * 1e8, p.secondMomentY * 1e8, p.torsionConstant * 1e8);
+    CHECK(ok);
+  }
+  const auto chs = computeProperties(find("CHS 114.3x5").getShape(), 0.3);
+  CHECK(near(chs.area * 1e4, 17.2, 3e-3) && near(chs.secondMomentY * 1e8, 257.0, 3e-3));
+  CHECK(near(computeProperties(find("SHS 100x100x6.3").getShape(), 0.3).area * 1e4, 23.2, 5e-3));
+  // Box torsion with corner radii (EN 10210-2, hot finished: outer 1.5 t, inner 1.0 t), It from
+  // the Dlubal cross-section table "SHS EN 10210-2" (alukonigstahl series).
+  CHECK(near(computeProperties(find("SHS 100x100x6.3").getShape(), 0.3).torsionConstant * 1e8, 534.00, 1e-3));
+  CHECK(near(computeProperties(BoxSection{0.1, 0.1, 0.0056, 0.0084, 0.0056}, 0.3).torsionConstant * 1e8, 484.00, 1e-3));
+  // Every entry is a valid doubly symmetric shape with dimensions in metres.
+  for (const auto& section : *catalog) {
+    CHECK(section.getIsBuiltin() && validateSection(section).has_value());
+    const auto p = computeProperties(section.getShape(), 0.3);
+    CHECK(p.area > 1e-5 && p.area < 0.1); // 0.1 cm^2 .. 1000 cm^2
+  }
+}
+
+TEST(invalidSectionsAreRefused) {
+  using namespace FEM::BEAM;
+  const auto refused = [](const SectionShape& shape) { return !validateShape(shape).has_value(); };
+  CHECK(refused(RectangleSection{0.0, 0.1}) && refused(RectangleSection{0.1, std::nan("")}));
+  CHECK(refused(CircleSection{-1.0}));
+  CHECK(refused(PipeSection{0.1, 0.05}) && refused(PipeSection{0.1, 0.0}));
+  CHECK(refused(BoxSection{0.1, 0.1, 0.05, 0.0, 0.0}) && refused(BoxSection{0.1, 0.1, 0.01, 0.06, 0.0}) && refused(BoxSection{0.1, 0.1, 0.01, 0.0, 0.045}));
+  CHECK(refused(ISection{0.3, 0.15, 0.15, 0.01, 0.0}) && refused(ISection{0.3, 0.15, 0.007, 0.15, 0.0}));
+  CHECK(refused(ISection{0.3, 0.15, 0.007, 0.01, 0.08}) && refused(ISection{0.3, 0.15, 0.007, 0.01, -0.001}));
+  CHECK(refused(GeneralSection{{0.01, 0.0, 1e-5, 1e-5, 0.0, 0.0}}) && refused(GeneralSection{{0.01, 1e-5, 1e-5, 1e-5, -1.0, 0.0}}));
+  CHECK(!refused(BoxSection{0.1, 0.1, 0.01, 0.05, 0.04}) && !refused(ISection{0.3, 0.15, 0.007, 0.01, 0.0}));
+  CHECK(!validateSection(BeamSection{"", RectangleSection{0.1, 0.1}}).has_value());
+  CHECK(!validateSection(BeamSection{"a\"b", RectangleSection{0.1, 0.1}}).has_value());
+  CHECK(sameSectionName("ipe 300", "IPE 300") && !sameSectionName("IPE 300", "IPE 30"));
+}
+
+TEST(userSectionFileRoundTrip) {
+  using namespace FEM::BEAM;
+  const std::vector<BeamSection> list{
+    BeamSection{"Built-in", RectangleSection{0.2, 0.1}, true, 0},
+    BeamSection{"My general", GeneralSection{kSection}},
+    BeamSection{"My rectangle", RectangleSection{0.25, 0.12}},
+    BeamSection{"My circle", CircleSection{0.08}},
+    BeamSection{"My pipe", PipeSection{0.0603, 0.004}},
+    BeamSection{"My box", BoxSection{0.2, 0.1, 0.008, 0.012, 0.008}},
+    BeamSection{"My I", ISection{0.3, 0.15, 0.0071, 0.0107, 0.015}},
+  };
+  const auto path = std::filesystem::temp_directory_path() / "anaf_beam_tests" / "userSections.json";
+  REQUIRE(saveUserSectionFile(path, list).has_value());
+  const auto back = loadUserSectionFile(path);
+  REQUIRE(back.has_value() && back->size() == list.size() - 1); // built-ins are not saved
+  for (std::size_t i = 0; i < back->size(); ++i) {
+    const auto& a = list[i + 1];
+    const auto& b = (*back)[i];
+    CHECK(a.getName() == b.getName() && !b.getIsBuiltin() && std::string(shapeKey(a.getShape())) == shapeKey(b.getShape()));
+    const auto pa = computeProperties(a.getShape(), 0.3);
+    const auto pb = computeProperties(b.getShape(), 0.3);
+    CHECK(pa.area == pb.area && pa.secondMomentZ == pb.secondMomentZ && pa.torsionConstant == pb.torsionConstant && pa.shearAreaY == pb.shearAreaY);
+  }
+  std::filesystem::remove_all(path.parent_path());
+  const auto missing = loadUserSectionFile(path);
+  CHECK(missing.has_value() && missing->empty());
+}
+
+TEST(solverUsesTheSectionShape) {
+  // Timoshenko cantilever with the solid rectangle: Asy = kappa A with Cowper's kappa for v = 0.3.
+  const double P = -20e3;
+  auto mesh = cantilever(Formulation::Timoshenko);
+  mesh.elements[0].sectionID = 1;
+  mesh.nodalLoads = {{1, {0.0, P, 0.0}, {}}};
+  const auto solved = solve(mesh);
+  const double A = 0.03;
+  const double Iz = 0.1 * 0.027 / 12.0;
+  const double kappa = 10.0 * 1.3 / (12.0 + 11.0 * 0.3);
+  CHECK(near(solved.mesh->nodes[1].getDisplacement()[1], P * std::pow(kL, 3) / (3.0 * kE * Iz) + P * kL / (kG * kappa * A), 1e-10));
+  // An IPE 300 from the catalogue, Euler-Bernoulli: the strong axis carries the gravity-direction load.
+  const auto catalog = FEM::BEAM::loadSectionLibrary(anaf::DIRECTORY::findAssetPath(FEM::BEAM::kSectionCatalogAsset));
+  REQUIRE(catalog.has_value());
+  std::uint32_t ipe = 0;
+  while (ipe < catalog->size() && (*catalog)[ipe].getName() != "IPE 300") ++ipe;
+  REQUIRE(ipe < catalog->size());
+  auto steel = cantilever(Formulation::EulerBernoulli);
+  steel.elements[0].sectionID = ipe;
+  steel.nodalLoads = {{1, {0.0, P, 0.0}, {}}};
+  const auto ipeSolved = solve(steel, *catalog);
+  const double strong = FEM::BEAM::computeProperties((*catalog)[ipe].getShape(), 0.3).secondMomentZ;
+  CHECK(near(strong * 1e8, 8356.0, 3e-3));
+  CHECK(near(ipeSolved.mesh->nodes[1].getDisplacement()[1], P * std::pow(kL, 3) / (3.0 * kE * strong), 1e-10));
 }
 
 // ---- errors -----------------------------------------------------------------------------------
@@ -516,13 +738,20 @@ TEST(invalidModelsAreReported) {
     change(model);
     return errorOf(model);
   };
-  CHECK(contains(broken([](MeshData& m) { m.elements[0].section.torsionConstant = 0.0; }), "torsion constant"));
-  CHECK(contains(broken([](MeshData& m) { m.elements[0].section.secondMomentY = -1.0; }), "Iy and Iz"));
-  CHECK(contains(broken([](MeshData& m) { m.elements[0].section.area = std::nan(""); }), "area"));
-  CHECK(contains(broken([](MeshData& m) {
-    m.elements[0].formulation = Formulation::Timoshenko;
-    m.elements[0].section.shearAreaZ = 0.0;
-  }), "shear areas"));
+  const auto brokenSection = [](auto change, const Formulation formulation = Formulation::EulerBernoulli) {
+    auto values = kSection;
+    change(values);
+    const std::vector<FEM::BEAM::BeamSection> list{FEM::BEAM::BeamSection{"Broken", FEM::BEAM::GeneralSection{values}}};
+    return errorOf(cantilever(formulation), list);
+  };
+  using P = FEM::BEAM::SectionProperties;
+  CHECK(contains(brokenSection([](P& v) { v.torsionConstant = 0.0; }), "section 'Broken': A, Iy, Iz and J must be positive"));
+  CHECK(contains(brokenSection([](P& v) { v.secondMomentY = -1.0; }), "must be positive"));
+  CHECK(contains(brokenSection([](P& v) { v.area = std::nan(""); }), "must be positive"));
+  CHECK(errorOf(cantilever(Formulation::EulerBernoulli), std::vector<FEM::BEAM::BeamSection>{
+    FEM::BEAM::BeamSection{"No shear", FEM::BEAM::GeneralSection{{0.01, 2e-5, 8e-5, 1e-5, 0.0, 0.0}}}}).empty()); // EB needs no shear area
+  CHECK(contains(brokenSection([](P& v) { v.shearAreaZ = 0.0; }, Formulation::Timoshenko), "shear areas"));
+  CHECK(contains(broken([](MeshData& m) { m.elements[0].sectionID = 7; }), "section that is not in the section list"));
   CHECK(contains(broken([](MeshData& m) { m.elements[0].materialID = 9; }), "material"));
   CHECK(contains(broken([](MeshData& m) { m.elements[0].node2 = 5; }), "references node 5"));
   CHECK(contains(broken([](MeshData& m) { m.elements[0].node2 = 0; }), "starts and ends"));
@@ -552,11 +781,11 @@ TEST(cancelledSolveAndProgress) {
   mesh.nodalLoads = {{1, {0, -1e3, 0}, {}}};
   std::stop_source source;
   source.request_stop();
-  const auto cancelled = FEM::BEAM::solveStatic(mesh, materials(), source.get_token());
+  const auto cancelled = FEM::BEAM::solveStatic(mesh, materials(), sections(), source.get_token());
   CHECK(!cancelled && cancelled.error() == "cancelled");
 
   std::vector<float> reported;
-  const auto solved = FEM::BEAM::solveStatic(mesh, materials(), {}, [&](const float f) { reported.push_back(f); });
+  const auto solved = FEM::BEAM::solveStatic(mesh, materials(), sections(), {}, [&](const float f) { reported.push_back(f); });
   REQUIRE(solved.has_value() && !reported.empty());
   bool increasing = true;
   for (std::size_t i = 1; i < reported.size(); ++i) increasing = increasing && reported[i] >= reported[i - 1];

@@ -81,6 +81,8 @@ set(ANAF_CORE_SOURCES
     src/solvers/solver_referee.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp
     src/objectCalcs/beam/beamProperties/node.cpp
+    src/objectCalcs/beam/beamSection/beamSection.cpp
+    src/objectCalcs/beam/beamSection/sectionLibrary.cpp
     src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.cpp
     src/objectCalcs/beam/beamEngine/beamSolver.cpp
     src/objectCalcs/beam/beamEngine/beamDiagrams.cpp
@@ -204,13 +206,14 @@ add_custom_command(
 )
 
 # The POST_BUILD copy above runs only when anafinen relinks; keep the editable
-# material library current on every build.
+# material library and section catalogue current on every build.
 add_custom_target(anafinen_material_library ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:anafinen>/assets/bridge
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_CURRENT_SOURCE_DIR}/assets/bridge/materialProperties.json
-        $<TARGET_FILE_DIR:anafinen>/assets/bridge/materialProperties.json
-    COMMENT "Syncing assets/bridge/materialProperties.json"
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/bridge/sectionCatalog.json
+        $<TARGET_FILE_DIR:anafinen>/assets/bridge/
+    COMMENT "Syncing assets/bridge/materialProperties.json and sectionCatalog.json"
 )
 
 # Window icons rendered at configure time (or the committed fallbacks, see cmake/Dependencies.cmake)

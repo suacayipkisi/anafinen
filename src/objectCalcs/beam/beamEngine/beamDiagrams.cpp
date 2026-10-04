@@ -43,13 +43,17 @@ namespace FEM::BEAM {
     const std::size_t element,
     const double xi,
     const Eigen::Vector3d& localLoad,
-    const std::span<const anaf::MATERIAL::Material> materials
+    const std::span<const anaf::MATERIAL::Material> materials,
+    const std::span<const BeamSection> sections
   ) {
     if (!solved.hasResults) throw std::invalid_argument("the beam model has no results");
     if (element >= solved.elements.size()) throw std::invalid_argument("element index out of range");
     if (!(xi >= 0.0 && xi <= 1.0)) throw std::invalid_argument("xi must be in [0, 1]");
 
     const auto& beam = solved.elements[element];
+    if (beam.materialID >= materials.size() || beam.sectionID >= sections.size()) {
+      throw std::invalid_argument("material or section index out of range");
+    }
     const auto& start = solved.nodes[beam.node1];
     const auto& end = solved.nodes[beam.node2];
     const Eigen::Vector3d p1(start.getLocation().data());
@@ -67,7 +71,7 @@ namespace FEM::BEAM {
     const auto& material = materials[beam.materialID];
     const double E = material.getElasticityModulus();
     const double G = material.getShearModulus();
-    const auto& s = beam.section;
+    const SectionProperties s = computeProperties(sections[beam.sectionID].getShape(), material.getPoisson());
     const bool timoshenko = beam.formulation == Formulation::Timoshenko;
     const double phiY = timoshenko ? 12.0 * E * s.secondMomentZ / (G * s.shearAreaY * L * L) : 0.0;
     const double phiZ = timoshenko ? 12.0 * E * s.secondMomentY / (G * s.shearAreaZ * L * L) : 0.0;
@@ -113,14 +117,15 @@ namespace FEM::BEAM {
     const std::size_t element,
     const std::size_t count,
     const Eigen::Vector3d& localLoad,
-    const std::span<const anaf::MATERIAL::Material> materials
+    const std::span<const anaf::MATERIAL::Material> materials,
+    const std::span<const BeamSection> sections
   ) {
     if (count < 2) throw std::invalid_argument("an element needs at least two sample points");
     std::vector<SectionState> states;
     states.reserve(count);
     for (std::size_t i = 0; i < count; ++i) {
       const double xi = static_cast<double>(i) / static_cast<double>(count - 1);
-      states.push_back(sectionAt(solved, element, xi, localLoad, materials));
+      states.push_back(sectionAt(solved, element, xi, localLoad, materials, sections));
     }
     return states;
   }
@@ -128,17 +133,24 @@ namespace FEM::BEAM {
   std::vector<std::vector<SectionState>> sampleAllElements(
     const MeshData& solved,
     const std::size_t countPerElement,
-    const std::span<const anaf::MATERIAL::Material> materials
+    const std::span<const anaf::MATERIAL::Material> materials,
+    const std::span<const BeamSection> sections
   ) {
     // Checked here: an exception must not leave the parallel loop below.
     if (!solved.hasResults) throw std::invalid_argument("the beam model has no results");
     if (countPerElement < 2) throw std::invalid_argument("an element needs at least two sample points");
-    const auto loads = elementLocalLoads(solved.nodes, solved.elements, solved.distributedLoads, solved.gravity, materials);
+    for (const auto& element : solved.elements) {
+      if (element.materialID >= materials.size() || element.sectionID >= sections.size()) {
+        throw std::invalid_argument("material or section index out of range");
+      }
+    }
+    const auto properties = elementSectionProperties(solved.elements, sections, materials);
+    const auto loads = elementLocalLoads(solved.nodes, solved.elements, properties, solved.distributedLoads, solved.gravity, materials);
     std::vector<std::vector<SectionState>> all(solved.elements.size());
     const auto elementCount = static_cast<long long>(solved.elements.size());
     #pragma omp parallel for schedule(static)
     for (long long index = 0; index < elementCount; ++index) {
-      all[index] = sampleElement(solved, static_cast<std::size_t>(index), countPerElement, loads[index], materials);
+      all[index] = sampleElement(solved, static_cast<std::size_t>(index), countPerElement, loads[index], materials, sections);
     }
     return all;
   }

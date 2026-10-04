@@ -1,0 +1,799 @@
+{
+  "schemaVersion": 1,
+  "units": {
+    "length": "m",
+    "notes": "Dimensions only; A, I, J and shear areas are computed (FEM::BEAM::computeProperties). IPE / HEA / HEB: EN 10365 (h, b, tw, tf, root radius r). CHS / SHS / RHS: EN 10210-2 hot finished (outer corner radius 1.5 t, inner 1.0 t). RHS height is the longer side (local y). Channels, angles and tees are not in the catalogue: the beam element needs doubly symmetric sections."
+  },
+  "sections": [
+    {
+      "id": 0,
+      "name": "IPE 80",
+      "shape": "i",
+      "height": 0.08,
+      "flangeWidth": 0.046,
+      "webThickness": 0.0038,
+      "flangeThickness": 0.0052,
+      "rootRadius": 0.005
+    },
+    {
+      "id": 1,
+      "name": "IPE 100",
+      "shape": "i",
+      "height": 0.1,
+      "flangeWidth": 0.055,
+      "webThickness": 0.0041,
+      "flangeThickness": 0.0057,
+      "rootRadius": 0.007
+    },
+    {
+      "id": 2,
+      "name": "IPE 120",
+      "shape": "i",
+      "height": 0.12,
+      "flangeWidth": 0.064,
+      "webThickness": 0.0044,
+      "flangeThickness": 0.0063,
+      "rootRadius": 0.007
+    },
+    {
+      "id": 3,
+      "name": "IPE 140",
+      "shape": "i",
+      "height": 0.14,
+      "flangeWidth": 0.073,
+      "webThickness": 0.0047,
+      "flangeThickness": 0.0069,
+      "rootRadius": 0.007
+    },
+    {
+      "id": 4,
+      "name": "IPE 160",
+      "shape": "i",
+      "height": 0.16,
+      "flangeWidth": 0.082,
+      "webThickness": 0.005,
+      "flangeThickness": 0.0074,
+      "rootRadius": 0.009
+    },
+    {
+      "id": 5,
+      "name": "IPE 180",
+      "shape": "i",
+      "height": 0.18,
+      "flangeWidth": 0.091,
+      "webThickness": 0.0053,
+      "flangeThickness": 0.008,
+      "rootRadius": 0.009
+    },
+    {
+      "id": 6,
+      "name": "IPE 200",
+      "shape": "i",
+      "height": 0.2,
+      "flangeWidth": 0.1,
+      "webThickness": 0.0056,
+      "flangeThickness": 0.0085,
+      "rootRadius": 0.012
+    },
+    {
+      "id": 7,
+      "name": "IPE 220",
+      "shape": "i",
+      "height": 0.22,
+      "flangeWidth": 0.11,
+      "webThickness": 0.0059,
+      "flangeThickness": 0.0092,
+      "rootRadius": 0.012
+    },
+    {
+      "id": 8,
+      "name": "IPE 240",
+      "shape": "i",
+      "height": 0.24,
+      "flangeWidth": 0.12,
+      "webThickness": 0.0062,
+      "flangeThickness": 0.0098,
+      "rootRadius": 0.015
+    },
+    {
+      "id": 9,
+      "name": "IPE 270",
+      "shape": "i",
+      "height": 0.27,
+      "flangeWidth": 0.135,
+      "webThickness": 0.0066,
+      "flangeThickness": 0.0102,
+      "rootRadius": 0.015
+    },
+    {
+      "id": 10,
+      "name": "IPE 300",
+      "shape": "i",
+      "height": 0.3,
+      "flangeWidth": 0.15,
+      "webThickness": 0.0071,
+      "flangeThickness": 0.0107,
+      "rootRadius": 0.015
+    },
+    {
+      "id": 11,
+      "name": "IPE 330",
+      "shape": "i",
+      "height": 0.33,
+      "flangeWidth": 0.16,
+      "webThickness": 0.0075,
+      "flangeThickness": 0.0115,
+      "rootRadius": 0.018
+    },
+    {
+      "id": 12,
+      "name": "IPE 360",
+      "shape": "i",
+      "height": 0.36,
+      "flangeWidth": 0.17,
+      "webThickness": 0.008,
+      "flangeThickness": 0.0127,
+      "rootRadius": 0.018
+    },
+    {
+      "id": 13,
+      "name": "IPE 400",
+      "shape": "i",
+      "height": 0.4,
+      "flangeWidth": 0.18,
+      "webThickness": 0.0086,
+      "flangeThickness": 0.0135,
+      "rootRadius": 0.021
+    },
+    {
+      "id": 14,
+      "name": "IPE 450",
+      "shape": "i",
+      "height": 0.45,
+      "flangeWidth": 0.19,
+      "webThickness": 0.0094,
+      "flangeThickness": 0.0146,
+      "rootRadius": 0.021
+    },
+    {
+      "id": 15,
+      "name": "IPE 500",
+      "shape": "i",
+      "height": 0.5,
+      "flangeWidth": 0.2,
+      "webThickness": 0.0102,
+      "flangeThickness": 0.016,
+      "rootRadius": 0.021
+    },
+    {
+      "id": 16,
+      "name": "IPE 550",
+      "shape": "i",
+      "height": 0.55,
+      "flangeWidth": 0.21,
+      "webThickness": 0.0111,
+      "flangeThickness": 0.0172,
+      "rootRadius": 0.024
+    },
+    {
+      "id": 17,
+      "name": "IPE 600",
+      "shape": "i",
+      "height": 0.6,
+      "flangeWidth": 0.22,
+      "webThickness": 0.012,
+      "flangeThickness": 0.019,
+      "rootRadius": 0.024
+    },
+    {
+      "id": 18,
+      "name": "HEA 100",
+      "shape": "i",
+      "height": 0.096,
+      "flangeWidth": 0.1,
+      "webThickness": 0.005,
+      "flangeThickness": 0.008,
+      "rootRadius": 0.012
+    },
+    {
+      "id": 19,
+      "name": "HEA 120",
+      "shape": "i",
+      "height": 0.114,
+      "flangeWidth": 0.12,
+      "webThickness": 0.005,
+      "flangeThickness": 0.008,
+      "rootRadius": 0.012
+    },
+    {
+      "id": 20,
+      "name": "HEA 140",
+      "shape": "i",
+      "height": 0.133,
+      "flangeWidth": 0.14,
+      "webThickness": 0.0055,
+      "flangeThickness": 0.0085,
+      "rootRadius": 0.012
+    },
+    {
+      "id": 21,
+      "name": "HEA 160",
+      "shape": "i",
+      "height": 0.152,
+      "flangeWidth": 0.16,
+      "webThickness": 0.006,
+      "flangeThickness": 0.009,
+      "rootRadius": 0.015
+    },
+    {
+      "id": 22,
+      "name": "HEA 180",
+      "shape": "i",
+      "height": 0.171,
+      "flangeWidth": 0.18,
+      "webThickness": 0.006,
+      "flangeThickness": 0.0095,
+      "rootRadius": 0.015
+    },
+    {
+      "id": 23,
+      "name": "HEA 200",
+      "shape": "i",
+      "height": 0.19,
+      "flangeWidth": 0.2,
+      "webThickness": 0.0065,
+      "flangeThickness": 0.01,
+      "rootRadius": 0.018
+    },
+    {
+      "id": 24,
+      "name": "HEA 220",
+      "shape": "i",
+      "height": 0.21,
+      "flangeWidth": 0.22,
+      "webThickness": 0.007,
+      "flangeThickness": 0.011,
+      "rootRadius": 0.018
+    },
+    {
+      "id": 25,
+      "name": "HEA 240",
+      "shape": "i",
+      "height": 0.23,
+      "flangeWidth": 0.24,
+      "webThickness": 0.0075,
+      "flangeThickness": 0.012,
+      "rootRadius": 0.021
+    },
+    {
+      "id": 26,
+      "name": "HEA 260",
+      "shape": "i",
+      "height": 0.25,
+      "flangeWidth": 0.26,
+      "webThickness": 0.0075,
+      "flangeThickness": 0.0125,
+      "rootRadius": 0.024
+    },
+    {
+      "id": 27,
+      "name": "HEA 280",
+      "shape": "i",
+      "height": 0.27,
+      "flangeWidth": 0.28,
+      "webThickness": 0.008,
+      "flangeThickness": 0.013,
+      "rootRadius": 0.024
+    },
+    {
+      "id": 28,
+      "name": "HEA 300",
+      "shape": "i",
+      "height": 0.29,
+      "flangeWidth": 0.3,
+      "webThickness": 0.0085,
+      "flangeThickness": 0.014,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 29,
+      "name": "HEA 320",
+      "shape": "i",
+      "height": 0.31,
+      "flangeWidth": 0.3,
+      "webThickness": 0.009,
+      "flangeThickness": 0.0155,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 30,
+      "name": "HEA 340",
+      "shape": "i",
+      "height": 0.33,
+      "flangeWidth": 0.3,
+      "webThickness": 0.0095,
+      "flangeThickness": 0.0165,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 31,
+      "name": "HEA 360",
+      "shape": "i",
+      "height": 0.35,
+      "flangeWidth": 0.3,
+      "webThickness": 0.01,
+      "flangeThickness": 0.0175,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 32,
+      "name": "HEA 400",
+      "shape": "i",
+      "height": 0.39,
+      "flangeWidth": 0.3,
+      "webThickness": 0.011,
+      "flangeThickness": 0.019,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 33,
+      "name": "HEA 450",
+      "shape": "i",
+      "height": 0.44,
+      "flangeWidth": 0.3,
+      "webThickness": 0.0115,
+      "flangeThickness": 0.021,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 34,
+      "name": "HEA 500",
+      "shape": "i",
+      "height": 0.49,
+      "flangeWidth": 0.3,
+      "webThickness": 0.012,
+      "flangeThickness": 0.023,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 35,
+      "name": "HEA 550",
+      "shape": "i",
+      "height": 0.54,
+      "flangeWidth": 0.3,
+      "webThickness": 0.0125,
+      "flangeThickness": 0.024,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 36,
+      "name": "HEA 600",
+      "shape": "i",
+      "height": 0.59,
+      "flangeWidth": 0.3,
+      "webThickness": 0.013,
+      "flangeThickness": 0.025,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 37,
+      "name": "HEB 100",
+      "shape": "i",
+      "height": 0.1,
+      "flangeWidth": 0.1,
+      "webThickness": 0.006,
+      "flangeThickness": 0.01,
+      "rootRadius": 0.012
+    },
+    {
+      "id": 38,
+      "name": "HEB 120",
+      "shape": "i",
+      "height": 0.12,
+      "flangeWidth": 0.12,
+      "webThickness": 0.0065,
+      "flangeThickness": 0.011,
+      "rootRadius": 0.012
+    },
+    {
+      "id": 39,
+      "name": "HEB 140",
+      "shape": "i",
+      "height": 0.14,
+      "flangeWidth": 0.14,
+      "webThickness": 0.007,
+      "flangeThickness": 0.012,
+      "rootRadius": 0.012
+    },
+    {
+      "id": 40,
+      "name": "HEB 160",
+      "shape": "i",
+      "height": 0.16,
+      "flangeWidth": 0.16,
+      "webThickness": 0.008,
+      "flangeThickness": 0.013,
+      "rootRadius": 0.015
+    },
+    {
+      "id": 41,
+      "name": "HEB 180",
+      "shape": "i",
+      "height": 0.18,
+      "flangeWidth": 0.18,
+      "webThickness": 0.0085,
+      "flangeThickness": 0.014,
+      "rootRadius": 0.015
+    },
+    {
+      "id": 42,
+      "name": "HEB 200",
+      "shape": "i",
+      "height": 0.2,
+      "flangeWidth": 0.2,
+      "webThickness": 0.009,
+      "flangeThickness": 0.015,
+      "rootRadius": 0.018
+    },
+    {
+      "id": 43,
+      "name": "HEB 220",
+      "shape": "i",
+      "height": 0.22,
+      "flangeWidth": 0.22,
+      "webThickness": 0.0095,
+      "flangeThickness": 0.016,
+      "rootRadius": 0.018
+    },
+    {
+      "id": 44,
+      "name": "HEB 240",
+      "shape": "i",
+      "height": 0.24,
+      "flangeWidth": 0.24,
+      "webThickness": 0.01,
+      "flangeThickness": 0.017,
+      "rootRadius": 0.021
+    },
+    {
+      "id": 45,
+      "name": "HEB 260",
+      "shape": "i",
+      "height": 0.26,
+      "flangeWidth": 0.26,
+      "webThickness": 0.01,
+      "flangeThickness": 0.0175,
+      "rootRadius": 0.024
+    },
+    {
+      "id": 46,
+      "name": "HEB 280",
+      "shape": "i",
+      "height": 0.28,
+      "flangeWidth": 0.28,
+      "webThickness": 0.0105,
+      "flangeThickness": 0.018,
+      "rootRadius": 0.024
+    },
+    {
+      "id": 47,
+      "name": "HEB 300",
+      "shape": "i",
+      "height": 0.3,
+      "flangeWidth": 0.3,
+      "webThickness": 0.011,
+      "flangeThickness": 0.019,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 48,
+      "name": "HEB 320",
+      "shape": "i",
+      "height": 0.32,
+      "flangeWidth": 0.3,
+      "webThickness": 0.0115,
+      "flangeThickness": 0.0205,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 49,
+      "name": "HEB 340",
+      "shape": "i",
+      "height": 0.34,
+      "flangeWidth": 0.3,
+      "webThickness": 0.012,
+      "flangeThickness": 0.0215,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 50,
+      "name": "HEB 360",
+      "shape": "i",
+      "height": 0.36,
+      "flangeWidth": 0.3,
+      "webThickness": 0.0125,
+      "flangeThickness": 0.0225,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 51,
+      "name": "HEB 400",
+      "shape": "i",
+      "height": 0.4,
+      "flangeWidth": 0.3,
+      "webThickness": 0.0135,
+      "flangeThickness": 0.024,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 52,
+      "name": "HEB 450",
+      "shape": "i",
+      "height": 0.45,
+      "flangeWidth": 0.3,
+      "webThickness": 0.014,
+      "flangeThickness": 0.026,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 53,
+      "name": "HEB 500",
+      "shape": "i",
+      "height": 0.5,
+      "flangeWidth": 0.3,
+      "webThickness": 0.0145,
+      "flangeThickness": 0.028,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 54,
+      "name": "HEB 550",
+      "shape": "i",
+      "height": 0.55,
+      "flangeWidth": 0.3,
+      "webThickness": 0.015,
+      "flangeThickness": 0.029,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 55,
+      "name": "HEB 600",
+      "shape": "i",
+      "height": 0.6,
+      "flangeWidth": 0.3,
+      "webThickness": 0.0155,
+      "flangeThickness": 0.03,
+      "rootRadius": 0.027
+    },
+    {
+      "id": 56,
+      "name": "CHS 48.3x3.2",
+      "shape": "pipe",
+      "outerDiameter": 0.0483,
+      "wallThickness": 0.0032
+    },
+    {
+      "id": 57,
+      "name": "CHS 60.3x4",
+      "shape": "pipe",
+      "outerDiameter": 0.0603,
+      "wallThickness": 0.004
+    },
+    {
+      "id": 58,
+      "name": "CHS 76.1x4",
+      "shape": "pipe",
+      "outerDiameter": 0.0761,
+      "wallThickness": 0.004
+    },
+    {
+      "id": 59,
+      "name": "CHS 88.9x5",
+      "shape": "pipe",
+      "outerDiameter": 0.0889,
+      "wallThickness": 0.005
+    },
+    {
+      "id": 60,
+      "name": "CHS 114.3x5",
+      "shape": "pipe",
+      "outerDiameter": 0.1143,
+      "wallThickness": 0.005
+    },
+    {
+      "id": 61,
+      "name": "CHS 139.7x6.3",
+      "shape": "pipe",
+      "outerDiameter": 0.1397,
+      "wallThickness": 0.0063
+    },
+    {
+      "id": 62,
+      "name": "CHS 168.3x8",
+      "shape": "pipe",
+      "outerDiameter": 0.1683,
+      "wallThickness": 0.008
+    },
+    {
+      "id": 63,
+      "name": "CHS 219.1x10",
+      "shape": "pipe",
+      "outerDiameter": 0.2191,
+      "wallThickness": 0.01
+    },
+    {
+      "id": 64,
+      "name": "CHS 273x10",
+      "shape": "pipe",
+      "outerDiameter": 0.273,
+      "wallThickness": 0.01
+    },
+    {
+      "id": 65,
+      "name": "CHS 323.9x12.5",
+      "shape": "pipe",
+      "outerDiameter": 0.3239,
+      "wallThickness": 0.0125
+    },
+    {
+      "id": 66,
+      "name": "SHS 40x40x4",
+      "shape": "box",
+      "height": 0.04,
+      "width": 0.04,
+      "wallThickness": 0.004,
+      "outerCornerRadius": 0.006,
+      "innerCornerRadius": 0.004
+    },
+    {
+      "id": 67,
+      "name": "SHS 50x50x5",
+      "shape": "box",
+      "height": 0.05,
+      "width": 0.05,
+      "wallThickness": 0.005,
+      "outerCornerRadius": 0.0075,
+      "innerCornerRadius": 0.005
+    },
+    {
+      "id": 68,
+      "name": "SHS 60x60x5",
+      "shape": "box",
+      "height": 0.06,
+      "width": 0.06,
+      "wallThickness": 0.005,
+      "outerCornerRadius": 0.0075,
+      "innerCornerRadius": 0.005
+    },
+    {
+      "id": 69,
+      "name": "SHS 80x80x6.3",
+      "shape": "box",
+      "height": 0.08,
+      "width": 0.08,
+      "wallThickness": 0.0063,
+      "outerCornerRadius": 0.00945,
+      "innerCornerRadius": 0.0063
+    },
+    {
+      "id": 70,
+      "name": "SHS 100x100x6.3",
+      "shape": "box",
+      "height": 0.1,
+      "width": 0.1,
+      "wallThickness": 0.0063,
+      "outerCornerRadius": 0.00945,
+      "innerCornerRadius": 0.0063
+    },
+    {
+      "id": 71,
+      "name": "SHS 100x100x8",
+      "shape": "box",
+      "height": 0.1,
+      "width": 0.1,
+      "wallThickness": 0.008,
+      "outerCornerRadius": 0.012,
+      "innerCornerRadius": 0.008
+    },
+    {
+      "id": 72,
+      "name": "SHS 120x120x8",
+      "shape": "box",
+      "height": 0.12,
+      "width": 0.12,
+      "wallThickness": 0.008,
+      "outerCornerRadius": 0.012,
+      "innerCornerRadius": 0.008
+    },
+    {
+      "id": 73,
+      "name": "SHS 150x150x10",
+      "shape": "box",
+      "height": 0.15,
+      "width": 0.15,
+      "wallThickness": 0.01,
+      "outerCornerRadius": 0.015,
+      "innerCornerRadius": 0.01
+    },
+    {
+      "id": 74,
+      "name": "SHS 200x200x10",
+      "shape": "box",
+      "height": 0.2,
+      "width": 0.2,
+      "wallThickness": 0.01,
+      "outerCornerRadius": 0.015,
+      "innerCornerRadius": 0.01
+    },
+    {
+      "id": 75,
+      "name": "SHS 250x250x12.5",
+      "shape": "box",
+      "height": 0.25,
+      "width": 0.25,
+      "wallThickness": 0.0125,
+      "outerCornerRadius": 0.01875,
+      "innerCornerRadius": 0.0125
+    },
+    {
+      "id": 76,
+      "name": "RHS 100x50x5",
+      "shape": "box",
+      "height": 0.1,
+      "width": 0.05,
+      "wallThickness": 0.005,
+      "outerCornerRadius": 0.0075,
+      "innerCornerRadius": 0.005
+    },
+    {
+      "id": 77,
+      "name": "RHS 120x60x6.3",
+      "shape": "box",
+      "height": 0.12,
+      "width": 0.06,
+      "wallThickness": 0.0063,
+      "outerCornerRadius": 0.00945,
+      "innerCornerRadius": 0.0063
+    },
+    {
+      "id": 78,
+      "name": "RHS 150x100x8",
+      "shape": "box",
+      "height": 0.15,
+      "width": 0.1,
+      "wallThickness": 0.008,
+      "outerCornerRadius": 0.012,
+      "innerCornerRadius": 0.008
+    },
+    {
+      "id": 79,
+      "name": "RHS 200x100x10",
+      "shape": "box",
+      "height": 0.2,
+      "width": 0.1,
+      "wallThickness": 0.01,
+      "outerCornerRadius": 0.015,
+      "innerCornerRadius": 0.01
+    },
+    {
+      "id": 80,
+      "name": "RHS 250x150x10",
+      "shape": "box",
+      "height": 0.25,
+      "width": 0.15,
+      "wallThickness": 0.01,
+      "outerCornerRadius": 0.015,
+      "innerCornerRadius": 0.01
+    },
+    {
+      "id": 81,
+      "name": "RHS 300x200x12.5",
+      "shape": "box",
+      "height": 0.3,
+      "width": 0.2,
+      "wallThickness": 0.0125,
+      "outerCornerRadius": 0.01875,
+      "innerCornerRadius": 0.0125
+    }
+  ]
+}

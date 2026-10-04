@@ -32,25 +32,31 @@ namespace FEM::BEAM {
 
     bool positive(const double value) { return std::isfinite(value) && value > 0.0; }
 
-    // Why the element cannot be solved, or an empty string.
+    // Why the element cannot be solved, or an empty string. properties is filled for a valid element.
     std::string elementProblem(const BeamElement& element, const std::size_t nodeCount,
-                               const std::span<const anaf::MATERIAL::Material> materials) {
+                               const std::span<const anaf::MATERIAL::Material> materials,
+                               const std::span<const BeamSection> sections, SectionProperties& properties) {
       if (element.node1 >= nodeCount || element.node2 >= nodeCount) {
         return std::format("references node {}, but the model has {} nodes", std::max(element.node1, element.node2), nodeCount);
       }
       if (element.node1 == element.node2) return std::format("starts and ends at node {}", element.node1);
       if (element.materialID >= materials.size()) return "uses a material that is not in the material list";
+      if (element.sectionID >= sections.size()) return "uses a section that is not in the section list";
       const auto& material = materials[element.materialID];
       if (!positive(material.getElasticityModulus()) || !positive(material.getShearModulus())) {
         return std::format("material '{}' needs a positive E and G", material.getMaterialType());
       }
-      const auto& section = element.section;
-      if (!positive(section.area)) return "the cross-section area must be positive";
-      if (!positive(section.secondMomentY) || !positive(section.secondMomentZ)) return "Iy and Iz must be positive";
-      if (!positive(section.torsionConstant)) return "the torsion constant J must be positive";
+      const auto& section = sections[element.sectionID];
+      if (const auto valid = validateShape(section.getShape()); !valid) {
+        return std::format("section '{}': {}", section.getName(), valid.error());
+      }
+      properties = computeProperties(section.getShape(), material.getPoisson());
+      if (!positive(properties.area)) return "the cross-section area must be positive";
+      if (!positive(properties.secondMomentY) || !positive(properties.secondMomentZ)) return "Iy and Iz must be positive";
+      if (!positive(properties.torsionConstant)) return "the torsion constant J must be positive";
       if (element.formulation == Formulation::Timoshenko
-          && (!positive(section.shearAreaY) || !positive(section.shearAreaZ))) {
-        return "a Timoshenko element needs positive shear areas Asy and Asz";
+          && (!positive(properties.shearAreaY) || !positive(properties.shearAreaZ))) {
+        return std::format("a Timoshenko element needs positive shear areas Asy and Asz (section '{}')", section.getName());
       }
       if (!std::ranges::all_of(element.orientation, [](const double v) { return std::isfinite(v); })) {
         return "the orientation vector is not finite";
@@ -58,13 +64,21 @@ namespace FEM::BEAM {
       return {};
     }
 
-    std::expected<MeshData, std::string> buildSolverModel(const MeshData& mesh,
-                                                          const std::span<const anaf::MATERIAL::Material> materials) {
+    // The checked model and the section properties of its elements.
+    struct SolverModel {
+      MeshData mesh;
+      std::vector<SectionProperties> properties;
+    };
+
+    std::expected<SolverModel, std::string> buildSolverModel(const MeshData& mesh,
+                                                             const std::span<const anaf::MATERIAL::Material> materials,
+                                                             const std::span<const BeamSection> sections) {
       const std::size_t nodeCount = mesh.nodes.size();
       if (nodeCount == 0) return std::unexpected("the model has no nodes");
       if (mesh.elements.empty()) return std::unexpected("the model has no beam elements");
 
-      MeshData model = mesh;
+      SolverModel solverModel{mesh, std::vector<SectionProperties>(mesh.elements.size())};
+      MeshData& model = solverModel.mesh;
       for (std::size_t i = 0; i < nodeCount; ++i) {
         if (model.nodes[i].getNodeID() != i) {
           return std::unexpected(std::format("node at position {} has id {}; node ids must be 0..{} in order",
@@ -78,7 +92,7 @@ namespace FEM::BEAM {
       std::size_t timoshenko = 0;
       for (std::size_t e = 0; e < model.elements.size(); ++e) {
         auto& element = model.elements[e];
-        if (const auto problem = elementProblem(element, nodeCount, materials); !problem.empty()) {
+        if (const auto problem = elementProblem(element, nodeCount, materials, sections, solverModel.properties[e]); !problem.empty()) {
           return std::unexpected(std::format("element {} (nodes {} - {}): {}", e, element.node1, element.node2, problem));
         }
         element.sectionForces = {};
@@ -109,7 +123,7 @@ namespace FEM::BEAM {
       if (isolated > 0) anaf::LOG::warn("{} nodes are not connected to any element; they are held fixed", isolated);
       anaf::LOG::info("Beam model: {} nodes, {} elements ({} Timoshenko, {} Euler-Bernoulli), {} supported nodes",
                       nodeCount, model.elements.size(), timoshenko, model.elements.size() - timoshenko, supported);
-      return model;
+      return solverModel;
     }
 
     void logResult(const Beam_3D_Container& container, const MeshData& model) {
@@ -150,6 +164,7 @@ namespace FEM::BEAM {
   std::expected<StaticResult, std::string> solveStatic(
     const MeshData& mesh,
     const std::span<const anaf::MATERIAL::Material> materials,
+    const std::span<const BeamSection> sections,
     const std::stop_token st,
     const ProgressCallback& progress
   ) {
@@ -158,14 +173,15 @@ namespace FEM::BEAM {
     };
     const auto cancelled = [&] { return std::unexpected<std::string>("cancelled"); };
 
-    auto model = buildSolverModel(mesh, materials);
+    auto model = buildSolverModel(mesh, materials, sections);
     if (!model) return std::unexpected(model.error());
     if (st.stop_requested()) return cancelled();
     report(0.20f);
 
-    auto solved = std::make_shared<MeshData>(std::move(*model));
+    auto solved = std::make_shared<MeshData>(std::move(model->mesh));
+    const std::vector<SectionProperties> properties = std::move(model->properties);
     Beam_3D_Container container;
-    container.set(solved->nodes, solved->elements);
+    container.set(solved->nodes, solved->elements, properties);
     if (auto built = container.buildElements(materials); !built) return std::unexpected(built.error());
     if (st.stop_requested()) return cancelled();
     report(0.40f);
