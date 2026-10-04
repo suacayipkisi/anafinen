@@ -16,6 +16,7 @@
 - [Processing] Add beam calculations
 - [Processing] Add import-export to files (.vtk, .msh)
 - [Planned] Exchange complete models and results with other programs (.inp, .frd, .bdf; see INTEROP_PLAN.md)
+- [Planned] Semi-rigid beam joints: rotational springs at released ends, after modal analysis
 
 ## Phase 2: 
 - [Processing] Add various and self build truss types and add import option and implement model tree.

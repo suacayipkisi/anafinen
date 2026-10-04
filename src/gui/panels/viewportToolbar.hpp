@@ -30,6 +30,12 @@ namespace anaf::GUI {
     Sphere  // 3D spheres, thicker than the elements at the node
   };
 
+  enum class SupportStyle : std::uint8_t {
+    Off,     // inclined supports only (their plane or line)
+    Symbols, // textbook symbols by support type: pin, roller, slider, clamp, hinge axles
+    Dof      // CAD style: a cone per restrained translation, a double cone per restrained rotation
+  };
+
   enum class ElementColoring : std::uint8_t {
     Off,         // one color for every element
     Stress,      // truss: |axial stress|; beam: von Mises along the element
@@ -42,6 +48,7 @@ namespace anaf::GUI {
     bool showAxes{false};   // 3D X / Y / Z axis lines (the corner gizmo is always drawn)
     NodeStyle nodeStyle{NodeStyle::Square};             // nodes, labels, picking, displacement colorbar
     bool showForces{true};  // applied force and moment arrows, distributed loads
+    SupportStyle supportStyle{SupportStyle::Off};
     ElementColoring coloring{ElementColoring::Stress};  // element colors and their colorbar
 
     bool showNodes() const { return nodeStyle != NodeStyle::Off; }

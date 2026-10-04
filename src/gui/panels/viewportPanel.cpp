@@ -21,6 +21,7 @@
 #include <beam/beamSection/sectionStress.hpp>
 #include <beam/beamSection/sectionTriangulation.hpp>
 #include <bridge/generalStatus.hpp>
+#include <objectCalcs/common/supportBasis.hpp>
 
 #include "imgui.h"
 #include "viewportRenderer.hpp"
@@ -128,6 +129,213 @@ namespace anaf::GUI {
         renderer.addTriangle(corner[0], corner[2], corner[3], supportFill);
         for (std::size_t c = 0; c < 4; ++c) renderer.addLine(corner[c], corner[(c + 1) % 4], supportColor, -1);
       }
+    }
+
+    // Support symbol by type at pos, from the allowed motion basis and the allowed rotation axes
+    // (nullptr = rotation free, as for a truss node). The ground side g points away from the
+    // free motion, toward -Y where there is a choice:
+    //   no motion:   pyramid (rotation free or hinged) on a hatched plate; a clamp (rotation
+    //                fixed) is a hatched wall through the node, behind the members
+    //   along a line: the same on two rollers in the motion direction, double arrow on the track
+    //   in a plane:   the same on four rollers, the plane drawn as a translucent square
+    // memberDirection: sum of the unit directions of the members leaving the node (zero if none).
+    //   free motion:  a wire cube around the node when a rotation is fixed
+    // Allowed rotation axes of a hinge (one or two axes) are drawn as cyan axles through the node.
+    void addSupportSymbol(ViewportRenderer& renderer, BeamSceneRenderer& spheres, const glm::vec3& pos,
+                          const std::vector<std::array<double, 3>>& motion, const std::vector<std::array<double, 3>>* rotation,
+                          const glm::vec3& memberDirection, const float symbol) {
+      const std::size_t rotationCount = rotation ? rotation->size() : 3;
+      if (motion.size() == 3 && rotationCount == 3) return;
+      const glm::vec4 lineColor(1.0f, 0.22f, 0.22f, 1.0f);
+      const glm::vec4 fillColor(1.0f, 0.22f, 0.22f, 0.28f);
+      const glm::vec4 axleColor(0.3f, 0.85f, 1.0f, 1.0f);
+      const glm::vec4 axleGlow(0.3f, 0.85f, 1.0f, 0.35f);
+      const float h = symbol, w = 0.7f * symbol;
+
+      const auto quad = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& d) {
+        renderer.addTriangle(a, b, c, fillColor);
+        renderer.addTriangle(a, c, d, fillColor);
+      };
+      const auto perpendicular = [](const glm::vec3& v) {
+        const glm::vec3 helper = std::abs(v.y) > 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+        return glm::normalize(glm::cross(v, helper));
+      };
+
+      if (rotation && rotationCount < 3) {
+        for (const auto& axis : *rotation) {
+          const glm::vec3 a = toVec(axis);
+          renderer.addLine(pos - a * (0.9f * h), pos + a * (0.9f * h), axleColor, -1);
+          renderer.addGlowLine(pos - a * (0.9f * h), pos + a * (0.9f * h), axleGlow);
+          for (const float end : {-0.9f, 0.9f}) spheres.addSphere(pos + a * (end * h), 0.07f * h, axleColor, -1);
+        }
+      }
+
+      if (motion.size() == 3) { // only rotations restrained
+        const float c = 0.3f * h;
+        for (int axis = 0; axis < 3; ++axis) {
+          glm::vec3 along(0.0f), u(0.0f), v(0.0f);
+          along[axis] = c;
+          u[(axis + 1) % 3] = c;
+          v[(axis + 2) % 3] = c;
+          for (const float su : {-1.0f, 1.0f}) {
+            for (const float sv : {-1.0f, 1.0f}) renderer.addLine(pos - along + su * u + sv * v, pos + along + su * u + sv * v, lineColor, -1);
+          }
+        }
+        return;
+      }
+
+      // Ground side g and the plate axes e1, e2 (e1 along the motion line, e1 / e2 in the motion
+      // plane). A pin or roller stands below the node (-Y). A clamp sits behind the node, opposite
+      // the members leaving it, so a cantilever comes out of a wall instead of resting on a block.
+      const glm::vec3 down(0.0f, -1.0f, 0.0f);
+      const bool clamped = rotationCount == 0;
+      const glm::vec3 preferred = clamped && glm::length(memberDirection) > 0.3f ? -glm::normalize(memberDirection) : down;
+      glm::vec3 g = preferred, e1{}, e2{};
+      if (motion.empty()) {
+        e1 = perpendicular(g);
+        e2 = glm::cross(g, e1);
+      } else if (motion.size() == 1) {
+        e1 = toVec(motion[0]);
+        glm::vec3 projected = preferred - e1 * glm::dot(preferred, e1);
+        if (glm::length(projected) < 1e-4f) projected = down - e1 * glm::dot(down, e1);
+        g = glm::length(projected) > 1e-4f ? glm::normalize(projected) : perpendicular(e1);
+        e2 = glm::cross(g, e1);
+      } else {
+        e1 = toVec(motion[0]);
+        e2 = toVec(motion[1]);
+        g = glm::normalize(glm::cross(e1, e2));
+        float side = glm::dot(g, preferred);
+        if (std::abs(side) < 1e-4f) side = glm::dot(g, down);
+        if (std::abs(side) < 1e-4f) side = glm::dot(g, glm::vec3(-1.0f, 0.0f, 0.0f));
+        if (std::abs(side) < 1e-4f) side = glm::dot(g, glm::vec3(0.0f, 0.0f, -1.0f));
+        if (side < 0.0f) g = -g;
+      }
+
+      // Body: a pyramid with its tip at the node. A clamp has none: its plate (the wall, or the
+      // shoe on the rollers) goes through the node itself.
+      const glm::vec3 base = clamped ? pos : pos + g * h;
+      if (clamped && !motion.empty()) {
+        const float shoe = 0.9f * w;
+        const std::array<glm::vec3, 4> corner{base - e1 * shoe - e2 * shoe, base + e1 * shoe - e2 * shoe, base + e1 * shoe + e2 * shoe,
+                                              base - e1 * shoe + e2 * shoe};
+        quad(corner[0], corner[1], corner[2], corner[3]);
+        for (std::size_t k = 0; k < 4; ++k) renderer.addLine(corner[k], corner[(k + 1) % 4], lineColor, -1);
+      } else if (!clamped) {
+        const std::array<glm::vec3, 4> corner{base - e1 * w - e2 * w, base + e1 * w - e2 * w, base + e1 * w + e2 * w, base - e1 * w + e2 * w};
+        for (std::size_t k = 0; k < 4; ++k) {
+          const std::size_t next = (k + 1) % 4;
+          renderer.addTriangle(pos, corner[k], corner[next], fillColor);
+          renderer.addLine(pos, corner[k], lineColor, -1);
+          renderer.addLine(corner[k], corner[next], lineColor, -1);
+        }
+      }
+
+      // Rollers between the body and the ground plate when the node can move.
+      glm::vec3 ground = base;
+      if (!motion.empty()) {
+        const float roller = 0.18f * h;
+        ground = base + g * (2.0f * roller);
+        std::vector<glm::vec3> at;
+        if (motion.size() == 1) {
+          at = {base + g * roller - e1 * (0.5f * w), base + g * roller + e1 * (0.5f * w)};
+        } else {
+          for (const float s1 : {-0.5f, 0.5f}) {
+            for (const float s2 : {-0.5f, 0.5f}) at.push_back(base + g * roller + e1 * (s1 * w) + e2 * (s2 * w));
+          }
+        }
+        for (const auto& center : at) spheres.addSphere(center, roller, lineColor, -1);
+      }
+
+      // Ground plate and hatching (two rows, so it reads from any side).
+      const float plate = 1.35f * w;
+      const std::array<glm::vec3, 4> plateCorner{ground - e1 * plate - e2 * plate, ground + e1 * plate - e2 * plate,
+                                                 ground + e1 * plate + e2 * plate, ground - e1 * plate + e2 * plate};
+      for (std::size_t k = 0; k < 4; ++k) renderer.addLine(plateCorner[k], plateCorner[(k + 1) % 4], lineColor, -1);
+      if (motion.size() == 2 || (clamped && motion.empty())) quad(plateCorner[0], plateCorner[1], plateCorner[2], plateCorner[3]);
+      constexpr int strokes = 5;
+      for (int k = 0; k < strokes; ++k) {
+        const float t = -1.0f + 2.0f * static_cast<float>(k) / static_cast<float>(strokes - 1);
+        for (const glm::vec3& along : {e1, e2}) {
+          const glm::vec3 from = ground + along * (t * plate);
+          renderer.addLine(from, from + g * (0.35f * h) - along * (0.3f * w), lineColor, -1);
+        }
+      }
+      if (motion.size() == 1) { // the track direction
+        const glm::vec3 a = ground + g * (0.55f * h) - e1 * (1.6f * w), b = ground + g * (0.55f * h) + e1 * (1.6f * w);
+        renderer.addLine(a, b, lineColor, -1);
+        for (const auto& [tip, back] : {std::pair{a, e1}, {b, -e1}}) {
+          for (const glm::vec3& side : {e2, -e2, g, -g}) renderer.addLine(tip, tip + back * (0.3f * w) + side * (0.15f * w), lineColor, -1);
+        }
+      }
+    }
+
+    // Cone with its apex at apex, opening against direction (unit): translucent sides and an outline.
+    void addCone(ViewportRenderer& renderer, const glm::vec3& apex, const glm::vec3& direction, const float length, const float radius,
+                 const glm::vec4& color) {
+      constexpr int segments = 10;
+      const glm::vec3 helper = std::abs(direction.y) > 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+      const glm::vec3 u = glm::normalize(glm::cross(direction, helper)) * radius;
+      const glm::vec3 v = glm::cross(direction, u);
+      const glm::vec3 center = apex - direction * length;
+      const glm::vec4 fill(color.r, color.g, color.b, 0.45f);
+      const auto ring = [&](const int k) {
+        const float angle = 2.0f * std::numbers::pi_v<float> * static_cast<float>(k) / static_cast<float>(segments);
+        return center + u * std::cos(angle) + v * std::sin(angle);
+      };
+      for (int k = 0; k < segments; ++k) {
+        renderer.addTriangle(apex, ring(k), ring(k + 1), fill);
+        renderer.addTriangle(center, ring(k + 1), ring(k), fill);
+        renderer.addLine(ring(k), ring(k + 1), color, -1);
+        if (k % 2 == 0) renderer.addLine(apex, ring(k), color, -1);
+      }
+    }
+
+    // CAD style restraints (as in Abaqus / ANSYS): every restrained direction, the orthogonal
+    // complement of the allowed basis, gets its own marker pointing at the node. A translation is
+    // a red cone from the -c side, a rotation an amber double cone from the +c side, so both fit
+    // on one axis. c is signed so its largest component is positive (global axes stay +X / +Y / +Z).
+    void addDofRestraints(ViewportRenderer& renderer, const glm::vec3& pos, const std::vector<std::array<double, 3>>& motion,
+                          const std::vector<std::array<double, 3>>* rotation, const float symbol) {
+      const glm::vec4 translationColor(1.0f, 0.25f, 0.25f, 1.0f);
+      const glm::vec4 rotationColor(1.0f, 0.75f, 0.2f, 1.0f);
+      const float length = 0.8f * symbol, radius = 0.22f * symbol;
+      const auto signedAxis = [](const std::array<double, 3>& direction) {
+        glm::vec3 c = toVec(direction);
+        const std::size_t largest = std::abs(c.x) >= std::abs(c.y) ? (std::abs(c.x) >= std::abs(c.z) ? 0 : 2) : (std::abs(c.y) >= std::abs(c.z) ? 1 : 2);
+        return c[static_cast<glm::length_t>(largest)] < 0.0f ? -c : c;
+      };
+      for (const auto& restrained : FEM::SUPPORT::orthogonalComplement(motion)) {
+        const glm::vec3 c = signedAxis(restrained);
+        addCone(renderer, pos, c, length, radius, translationColor);
+        renderer.addLine(pos - c * length, pos - c * (1.5f * length), translationColor, -1);
+      }
+      if (!rotation) return;
+      for (const auto& restrained : FEM::SUPPORT::orthogonalComplement(*rotation)) {
+        const glm::vec3 c = signedAxis(restrained);
+        addCone(renderer, pos, -c, 0.5f * length, radius, rotationColor);
+        addCone(renderer, pos + c * (0.5f * length), -c, 0.5f * length, radius, rotationColor);
+        renderer.addLine(pos + c * length, pos + c * (1.5f * length), rotationColor, -1);
+      }
+    }
+
+    // Where an end release is drawn: just inside the released end (so it marks that member, not
+    // the joint), with the drawn local axes there (x pointing into the member).
+    struct ReleaseFrame {
+      glm::vec3 center;
+      glm::vec3 axisX;
+      glm::vec3 axisY;
+      glm::vec3 axisZ;
+    };
+    template <typename Draw>
+    ReleaseFrame releaseFrame(const Draw& draw, const int end) {
+      const std::size_t last = draw.stations.size() - 1;
+      const glm::vec3 from = end == 0 ? draw.stations.front() : draw.stations.back();
+      const glm::vec3 next = end == 0 ? draw.stations[1] : draw.stations[last - 1];
+      const float chord = glm::length(draw.stations.back() - draw.stations.front());
+      const glm::vec3 inward = glm::length(next - from) > 0.0f ? glm::normalize(next - from) : (end == 0 ? draw.axisX : -draw.axisX);
+      const float inset = std::min(1.4f * draw.halfSize, 0.25f * chord);
+      return {from + inward * inset, inward, end == 0 ? draw.frameY.front() : draw.frameY.back(),
+              end == 0 ? draw.frameZ.front() : draw.frameZ.back()};
     }
 
     // Shape drawn for a section: a general section (no shape) as the rectangle with the same A,
@@ -429,9 +637,17 @@ namespace anaf::GUI {
 
     // Inclined / skewed supports at the drawn node position. Sized from the model, so they stay
     // readable on a 1 m mount and on a 300 m stadium.
+    // Symbols / DOF draw every support, the inclined ones included.
     const float symbol = std::max(m_sceneRadius * 0.04f, 1e-3f);
     for (const auto& node : mesh.trussNodes) {
-      if (node.hasInclinedSupport()) addInclinedSupport(*m_renderer_, nodeLookup[node.getNodeID()], node.getAllowedMotionDirections(), symbol);
+      const glm::vec3& pos = nodeLookup[node.getNodeID()];
+      if (m_display->supportStyle == SupportStyle::Symbols) {
+        addSupportSymbol(*m_renderer_, *m_beamRenderer_, pos, node.getAllowedMotionDirections(), nullptr, glm::vec3(0.0f), symbol);
+      } else if (m_display->supportStyle == SupportStyle::Dof) {
+        if (node.isSupported()) addDofRestraints(*m_renderer_, pos, node.getAllowedMotionDirections(), nullptr, symbol);
+      } else if (node.hasInclinedSupport()) {
+        addInclinedSupport(*m_renderer_, pos, node.getAllowedMotionDirections(), symbol);
+      }
     }
 
     // Force Arrows (Lines in FBO)
@@ -473,7 +689,7 @@ namespace anaf::GUI {
     m_lineMesh = m_beamRenderer_->addMesh(line, GL_LINES);
 
     // One full and one simple mesh per section in use.
-    std::vector<int> fullOf(sections.size(), -1), simpleOf(sections.size(), -1);
+    std::vector<int> fullOf(sections.size(), -1), simpleOf(sections.size(), -1), pinOf(sections.size(), -1), collarOf(sections.size(), -1);
     std::vector<float> halfOf(sections.size(), 0.0f);
     for (const auto& element : mesh.elements) {
       const auto id = element.sectionID;
@@ -487,6 +703,9 @@ namespace anaf::GUI {
                                                    : FEM::BEAM::SectionShape{FEM::BEAM::RectangleSection{2.0 * extent[0], 2.0 * extent[1]}};
       simpleOf[id] = m_beamRenderer_->addMesh(extrudeSection(simple, 2), GL_TRIANGLES);
       halfOf[id] = static_cast<float>(std::max(extent[0], extent[1]));
+      const double half = halfOf[id];
+      pinOf[id] = m_beamRenderer_->addMesh(extrudeSection(FEM::BEAM::CircleSection{0.4 * half}, 3), GL_TRIANGLES);
+      collarOf[id] = m_beamRenderer_->addMesh(extrudeSection(FEM::BEAM::PipeSection{2.5 * half, 0.2 * half}, 4), GL_TRIANGLES);
     }
 
     // The exact displacement field along each element (beamDiagrams), when there are results.
@@ -533,7 +752,10 @@ namespace anaf::GUI {
         }
         draw.fullMesh = fullOf[element.sectionID];
         draw.simpleMesh = simpleOf[element.sectionID];
+        draw.pinMesh = pinOf[element.sectionID];
+        draw.collarMesh = collarOf[element.sectionID];
         draw.halfSize = halfOf[element.sectionID];
+        draw.releases = element.endReleases;
         if (sampled) {
           const auto states = FEM::BEAM::sampleElement(mesh, static_cast<std::size_t>(index), samples, loads[static_cast<std::size_t>(index)],
                                                        materials, sections);
@@ -657,28 +879,59 @@ namespace anaf::GUI {
       }
     }
 
-    // End releases: a light ball just inside the released element end (picks the element).
-    for (std::size_t e = 0; e < mesh.elements.size() && e < m_beamElements.size(); ++e) {
-      const auto releases = mesh.elements[e].endReleases;
+    // End releases of a translation (a slot or slider at the member end): a light double arrow
+    // along the released local axis. Rotation releases are pins and collars (pushBeamInstances()).
+    for (std::size_t e = 0; e < m_beamElements.size(); ++e) {
       const auto& draw = m_beamElements[e];
-      if (releases == 0 || draw.stations.size() < 2) continue;
-      const float radius = std::max(1.15f * draw.halfSize, 1e-4f);
-      const bool selected = e == m_selectedElement;
+      if (draw.releases == 0 || draw.stations.size() < 2) continue;
+      const glm::vec4 color = e == m_selectedElement ? kSelectedColor : kHingeColor;
+      const glm::vec4 glow(color.r, color.g, color.b, 0.35f);
       for (int end = 0; end < 2; ++end) {
-        if (FEM::BEAM::RELEASE::ofEnd(releases, end) == 0) continue;
-        const glm::vec3 from = end == 0 ? draw.stations.front() : draw.stations.back();
-        const glm::vec3 next = end == 0 ? draw.stations[1] : draw.stations[draw.stations.size() - 2];
-        const glm::vec3 chord = (end == 0 ? draw.stations.back() : draw.stations.front()) - from;
-        const float inset = std::min(2.0f * radius, 0.25f * glm::length(chord));
-        const glm::vec3 inward = glm::length(next - from) > 0.0f ? glm::normalize(next - from) : draw.axisX;
-        m_beamRenderer_->addSphere(from + inward * inset, radius, selected ? kSelectedColor : kHingeColor, -static_cast<int>(e) - 2);
+        const auto bits = FEM::BEAM::RELEASE::ofEnd(draw.releases, end);
+        const auto at = releaseFrame(draw, end);
+        const float reach = 1.6f * draw.halfSize;
+        for (const auto& [bit, axis] : {std::pair{FEM::BEAM::RELEASE::axial, at.axisX}, {FEM::BEAM::RELEASE::shearY, at.axisY},
+                                        {FEM::BEAM::RELEASE::shearZ, at.axisZ}}) {
+          if ((bits & bit) == 0) continue;
+          const float head = 0.35f * draw.halfSize;
+          addArrow(*m_renderer_, at.center, at.center + axis * reach, color, glow, head, 0.4f * head);
+          addArrow(*m_renderer_, at.center, at.center - axis * reach, color, glow, head, 0.4f * head);
+        }
       }
     }
 
     const float symbol = std::max(m_sceneRadius * 0.04f, 1e-3f);
-    for (std::uint32_t id = 0; id < mesh.nodes.size(); ++id) {
-      const auto& motion = mesh.nodes[id].getAllowedMotionDirections();
-      if (!alongGlobalAxes(motion)) addInclinedSupport(*m_renderer_, position[id], motion, symbol);
+    if (m_display->supportStyle != SupportStyle::Off) {
+      // At least three times the largest section half size at the node, so the symbol shows
+      // around the members.
+      std::vector<float> halfSize(mesh.nodes.size(), 0.0f);
+      std::vector<glm::vec3> memberDirection(mesh.nodes.size(), glm::vec3(0.0f));
+      for (std::size_t e = 0; e < mesh.elements.size() && e < m_beamElements.size(); ++e) {
+        const auto& element = mesh.elements[e];
+        if (element.node1 >= mesh.nodes.size() || element.node2 >= mesh.nodes.size()) continue;
+        const glm::vec3 chord = toVec(mesh.nodes[element.node2].getLocation()) - toVec(mesh.nodes[element.node1].getLocation());
+        if (glm::length(chord) <= 0.0f) continue;
+        const glm::vec3 unit = glm::normalize(chord);
+        memberDirection[element.node1] += unit;
+        memberDirection[element.node2] -= unit;
+        for (const auto node : {element.node1, element.node2}) halfSize[node] = std::max(halfSize[node], m_beamElements[e].halfSize);
+      }
+      for (std::uint32_t id = 0; id < mesh.nodes.size(); ++id) {
+        const auto& node = mesh.nodes[id];
+        if (!node.isSupported()) continue;
+        const float size = std::max(symbol, 3.0f * halfSize[id]);
+        if (m_display->supportStyle == SupportStyle::Dof) {
+          addDofRestraints(*m_renderer_, position[id], node.getAllowedMotionDirections(), &node.getAllowedRotationAxes(), size);
+        } else {
+          addSupportSymbol(*m_renderer_, *m_beamRenderer_, position[id], node.getAllowedMotionDirections(), &node.getAllowedRotationAxes(),
+                           memberDirection[id], size);
+        }
+      }
+    } else {
+      for (std::uint32_t id = 0; id < mesh.nodes.size(); ++id) {
+        const auto& motion = mesh.nodes[id].getAllowedMotionDirections();
+        if (!alongGlobalAxes(motion)) addInclinedSupport(*m_renderer_, position[id], motion, symbol);
+      }
     }
 
     if (m_display->showForces) {
@@ -768,6 +1021,29 @@ namespace anaf::GUI {
         const int meshIndex = tier == Tier::Simple ? draw.simpleMesh : m_lineMesh;
         m_beamRenderer_->addInstance(meshIndex, {draw.stations.front(), draw.stations.back(), draw.frameY.front(), draw.frameZ.front(),
                                                  draw.frameY.back(), draw.frameZ.back(), color(0), color(last), entity});
+      }
+
+      // End releases of a rotation: a pin through the end along each released bending axis
+      // (local y / z; both = crossed pins, a universal joint), a collar around the member when
+      // the twist is released. Lit like the members, light grey, and they pick the element.
+      if (draw.releases == 0 || tier == Tier::Line || draw.pinMesh < 0) continue;
+      const glm::vec4 pinColor = selected ? kSelectedColor : kHingeColor;
+      for (int end = 0; end < 2; ++end) {
+        const auto bits = FEM::BEAM::RELEASE::ofEnd(draw.releases, end);
+        if ((bits & (FEM::BEAM::RELEASE::torsion | FEM::BEAM::RELEASE::hinge)) == 0) continue;
+        const auto at = releaseFrame(draw, end);
+        const float pin = 1.35f * draw.halfSize;
+        for (const auto& [bit, axis] : {std::pair{FEM::BEAM::RELEASE::momentY, at.axisY}, {FEM::BEAM::RELEASE::momentZ, at.axisZ}}) {
+          if ((bits & bit) == 0) continue;
+          const glm::vec3 side = glm::normalize(glm::cross(axis, at.axisX));
+          m_beamRenderer_->addInstance(draw.pinMesh, {at.center - axis * pin, at.center + axis * pin, at.axisX, side, at.axisX, side,
+                                                      pinColor, pinColor, entity});
+        }
+        if ((bits & FEM::BEAM::RELEASE::torsion) != 0) {
+          const float band = 0.12f * draw.halfSize;
+          m_beamRenderer_->addInstance(draw.collarMesh, {at.center - at.axisX * band, at.center + at.axisX * band, at.axisY, at.axisZ,
+                                                         at.axisY, at.axisZ, pinColor, pinColor, entity});
+        }
       }
     }
     m_beamRenderer_->upload();

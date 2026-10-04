@@ -94,7 +94,10 @@ namespace anaf::GUI{
       std::vector<glm::vec3> frameZ;     // rotation applied, scaled like the displacements
       int fullMesh{-1};                  // the real section
       int simpleMesh{-1};                // box or cylinder of the same size (level of detail)
+      int pinMesh{-1};                   // end release pin (a thin cylinder sized from the section)
+      int collarMesh{-1};                // end release collar (torsion), a ring around the section
       float halfSize{0.0f};              // largest distance of the outline from the axis (m)
+      std::uint16_t releases{0};         // FEM::BEAM::RELEASE bits of the element
     };
     std::vector<BeamDrawElement> m_beamElements;
     int m_lineMesh{-1};

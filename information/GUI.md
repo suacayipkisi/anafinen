@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (node squares depth tested with an eye-ward lift, hidden by members in front, section 3.4; editor layout: the three left editors share a summary card, Model / Supports & Loads / Analysis tabs and a fixed footer with the run button, `panels/editorLayout.hpp`, section 2.4; analysis selector: "Select Analysis" asks for the load kind (constant / dynamic) after Analyze > Truss or Beam; dynamic shows the dynamic inputs in the Analysis tab instead of the static loads and solve, section 2; end releases: Frame Editor "End Releases (Hinges)" table and presets, hinge markers in the viewport, hinged end rotations in the drawn shape, sections 2.5 and 3.9; Frame Editor "Built-in Models" (49 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-05 (support symbols: toolbar "Supports: Off / Symbols / DOF", off by default, textbook symbols by support type or CAD style cones per restrained DOF, sections 3.4, 3.7 and 3.9; end releases drawn as pins along the released bending axes and collars for released torsion instead of balls, section 3.9; 2026-10-04: node squares depth tested with an eye-ward lift, hidden by members in front, section 3.4; editor layout: the three left editors share a summary card, Model / Supports & Loads / Analysis tabs and a fixed footer with the run button, `panels/editorLayout.hpp`, section 2.4; analysis selector: "Select Analysis" asks for the load kind (constant / dynamic) after Analyze > Truss or Beam; dynamic shows the dynamic inputs in the Analysis tab instead of the static loads and solve, section 2; end releases: Frame Editor "End Releases (Hinges)" table and presets, hinge markers in the viewport, hinged end rotations in the drawn shape, sections 2.5 and 3.9; Frame Editor "Built-in Models" (49 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
 
 ## 1. Overall flow (one frame)
 
@@ -318,7 +318,10 @@ Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (
 1. If `dataVersion` changed, `m_meshNeedsUpdate` is set or a bridge selection changed: copy `activeMesh` / `activeBeamMesh` under `dataMutex`, then `buildSceneBatches()` (truss: `buildTrussScene()`, beam: `buildBeamScene()`, section 3.9):
    - Truss elements become lines. "Color: Stress": `sqrt(|σ| / |σ|_max)` on the jet ramp (magnitude only; the sign is in the model tree); "Displacement": mean of the end nodes' |u|; "Off": the unsolved element color.
    - Nodes ("Nodes: Square") become points colored by displacement magnitude, or ("Sphere") instanced spheres. The selected node is orange and larger; supported nodes are red.
-   - Inclined supports (`Node::hasInclinedSupport()`), drawn red at the drawn node position with a size of 4 % of the scene radius: an allowed plane as a translucent square (`addTriangle()`, blended after the lines without depth writes) with an outline, an allowed line as a double arrow with a glow line.
+   - Supports, by "Supports" (section 3.7), at the drawn node position with a size of 4 % of the scene radius:
+     - "Off": only inclined supports (`Node::hasInclinedSupport()`), red: an allowed plane as a translucent square (`addTriangle()`, blended after the lines without depth writes) with an outline, an allowed line as a double arrow with a glow line.
+     - "Symbols" (`addSupportSymbol()`): every supported node gets a textbook symbol from its allowed motion basis (rotation is always free for a truss): no motion = a pyramid with its tip at the node on a hatched plate; one direction = the same on two rollers (instanced spheres) along it, with a double arrow under the plate; a plane = four rollers on a translucent plate. The ground side is -Y where the basis allows it.
+     - "DOF" (`addDofRestraints()`): a red cone pointing at the node for every restrained direction (`FEM::SUPPORT::orthogonalComplement()` of the allowed basis), signed so its largest component is positive.
    - Applied forces become arrows with a fixed world length of 3 m: a shaft plus a 4-line head, each duplicated as a glow line.
    - Draw position = `location + displacement * deformScale`, with `deformScale` read from the bridge (`Gui_Calc_Bridge::deformScale`, a view setting) when the snapshot is reloaded.
 2. `fbo.bind()`, depth test on, `fbo.clear(color, entity = -1)`.
@@ -383,9 +386,10 @@ Both run on the GUI thread, so the struct needs no lock.
 | Axes | `showAxes` | off | 3D X / Y / Z axis lines in `buildSceneBatches()`; the corner gizmo is always drawn |
 | Nodes: Off / Square / Sphere | `nodeStyle` | Square | node squares (screen markers) or 3D spheres, node labels, picking, displacement colorbar |
 | Forces | `showForces` | on | force arrows; beam: also moments (double head) and distributed loads |
+| Supports: Off / Symbols / DOF | `supportStyle` | Off | "Off": inclined supports only; "Symbols": textbook symbol per support type; "DOF": CAD style cones per restrained DOF (sections 3.4, 3.9) |
 | Color: Off / Stress / Displacement | `coloring` | Stress | element colors (truss: \|axial stress\|, beam: von Mises along the element; displacement magnitude) and their colorbar |
 
-Hover and press do not change a button's color: a toggle that is on (or a choice other than "Off") is drawn in `ButtonActive`, everything else in `Button`. The two choice buttons show "label: current" and open a popup list. Every change makes the viewport rebuild its batches on the next frame.
+Hover and press do not change a button's color: a toggle that is on (or a choice other than "Off") is drawn in `ButtonActive`, everything else in `Button`. The three choice buttons show "label: current" and open a popup list. Every change makes the viewport rebuild its batches on the next frame.
 
 ### 3.8 2D overlay (ImGui draw list)
 
@@ -407,8 +411,9 @@ deformation scale changed -> applyBeamDeformation()
    section frame per station: twist = scale × local rx, linear between the nodes; bending: the
    frame turned (Rodrigues, smallest rotation) from the undeformed axis onto the drawn tangent,
    which is x + scale × (rz y − ry z) at the nodes and a central difference inside
-every rebuild           -> buildBeamScene(): node squares / spheres, hinge balls, inclined supports, force,
-                           moment and distributed-load arrows, then pushBeamInstances()
+every rebuild           -> buildBeamScene(): node squares / spheres, translation release arrows, supports,
+                           force, moment and distributed-load arrows, then pushBeamInstances()
+                           (sections, release pins and collars)
 camera moved (level of detail only) -> pushBeamInstances() alone
 ```
 
@@ -417,8 +422,14 @@ camera moved (level of detail only) -> pushBeamInstances() alone
 3. The bending rotation shown is the slope of the drawn axis, exact for Euler-Bernoulli; for Timoshenko the section rotation differs from it by the shear angle. Rotations are scaled like the displacements, so a large scale over-twists visibly.
 4. Spheres: radius = 1.3 × the largest section half size at the node (larger than the elements), selected × 1.25.
 5. Level of detail, only above 4000 elements: the on-screen section size `2 × halfSize × focal / distance` picks the real section (≥ 10 px), the simple mesh (≥ 2 px) or a line; the selected element always gets the real section. Only the instance lists change with the camera (the meshes stay on the GPU); 13 120 elements drew at 59 FPS on a Radeon 680M.
-6. A released element end gets a light ball of 1.15 × the section half size, set in from the node by two radii (at most a quarter of the element), entity ID of the element (picking it selects the element). With results, a hinged end's rotation comes from `elementEndDisplacements()` (the element end's own rotation), so the drawn sections kink at the hinge.
+6. End releases are drawn just inside the released end (`releaseFrame()`: set in from the node by 1.4 × the section half size, at most a quarter of the element), so they mark the member, not the joint, in light grey (selected: orange), with the element's entity ID (picking selects the element):
+   - a released bending rotation (`momentY` / `momentZ`) is a pin: an instance of a per-section cylinder mesh (diameter 0.4 × half size) along the drawn local y / z, 1.35 × half size to each side. Both released (`hinge`) gives crossed pins: kinematically a universal joint (forces and torsion carried, no bending moment);
+   - released torsion is a collar (pipe mesh 2.5 × half size wide) around the member;
+   - released translations (`axial`, `shearY`, `shearZ`) are double arrows along the local axis (lines, built in `buildBeamScene()`).
+
+   Pins and collars are instances, so `pushBeamInstances()` adds them; with level of detail they are left out where the member is drawn as a line. With results, a hinged end's rotation comes from `elementEndDisplacements()` (the element end's own rotation), so the drawn sections kink at the hinge.
 7. Arrows are sized from the scene radius (15 % for forces and moments, 45 % of that for distributed loads).
+8. Supports ("Supports" toolbar choice) are sized max(4 % of the scene radius, 3 × the largest section half size at the node). "Symbols" reads both bases of the node: a free rotation keeps the pyramid; a fixed rotation (clamp) has no body but a hatched wall through the node, facing away from the members (opposite the sum of the unit directions of the members leaving it; -Y when they cancel), on rollers with a shoe plate when the node may move; one or two allowed rotation axes add cyan axles through the node; a node free in translation with a restrained rotation gets a wire cube. "DOF" adds an amber double cone from the +c side for every restrained rotation axis, so a translation and a rotation cone on the same axis do not overlap.
 
 ## 4. Window and platform details
 

@@ -107,6 +107,13 @@ namespace anaf::GUI {
     ImGui::SameLine();
     toggleButton("Forces", options.showForces, "Applied forces, moments and distributed loads");
     ImGui::SameLine();
+    constexpr std::array<const char*, 3> supportStyles{"Off", "Symbols", "DOF"};
+    if (choiceButton("Supports", options.supportStyle, supportStyles,
+                     "Symbols: support types (pin, roller, slider, clamp, cyan hinge axles); "
+                     "DOF: a red cone per restrained translation, an amber double cone per restrained rotation")) {
+      options.changed = true;
+    }
+    ImGui::SameLine();
     constexpr std::array<const char*, 3> colorings{"Off", "Stress", "Displacement"};
     if (choiceButton("Color", options.coloring, colorings, "Element colors: stress (truss axial, beam von Mises) or displacement")) options.changed = true;
 
