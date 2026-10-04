@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (linear solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`; HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -39,7 +39,8 @@ This document is the entry point for the project documentation. It describes how
 |            v                          | publish snapshot                  |
 |  +--------------------------------------------------------------------+   |
 |  | anaf_core (static library)                                         |   |
-|  |  FEM::TRUSS: generator, container, solver portfolio                |   |
+|  |  FEM::TRUSS: generator, container (truss_1D/)                      |   |
+|  |  FEM::SOLVER: linear solver portfolio + referee (solvers/)         |   |
 |  |  FEM::TRUSS::ADAPTER: MeshModel <-> MeshData (truss_1D/trussIO/)   |   |
 |  +---------------------------------+----------------------------------+   |
 |                                    | links                                |
@@ -63,7 +64,7 @@ This document is the entry point for the project documentation. It describes how
 | Namespace | Location | Responsibility |
 |---|---|---|
 | `FEM::TRUSS` | `src/objectCalcs/truss_1D/` | Node, element, load types; truss generator; FEM container |
-| `FEM::TRUSS::SOLVER` | `src/objectCalcs/truss_1D/trussEngine/trussSolver/` | Linear solver portfolio and referee |
+| `FEM::SOLVER` | `src/solvers/` (`direct/`, `iterative/`) | Linear solver portfolio and referee, shared by every element type (Block-CG still assumes 3 DOFs per node, see [CALCULATIONS.md](CALCULATIONS.md) section 7) |
 | `anaf::BRIDGE` | `src/bridge/` | Shared state between GUI thread and worker thread |
 | `anaf::GUI` | `src/gui/` | Window, ImGui layer, panels, OpenGL renderer |
 | `anaf::IO` | `src/io/` | Format-neutral mesh model, readers / writers, async I/O service (library `anaf_io`) |

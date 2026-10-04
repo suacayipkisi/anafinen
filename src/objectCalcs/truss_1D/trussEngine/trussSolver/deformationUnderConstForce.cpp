@@ -16,7 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "deformationUnderConstForce.hpp"
-#include "solverPortfolio.hpp"
+#include <solvers/solverPortfolio.hpp>
 #include <log/anaf_info.hpp>
 
 #include <Eigen/Core>
@@ -220,7 +220,7 @@ namespace FEM::TRUSS {
     }
 
     Eigen::VectorXd reducedDisplacements(activeDofCount);
-    const auto solverResult = SOLVER::solveSelected(
+    const auto solverResult = FEM::SOLVER::solveSelected(
       reducedStiffnessMatrix,
       reducedForce,
       nodeCount,
@@ -232,7 +232,7 @@ namespace FEM::TRUSS {
     if (!solverResult.converged) {
       anaf::LOG::error(
         "Stiffness solve failed using {}: {}",
-        SOLVER::toString(solverResult.type), solverResult.message
+        FEM::SOLVER::toString(solverResult.type), solverResult.message
       );
       m_resultDisplacements.assign(nodeCount, {0.0, 0.0, 0.0});
       for (auto& node : m_allNodes) node.setDisplacements({0.0, 0.0, 0.0});

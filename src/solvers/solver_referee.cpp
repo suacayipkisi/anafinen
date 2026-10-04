@@ -25,7 +25,7 @@
 #include <omp.h>
 #include <string>
 
-namespace FEM::TRUSS::SOLVER {
+namespace FEM::SOLVER {
 
   const char* toString(const Type type) noexcept {
     switch (type) {
@@ -117,4 +117,4 @@ namespace FEM::TRUSS::SOLVER {
     return result;
   }
 
-} // namespace FEM::TRUSS::SOLVER
+} // namespace FEM::SOLVER end

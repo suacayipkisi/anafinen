@@ -22,7 +22,7 @@
 #include "testSupport.hpp"
 #include <material/materialLibrary.hpp>
 #include <trussEngine/trussSolver.hpp>
-#include <trussEngine/trussSolver/solverPortfolio.hpp>
+#include <solvers/solverPortfolio.hpp>
 #include <trussProperties/element.hpp>
 #include <trussProperties/meshData.hpp>
 #include <trussProperties/node.hpp>
@@ -368,8 +368,8 @@ TEST(blockCgMatchesTheDirectSolver) {
   for (Eigen::Index i = 0; i < dofs; ++i) remap[static_cast<std::size_t>(i)] = static_cast<std::int32_t>(i);
 
   Eigen::VectorXd direct, iterative;
-  const auto ldlt = FEM::TRUSS::SOLVER::solveSimplicialLDLT(matrix, force, direct);
-  const auto cg = FEM::TRUSS::SOLVER::solveBlockCG(matrix, force, nodes, remap, {}, iterative);
+  const auto ldlt = FEM::SOLVER::solveSimplicialLDLT(matrix, force, direct);
+  const auto cg = FEM::SOLVER::solveBlockCG(matrix, force, nodes, remap, {}, iterative);
   if (!ldlt.converged || !cg.converged) std::printf("      LDLT: %s, Block-CG: %s\n", ldlt.message.c_str(), cg.message.c_str());
   REQUIRE(ldlt.converged && cg.converged);
   CHECK(cg.iterations > 0 && cg.relativeResidual < 1e-8);

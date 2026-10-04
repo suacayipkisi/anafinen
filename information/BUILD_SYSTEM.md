@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (solver sources in `src/solvers/`; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
 
 ## 1. Overall flow
 
@@ -47,7 +47,7 @@ CMakeLists.txt
 |---|---|---|---|
 | `project_warnings_and_optimizations` | INTERFACE | Release flags and defines | - |
 | `anaf_io` | STATIC | `src/io/*` (model, formats, service, `array/` HDF5 store) | Gmsh, ZLIB, HDF5 (all PRIVATE). The Eigen and CHOLMOD adapters in `src/io/array/` are header-only, so `anaf_io` itself links neither. |
-| `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`), `src/material/materialLibrary.cpp`, `src/log/anaf_info.cpp`, `src/directory/getExecutableDirectory.cpp`, `src/platform/systemInfo.cpp`. Self-contained: a front end links it and calls `solveStatic()` (no bridge or GUI code). `MAIN_DIR` (PRIVATE) for the source-tree asset fallback. | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE), nlohmann_json (PRIVATE); Windows: shell32, ole32, uuid (user config folder), dxgi, advapi32 (`systemInfo`: VRAM, CPU name from the registry) |
+| `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`), `src/solvers/*` (solver portfolio), `src/material/materialLibrary.cpp`, `src/log/anaf_info.cpp`, `src/directory/getExecutableDirectory.cpp`, `src/platform/systemInfo.cpp`. Self-contained: a front end links it and calls `solveStatic()` (no bridge or GUI code). `MAIN_DIR` (PRIVATE) for the source-tree asset fallback. | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE), nlohmann_json (PRIVATE); Windows: shell32, ole32, uuid (user config folder), dxgi, advapi32 (`systemInfo`: VRAM, CPU name from the registry) |
 | `glad_local` | STATIC | `external/glad/src/gl.c` | - |
 | `imgui_suite` | STATIC | ImGui core + GLFW/OpenGL3 backends + ImGuizmo + ImPlot | glad, GLFW, OpenGL |
 | `anafinen` | EXECUTABLE | `main.cpp`, bridge, GUI, `platform/resourceMonitor.cpp` | `anaf_core`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG; Windows: ole32, comdlg32, shell32, uuid (file dialogs), psapi (resource monitor) |
@@ -113,7 +113,7 @@ find_path(cholmod.h, suffix suitesparse) + find_library(cholmod, suitesparseconf
 
 `find_package(CHOLMOD CONFIG)` is not used on purpose. Fedora's `suitesparse-devel` ships `CAMDConfig.cmake` / `CCOLAMDConfig.cmake`, which include `*Targets_static.cmake` files that are not packaged. That is a hard configure error, even with `QUIET`.
 
-When `ANAFINEN_HAS_CHOLMOD` is ON, `anaf_core` gets the `ANAFINEN_HAS_CHOLMOD` define and links CHOLMOD privately. `solver_cholmod.cpp` compiles to a stub otherwise.
+When `ANAFINEN_HAS_CHOLMOD` is ON, `anaf_core` gets the `ANAFINEN_HAS_CHOLMOD` define and links CHOLMOD privately. `src/solvers/direct/solver_cholmod.cpp` compiles to a stub otherwise.
 
 Test without CHOLMOD on a machine that has it:
 ```bash

@@ -15,7 +15,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "solverPortfolio.hpp"
+#include <solvers/solverPortfolio.hpp>
 #include <log/anaf_info.hpp>
 
 #include <Eigen/LU> // MatrixXd::inverse()
@@ -27,7 +27,7 @@
 #include <limits>
 #include <omp.h>
 
-namespace FEM::TRUSS::SOLVER {
+namespace FEM::SOLVER {
 
   Result solveBlockCG(
     const Eigen::SparseMatrix<double>& upperMatrix,
@@ -154,4 +154,4 @@ namespace FEM::TRUSS::SOLVER {
     return result;
   }
 
-} // namespace FEM::TRUSS::SOLVER
+} // namespace FEM::SOLVER end

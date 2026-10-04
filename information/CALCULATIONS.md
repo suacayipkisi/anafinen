@@ -3,7 +3,7 @@
 This document describes the finite element calculation for 3D truss structures built from 1D two-node bar elements. It covers the data types, the math, the solver portfolio, and the energy validator.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-03 (beam data in `anaf_io`, section 13).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`, section 7; 2026-10-03: beam data in `anaf_io`, section 13).
 > Implemented: static displacement under nodal loads + self-weight.
 > Not implemented yet: mass matrix, modal analysis (Spectra), beam/frame elements, CST.
 
@@ -201,7 +201,19 @@ Each node owns one reduced DOF `q_k` per allowed-motion direction `b_k` (orthono
 
 Supports are homogeneous (zero prescribed displacement). Reaction forces are not computed yet.
 
-## 7. Solver portfolio (`FEM::TRUSS::SOLVER`)
+## 7. Solver portfolio (`FEM::SOLVER`)
+
+The portfolio lives in `src/solvers/`, outside `truss_1D/`, so that later element types (beam, CST) use the same solvers. It only sees the reduced system `K_upper u = f`; assembly and DOF reduction stay in each element's container. The truss container calls `FEM::SOLVER::solveSelected()`.
+
+```text
+src/solvers/
+  solverPortfolio.hpp     Type, Result, every solve* declaration
+  solver_referee.cpp      solveSelected(): picks a solver by DOF count, hardware log
+  direct/                 solver_cholmod.cpp, solver_simplicial.cpp
+  iterative/              solver_iterative.cpp (Block-CG)
+```
+
+The direct solvers do not care how DOFs map to nodes. Block-CG does: its preconditioner reads `remapTable[3 * node + k]` and inverts 3x3 node blocks, so it is only correct for 3 translational DOFs per node. A beam model (6 DOFs per node) must not reach it until the block size is a parameter.
 
 `solveSelected()` is the referee:
 
@@ -220,9 +232,9 @@ dofs <= 400,000 ?
 
 | Solver | File | Method | Notes |
 |---|---|---|---|
-| `solveCholmod` | `solver_cholmod.cpp` | Eigen `CholmodSupernodalLLT<..., Upper>` | Only when `ANAFINEN_HAS_CHOLMOD`, otherwise a stub that returns "not available" |
-| `solveSimplicialLDLT` | `solver_simplicial.cpp` | Eigen `SimplicialLDLT<..., Upper>` | Always available |
-| `solveBlockCG` | `solver_iterative.cpp` | Preconditioned CG, 3x3 per-node block-Jacobi preconditioner | Tolerance 1e-8, max 50,000 iterations, logs every 200, honors `stop_token` |
+| `solveCholmod` | `direct/solver_cholmod.cpp` | Eigen `CholmodSupernodalLLT<..., Upper>` | Only when `ANAFINEN_HAS_CHOLMOD`, otherwise a stub that returns "not available" |
+| `solveSimplicialLDLT` | `direct/solver_simplicial.cpp` | Eigen `SimplicialLDLT<..., Upper>` | Always available |
+| `solveBlockCG` | `iterative/solver_iterative.cpp` | Preconditioned CG, 3x3 per-node block-Jacobi preconditioner | Tolerance 1e-8, max 50,000 iterations, logs every 200, honors `stop_token` |
 
 Every result is a `Result` record: `type` (`SOLVER::Type`), `available`, `converged`, `iterations`, `relativeResidual = ‖f − K u‖ / ‖f‖`, `elapsedSeconds`, `message`. The referee also logs a hardware summary: CPU name, hardware / OpenMP / Eigen threads, and available / total RAM. It reads them from `anaf::PLATFORM` (`querySystemInfo()` once, `queryMemory()` per solve; Linux and Windows), the same source as the GUI status bar. "Available" is the memory the OS can hand out without swapping (Linux `MemAvailable`, page cache included).
 
@@ -310,7 +322,7 @@ The tests were checked against injected faults: a wrong self-weight split and a 
 
 - Orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp), [trussSolver.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp); model types: [trussProperties/meshData.hpp](../src/objectCalcs/truss_1D/trussProperties/meshData.hpp)
 - Container: [deformationUnderConstForce.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp)
-- Solvers: [solverPortfolio.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solverPortfolio.hpp), [solver_referee.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_referee.cpp), [solver_cholmod.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_cholmod.cpp), [solver_simplicial.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_simplicial.cpp), [solver_iterative.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/solver_iterative.cpp)
+- Solvers: [solverPortfolio.hpp](../src/solvers/solverPortfolio.hpp), [solver_referee.cpp](../src/solvers/solver_referee.cpp), [direct/solver_cholmod.cpp](../src/solvers/direct/solver_cholmod.cpp), [direct/solver_simplicial.cpp](../src/solvers/direct/solver_simplicial.cpp), [iterative/solver_iterative.cpp](../src/solvers/iterative/solver_iterative.cpp)
 - Types: [node.hpp](../src/objectCalcs/truss_1D/trussProperties/node.hpp), [element.hpp](../src/objectCalcs/truss_1D/trussProperties/element.hpp), [appliedForce.hpp](../src/objectCalcs/truss_1D/trussProperties/appliedForce.hpp), [properties.hpp](../src/material/properties.hpp)
 - Generator: [simpleQuadranglePrismTrussCreate.cpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp)
 - Tests: [tests/coreTests.cpp](../tests/coreTests.cpp)

@@ -25,7 +25,7 @@
 #include <stop_token>
 #include <vector>
 
-namespace FEM::TRUSS::SOLVER {
+namespace FEM::SOLVER {
 
   enum class Type {
     Cholmod,
@@ -77,4 +77,4 @@ namespace FEM::TRUSS::SOLVER {
 
   const char* toString(Type type) noexcept;
 
-} // namespace FEM::TRUSS::SOLVER
+} // namespace FEM::SOLVER end

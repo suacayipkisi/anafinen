@@ -15,40 +15,33 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "solverPortfolio.hpp"
+#include <solvers/solverPortfolio.hpp>
 
 #include <chrono>
-#ifdef ANAFINEN_HAS_CHOLMOD
-#include <Eigen/CholmodSupport>
-#endif
+#include <Eigen/SparseCholesky>
 
-namespace FEM::TRUSS::SOLVER {
+namespace FEM::SOLVER {
 
-  // Parameters are unused in builds without CHOLMOD (no SuiteSparse installed, CMAKE_IGNORE_PATH test builds).
-  Result solveCholmod(
-    [[maybe_unused]] const Eigen::SparseMatrix<double>& upperMatrix,
-    [[maybe_unused]] const Eigen::VectorXd& force,
-    [[maybe_unused]] Eigen::VectorXd& displacement
+  Result solveSimplicialLDLT(
+    const Eigen::SparseMatrix<double>& upperMatrix,
+    const Eigen::VectorXd& force,
+    Eigen::VectorXd& displacement
   ) {
-    Result result{.type = Type::Cholmod};
-#ifdef ANAFINEN_HAS_CHOLMOD
+    Result result{.type = Type::SimplicialLDLT};
     const auto start = std::chrono::steady_clock::now();
-    Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<double>, Eigen::Upper> solver;
+    Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper> solver;
     solver.compute(upperMatrix);
     if (solver.info() != Eigen::Success) {
-      result.message = "CHOLMOD factorization failed";
+      result.message = "Eigen SimplicialLDLT factorization failed";
     }
     else {
       displacement = solver.solve(force);
       result.converged = solver.info() == Eigen::Success && displacement.allFinite();
-      if (!result.converged) result.message = "CHOLMOD solve failed";
+      if (!result.converged) result.message = "Eigen SimplicialLDLT solve failed";
     }
     result.available = true;
     result.elapsedSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-#else
-    result.message = "CHOLMOD is not available in this build";
-#endif
     return result;
   }
 
-} // namespace FEM::TRUSS::SOLVER
+} // namespace FEM::SOLVER end
