@@ -78,8 +78,11 @@ namespace anaf::GUI {
       layout (location = 1) in vec4 aColor;
       layout (location = 2) in int aEntityID;
       layout (location = 3) in float aPointSize;
+      layout (location = 4) in float aDepthLift;
 
       uniform mat4 u_MVP;
+      uniform vec3 u_Eye;
+      uniform float u_WorldPerPixel;
 
       out vec4 vColor;
       flat out int vEntityID;
@@ -88,7 +91,16 @@ namespace anaf::GUI {
         vColor = aColor;
         vEntityID = aEntityID;
         gl_PointSize = (aPointSize > 0.0) ? aPointSize : 1.0;
-        gl_Position = u_MVP * vec4(aPos, 1.0);
+        vec3 position = aPos;
+        // Point markers only (lines leave location 3 disabled, so aPointSize is 0): moved along
+        // the eye ray, so the screen position stays and only the depth changes.
+        if (aPointSize > 0.0) {
+          vec3 toEye = u_Eye - aPos;
+          float distance = length(toEye);
+          float lift = max(aDepthLift, 0.5 * aPointSize * distance * u_WorldPerPixel);
+          if (distance > 0.0) position += toEye / distance * min(lift, 0.5 * distance);
+        }
+        gl_Position = u_MVP * vec4(position, 1.0);
       }
     )";
 
@@ -109,6 +121,8 @@ namespace anaf::GUI {
     m_program = buildShaderProgram(vertexShaderSource, fragmentShaderSource, "scene");
 
     m_mvpLoc = glGetUniformLocation(m_program.get(), "u_MVP");
+    m_eyeLoc = glGetUniformLocation(m_program.get(), "u_Eye");
+    m_worldPerPixelLoc = glGetUniformLocation(m_program.get(), "u_WorldPerPixel");
   }
 
   void ViewportRenderer::compileGridShader() {
@@ -270,6 +284,7 @@ namespace anaf::GUI {
     setFloatAttrib(m_pointVao.get(), 1, 4, offsetof(Point3D, color));
     setIntAttrib(m_pointVao.get(), 2, offsetof(Point3D, entityID));
     setFloatAttrib(m_pointVao.get(), 3, 1, offsetof(Point3D, size));
+    setFloatAttrib(m_pointVao.get(), 4, 1, offsetof(Point3D, depthLift));
 
     // Text (glyph quad) Buffers
     m_textVbo = createBuffer();
@@ -296,8 +311,8 @@ namespace anaf::GUI {
     m_triangleBuffer.push_back({p3, color, -1});
   }
 
-  void ViewportRenderer::addPoint(const glm::vec3& p, const glm::vec4& color, int entityID, float size) {
-    m_pointBuffer.push_back({p, color, entityID, size});
+  void ViewportRenderer::addPoint(const glm::vec3& p, const glm::vec4& color, int entityID, float size, float depthLift) {
+    m_pointBuffer.push_back({p, color, entityID, size, depthLift});
   }
 
   void ViewportRenderer::addText(
@@ -396,8 +411,10 @@ namespace anaf::GUI {
     glDisable(GL_BLEND);
   }
 
-  void ViewportRenderer::render(const glm::mat4& mvp) {
+  void ViewportRenderer::render(const glm::mat4& mvp, const glm::vec3& eye, const float worldPerPixel) {
     glProgramUniformMatrix4fv(m_program.get(), m_mvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
+    glProgramUniform3fv(m_program.get(), m_eyeLoc, 1, glm::value_ptr(eye));
+    glProgramUniform1f(m_program.get(), m_worldPerPixelLoc, worldPerPixel);
     glUseProgram(m_program.get());
 
     // Coverage-based AA on top of MSAA, so thin lines don't fall back to hard, blocky edges.
@@ -437,14 +454,12 @@ namespace anaf::GUI {
     glDisable(GL_BLEND);
     glDisable(GL_LINE_SMOOTH);
 
-    // Node squares are markers: drawn over everything (a beam section would hide them) and so
-    // also first in line for picking.
+    // Node squares are depth tested like the rest of the scene, but lifted toward the eye (see
+    // Point3D::depthLift): the beam section around a node never hides it, a member in front does.
     if (m_pointVertexCount > 0) {
       glEnable(GL_PROGRAM_POINT_SIZE);
-      glDisable(GL_DEPTH_TEST);
       glBindVertexArray(m_pointVao.get());
       glDrawArrays(GL_POINTS, 0, m_pointVertexCount);
-      glEnable(GL_DEPTH_TEST);
     }
 
     glBindVertexArray(0);

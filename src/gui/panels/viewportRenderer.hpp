@@ -39,6 +39,9 @@ namespace anaf::GUI {
     glm::vec4 color;
     int entityID {-1};
     float size {10.0f};
+    // World distance the marker is pulled toward the eye before the depth test, so the element
+    // it sits in (a beam section around the node) does not hide it; anything further in front does.
+    float depthLift {0.0f};
   };
 
   // Screen-space glyph quad vertex; position is already in NDC (-1..1).
@@ -73,6 +76,8 @@ namespace anaf::GUI {
     GlVertexArray m_pointVao;
     GlBuffer m_pointVbo;
     GLint m_mvpLoc{-1};
+    GLint m_eyeLoc{-1};
+    GLint m_worldPerPixelLoc{-1};
 
     GlProgram m_gridProgram;
     GlVertexArray m_gridVao;
@@ -120,7 +125,9 @@ namespace anaf::GUI {
     // blended after the lines, without depth writes.
     void addTriangle(const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3, const glm::vec4& color);
 
-    void addPoint(const glm::vec3& p, const glm::vec4& color, int entityID, float size = 12.0f);
+    // depthLift: see Point3D. The marker is lifted at least by its own screen radius, so the
+    // lines meeting at the point never cut it.
+    void addPoint(const glm::vec3& p, const glm::vec4& color, int entityID, float size = 12.0f, float depthLift = 0.0f);
 
     // Builds a screen-space glyph quad batch using ImGui's already-loaded font atlas as texture.
     // screenPosPixels/fbWidth/fbHeight are in FBO pixel space with origin top-left.
@@ -141,7 +148,9 @@ namespace anaf::GUI {
     void uploadCurrentBuffer();
     void uploadTextBuffer();
 
-    void render(const glm::mat4& mvp);
+    // eye: camera position; worldPerPixel: world size of one framebuffer pixel at unit distance
+    // (2 tan(fov / 2) / framebuffer height), used to lift the point markers.
+    void render(const glm::mat4& mvp, const glm::vec3& eye, float worldPerPixel);
 
     void renderGrid(const GridView& view);
 

@@ -627,15 +627,18 @@ namespace anaf::GUI {
     }
 
     // Nodes: a sphere is 1.3 times the largest section half size at the node, so it shows
-    // around the elements.
+    // around the elements. A square is lifted toward the eye by 1.2 times that half size (the
+    // outline's farthest point from the axis, corners included), so only other members hide it.
     if (m_display->showNodes()) {
       std::vector<float> radius(mesh.nodes.size(), std::max(m_sceneRadius * 0.01f, 1e-4f));
+      std::vector<float> lift(mesh.nodes.size(), 0.0f);
       std::vector<bool> connected(mesh.nodes.size(), false);
       for (std::size_t e = 0; e < mesh.elements.size() && e < m_beamElements.size(); ++e) {
         const auto& element = mesh.elements[e];
         for (const auto node : {element.node1, element.node2}) {
           if (node >= radius.size()) continue;
           radius[node] = connected[node] ? std::max(radius[node], 1.3f * m_beamElements[e].halfSize) : 1.3f * m_beamElements[e].halfSize;
+          lift[node] = std::max(lift[node], 1.2f * m_beamElements[e].halfSize);
           connected[node] = true;
         }
       }
@@ -648,7 +651,7 @@ namespace anaf::GUI {
         if (m_display->nodeStyle == NodeStyle::Sphere) {
           m_beamRenderer_->addSphere(position[id], std::max(radius[id], 1e-4f) * (selected ? 1.25f : 1.0f), color, static_cast<int>(id));
         } else {
-          m_renderer_->addPoint(position[id], color, static_cast<int>(id), selected ? 18.0f : 12.0f);
+          m_renderer_->addPoint(position[id], color, static_cast<int>(id), selected ? 18.0f : 12.0f, lift[id]);
         }
         m_nodeLabels.emplace_back(id, position[id]);
       }
@@ -845,7 +848,11 @@ namespace anaf::GUI {
       m_renderer_->renderGrid(grid);
     }
     m_beamRenderer_->render(mvp, -orbitDirection());
-    m_renderer_->render(mvp);
+    {
+      const glm::vec3 eye = m_target + orbitDirection() * m_cameraDistance;
+      const float fbHeight = static_cast<float>(std::max(m_fbo_->getHeight(), 1u));
+      m_renderer_->render(mvp, eye, 2.0f * std::tan(kFovY * 0.5f) / fbHeight);
+    }
 
     // Node number labels, rendered as OpenGL glyph quads (ImGui font atlas) instead of an ImGui 2D overlay.
     m_renderer_->clearTextBuffer();
