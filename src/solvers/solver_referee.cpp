@@ -84,6 +84,18 @@ namespace FEM::SOLVER {
     constexpr Eigen::Index directLimit = 400'000;
     Result result;
 
+    // Every DOF is restrained: nothing to solve. Debian 13's CHOLMOD rejects an empty matrix
+    // ("invalid xtype or dtype" in cholmod_analyze) and the factorization then crashes.
+    if (dofs == 0) {
+      displacement.resize(0);
+      result.type = Type::SimplicialLDLT;
+      result.available = true;
+      result.converged = true;
+      result.message = "no free DOFs";
+      anaf::LOG::info("Solver referee: no free DOFs, nothing to solve");
+      return result;
+    }
+
     if (dofs <= directLimit) {
     #ifdef ANAFINEN_HAS_CHOLMOD
       anaf::LOG::info("Solver referee selected CHOLMOD: {} DOFs <= {}", dofs, directLimit);

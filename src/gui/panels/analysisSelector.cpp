@@ -19,6 +19,8 @@
 
 #include "analysisSelector.hpp"
 
+#include <panels/editorLayout.hpp>
+
 namespace anaf::GUI {
   void AnalysisSelector::open(const StructureFamily family) {
     m_family = family;
@@ -69,8 +71,9 @@ namespace anaf::GUI {
       if (m_loadKind == BRIDGE::LoadKind::constant) {
         ImGui::TextWrapped("Static solve under nodal loads%s.", truss ? " and self weight" : ", distributed loads and self weight");
       } else {
-        ImGui::TextWrapped("Natural frequencies and mode shapes (modal analysis). Not implemented yet: the inputs "
-                           "can be set, the solver is still to come.");
+        ImGui::TextColored(LAYOUT::kWarn, "Not available in this version.");
+        ImGui::TextWrapped("Natural frequencies and mode shapes (modal analysis) come next. The inputs can be set, "
+                           "but there is no dynamic solver yet, so nothing can be run.");
       }
       ImGui::TextDisabled("Changing the %s type clears the current model.", truss ? "truss" : "object");
 

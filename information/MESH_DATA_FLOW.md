@@ -3,7 +3,7 @@
 This document describes how truss mesh data is created (Simple Quadrangle generator, built-in library, import, model editor), stored, passed through the one solver pipeline, and finally displayed in the viewport.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam models and their rendering, section 6.1).
+> Verified against: `v0.2.0-alpha` (released 2026-10-05; previous release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-05 (v0.2.0-alpha release check; 2026-10-04: beam models and their rendering, section 6.1).
 > Part of the documentation set indexed in [ARCHITECTURE.md](ARCHITECTURE.md). Module details: [CALCULATIONS.md](CALCULATIONS.md), [BRIDGE.md](BRIDGE.md), [GUI.md](GUI.md).
 
 ## 1. Overall flow

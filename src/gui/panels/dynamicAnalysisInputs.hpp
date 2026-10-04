@@ -69,6 +69,11 @@ namespace anaf::GUI {
     ImGui::SetItemTooltip("Change it in the Analyze menu; the model is kept.");
     ImGui::PushTextWrapPos(0.0f);
     if (dynamic) {
+      ImGui::PopTextWrapPos();
+      LAYOUT::wrappedColored(LAYOUT::kWarn, "Not available in this version: there is no dynamic solver yet (modal, "
+                                            "harmonic or transient). The inputs below are a preview; use Constant Load "
+                                            "(Static) to solve the model.");
+      ImGui::PushTextWrapPos(0.0f);
       ImGui::TextDisabled("Uses supports, materials (density) and sections; static loads are not used.");
       ImGui::PopTextWrapPos();
       ImGui::Spacing();
@@ -85,7 +90,7 @@ namespace anaf::GUI {
     ImGui::BeginDisabled();
     LAYOUT::primaryButton("Run Modal Analysis##dynamic");
     ImGui::EndDisabled();
-    ImGui::SetItemTooltip("Not implemented yet");
+    ImGui::SetItemTooltip("Not available yet: dynamic analysis has no solver in this version");
   }
 
 } // namespace anaf::GUI end

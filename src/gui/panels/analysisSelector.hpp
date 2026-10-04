@@ -43,7 +43,7 @@ namespace anaf::GUI {
   class AnalysisSelector : public IPanel {
   private:
     static constexpr std::array<std::string_view, 2> kTrussTypes{"Imported / Self-Built", "Simple Quadrangle"};
-    static constexpr std::array<std::string_view, 2> kLoadKinds{"Constant Load (Static)", "Dynamic Load"};
+    static constexpr std::array<std::string_view, 2> kLoadKinds{"Constant Load (Static)", "Dynamic Load (not available yet)"};
 
     StructureFamily m_family{StructureFamily::truss};
     TrussTypes m_trussType{nodeEntered}; // imported / self-built is offered first

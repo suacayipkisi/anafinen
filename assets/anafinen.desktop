@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=ANAFINEN
-Comment=3D FEM Dynamic and Modal Analysis Engine
+Comment=3D finite element analysis of trusses and beam frames (linear static)
 Exec=anafinen
 Icon=anafinen
 Terminal=false

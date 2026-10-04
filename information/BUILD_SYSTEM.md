@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (`anaf_beam_library_tool`, beam library sources in `anaf_core`; section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
+> Verified against: `v0.2.0-alpha` (released 2026-10-05; previous release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-05 (v0.2.0-alpha release check: package descriptions and `.desktop` comment, section 8; Debian GCC 14 `-Wmaybe-uninitialized` fixed, release packages built in the containers, section 8.1.1; 2026-10-04: `anaf_beam_library_tool`, beam library sources in `anaf_core`; section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
 
 ## 1. Overall flow
 
@@ -179,6 +179,8 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 | Linux | `bin/anafinen`, `share/anafinen/assets` (without the `.desktop` file), `share/applications/anafinen.desktop`, hicolor icons (scalable SVG, 128 px PNG, and 16 / 24 / 32 px PNGs from `anafinen-small.svg`) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
 | Windows | Flat: `anafinen.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES`, app-local MSVC runtime (`InstallRequiredSystemLibraries`, including `vcomp140.dll` for `/openmp`, so no Visual C++ Redistributable is needed; added after the 0.1.3 release) | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
 
+Package descriptions: `CPACK_PACKAGE_DESCRIPTION_SUMMARY` ("3D FEM Analysis Engine", also `pkgdesc` in `PKGBUILD`) and a long `CPACK_PACKAGE_DESCRIPTION` that also states that dynamic analysis is not available yet. DEB reads it on its own; RPM only reads `CPACK_RPM_PACKAGE_DESCRIPTION` (or `CPACK_PACKAGE_DESCRIPTION_FILE`), so that is set to the same text (before 0.2.0 the RPM carried CPack's generic "This is an installer created using CPack" template). The `.desktop` `Comment` says "3D finite element analysis of trusses and beam frames (linear static)" (it claimed dynamic and modal analysis before 0.2.0).
+
 Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: hdf5` (and `suitesparse` when CHOLMOD is enabled).
 
 ### 8.1 Packaging scripts
@@ -219,7 +221,7 @@ host: build-containers/<distro>/  (check-*.log or package.log + .deb / .pkg.tar.
 1. The working tree is sent as it is, uncommitted changes included; build directories and `.git` are left out.
 2. Distros run one after the other. Source and results go through stdin / stdout, so there is no SELinux relabel (`:Z`) of the repository and no file owned by another user on the host.
 3. `shell` mode opens an interactive shell in `/work` as `builder`; nothing is copied back.
-4. Expected on Debian 13: `anaf_io_tests` aborts in `highOrderNodeOrderingMatchesGmshVtkWriter` (the log may end at an earlier `[ RUN ]` line: stdout is buffered, the abort is not) (the `libgmsh4.13` Eigen assertion, `ARCHITECTURE.md` section 8, item 4), so `test` reports a failure there.
+4. Expected on Debian 13: `anaf_io_tests` aborts in `highOrderNodeOrderingMatchesGmshVtkWriter` (the log may end at an earlier `[ RUN ]` line: stdout is buffered, the abort is not) (the `libgmsh4.13` Eigen assertion, `ARCHITECTURE.md` section 8, item 4), so `test` reports a failure there. Every other test passes on Debian (2026-10-05, `v0.2.0-alpha`).
 
 ### 8.2 Dependencies per platform (2026-09-28)
 

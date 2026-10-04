@@ -76,6 +76,15 @@ set(CPACK_PACKAGE_VENDOR "Abdurrahman Konuk (professionally known as Ufuk Deniz 
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_RELEASE "1")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "3D FEM Analysis Engine")
+# Long description for RPM / DEB (without it CPack uses its generic template text).
+set(CPACK_PACKAGE_DESCRIPTION
+    "ANAFINEN (Analyze Finite Element Engineering) is an open-source 3D finite element analysis \
+engine and visualizer. It solves trusses and beam / frame structures (Euler-Bernoulli and \
+Timoshenko elements, cross-section library, end releases) under static loads, checks every \
+solve with an energy balance, and reads and writes Gmsh MSH, VTK / VTU, STEP, IGES and BREP. \
+Dynamic analysis (modal, harmonic, transient) is not available yet.")
+# The RPM generator reads only its own variable (or CPACK_PACKAGE_DESCRIPTION_FILE).
+set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
 set(CPACK_PACKAGE_LICENSE "GPL-3.0-or-later")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_CONTACT "Abdurrahman Konuk (Ufuk Deniz Konuk) <konuki8523@gmail.com>") # required by the DEB generator

@@ -6,14 +6,14 @@
 [![GitHub Release](https://img.shields.io/github/v/release/suacayipkisi/anafinen?include_prereleases&style=flat-square&color=blue)](https://github.com/suacayipkisi/anafinen/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/suacayipkisi/anafinen/total?style=flat-square&color=green)](https://github.com/suacayipkisi/anafinen/releases)
 
-![anafinen: fuselage barrel frame solved with beam elements, von Mises stress coloring, beam diagrams and solver log](docs/images/anafinen-beam-fuselage.png)
+![anafinen: narrow-body airliner airframe solved with beam elements, von Mises stress coloring, bending moment diagram and solver log](docs/images/anafinen-beam-fuselage.png)
 
-*A built-in model (aircraft fuselage barrel section, aluminium 2024-T3) solved with 3D beam elements: real cross-sections colored by von Mises stress, bending moment diagram of the selected element, and the solver log with the energy check.*
+*A built-in large structure (a complete 38 m narrow-body airliner airframe on its landing gear: 961 nodes, 2910 beam elements, aluminium 2024-T3 / 7075-T6 and a steel gear) solved with 3D beam elements: real cross-sections colored by von Mises stress, the bending moment diagram and end forces of the selected element, and the solver log with the energy check.*
 
 ## Features
 
-- **3D truss solver** (released, v0.1.3-alpha): static displacement, axial force and stress under nodal loads and self weight; inclined supports.
-- **3D beam / frame solver** (in development, v0.2.0):
+- **3D truss solver**: static displacement, axial force and stress under nodal loads and self weight; inclined supports.
+- **3D beam / frame solver** (new in v0.2.0-alpha):
   - Euler-Bernoulli and Timoshenko elements (no shear locking), chosen per element.
   - Cross-section library: rectangle, circle, pipe, box, I with fillets; a catalogue of 118 standard profiles (IPE, HEA, HEB, CHS, SHS, RHS, ...).
   - Uniform and self-weight loads, nodal forces and moments, inclined supports, end releases (hinges) by static condensation.
@@ -24,26 +24,28 @@
 - **Built-in models:** 49 beam / frame models (buildings, bridges, machines, aerospace, hinged structures, and large structures of about 3000 elements: a stadium, an airport terminal, a complete airliner airframe) and a truss library, each tested against the generator.
 - **Tests:** closed-form checks (cantilevers, clamped beams, three-hinged frame, published section tables) and file round trips through every format, on GCC and Clang with zero warnings.
 
+**Not available yet:** dynamic analysis of any kind (modal, harmonic, transient). The GUI already offers a "Dynamic Load" analysis type that shows the planned inputs (mode count, mass matrix), but it cannot be run in v0.2.0-alpha; every solve is linear static. Modal analysis is the next step.
+
 Documentation, design decisions and progress are in the [`information/`](information/ARCHITECTURE.md) folder.
 
 ## Roadmap
 
-1. Static displacement under applied force: trusses done, beams / frames in development
-2. Modal analysis
+1. Static displacement under applied force: trusses and beams / frames done
+2. Modal analysis (next; not in v0.2.0-alpha)
 3. Heat transfer
 4. Nonlinear elasticity
 5. CFD (computational fluid dynamics)
 
-## 📦 Downloads (v0.1.3-alpha)
+## 📦 Downloads (v0.2.0-alpha)
 
-Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases). The latest release contains the truss solver; the beam solver comes with v0.2.0.
+Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases). v0.2.0-alpha contains the truss and the beam / frame solvers (linear static analysis only; dynamic analysis is not available yet).
 
 | Platform | File | Quick Run / Install Command |
 | --- | --- | --- |
-| **Windows** (10/11 x64 Portable) | [`anafinen-0.1.3-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.3-alpha/anafinen-0.1.3-windows-AMD64-alpha.zip) | Extract the `.zip` into a folder you can write to (not `Program Files`) and run `anafinen.exe`. Needs the [Microsoft Visual C++ 2015-2022 Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe) |
-| **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.1.3-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.3-alpha/anafinen-0.1.3-alpha.rpm) | `sudo dnf install ./anafinen-0.1.3-alpha.rpm` |
-| **Linux** (Debian / Ubuntu / DEB-based) | [`anafinen-0.1.3-alpha.deb`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.3-alpha/anafinen-0.1.3-alpha.deb) | `sudo apt install ./anafinen-0.1.3-alpha.deb` |
-| **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.1.3_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.1.3-alpha/anafinen-0.1.3_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.1.3_alpha-1-x86_64.pkg.tar.zst` (needs `gmsh` or `gmsh-bin` from the AUR) |
+| **Windows** (10/11 x64 Portable) | [`anafinen-0.2.0-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.0-alpha/anafinen-0.2.0-windows-AMD64-alpha.zip) | Extract the `.zip` into a folder you can write to (not `Program Files`) and run `anafinen.exe`. The MSVC runtime is included; no Visual C++ Redistributable is needed. |
+| **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.2.0-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.0-alpha/anafinen-0.2.0-alpha.rpm) | `sudo dnf install ./anafinen-0.2.0-alpha.rpm` |
+| **Linux** (Debian / Ubuntu / DEB-based) | [`anafinen-0.2.0-alpha.deb`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.0-alpha/anafinen-0.2.0-alpha.deb) | `sudo apt install ./anafinen-0.2.0-alpha.deb` |
+| **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.2.0_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.0-alpha/anafinen-0.2.0_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.2.0_alpha-1-x86_64.pkg.tar.zst` (needs `gmsh` or `gmsh-bin` from the AUR) |
 
 ## References
 

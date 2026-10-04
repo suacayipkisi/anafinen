@@ -3,7 +3,7 @@
 This document describes `anaf::BRIDGE`, the shared state between the GUI thread and the calculation worker. It covers what the bridge stores, who reads and writes each field, and which synchronization rule protects it.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (`m_loadKind`, constant / dynamic, section 2; beam: `beam_frame`, `activeBeamMesh`, `allSections`, `selectedElementId`, section 5.2).
+> Verified against: `v0.2.0-alpha` (released 2026-10-05; previous release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-05 (v0.2.0-alpha release check; 2026-10-04: `m_loadKind`, constant / dynamic, section 2; beam: `beam_frame`, `activeBeamMesh`, `allSections`, `selectedElementId`, section 5.2).
 
 ## 1. Overall flow
 

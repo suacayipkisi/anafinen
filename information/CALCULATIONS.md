@@ -3,9 +3,9 @@
 This document describes the finite element calculation for 3D truss structures built from 1D two-node bar elements. It covers the data types, the math, the solver portfolio, and the energy validator.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam solver in [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), section 13; support bases in `FEM::SUPPORT`, section 2.1; unloaded mechanisms, section 12; solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`, Block-CG takes `dofsPerNode`, sections 7 and 11; 2026-10-03: beam data in `anaf_io`, section 13).
+> Verified against: `v0.2.0-alpha` (released 2026-10-05; previous release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-05 (v0.2.0-alpha release check: referee returns at once when no DOF is free, section 7; dynamic analysis listed as not implemented; 2026-10-04: beam solver in [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), section 13; support bases in `FEM::SUPPORT`, section 2.1; unloaded mechanisms, section 12; solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`, Block-CG takes `dofsPerNode`, sections 7 and 11; 2026-10-03: beam data in `anaf_io`, section 13).
 > Implemented: static displacement under nodal loads + self-weight.
-> Not implemented yet: mass matrix, modal analysis (Spectra), CST. Beam / frame elements: [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md).
+> Not implemented yet: dynamic analysis of any kind (no mass matrix, no modal / harmonic / transient solver; the GUI's "Dynamic Load" only shows preview inputs), modal analysis with Spectra is next; CST. Beam / frame elements: [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md).
 
 ## 1. Overall flow
 
@@ -222,9 +222,10 @@ The direct solvers do not care how DOFs map to nodes. Block-CG does: `solveSelec
 
 The preconditioner inverts one `dofsPerNode x dofsPerNode` block per node over its used slots; the rows and columns of unused slots stay zero. `FEM::SOLVER::maxDofsPerNode = 6` bounds the block (a stack array per node, no allocation in the CG loop). A `dofsPerNode` outside 1 … 6 or a remap table of the wrong size returns `converged = false` with a message instead of reading out of range.
 
-`solveSelected()` is the referee:
+`solveSelected()` is the referee. A system with no free DOF (every DOF restrained) returns at once with an empty displacement vector (`message` "no free DOFs"): Debian 13's CHOLMOD rejects an empty matrix in `cholmod_analyze` and then crashed in the factorization (found 2026-10-05 by `anaf_beam_tests` in the Debian container).
 
 ```text
+dofs == 0 ? --> accepted, nothing to solve
 dofs <= 400,000 ?
    |yes                                         |no
    v                                            v

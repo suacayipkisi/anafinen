@@ -96,10 +96,12 @@ namespace FEM::BEAM {
   private:
     struct ElementFrame {
       double length{};
-      Eigen::Matrix3d axes;      // rows: local x, y, z
-      Matrix12 localStiffness;   // k
-      Matrix12 globalStiffness;  // T^T k T
-      Vector12 fixedEndLoads;    // local equivalent nodal loads of the element's total uniform load
+      // Zero-initialized: m_frames.assign() copies a default frame, and GCC 14 warns
+      // (-Wmaybe-uninitialized) about copying uninitialized Eigen storage.
+      Eigen::Matrix3d axes{Eigen::Matrix3d::Zero()};       // rows: local x, y, z
+      Matrix12 localStiffness{Matrix12::Zero()};           // k
+      Matrix12 globalStiffness{Matrix12::Zero()};          // T^T k T
+      Vector12 fixedEndLoads{Vector12::Zero()};            // local equivalent nodal loads of the element's total uniform load
     };
 
     // DOF slots of one node: columns 0..motion-1 and 3..3+rotation-1 of basis (6-component

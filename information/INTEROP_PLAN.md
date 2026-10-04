@@ -5,7 +5,7 @@ This document is the plan for making ANAFINEN exchange complete models and resul
 Nothing in this document is implemented yet. The current state of every format is in [FILE_HANDLING.md](FILE_HANDLING.md).
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), plan written 2026-10-03 on top of `98d33d4` (phase 2.10), links checked 2026-10-04 (beam conventions moved to CALCULATIONS_BEAM.md; beam files are routed to the beam adapter, which narrows P0 item 8). No code exists for any step below.
+> Verified against: `v0.2.0-alpha` (released 2026-10-05; previous release `v0.1.3-alpha`, 2026-10-01), plan written 2026-10-03 on top of `98d33d4` (phase 2.10), links checked 2026-10-05 (v0.2.0-alpha release check; 2026-10-04: beam conventions moved to CALCULATIONS_BEAM.md; beam files are routed to the beam adapter, which narrows P0 item 8). No code exists for any step below.
 > When a step is done, move its content into [FILE_HANDLING.md](FILE_HANDLING.md) / [IO_USAGE.md](IO_USAGE.md) and mark the step done in section 6.
 
 ## 1. Goal
