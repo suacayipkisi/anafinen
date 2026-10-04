@@ -18,6 +18,7 @@
 #pragma once
 
 #include <guiMaterials/iPanel.hpp>
+#include <panels/dynamicAnalysisInputs.hpp>
 #include <truss_1D/trussTypes/trussLibrary.hpp>
 
 #include <array>
@@ -55,6 +56,7 @@ namespace anaf::GUI {
     std::uint32_t m_loadedNode{kNone};   // node whose values are in the inputs above
     std::string m_status;                // last edit result shown under the summary
     bool m_statusIsError{false};
+    DynamicAnalysisInputs m_dynamic;     // shown for LoadKind::dynamic
 
     // Whole model: one section and material for every bar at once.
     std::uint32_t m_wholeMaterialID{0};
@@ -76,7 +78,8 @@ namespace anaf::GUI {
     void renderSummary();
     void renderNodes(std::uint32_t selectedNode);
     void renderBars();
-    void renderSupportsAndLoads(std::uint32_t selectedNode);
+    // withLoads false (dynamic load kind): supports only.
+    void renderSupportsAndLoads(std::uint32_t selectedNode, bool withLoads);
     void renderInclinedSupportInputs();
     void setSupportVectors(const std::vector<std::array<double, 3>>& vectors);
     void renderSolve();

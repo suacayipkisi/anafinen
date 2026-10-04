@@ -97,9 +97,12 @@ namespace anaf::GUI {
     BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
     std::uint32_t materialIndex{};
 
+    const bool dynamic = bridge.m_loadKind.load() == BRIDGE::LoadKind::dynamic;
+
     ImGui::Begin("Truss(1D) Analysis Set", &isOpen);
 
     ImGui::Text("Truss Parameters");
+    renderLoadKindLine(bridge.m_loadKind.load());
     ImGui::Separator();
 
     std::uint32_t currentSelectedNode = std::numeric_limits<std::uint32_t>::max();
@@ -260,24 +263,27 @@ namespace anaf::GUI {
     }
 
     ImGui::Separator();
-    ImGui::Text("Node Forces & Constraints");
+    ImGui::Text(dynamic ? "Node Constraints" : "Node Forces & Constraints");
 
     if (currentSelectedNode != std::numeric_limits<std::uint32_t>::max()) {
       m_forceNodeId = currentSelectedNode;
     }
 
     ImGui::InputScalar("Node ID##force_node", ImGuiDataType_U32, &m_forceNodeId);
-    ImGui::InputDouble("Fx##force_fx", &m_forceVector[0], 0.0, 0.0, "%.3f");
-    ImGui::InputDouble("Fy##force_fy", &m_forceVector[1], 0.0, 0.0, "%.3f");
-    ImGui::InputDouble("Fz##force_fz", &m_forceVector[2], 0.0, 0.0, "%.3f");
+    // Static loads only; a dynamic analysis keeps them in the inputs but does not show them.
+    if (!dynamic) {
+      ImGui::InputDouble("Fx##force_fx", &m_forceVector[0], 0.0, 0.0, "%.3f");
+      ImGui::InputDouble("Fy##force_fy", &m_forceVector[1], 0.0, 0.0, "%.3f");
+      ImGui::InputDouble("Fz##force_fz", &m_forceVector[2], 0.0, 0.0, "%.3f");
 
-    if (ImGui::Button("Apply Load to Selected Node")) {
-      m_appliedForces.erase(
-        std::remove_if(m_appliedForces.begin(), m_appliedForces.end(),
-          [&](const FEM::TRUSS::ForceApplied& f) { return f.getAppliedNode() == m_forceNodeId; }),
-        m_appliedForces.end());
-      m_appliedForces.emplace_back(m_forceNodeId, m_forceVector);
-      publishInputs(bridge, m_appliedForces, m_supports);
+      if (ImGui::Button("Apply Load to Selected Node")) {
+        m_appliedForces.erase(
+          std::remove_if(m_appliedForces.begin(), m_appliedForces.end(),
+            [&](const FEM::TRUSS::ForceApplied& f) { return f.getAppliedNode() == m_forceNodeId; }),
+          m_appliedForces.end());
+        m_appliedForces.emplace_back(m_forceNodeId, m_forceVector);
+        publishInputs(bridge, m_appliedForces, m_supports);
+      }
     }
 
     // Panel members, not statics: resetState() clears them when the object type changes.
@@ -295,31 +301,37 @@ namespace anaf::GUI {
       publishInputs(bridge, m_appliedForces, m_supports);
     }
 
-    ImGui::SetNextItemWidth(160.0f);
-    double currentScale = bridge.deformScale.load();
-    if (ImGui::InputDouble("Deformation Scale", &currentScale, 0.0, 0.0, "%.3f")) {
-      bridge.deformScale = currentScale;
-      bridge.dataVersion.fetch_add(1, std::memory_order_release);
-    }
+    if (dynamic) {
+      ImGui::Separator();
+      renderDynamicAnalysisInputs(m_dynamic);
+      renderDynamicRunButton();
+    } else {
+      ImGui::SetNextItemWidth(160.0f);
+      double currentScale = bridge.deformScale.load();
+      if (ImGui::InputDouble("Deformation Scale", &currentScale, 0.0, 0.0, "%.3f")) {
+        bridge.deformScale = currentScale;
+        bridge.dataVersion.fetch_add(1, std::memory_order_release);
+      }
 
-    if (bridge.m_isRunning) {
-      ImGui::ProgressBar(bridge.m_progress.load(), ImVec2(0.0f, 0.0f));
-      ImGui::BeginDisabled();
-      ImGui::Button("Calculating");
-      ImGui::EndDisabled();
-    }
-    else if (ImGui::Button("Run Solver for Truss", ImVec2(-1, 32)) && resolveMaterialIndex(bridge, m_materialID, materialIndex)) {
-      // The grid is rebuilt from the current inputs on the worker, like the preview.
-      TRUSS_WORKER::startSolve(bridge,
-        [cubeNumX = m_cubeNumX, cubeNumY = m_cubeNumY, cubeNumZ = m_cubeNumZ, cubeEdgeLength = m_cubeEdgeLength,
-         crossSectionalArea = m_crossSectionalArea, type = materialIndex,
-         forcesToApply = m_appliedForces, supports = m_supports]() -> std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string> {
-          auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
-          if (!built) return std::unexpected(built.error());
-          built->appliedForces = forcesToApply;
-          applySupports(*built, supports);
-          return std::make_shared<const BRIDGE::MeshData>(std::move(*built));
-        });
+      if (bridge.m_isRunning) {
+        ImGui::ProgressBar(bridge.m_progress.load(), ImVec2(0.0f, 0.0f));
+        ImGui::BeginDisabled();
+        ImGui::Button("Calculating");
+        ImGui::EndDisabled();
+      }
+      else if (ImGui::Button("Run Solver for Truss", ImVec2(-1, 32)) && resolveMaterialIndex(bridge, m_materialID, materialIndex)) {
+        // The grid is rebuilt from the current inputs on the worker, like the preview.
+        TRUSS_WORKER::startSolve(bridge,
+          [cubeNumX = m_cubeNumX, cubeNumY = m_cubeNumY, cubeNumZ = m_cubeNumZ, cubeEdgeLength = m_cubeEdgeLength,
+           crossSectionalArea = m_crossSectionalArea, type = materialIndex,
+           forcesToApply = m_appliedForces, supports = m_supports]() -> std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string> {
+            auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
+            if (!built) return std::unexpected(built.error());
+            built->appliedForces = forcesToApply;
+            applySupports(*built, supports);
+            return std::make_shared<const BRIDGE::MeshData>(std::move(*built));
+          });
+      }
     }
 
     if (ImGui::Button("Clear All", ImVec2(-1, 32))) {

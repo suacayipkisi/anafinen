@@ -376,8 +376,12 @@ namespace anaf::GUI {
     }
   }
 
-  void BeamModelEditor::renderSupportsAndLoads(const std::uint32_t node) {
-    if (!ImGui::CollapsingHeader("Supports & Nodal Loads", ImGuiTreeNodeFlags_DefaultOpen)) return;
+  void BeamModelEditor::renderSupportsAndLoads(const std::uint32_t node, const bool withLoads) {
+    // ### keeps one ID (open state) for both labels.
+    if (!ImGui::CollapsingHeader(withLoads ? "Supports & Nodal Loads###beam_supports" : "Supports###beam_supports",
+                                 ImGuiTreeNodeFlags_DefaultOpen)) {
+      return;
+    }
     if (node == kNone) {
       ImGui::TextDisabled("Select a node first.");
       return;
@@ -415,6 +419,7 @@ namespace anaf::GUI {
       }
     }
     ImGui::EndDisabled();
+    if (!withLoads) return;
 
     ImGui::Spacing();
     ImGui::InputScalarN("Force [N]##beam", ImGuiDataType_Double, m_force.data(), 3, nullptr, nullptr, "%.4g");
@@ -920,8 +925,11 @@ namespace anaf::GUI {
       }
       ImGui::EndDisabled();
     }
-    const bool busy = bridge.m_isRunning.load();
-    ImGui::BeginDisabled(busy);
+  }
+
+  void BeamModelEditor::renderModelButtons() {
+    auto& bridge = BRIDGE::buildBridge();
+    ImGui::BeginDisabled(bridge.m_isRunning.load());
     if (ImGui::Button("Load Example Frame##beam")) loadExample();
     ImGui::SameLine();
     if (ImGui::Button("Clear Model##beam")) {
@@ -944,20 +952,26 @@ namespace anaf::GUI {
     }
     syncSelection(node, element);
 
+    const bool dynamic = bridge.m_loadKind.load() == BRIDGE::LoadKind::dynamic;
+
     ImGui::Begin("Beam(3D) Frame Editor", &isOpen);
     renderSummary();
+    renderLoadKindLine(bridge.m_loadKind.load());
     ImGui::Separator();
     // The solve works on a copy; edits made meanwhile would be overwritten by its result.
     ImGui::BeginDisabled(bridge.m_isRunning.load());
     renderLibrary();
     renderNodes(node);
-    renderSupportsAndLoads(node);
+    renderSupportsAndLoads(node, !dynamic);
     renderElements(element);
-    renderElementLoads(element);
+    if (!dynamic) renderElementLoads(element);
     renderWholeModel();
+    if (dynamic) renderDynamicAnalysisInputs(m_dynamic);
     ImGui::EndDisabled();
     ImGui::Separator();
-    renderSolve();
+    if (dynamic) renderDynamicRunButton();
+    else renderSolve();
+    renderModelButtons();
     ImGui::End();
   }
 

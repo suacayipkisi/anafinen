@@ -491,8 +491,12 @@ namespace anaf::GUI {
     ImGui::TextDisabled("Read-only: loading makes a copy; save changes with File > Export.");
   }
 
-  void TrussModelEditor::renderSupportsAndLoads(const std::uint32_t selectedNode) {
-    if (!ImGui::CollapsingHeader("Supports & Loads", ImGuiTreeNodeFlags_DefaultOpen)) return;
+  void TrussModelEditor::renderSupportsAndLoads(const std::uint32_t selectedNode, const bool withLoads) {
+    // ### keeps one ID (open state) for both labels.
+    if (!ImGui::CollapsingHeader(withLoads ? "Supports & Loads###editor_supports" : "Supports###editor_supports",
+                                 ImGuiTreeNodeFlags_DefaultOpen)) {
+      return;
+    }
     if (selectedNode == kNone) {
       ImGui::TextDisabled("Select a node first.");
       return;
@@ -561,6 +565,7 @@ namespace anaf::GUI {
       if (applied) setStatus(std::format("Support of node {} updated", selectedNode), false);
     }
     ImGui::EndDisabled();
+    if (!withLoads) return;
 
     ImGui::InputScalarN("Force [N]", ImGuiDataType_Double, m_force.data(), 3, nullptr, nullptr, "%.4g");
     const auto setLoad = [&](const std::array<double, 3> force) {
@@ -639,11 +644,6 @@ namespace anaf::GUI {
       }
       ImGui::EndDisabled();
     }
-
-    if (ImGui::Button("Clear Model", ImVec2(-1.0f, 0.0f))) {
-      bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
-      resetState();
-    }
   }
 
   void TrussModelEditor::onImGuiRender() {
@@ -658,8 +658,11 @@ namespace anaf::GUI {
     }
     syncSelection(selectedNode);
 
+    const bool dynamic = bridge.m_loadKind.load() == BRIDGE::LoadKind::dynamic;
+
     ImGui::Begin("Truss(1D) Model Editor", &isOpen);
     renderSummary();
+    renderLoadKindLine(bridge.m_loadKind.load());
     ImGui::Separator();
 
     // The solve works on a copy; edits made meanwhile would be overwritten by its result.
@@ -669,11 +672,17 @@ namespace anaf::GUI {
     renderWholeModel();
     renderNodes(selectedNode);
     renderBars();
-    renderSupportsAndLoads(selectedNode);
+    renderSupportsAndLoads(selectedNode, !dynamic);
+    if (dynamic) renderDynamicAnalysisInputs(m_dynamic);
     ImGui::EndDisabled();
 
     ImGui::Separator();
-    renderSolve();
+    if (dynamic) renderDynamicRunButton();
+    else renderSolve();
+    if (ImGui::Button("Clear Model", ImVec2(-1.0f, 0.0f))) {
+      bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
+      resetState();
+    }
     ImGui::End();
   }
 

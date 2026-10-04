@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (end releases: Frame Editor "End Releases (Hinges)" table and presets, hinge markers in the viewport, hinged end rotations in the drawn shape, sections 2.5 and 3.9; Frame Editor "Built-in Models" (49 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (analysis selector: "Select Analysis" asks for the load kind (constant / dynamic) after Analyze > Truss or Beam; dynamic shows a "Dynamic Analysis" section instead of the static loads and solve, section 2; end releases: Frame Editor "End Releases (Hinges)" table and presets, hinge markers in the viewport, hinged end rotations in the drawn shape, sections 2.5 and 3.9; Frame Editor "Built-in Models" (49 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
 
 ## 1. Overall flow (one frame)
 
@@ -43,8 +43,9 @@ The 3D scene is drawn **before** the ImGui frame, into an offscreen framebuffer.
 - Panels do not know each other. `bindAnalysisFlow()` in `gui.cpp` wires them together with `std::function` callbacks:
 
 ```text
-MainDockSpaceHost --on_select_truss()-----------------------> TrussSelector.isOpen = true
-TrussSelector     --onSelected(type)-----------------------> type changed? FileIoPanel.cancelImport(),
+MainDockSpaceHost --on_select_truss / on_select_beam()-----> AnalysisSelector.open(truss / beam)
+AnalysisSelector  --onTrussSelected(type, loadKind)--------> bridge.m_loadKind = loadKind;
+                                                              type changed? FileIoPanel.cancelImport(),
                                                               bridge.resetModel(type), both truss panels resetState();
                                                               TrussControlPanel / TrussModelEditor .isOpen by type,
                                                               ModelTree.isOpen
@@ -53,13 +54,24 @@ TrussModelEditor  --onOpenMaterialHandler / onRequestImport-> MaterialHandler.is
 MainDockSpaceHost --on_import_mesh / on_export_results-----> FileIoPanel.requestImport() / requestExport()
 FileIoPanel       --onImported()---------------------------> panels resetState(), TrussModelEditor + ModelTree open,
                                                               beam panels closed, ViewportPanel.requestFit()
-MainDockSpaceHost --on_select_beam()-----------------------> type changed? FileIoPanel.cancelImport(),
+AnalysisSelector  --onBeamSelected(loadKind)---------------> bridge.m_loadKind = loadKind;
+                                                              type changed? FileIoPanel.cancelImport(),
                                                               resetModel(beam_frame), panels resetState();
-                                                              BeamModelEditor + ModelTree + BeamDiagramPanel open,
-                                                              truss panels closed
+                                                              BeamModelEditor + ModelTree open, BeamDiagramPanel
+                                                              open for constant loads only, truss panels closed
 BeamModelEditor   --onOpenMaterialHandler / onOpenSectionHandler-> MaterialHandler / SectionHandler .isOpen = true
 FileIoPanel       --onImportedBeam()-----------------------> panels resetState(), beam panels + ModelTree open
 ```
+
+Load kind (`BRIDGE::LoadKind`, `bridge.m_loadKind`): "Constant Load (Static)" or "Dynamic Load", picked in the selector together with the type. It only changes what the editors show, so changing it alone keeps the model (the model is the same for both; modal analysis needs no loads). The three editors read it every frame:
+
+| Panel | Constant | Dynamic |
+|---|---|---|
+| `TrussControlPanel` | force inputs, deformation scale, Run Solver for Truss | constraints only, "Dynamic Analysis" section, Run Modal Analysis (disabled) |
+| `TrussModelEditor` | "Supports & Loads", deformation scale, Run Solver | "Supports" (no force inputs), "Dynamic Analysis", Run Modal Analysis (disabled) |
+| `BeamModelEditor` | "Supports & Nodal Loads", "Distributed Loads & Self Weight", deformation scale, Run Solver | "Supports", no element loads, "Dynamic Analysis", Run Modal Analysis (disabled) |
+
+The "Dynamic Analysis" section (`panels/dynamicAnalysisInputs.hpp`, one `DynamicAnalysisInputs` per editor) has the analysis type (only Modal selectable; Harmonic and Transient listed disabled), number of modes and mass matrix (consistent / lumped). Nothing reads these yet: the modal solver is still to come. Loads entered in the constant mode stay in the model and the panel inputs, only hidden.
 
 Object type switch: selecting the type that is already active only reopens its panel. Selecting a different type goes through `Gui_Calc_Bridge::resetModel()` ([BRIDGE.md](BRIDGE.md) section 4.1), so no model, fixity, selection, result or panel input of the previous type survives, and a solve still running for it cannot publish.
 
@@ -68,7 +80,7 @@ Object type switch: selecting the type that is already active only reopens its p
 | `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D, Beam / Frame 3D; Panels: reopen closed panels (section 2.0); Help: "About anafinen...". Builds the default dock layout once (left: analysis set, truss model editor and beam frame editor, right: model tree, bottom: console, center: viewport with the viewport toolbar strip above it). |
 | `ViewportToolbar` | `panels/viewportToolbar.cpp` | "Viewport Toolbar" | Reset Camera and the display toggles, docked above the viewport (section 3.7) |
 | `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking (nodes, beam elements), overlays, legends; truss as lines, beams with their sections (section 3.9) |
-| `TrussSelector` | `panels/truss/trussTypePanel.cpp` | "Select Truss Type" | "Imported / Self-Built" (first, preselected) or "Simple Quadrangle" (generated grid). Warns that a type change clears the model. |
+| `AnalysisSelector` | `panels/analysisSelector.cpp` | "Select Analysis" | Opened by Analyze > Truss / Beam (`open(StructureFamily)`). Truss: "Imported / Self-Built" (first, preselected) or "Simple Quadrangle" (generated grid). Both: load type "Constant Load (Static)" or "Dynamic Load" (preselects the active one). Warns that a type change clears the model. |
 | `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). `resetState()` restores the default inputs. |
 | `TrussModelEditor` | `panels/truss/importedTruss/trussModelEditor.cpp` | "Truss(1D) Model Editor" | For `truss_imported_or_entered`, see section 2.4. |
 | `BeamModelEditor` | `panels/beam/beamModelEditor.cpp` | "Beam(3D) Frame Editor" | For `beam_frame`, see section 2.5. |
@@ -427,5 +439,5 @@ camera moved (level of detail only) -> pushBeamInstances() alone
 - Frame loop and wiring: [src/gui/gui.hpp](../src/gui/gui.hpp), [src/gui/gui.cpp](../src/gui/gui.cpp)
 - Infrastructure: [iPanel.hpp](../src/gui/guiMaterials/iPanel.hpp), [imGuiLayer.hpp](../src/gui/guiMaterials/imGuiLayer.hpp), [imGuiLayer.cpp](../src/gui/guiMaterials/imGuiLayer.cpp), [glHandle.hpp](../src/gui/guiMaterials/glHandle.hpp), [framebuffer.hpp](../src/gui/guiMaterials/framebuffer.hpp), [framebuffer.cpp](../src/gui/guiMaterials/framebuffer.cpp)
 - Viewport: [viewportPanel.hpp](../src/gui/panels/viewportPanel.hpp), [viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [viewportRenderer.hpp](../src/gui/panels/viewportRenderer.hpp), [viewportRenderer.cpp](../src/gui/panels/viewportRenderer.cpp), [beamSceneRenderer.hpp](../src/gui/panels/beamSceneRenderer.hpp), [beamSceneRenderer.cpp](../src/gui/panels/beamSceneRenderer.cpp), [shaderProgram.cpp](../src/gui/guiMaterials/shaderProgram.cpp)
-- Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp), [trussWorker.hpp](../src/gui/panels/truss/trussWorker.hpp), [trussTypePanel.cpp](../src/gui/panels/truss/trussTypePanel.cpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [beamModelEditor.cpp](../src/gui/panels/beam/beamModelEditor.cpp), [beamWorker.cpp](../src/gui/panels/beam/beamWorker.cpp), [sectionHandler.cpp](../src/gui/panels/beam/sectionHandler.cpp), [sectionCombo.hpp](../src/gui/panels/beam/sectionCombo.hpp), [beamDiagramPanel.cpp](../src/gui/panels/beam/beamDiagramPanel.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
+- Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp), [trussWorker.hpp](../src/gui/panels/truss/trussWorker.hpp), [analysisSelector.cpp](../src/gui/panels/analysisSelector.cpp), [dynamicAnalysisInputs.hpp](../src/gui/panels/dynamicAnalysisInputs.hpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [beamModelEditor.cpp](../src/gui/panels/beam/beamModelEditor.cpp), [beamWorker.cpp](../src/gui/panels/beam/beamWorker.cpp), [sectionHandler.cpp](../src/gui/panels/beam/sectionHandler.cpp), [sectionCombo.hpp](../src/gui/panels/beam/sectionCombo.hpp), [beamDiagramPanel.cpp](../src/gui/panels/beam/beamDiagramPanel.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
 - Platform: [linuxCursor.hpp](../src/gui/linuxCursor.hpp), [getExecutableDirectory.cpp](../src/directory/getExecutableDirectory.cpp)

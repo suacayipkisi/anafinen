@@ -18,6 +18,7 @@
 #pragma once
 
 #include <guiMaterials/iPanel.hpp>
+#include <panels/dynamicAnalysisInputs.hpp>
 #include <truss_1D/trussProperties/appliedForce.hpp>
 
 #include <array>
@@ -45,6 +46,7 @@ namespace anaf::GUI {
     std::map<std::uint32_t, std::array<bool, 3>> m_supports;
     std::array<bool, 3> m_fixed{false, false, false};
     std::uint32_t m_lastFixNode{std::numeric_limits<std::uint32_t>::max()};
+    DynamicAnalysisInputs m_dynamic; // shown for LoadKind::dynamic
   public:
     ~TrussControlPanel() override = default;
     std::function<void()> onOpenMaterialHandler;

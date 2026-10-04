@@ -3,7 +3,7 @@
 This document describes `anaf::BRIDGE`, the shared state between the GUI thread and the calculation worker. It covers what the bridge stores, who reads and writes each field, and which synchronization rule protects it.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam: `beam_frame`, `activeBeamMesh`, `allSections`, `selectedElementId`, section 5.2).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (`m_loadKind`, constant / dynamic, section 2; beam: `beam_frame`, `activeBeamMesh`, `allSections`, `selectedElementId`, section 5.2).
 
 ## 1. Overall flow
 
@@ -51,7 +51,8 @@ This document describes `anaf::BRIDGE`, the shared state between the GUI thread 
 | `m_progress` | `atomic<float>` 0..1 | Worker (solver steps) | Progress bars | atomic |
 | `m_isValid`, `m_energyDiff` | atomics | `TRUSS_WORKER::startSolve()` (from the `StaticResult`, when it publishes), `resetModel()` | Panels | atomic (written under `dataMutex`) |
 | `deformScale` | `atomic<double>` | Both truss panels ("Deformation Scale", then `dataVersion` bump), `resetModel()` (back to 1) | Viewport (with each snapshot reload) | atomic |
-| `m_objectType` | `atomic<ObjectType>`, starts as `no_type` | `resetModel()` only | Model tree, truss selector | atomic; written under `dataMutex` |
+| `m_objectType` | `atomic<ObjectType>`, starts as `no_type` | `resetModel()` only | Model tree, analysis selector | atomic; written under `dataMutex` |
+| `m_loadKind` | `atomic<LoadKind>` (`constant` / `dynamic`), starts as `constant` | `AnalysisSelector` callbacks in `bindAnalysisFlow()`; `resetModel()` keeps it | Truss / beam editors (which sections they show), analysis selector | atomic |
 | `workerThread` | `std::jthread` | Truss panels (after `joinWorker()`) | `initgui()` shutdown, `resetModel()` (stop request) | GUI thread only |
 | `allMaterials` | `vector<Material>` | `setStaticInfo()` (built-ins from JSON), `addUserMaterial()`, `removeUserMaterial()` | Control panel (material combo, copies it for the worker), Material Handler, File > Import | `dataMutex`; the solver worker only sees a copy |
 | `m_nextMaterialID` (private) | `uint32_t` | `setStaticInfo()`, `addUserMaterial()`, `loadUserMaterials()` | - | `dataMutex` |

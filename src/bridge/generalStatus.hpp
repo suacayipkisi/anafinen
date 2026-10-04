@@ -45,6 +45,17 @@ namespace anaf::BRIDGE {
 
   std::string_view getObjectTypeName(ObjectType obj);
 
+  // How the model is loaded, chosen with the object type (Analyze menu). Constant: static
+  // solve under the loads entered in the editors. Dynamic: time / frequency dependent
+  // analysis (modal first); the editors hide the static loads and show the dynamic inputs.
+  // The model itself does not depend on it, so switching keeps the model.
+  enum class LoadKind {
+    constant,
+    dynamic
+  };
+
+  std::string_view getLoadKindName(LoadKind kind);
+
   // The model types live in the FEM core (anaf_core), so a CLI can use them without the GUI bridge.
   using RenderElement = FEM::TRUSS::RenderElement;
   using MeshData = FEM::TRUSS::MeshData;
@@ -59,6 +70,8 @@ namespace anaf::BRIDGE {
     std::jthread workerThread;
 
     std::atomic<ObjectType> m_objectType{no_type};
+    // Set by the analysis selector; resetModel() keeps it.
+    std::atomic<LoadKind> m_loadKind{LoadKind::constant};
     // Bumped by resetModel(). A worker takes it before it starts and publishes its snapshot
     // only if it is unchanged (checked under dataMutex), so a solve or preview that was still
     // running when the model was reset never brings the old model back.

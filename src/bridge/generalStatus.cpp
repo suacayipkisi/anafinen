@@ -42,6 +42,10 @@ namespace anaf::BRIDGE {
     }
   }
 
+  std::string_view getLoadKindName(const LoadKind kind) {
+    return kind == LoadKind::dynamic ? "dynamic" : "constant";
+  }
+
   void Gui_Calc_Bridge::resetModel(const ObjectType type) {
     modelGeneration.fetch_add(1, std::memory_order_acq_rel);
     if (workerThread.joinable()) workerThread.request_stop();

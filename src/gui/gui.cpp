@@ -41,6 +41,7 @@
 #include "guiMaterials/iPanel.hpp"
 
 #include "panels/aboutPanel.hpp"
+#include "panels/analysisSelector.hpp"
 #include "panels/beam/beamDiagramPanel.hpp"
 #include "panels/beam/beamModelEditor.hpp"
 #include "panels/beam/sectionHandler.hpp"
@@ -51,7 +52,6 @@
 #include "panels/modelTree.hpp"
 #include "panels/truss/importedTruss/trussModelEditor.hpp"
 #include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
-#include "panels/truss/trussTypePanel.hpp"
 #include "panels/viewportPanel.hpp"
 #include "panels/viewportToolbar.hpp"
 
@@ -143,7 +143,7 @@ namespace anaf::GUI {
     struct UIPanels {
       MainDockSpaceHost* dock = nullptr;
       ViewportPanel* viewport = nullptr;
-      TrussSelector* selector = nullptr;
+      AnalysisSelector* selector = nullptr;
       TrussControlPanel* control = nullptr;
       ModelTree* tree = nullptr;
       LogTerminal* console = nullptr;
@@ -163,14 +163,17 @@ namespace anaf::GUI {
     }
 
     void bindAnalysisFlow(UIPanels panels) {
-      panels.dock->on_select_truss = [panels] { panels.selector->isOpen = true; };
+      panels.dock->on_select_truss = [panels] { panels.selector->open(StructureFamily::truss); };
+      panels.dock->on_select_beam = [panels] { panels.selector->open(StructureFamily::beam); };
 
       // Only a change of type resets: selecting the current type again just reopens its panel.
-      panels.selector->onSelected = [panels](TrussTypes type) {
+      // The load kind only changes what the editors show, so it never resets the model.
+      panels.selector->onTrussSelected = [panels](TrussTypes type, anaf::BRIDGE::LoadKind loadKind) {
         const auto objectType = type == simpleQuadranglePrism
           ? anaf::BRIDGE::ObjectType::truss_SQPT
           : anaf::BRIDGE::ObjectType::truss_imported_or_entered;
         auto& bridge = anaf::BRIDGE::buildBridge();
+        bridge.m_loadKind = loadKind;
         if (bridge.m_objectType.load() != objectType) {
           panels.fileIo->cancelImport();
           bridge.resetModel(objectType);
@@ -183,8 +186,9 @@ namespace anaf::GUI {
         closeBeamPanels(panels);
       };
 
-      panels.dock->on_select_beam = [panels] {
+      panels.selector->onBeamSelected = [panels](anaf::BRIDGE::LoadKind loadKind) {
         auto& bridge = anaf::BRIDGE::buildBridge();
+        bridge.m_loadKind = loadKind;
         if (bridge.m_objectType.load() != anaf::BRIDGE::ObjectType::beam_frame) {
           panels.fileIo->cancelImport();
           bridge.resetModel(anaf::BRIDGE::ObjectType::beam_frame);
@@ -196,7 +200,8 @@ namespace anaf::GUI {
         panels.editor->isOpen = false;
         panels.beamEditor->isOpen = true;
         panels.tree->isOpen = true;
-        panels.diagrams->isOpen = true;
+        // Static section force diagrams; reopened from the Panels menu if wanted.
+        panels.diagrams->isOpen = loadKind == anaf::BRIDGE::LoadKind::constant;
       };
       panels.beamEditor->onOpenMaterialHandler = [panels] { panels.matWindow->isOpen = true; };
       panels.beamEditor->onOpenSectionHandler = [panels] { panels.sections->isOpen = true; };
@@ -267,7 +272,7 @@ namespace anaf::GUI {
       auto viewport = panelManager.addPanel<ViewportPanel>(fbo, display);
       panelManager.addPanel<ViewportToolbar>(display, viewport.get());
       auto tree = panelManager.addPanel<ModelTree>();
-      auto trussSelector = panelManager.addPanel<TrussSelector>();
+      auto analysisSelector = panelManager.addPanel<AnalysisSelector>();
       auto trussControl = panelManager.addPanel<TrussControlPanel>();
       auto console = panelManager.addPanel<LogTerminal>();
       auto matWindow = panelManager.addPanel<MaterialHandler>();
@@ -281,7 +286,7 @@ namespace anaf::GUI {
       UIPanels panels{
         dock.get(),
         viewport.get(),
-        trussSelector.get(),
+        analysisSelector.get(),
         trussControl.get(),
         tree.get(),
         console.get(),
@@ -294,7 +299,7 @@ namespace anaf::GUI {
         diagrams.get()
       };
 
-      trussSelector->isOpen = false;
+      analysisSelector->isOpen = false;
       trussControl->isOpen = false;
       editor->isOpen = false;
       tree->isOpen = false;

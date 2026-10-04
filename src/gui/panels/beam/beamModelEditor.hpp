@@ -19,6 +19,7 @@
 
 #include <beam/beamTypes/beamLibrary.hpp>
 #include <guiMaterials/iPanel.hpp>
+#include <panels/dynamicAnalysisInputs.hpp>
 
 #include <array>
 #include <cstdint>
@@ -79,6 +80,7 @@ namespace anaf::GUI {
 
     std::string m_status;
     bool m_statusIsError{false};
+    DynamicAnalysisInputs m_dynamic; // shown for LoadKind::dynamic
 
     // Built-in library (assets/objects/beam/beam3D), read once on first use.
     bool m_libraryRead{false};
@@ -91,7 +93,8 @@ namespace anaf::GUI {
     void syncSelection(std::uint32_t node, std::uint32_t element);
     void renderSummary();
     void renderNodes(std::uint32_t node);
-    void renderSupportsAndLoads(std::uint32_t node);
+    // withLoads false (dynamic load kind): supports only.
+    void renderSupportsAndLoads(std::uint32_t node, bool withLoads);
     // Inputs of one group; returns its allowed basis or nothing when the input is invalid.
     std::optional<std::vector<std::array<double, 3>>> renderSupportGroup(const char* id, const char* axisNames, SupportInput& input);
     void renderElements(std::uint32_t element);
@@ -99,6 +102,8 @@ namespace anaf::GUI {
     void renderElementLoads(std::uint32_t element);
     void renderWholeModel();
     void renderSolve();
+    // Load Example Frame / Clear Model, shown for both load kinds.
+    void renderModelButtons();
     void loadExample();
     void readLibrary();
     void renderLibrary();

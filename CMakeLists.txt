@@ -135,7 +135,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/mainDockSpaceHost.cpp
     src/gui/panels/materialHandler.cpp
     src/gui/panels/modelTree.cpp
-    src/gui/panels/truss/trussTypePanel.cpp
+    src/gui/panels/analysisSelector.cpp
     src/gui/panels/truss/trussWorker.cpp
     src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp
     src/gui/panels/truss/importedTruss/trussModelEditor.cpp
