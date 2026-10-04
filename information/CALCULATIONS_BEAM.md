@@ -3,9 +3,9 @@
 This document describes the linear static calculation of 3D frames built from two-node beam elements (Euler-Bernoulli and Timoshenko): data types, local axes, element matrices, loads, supports, results along the element and the tests.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
-> Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 82 standard profiles.
-> Not implemented yet: `anaf_io` adapter (`MeshModel` ↔ `FEM::BEAM::MeshData`), GUI (Section Handler, bridge loading of the catalogue), stresses, channels / angles / tees, end releases (hinges), mass matrix, reactions.
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
+> Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 82 standard profiles; normal, shear and von Mises stresses with a yield check.
+> Not implemented yet: `anaf_io` adapter (`MeshModel` ↔ `FEM::BEAM::MeshData`), GUI (Section Handler, bridge loading of the catalogue), point-wise stresses inside the section, channels / angles / tees, end releases (hinges), mass matrix, reactions.
 
 ## 1. Overall flow
 
@@ -24,7 +24,9 @@ solveStatic(mesh, materials, sections, st, progress)  (beamSolver.cpp)       pro
    |     +-- calculateDisplacements()   u = T q per node (6 slots), B^T K_e B
    |     |                              straight into reduced triplets,
    |     |                              SOLVER::solveSelected(dofsPerNode = 6)   0.85
-   |     +-- calculateSectionForces()   p = k (T u_e) - f0, section convention   0.90
+   |     +-- calculateSectionForces()   p = k (T u_e) - f0, section convention
+   +-- calculateStresses()   elementStress() per element: extremes along it,
+   |                         yield check                                         0.90
    |     +-- runValidator()             U = W / 2                                0.95
    +-- logResult()   energy, max |u|, max |rotation|, max |N|, max |M|
    +-- StaticResult                                                              1.00
@@ -49,6 +51,8 @@ after the solve (beamDiagrams.cpp):
 | `MeshData` | `beamProperties/meshData.hpp` | nodes, elements, nodal loads, distributed loads, `gravity` (default {0, −9.80665, 0}; zero = no self weight), `hasResults` |
 | `Beam_3D_Container` | `beamEngine/beamSolver/deformationUnderConstForce.hpp` | Spans over nodes and elements, per-element frame (length, R, k, Tᵀ k T, fixed-end loads), global load vector (6 per node), energies |
 | `SectionState` | `beamEngine/beamDiagrams.hpp` | position x, undeformed location, global and local displacement, {N, Vy, Vz, T, My, Mz} |
+| `SectionStress` | `beamSection/sectionStress.hpp` | one cross-section: max / min σx and their points {y, z}, τ from shear force, τ from torsion, von Mises |
+| `BeamStress` | `beamProperties/element.hpp` | result `BeamElement::stress`: available (false for a general section), max / min σx, max τ, max von Mises and its position, `isStressExceeded` |
 
 Where the data is stored:
 
@@ -176,7 +180,7 @@ s2 = +p[6..11]  {N, Vy, Vz, T, My, Mz} at node 2
 
 N > 0 is tension at both ends (the `BeamSectionForce` convention of `anaf_io`). For a cantilever along +x clamped at node 1 with a tip load P_y: Vy = P_y along the element, Mz = P_y L at the clamp and 0 at the tip.
 
-Stresses are not computed: σ = N/A ± M c / I needs the extreme fiber distances (or section moduli), which the section does not carry yet.
+Stresses: section 7.2.
 
 ### 7.1 Along the element (`beamDiagrams.hpp`)
 
@@ -194,6 +198,24 @@ Stresses are not computed: σ = N/A ± M c / I needs the extreme fiber distances
 N(ξ, φ) are the interdependent interpolation shape functions (Hermite cubics at φ = 0); the shear terms (2 G As) apply to Timoshenko only. The particular parts are the clamped-clamped solutions, zero at both ends. Hence dMz/dx = −Vy, dMy/dx = Vz, and x = L gives the node 2 section forces (tested).
 
 q is the element's total local load from `elementLocalLoads()`. `sampleElement()` returns `count` (≥ 2) evenly spaced states; `sampleAllElements()` does it for every element and computes q once. Displacements are returned in global axes (for drawing the deformed shape) and in local axes.
+
+### 7.2 Stresses (`sectionStress.hpp`, `beamStress.hpp`)
+
+`sectionStress(shape, {N, Vy, Vz, T, My, Mz})` gives the stresses of one cross-section; a general section has no shape and gets none.
+
+| Quantity | Formula | Exactness |
+|---|---|---|
+| σx(y, z) | N/A − Mz y / Iz + My z / Iy (M = E I dθ/dx, so ε = u′ − y v″ − z w″) | exact (beam theory) |
+| max / min σx | N/A ± h(a, b), h = support function of the shape, a = −Mz/Iz, b = My/Iy; point = support point | exact: σ is linear, extremes lie on the convex hull; every shape is centrally symmetric |
+| τ from Vy, Vz | Jourawski V Q / (I t) at the neutral axis, Q with fillets / corner radii; I weak axis 1.5 Vz / (2 b t_f); both directions added | Jourawski; added = upper bound |
+| τ from T | circle / pipe T r / J; box T / (2 A_h t) (Bredt); rectangle T (3a + 1.8c) / (a² c²) (Roark); I T t_max / J | exact / thin-walled / Roark / thin-walled open |
+| von Mises | √(max\|σ\|² + 3 (τ_V + τ_T)²) | upper bound: the largest σ and τ usually act at different points |
+
+Support functions: rectangle and I |a| h/2 + |b| w/2 (the I's convex hull is its bounding rectangle); circle and pipe R √(a² + b²); box |a|(h/2 − r_o) + |b|(w/2 − r_o) + r_o √(a² + b²).
+
+von Mises is the distortion energy criterion σ_v = √(3 J₂), an invariant (no orientation); for σx and τ it is √(σ² + 3τ²). Tresca (twice the largest shear stress on a rotated plane) would be √(σ² + 4τ²), up to 1.155 times larger.
+
+`elementStress(element, q, L, shape, f_y)` searches along the element: both ends, the stationary points of Mz (x = Vy0 / q_y) and My (x = Vz0 / q_z), and 16 evenly spaced points; `solveStatic()` stores the result in `BeamElement::stress`, with `isStressExceeded` = max von Mises > the material's yield strength (no partial safety factors, no code check).
 
 ## 8. Validator
 
@@ -226,20 +248,26 @@ The same energy balance as the truss ([CALCULATIONS.md](CALCULATIONS.md) section
 | `catalogMatchesPublishedTables` | IPE 200 / 300, HEA 200, HEB 200 / 300: A, I strong / weak, J within 0.1 %; CHS 114.3x5 A and I; SHS 100x100x6.3 A and J (534.00 cm⁴), SHS 100x100x5.6 J (484.00 cm⁴), from the Dlubal table "SHS EN 10210-2"; every entry valid |
 | `invalidSectionsAreRefused` | Dimension limits of every shape, names |
 | `userSectionFileRoundTrip` | Every shape written and read back; built-ins are not saved; a missing file is an empty list |
+| `normalStressFollowsTheStrainField` | E ε with ε = u′ − y v″ − z w″ from the displacement field (central differences) equals σx at the max / min points: the sign convention, independent of the formula |
+| `normalStressExtremesMatchTheOutline` | No outline vertex exceeds the support-function extremes and the returned points carry them (every shape, four load cases) |
+| `shearAndTorsionStressesMatchClosedForms` | 1.5 V/A, 4V/3A, thin pipe 2V/A, sharp box and I Jourawski; Q with fillets / radii against the clipped outline integral; torsion formulas; von Mises limits |
+| `elementStressAlongTheElement` | IPE 300 cantilever P L c / I at the clamp and the yield check; simply supported beam q L²/8 at mid span (found as a stationary point without samples), 1.5 (qL/2)/A shear at the supports; general section without stresses |
 | `solverUsesTheSectionShape` | Timoshenko rectangle with Cowper's κ(ν = 0.3); catalogue IPE 300 bending about its strong axis |
 
-The tests were checked against injected faults: in the sections a wrong J coefficient of the I formula (caught after the table tolerance went from 0.5 % to 0.1 %), the corner disc sign and swapped κ axes of the box, the spandrel's own inertia, and the box corner radius in J (caught only after the Dlubal value was added); in the solver φ built from the wrong inertia, the sign of the x-z fixed-end moment (caught only after `cantileverUnderUniformLoadInBothPlanes` was added), the section sign, and in the diagrams the w rotation sign, the Mz load term, the Timoshenko particular part and a wrong shape function; each makes tests fail.
+The tests were checked against injected faults: in the stresses the Mz sign, a support function without the corner radius, the I fillet in Q (caught after the clipped outline integral was added), a box corner term in Q, the Bredt factor and a missing stationary point; in the sections a wrong J coefficient of the I formula (caught after the table tolerance went from 0.5 % to 0.1 %), the corner disc sign and swapped κ axes of the box, the spandrel's own inertia, and the box corner radius in J (caught only after the Dlubal value was added); in the solver φ built from the wrong inertia, the sign of the x-z fixed-end moment (caught only after `cantileverUnderUniformLoadInBothPlanes` was added), the section sign, and in the diagrams the w rotation sign, the Mz load term, the Timoshenko particular part and a wrong shape function; each makes tests fail.
 
 ## 10. Known issues
 
 - An unloaded mechanism is not detected: when the loads do not excite a mechanism (axial load on a beam pinned at both ends that may spin about its own axis) the singular system still gets a finite answer, because the referee has no singularity check; it is shared with the truss solver ([ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 6). `invalidModelsAreReported` loads its torsion mechanism with a torque on purpose.
-- Reactions and stresses are not computed.
+- Reactions are not computed.
+- The von Mises value is an upper bound (largest σ and largest τ combined, both shear directions added). Point-wise stresses at stress points of the section (as RFEM reports them) are future work.
 - Asy of an I-section comes from Cowper's thin-walled I (IPE 300: 20.3 cm², about the web area h t_w = 21.3 cm²). It is a stiffness value for shear deformation, not the larger plastic shear area A_v of EN 1993-1-1 (25.7 cm²), which is a design resistance quantity.
 
 ## 11. Related source files
 
 - Entry point: [beamSolver.hpp](../src/objectCalcs/beam/beamEngine/beamSolver.hpp), [beamSolver.cpp](../src/objectCalcs/beam/beamEngine/beamSolver.cpp)
 - Container and element math: [deformationUnderConstForce.hpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.cpp)
+- Stresses: [sectionStress.hpp](../src/objectCalcs/beam/beamSection/sectionStress.hpp), [sectionStress.cpp](../src/objectCalcs/beam/beamSection/sectionStress.cpp), [beamStress.hpp](../src/objectCalcs/beam/beamEngine/beamStress.hpp), [beamStress.cpp](../src/objectCalcs/beam/beamEngine/beamStress.cpp)
 - Results along the element: [beamDiagrams.hpp](../src/objectCalcs/beam/beamEngine/beamDiagrams.hpp), [beamDiagrams.cpp](../src/objectCalcs/beam/beamEngine/beamDiagrams.cpp)
 - Cross-sections: [beamSection.hpp](../src/objectCalcs/beam/beamSection/beamSection.hpp), [beamSection.cpp](../src/objectCalcs/beam/beamSection/beamSection.cpp), [sectionLibrary.hpp](../src/objectCalcs/beam/beamSection/sectionLibrary.hpp), [sectionLibrary.cpp](../src/objectCalcs/beam/beamSection/sectionLibrary.cpp), [assets/bridge/sectionCatalog.json](../assets/bridge/sectionCatalog.json)
 - Types: [node.hpp](../src/objectCalcs/beam/beamProperties/node.hpp), [node.cpp](../src/objectCalcs/beam/beamProperties/node.cpp), [element.hpp](../src/objectCalcs/beam/beamProperties/element.hpp), [loads.hpp](../src/objectCalcs/beam/beamProperties/loads.hpp), [meshData.hpp](../src/objectCalcs/beam/beamProperties/meshData.hpp)

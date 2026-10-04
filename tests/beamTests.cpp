@@ -23,8 +23,10 @@
 #include "testSupport.hpp"
 #include <beam/beamEngine/beamDiagrams.hpp>
 #include <beam/beamEngine/beamSolver.hpp>
+#include <beam/beamEngine/beamStress.hpp>
 #include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp>
 #include <beam/beamSection/sectionLibrary.hpp>
+#include <beam/beamSection/sectionStress.hpp>
 #include <directory/getExecutableDirectory.hpp>
 
 #include <Eigen/Eigenvalues>
@@ -185,6 +187,36 @@ namespace {
     result.centroidY = firstY / result.area;
     result.centroidZ = firstZ / result.area;
     return result;
+  }
+
+  // First moment about the z axis (Q = integral of y dA) of the part of the section with y > 0:
+  // every outline loop clipped at y = 0 (Sutherland-Hodgman against one half plane), then
+  // Green's theorem. With swapAxes the roles of y and z change (Q about the y axis).
+  double halfSectionFirstMoment(const FEM::BEAM::SectionShape& shape, const bool swapAxes = false) {
+    double q = 0.0;
+    for (auto loop : FEM::BEAM::sectionOutline(shape, 512)) {
+      if (swapAxes) {
+        for (auto& point : loop) point = {point[1], -point[0]}; // turn by 90 degrees, orientation kept
+      }
+      std::vector<std::array<double, 2>> clipped;
+      for (std::size_t i = 0; i < loop.size(); ++i) {
+        const auto& a = loop[i];
+        const auto& b = loop[(i + 1) % loop.size()];
+        const bool inA = a[0] >= 0.0, inB = b[0] >= 0.0;
+        if (inA) clipped.push_back(a);
+        if (inA != inB) {
+          const double t = a[0] / (a[0] - b[0]);
+          clipped.push_back({0.0, a[1] + t * (b[1] - a[1])});
+        }
+      }
+      for (std::size_t i = 0; i < clipped.size(); ++i) {
+        const auto& a = clipped[i];
+        const auto& b = clipped[(i + 1) % clipped.size()];
+        const double cross = a[1] * b[0] - b[1] * a[0]; // (z, y) plane
+        q += cross * (a[0] + b[0]) / 6.0;
+      }
+    }
+    return q;
   }
 
   bool contains(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
@@ -723,6 +755,159 @@ TEST(solverUsesTheSectionShape) {
   const double strong = FEM::BEAM::computeProperties((*catalog)[ipe].getShape(), 0.3).secondMomentZ;
   CHECK(near(strong * 1e8, 8356.0, 3e-3));
   CHECK(near(ipeSolved.mesh->nodes[1].getDisplacement()[1], P * std::pow(kL, 3) / (3.0 * kE * strong), 1e-10));
+}
+
+// ---- stresses ---------------------------------------------------------------------------------
+
+TEST(normalStressFollowsTheStrainField) {
+  // sigma = E eps with eps(y, z) = u' - y v'' - z w'' from the displacement field along the
+  // element (central differences, exact for the cubic fields): checks the sign convention of
+  // N, My, Mz in sigma_x independently of the stress formula.
+  auto mesh = cantilever(Formulation::EulerBernoulli);
+  mesh.elements[0].sectionID = 1; // rectangle 300 x 100
+  mesh.nodalLoads = {{1, {4e3, -9e3, 3e3}, {}}};
+  const auto solved = solve(mesh);
+  const auto zero = Eigen::Vector3d::Zero();
+  const double xi = 0.4, h = 0.01;
+  const auto left = FEM::BEAM::sectionAt(*solved.mesh, 0, xi - h, zero, materials(), sections());
+  const auto centre = FEM::BEAM::sectionAt(*solved.mesh, 0, xi, zero, materials(), sections());
+  const auto right = FEM::BEAM::sectionAt(*solved.mesh, 0, xi + h, zero, materials(), sections());
+  const double dx = h * kL;
+  const double du = (right.localDisplacement[0] - left.localDisplacement[0]) / (2.0 * dx);
+  const double curvatureV = (right.localDisplacement[1] - 2.0 * centre.localDisplacement[1] + left.localDisplacement[1]) / (dx * dx);
+  const double curvatureW = (right.localDisplacement[2] - 2.0 * centre.localDisplacement[2] + left.localDisplacement[2]) / (dx * dx);
+  const auto stress = FEM::BEAM::sectionStress(sections()[1].getShape(), centre.forces);
+  REQUIRE(stress.has_value());
+  for (const auto& point : {stress->maxNormalPoint, stress->minNormalPoint}) {
+    const double strain = du - point[0] * curvatureV - point[1] * curvatureW;
+    const double expected = point == stress->maxNormalPoint ? stress->maxNormal : stress->minNormal;
+    CHECK(near(kE * strain, expected, 1e-6));
+  }
+  // Downward tip load (Py < 0): the bottom fibre (y < 0) is compressed, the top one stretched.
+  CHECK(stress->minNormalPoint[0] < 0.0 && stress->maxNormalPoint[0] > 0.0);
+}
+
+TEST(normalStressExtremesMatchTheOutline) {
+  // The support function gives the exact extremes: no outline vertex exceeds them, and the
+  // returned points carry them.
+  using namespace FEM::BEAM;
+  const std::vector<SectionShape> shapes{
+    RectangleSection{0.3, 0.1}, CircleSection{0.2}, PipeSection{0.1143, 0.005}, BoxSection{0.2, 0.1, 0.008, 0.012, 0.008},
+    ISection{0.3, 0.15, 0.0071, 0.0107, 0.015},
+  };
+  const std::vector<std::array<double, 6>> loads{{1e5, 0, 0, 0, 2e4, -3e4}, {-2e4, 0, 0, 0, -5e3, 0}, {0, 0, 0, 0, 0, 4e4}, {3e4, 0, 0, 0, 0, 0}};
+  for (const auto& shape : shapes) {
+    const auto p = computeProperties(shape, 0.3);
+    for (const auto& f : loads) {
+      const auto stress = sectionStress(shape, f);
+      REQUIRE(stress.has_value());
+      const auto sigma = [&](const std::array<double, 2>& q) { return f[0] / p.area - f[5] * q[0] / p.secondMomentZ + f[4] * q[1] / p.secondMomentY; };
+      double outlineMax = -1e300, outlineMin = 1e300;
+      for (const auto& loop : sectionOutline(shape, 256)) {
+        for (const auto& q : loop) {
+          outlineMax = std::max(outlineMax, sigma(q));
+          outlineMin = std::min(outlineMin, sigma(q));
+        }
+      }
+      const double scale = std::max(std::abs(stress->maxNormal), std::abs(stress->minNormal));
+      CHECK(outlineMax <= stress->maxNormal + 1e-9 * scale && outlineMax >= stress->maxNormal - 1e-4 * scale);
+      CHECK(outlineMin >= stress->minNormal - 1e-9 * scale && outlineMin <= stress->minNormal + 1e-4 * scale);
+      CHECK(near(sigma(stress->maxNormalPoint), stress->maxNormal, 1e-12, 1e-9 * scale));
+      CHECK(near(sigma(stress->minNormalPoint), stress->minNormal, 1e-12, 1e-9 * scale));
+    }
+  }
+  CHECK(!sectionStress(GeneralSection{kSection}, {1, 0, 0, 0, 0, 0}).has_value());
+}
+
+TEST(shearAndTorsionStressesMatchClosedForms) {
+  using namespace FEM::BEAM;
+  constexpr double pi = std::numbers::pi;
+  const double V = 1e4, T = 2e3;
+  const auto shear = [&](const SectionShape& shape, const double vy, const double vz) { return sectionStress(shape, {0, vy, vz, 0, 0, 0})->shearFromForce; };
+  const auto torsion = [&](const SectionShape& shape) { return sectionStress(shape, {0, 0, 0, T, 0, 0})->shearFromTorsion; };
+  // Rectangle: 1.5 V / A; Roark's T (3a + 1.8c) / (a^2 c^2).
+  CHECK(near(shear(RectangleSection{0.3, 0.1}, V, 0.0), 1.5 * V / 0.03, 1e-12) && near(shear(RectangleSection{0.3, 0.1}, 0.0, -V), 1.5 * V / 0.03, 1e-12));
+  CHECK(near(torsion(RectangleSection{0.3, 0.1}), T * (0.9 + 0.18) / (0.09 * 0.01), 1e-12));
+  // Circle: 4 V / 3A, T r / J; pipe: thin wall 2 V / A, T ro / J.
+  CHECK(near(shear(CircleSection{0.2}, V, 0.0), 4.0 * V / (3.0 * pi * 0.01), 1e-12));
+  CHECK(near(torsion(CircleSection{0.2}), 2.0 * T / (pi * 0.001), 1e-12));
+  CHECK(near(shear(PipeSection{1.0, 1e-4}, V, 0.0), 2.0 * V / computeProperties(PipeSection{1.0, 1e-4}, 0.3).area, 1e-3));
+  CHECK(near(torsion(PipeSection{0.2, 0.01}), T * 0.1 / computeProperties(PipeSection{0.2, 0.01}, 0.3).torsionConstant, 1e-12));
+  // Sharp box: Q = (w h^2 - (w - 2t)(h - 2t)^2) / 8 over two webs; Bredt T / (2 (h - t)(w - t) t).
+  const double h = 0.2, w = 0.1, t = 0.008;
+  const BoxSection box{h, w, t, 0.0, 0.0};
+  const auto boxProps = computeProperties(box, 0.3);
+  CHECK(near(shear(box, V, 0.0), V * (w * h * h - (w - 2 * t) * (h - 2 * t) * (h - 2 * t)) / 8.0 / (boxProps.secondMomentZ * 2 * t), 1e-12));
+  CHECK(near(torsion(box), T / (2.0 * (h - t) * (w - t) * t), 1e-12));
+  // Sharp I: web Q = b tf (h - tf) / 2 + tw (h/2 - tf)^2 / 2; flanges 1.5 Vz / (2 b tf); T t_max / J.
+  const ISection beam{0.3, 0.15, 0.007, 0.01, 0.0};
+  const auto beamProps = computeProperties(beam, 0.3);
+  const double q = 0.15 * 0.01 * 0.29 / 2.0 + 0.007 * 0.14 * 0.14 / 2.0;
+  CHECK(near(shear(beam, V, 0.0), V * q / (beamProps.secondMomentZ * 0.007), 1e-12));
+  CHECK(near(shear(beam, 0.0, V), 1.5 * V / (2.0 * 0.15 * 0.01), 1e-12));
+  CHECK(near(torsion(beam), T * 0.01 / beamProps.torsionConstant, 1e-12));
+  // With fillets and corner radii: Q against the clipped outline integral (tau I t / V = Q).
+  const ISection rolled{0.3, 0.15, 0.0071, 0.0107, 0.015};
+  CHECK(near(shear(rolled, V, 0.0) * computeProperties(rolled, 0.3).secondMomentZ * 0.0071 / V, halfSectionFirstMoment(rolled), 2e-6));
+  const BoxSection hollow{0.2, 0.1, 0.008, 0.012, 0.008};
+  const auto hollowProps = computeProperties(hollow, 0.3);
+  CHECK(near(shear(hollow, V, 0.0) * hollowProps.secondMomentZ * 2 * 0.008 / V, halfSectionFirstMoment(hollow), 2e-6));
+  CHECK(near(shear(hollow, 0.0, V) * hollowProps.secondMomentY * 2 * 0.008 / V, halfSectionFirstMoment(hollow, true), 2e-6));
+  // Rounded corners and fillets change Q only a little.
+  CHECK(near(shear(BoxSection{h, w, t, 1.5 * t, t}, V, 0.0), shear(box, V, 0.0), 0.05));
+  CHECK(near(shear(ISection{0.3, 0.15, 0.007, 0.01, 0.015}, V, 0.0), shear(beam, V, 0.0), 0.05));
+  // von Mises: |sigma| alone, sqrt(3) tau alone.
+  const auto pure = sectionStress(RectangleSection{0.3, 0.1}, {3e4, 0, 0, 0, 0, 0});
+  CHECK(near(pure->vonMises, 1e6, 1e-12));
+  const auto twist = sectionStress(CircleSection{0.2}, {0, 0, 0, T, 0, 0});
+  CHECK(near(twist->vonMises, std::sqrt(3.0) * twist->shearFromTorsion, 1e-12));
+}
+
+TEST(elementStressAlongTheElement) {
+  using namespace FEM::BEAM;
+  // Cantilever, catalogue IPE 300, tip load down: sigma = P L (h/2) / Iz at the clamp.
+  const auto catalog = loadSectionLibrary(anaf::DIRECTORY::findAssetPath(kSectionCatalogAsset));
+  REQUIRE(catalog.has_value());
+  std::uint32_t ipe = 0;
+  while (ipe < catalog->size() && (*catalog)[ipe].getName() != "IPE 300") ++ipe;
+  REQUIRE(ipe < catalog->size());
+  const double P = 30e3;
+  auto mesh = cantilever(Formulation::EulerBernoulli);
+  mesh.elements[0].sectionID = ipe;
+  mesh.nodalLoads = {{1, {0.0, -P, 0.0}, {}}};
+  auto solved = solve(mesh, *catalog);
+  const auto ipeProps = computeProperties((*catalog)[ipe].getShape(), 0.3);
+  const auto& stress = solved.mesh->elements[0].stress;
+  const double bending = P * kL * 0.15 / ipeProps.secondMomentZ;
+  CHECK(stress.available && near(stress.maxNormal, bending, 1e-9) && near(stress.minNormal, -bending, 1e-9));
+  CHECK(stress.vonMisesPosition == 0.0 && stress.maxVonMises >= bending && !stress.isStressExceeded); // 236 MPa < 250 MPa
+  // Twice the load exceeds the 250 MPa yield strength of the test steel.
+  mesh.nodalLoads[0].force[1] = -2.0 * P;
+  CHECK(solve(mesh, *catalog).mesh->elements[0].stress.isStressExceeded);
+
+  // Simply supported rectangle under uniform load: the maximum is at mid span, found as the
+  // stationary point of Mz even without samples: sigma = (q L^2 / 8)(h/2) / Iz.
+  const double q = 5e3;
+  MeshData simple;
+  simple.gravity = {0.0, 0.0, 0.0};
+  simple.nodes = {Node{0, 0, 0, 0}, Node{1, kL, 0, 0}};
+  simple.nodes[0].setMovable({false, false, false});
+  simple.nodes[0].setRotatable({false, true, true}); // torsion held at one end
+  simple.nodes[1].setMovable({true, false, false});
+  simple.elements = {beam(0, 1)};
+  simple.elements[0].sectionID = 1;
+  simple.distributedLoads = {{0, {0.0, -q, 0.0}, LoadFrame::Global}};
+  solved = solve(simple);
+  const double Iz = 0.1 * 0.027 / 12.0;
+  const double midSpan = q * kL * kL / 8.0 * 0.15 / Iz;
+  const auto& span = solved.mesh->elements[0];
+  CHECK(near(span.stress.maxNormal, midSpan, 1e-9) && near(span.stress.minNormal, -midSpan, 1e-9));
+  const auto direct = elementStress(span, Eigen::Vector3d(0.0, -q, 0.0), kL, sections()[1].getShape(), 250e6, 1);
+  CHECK(near(direct.maxNormal, midSpan, 1e-9));
+  // Shear peaks at the supports: 1.5 (qL/2) / A.
+  CHECK(near(span.stress.maxShear, 1.5 * q * kL / 2.0 / 0.03, 1e-9));
+  // A general section has no stresses.
+  CHECK(!solve(cantilever(Formulation::EulerBernoulli)).mesh->elements[0].stress.available);
 }
 
 // ---- errors -----------------------------------------------------------------------------------

@@ -40,6 +40,17 @@ namespace FEM::BEAM {
     double shearAreaZ{};      // Asz = kappa_z A, m^2: carries Vz; Timoshenko only
   };
 
+  // Stress result of one element: extremes along the whole element (beamStress.hpp).
+  struct BeamStress {
+    bool available{false};        // false for a general section (no shape, no stress)
+    double maxNormal{};           // Pa, largest sigma_x (tension > 0)
+    double minNormal{};           // Pa, smallest sigma_x (most compressive)
+    double maxShear{};            // Pa, largest shear stress (shear force + torsion)
+    double maxVonMises{};         // Pa, largest equivalent stress (an upper bound)
+    double vonMisesPosition{};    // m from node 1 where maxVonMises occurs
+    bool isStressExceeded{false}; // maxVonMises > the material's yield strength
+  };
+
   // Two-node 3D beam as the snapshot keeps it.
   //
   // Local axes (Nastran CBEAM / ANSYS convention, the same as anaf_io BeamOrientation):
@@ -59,6 +70,7 @@ namespace FEM::BEAM {
     // {N, Vy, Vz, T, My, Mz} at node1, then the same at node2 (N, m).
     // Node1 values are -(k u - f0), node2 values +(k u - f0), so N > 0 is tension at both ends.
     std::array<double, 12> sectionForces{};
+    BeamStress stress{};
   };
 
 } // namespace FEM::BEAM end

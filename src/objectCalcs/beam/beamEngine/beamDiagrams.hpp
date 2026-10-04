@@ -54,6 +54,10 @@ namespace FEM::BEAM {
     std::array<double, 6> forces{};
   };
 
+  // {N, Vy, Vz, T, My, Mz} at x from node 1, from the element's section forces and its total
+  // local uniform load (the statics formulas above).
+  std::array<double, 6> sectionForcesAt(const std::array<double, 12>& sectionForces, const Eigen::Vector3d& localLoad, double x);
+
   // State at xi = x / L in [0, 1] of element `element` of a solved model (MeshData from
   // solveStatic, hasResults = true) with the material and section lists of the solve.
   // localLoad is the element's total uniform load in local axes, from elementLocalLoads().

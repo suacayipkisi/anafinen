@@ -17,6 +17,7 @@
 
 #include "beamSolver.hpp"
 #include "beamSolver/deformationUnderConstForce.hpp"
+#include "beamStress.hpp"
 
 #include <log/anaf_info.hpp>
 
@@ -96,6 +97,7 @@ namespace FEM::BEAM {
           return std::unexpected(std::format("element {} (nodes {} - {}): {}", e, element.node1, element.node2, problem));
         }
         element.sectionForces = {};
+        element.stress = {};
         used[element.node1] = true;
         used[element.node2] = true;
         if (element.formulation == Formulation::Timoshenko) ++timoshenko;
@@ -126,6 +128,21 @@ namespace FEM::BEAM {
       return solverModel;
     }
 
+    void calculateStresses(MeshData& model, const std::span<const SectionProperties> properties,
+                           const std::span<const anaf::MATERIAL::Material> materials, const std::span<const BeamSection> sections) {
+      const auto loads = elementLocalLoads(model.nodes, model.elements, properties, model.distributedLoads, model.gravity, materials);
+      const auto elementCount = static_cast<long long>(model.elements.size());
+      #pragma omp parallel for schedule(static)
+      for (long long index = 0; index < elementCount; ++index) {
+        auto& element = model.elements[index];
+        const auto& a = model.nodes[element.node1].getLocation();
+        const auto& b = model.nodes[element.node2].getLocation();
+        const double length = std::sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]) + (b[2] - a[2]) * (b[2] - a[2]));
+        element.stress = elementStress(element, loads[index], length, sections[element.sectionID].getShape(),
+                                       materials[element.materialID].getYieldTensile());
+      }
+    }
+
     void logResult(const Beam_3D_Container& container, const MeshData& model) {
       double maxDisplacement = 0.0;
       double maxRotation = 0.0;
@@ -137,12 +154,21 @@ namespace FEM::BEAM {
       }
       double maxAxial = 0.0;
       double maxMoment = 0.0;
+      double maxVonMises = 0.0;
+      std::size_t exceeded = 0;
+      std::size_t withoutStress = 0;
       for (const auto& element : model.elements) {
         for (std::size_t end = 0; end < 2; ++end) {
           const auto* s = element.sectionForces.data() + 6 * end;
           maxAxial = std::max(maxAxial, std::abs(s[0]));
           maxMoment = std::max(maxMoment, std::hypot(s[4], s[5]));
         }
+        if (!element.stress.available) {
+          ++withoutStress;
+          continue;
+        }
+        maxVonMises = std::max(maxVonMises, element.stress.maxVonMises);
+        if (element.stress.isStressExceeded) ++exceeded;
       }
 
       anaf::LOG::success("Beam solver completed");
@@ -155,6 +181,9 @@ namespace FEM::BEAM {
       }
       anaf::LOG::info("Max nodal displacement magnitude: {:.6g} m, max rotation magnitude: {:.6g} rad", maxDisplacement, maxRotation);
       anaf::LOG::info("Max |axial force|: {:.6g} N, max bending moment magnitude: {:.6g} N m", maxAxial, maxMoment);
+      anaf::LOG::info("Max equivalent (von Mises, upper bound) stress: {:.6g} Pa", maxVonMises);
+      if (exceeded > 0) anaf::LOG::warn("{} elements exceed the yield strength of their material", exceeded);
+      if (withoutStress > 0) anaf::LOG::info("{} elements use a general section (no shape): no stresses", withoutStress);
       anaf::LOG::info("Work done by external forces: {:.6g} J", container.getWorkDone_External());
       anaf::LOG::info("Stored elastic deformation energy: {:.6g} J", container.getElasticDeformationEnergy_Internal());
     }
@@ -193,6 +222,7 @@ namespace FEM::BEAM {
     }
     report(0.85f);
     container.calculateSectionForces();
+    calculateStresses(*solved, properties, materials, sections);
     report(0.90f);
     container.runValidator();
     report(0.95f);

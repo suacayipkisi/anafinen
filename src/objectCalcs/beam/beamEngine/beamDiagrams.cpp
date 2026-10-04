@@ -38,6 +38,17 @@ namespace FEM::BEAM {
     }
   } // namespace end
 
+  std::array<double, 6> sectionForcesAt(const std::array<double, 12>& S0, const Eigen::Vector3d& localLoad, const double x) {
+    return {
+      S0[0] - localLoad[0] * x,
+      S0[1] - localLoad[1] * x,
+      S0[2] - localLoad[2] * x,
+      S0[3],
+      S0[4] + S0[2] * x - localLoad[2] * x * x / 2.0,
+      S0[5] - S0[1] * x + localLoad[1] * x * x / 2.0,
+    };
+  }
+
   SectionState sectionAt(
     const MeshData& solved,
     const std::size_t element,
@@ -100,15 +111,7 @@ namespace FEM::BEAM {
       state.localDisplacement[k] = local[i];
     }
 
-    const auto& S0 = beam.sectionForces;
-    state.forces = {
-      S0[0] - localLoad[0] * x,
-      S0[1] - localLoad[1] * x,
-      S0[2] - localLoad[2] * x,
-      S0[3],
-      S0[4] + S0[2] * x - localLoad[2] * x * x / 2.0,
-      S0[5] - S0[1] * x + localLoad[1] * x * x / 2.0,
-    };
+    state.forces = sectionForcesAt(beam.sectionForces, localLoad, x);
     return state;
   }
 

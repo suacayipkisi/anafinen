@@ -83,9 +83,11 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/beam/beamProperties/node.cpp
     src/objectCalcs/beam/beamSection/beamSection.cpp
     src/objectCalcs/beam/beamSection/sectionLibrary.cpp
+    src/objectCalcs/beam/beamSection/sectionStress.cpp
     src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.cpp
     src/objectCalcs/beam/beamEngine/beamSolver.cpp
     src/objectCalcs/beam/beamEngine/beamDiagrams.cpp
+    src/objectCalcs/beam/beamEngine/beamStress.cpp
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
