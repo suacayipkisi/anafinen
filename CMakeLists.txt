@@ -69,6 +69,7 @@ set(ANAF_CORE_SOURCES
     src/directory/getExecutableDirectory.cpp
     src/platform/systemInfo.cpp
     src/material/materialLibrary.cpp
+    src/objectCalcs/common/supportBasis.cpp
     src/objectCalcs/truss_1D/trussProperties/node.cpp
     src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
     src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
@@ -79,6 +80,10 @@ set(ANAF_CORE_SOURCES
     src/solvers/iterative/solver_iterative.cpp
     src/solvers/solver_referee.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp
+    src/objectCalcs/beam/beamProperties/node.cpp
+    src/objectCalcs/beam/beamEngine/beamSolver/deformationUnderConstForce.cpp
+    src/objectCalcs/beam/beamEngine/beamSolver.cpp
+    src/objectCalcs/beam/beamEngine/beamDiagrams.cpp
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})

@@ -5,7 +5,7 @@ This guide shows how code outside `src/io/` reads and writes model files through
 For the file formats themselves (which data goes where in MSH, VTK, VTU, `.pvd` and the STEP sidecar), see [FILE_HANDLING.md](FILE_HANDLING.md).
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 array store, section 9; 2026-10-03: rotational constraints, nodal moments, beam section data and orientation, beam / dynamic result names).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam solver default orientation; HDF5 array store, section 9; 2026-10-03: rotational constraints, nodal moments, beam section data and orientation, beam / dynamic result names).
 
 ## 1. Overview
 
@@ -258,7 +258,7 @@ auto exportTask = io.exportAsync(path, snapshot, options);
 | Geometry | `nodes`, `blocks` | `Node`, `ElementBlock` |
 | Named groups (physical groups, materials as `Material:<name>`) | `sets` | `EntitySet` (node or element members) |
 | Per-element scalars | `elementAttributes` | `MaterialID`, `CrossSectionArea` (m²), `HeatGeneration` (W/m³), beam section data (`SecondMomentY/Z`, `TorsionConstant` (m⁴), `ShearAreaY/Z` (m²)), `ElementFormulation` (`ElementFormulation` enum code; missing = bar), any other name |
-| Beam orientation | `beamOrientation` | `std::vector<std::array<double, 3>>`, one reference vector per element (global axes) or empty; v lies in the local x–y plane, zero = solver default |
+| Beam orientation | `beamOrientation` | `std::vector<std::array<double, 3>>`, one reference vector per element (global axes) or empty; v lies in the local x–y plane, zero = solver default (`FEM::BEAM`: +Y, or +X for members parallel to Y) |
 | Supports, prescribed displacements and rotations | `constraints` | `NodeConstraint{node, fixed, allowedMotion, prescribed (m), amplitude, fixedRotation, prescribedRotation (rad), amplitudeRotation}`; `amplitudeRotation` is independent of `amplitude` |
 | Forces and moments | `loads` | `NodalLoad{node, force (N), amplitude, moment (N·m)}`; one amplitude for both, use another entry for a moment with another history |
 | Prescribed temperatures | `temperatureConstraints` | `TemperatureConstraint{node, temperature (K), amplitude}` |

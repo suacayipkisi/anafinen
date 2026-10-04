@@ -20,6 +20,7 @@
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
+#include <objectCalcs/common/supportBasis.hpp>
 #include <panels/truss/materialCombo.hpp>
 #include <panels/truss/trussWorker.hpp>
 
@@ -156,7 +157,7 @@ namespace anaf::GUI {
     m_supportInclined = node.hasInclinedSupport();
     if (m_supportInclined) {
       const auto& allowed = node.getAllowedMotionDirections();
-      setSupportVectors(m_vectorsRestrained ? FEM::TRUSS::orthogonalComplement(allowed) : allowed);
+      setSupportVectors(m_vectorsRestrained ? FEM::SUPPORT::orthogonalComplement(allowed) : allowed);
     }
   }
 
@@ -511,9 +512,9 @@ namespace anaf::GUI {
     if (m_supportInclined) {
       renderInclinedSupportInputs();
       try {
-        const auto basis = FEM::TRUSS::orthonormalize(
+        const auto basis = FEM::SUPPORT::orthonormalize(
           {m_supportVectors.begin(), m_supportVectors.begin() + m_supportVectorCount});
-        allowed = m_vectorsRestrained ? FEM::TRUSS::orthogonalComplement(basis) : basis;
+        allowed = m_vectorsRestrained ? FEM::SUPPORT::orthogonalComplement(basis) : basis;
       } catch (const std::invalid_argument&) {
         inclinedError = "The vectors must be non-zero and linearly independent.";
       }
@@ -527,7 +528,7 @@ namespace anaf::GUI {
       } else if (allowed.size() == 1) {
         show("Moves along the line", allowed[0]);
       } else if (allowed.size() == 2) {
-        show("Slides on the plane with normal", FEM::TRUSS::orthogonalComplement(allowed)[0]);
+        show("Slides on the plane with normal", FEM::SUPPORT::orthogonalComplement(allowed)[0]);
       } else {
         ImGui::TextDisabled("Nothing is restrained (free node).");
       }
@@ -592,9 +593,9 @@ namespace anaf::GUI {
     if (restrained != m_vectorsRestrained) {
       // Switch the meaning without changing the support: the vectors become their complement.
       try {
-        const auto basis = FEM::TRUSS::orthonormalize(
+        const auto basis = FEM::SUPPORT::orthonormalize(
           {m_supportVectors.begin(), m_supportVectors.begin() + m_supportVectorCount});
-        if (basis.size() < 3) setSupportVectors(FEM::TRUSS::orthogonalComplement(basis));
+        if (basis.size() < 3) setSupportVectors(FEM::SUPPORT::orthogonalComplement(basis));
       } catch (const std::invalid_argument&) {
         // Invalid input: keep the vectors as typed.
       }

@@ -17,6 +17,46 @@
 
 #pragma once
 
+// Public entry point of the 3D beam / frame FEM core. No GUI types: a CLI or a test calls it
+// directly.
+
+#include <beam/beamProperties/meshData.hpp>
+#include <material/properties.hpp>
+
+#include <expected>
+#include <functional>
+#include <memory>
+#include <span>
+#include <stop_token>
+#include <string>
+
 namespace FEM::BEAM {
+
+  struct StaticResult {
+    // Copy of the input with displacements and rotations on every node and section forces on
+    // every element; hasResults = true. Loads and supports are kept.
+    std::shared_ptr<MeshData> mesh;
+    // Energy check: the stored elastic energy must equal half the external work.
+    bool energyCheckPassed{false};
+    double energyDiff{};          // |U - W / 2|, J
+    double energyRelativeDiff{};  // energyDiff / max(|U|, |W / 2|, 1)
+  };
+
+  // Progress of a running solve, 0..1.
+  using ProgressCallback = std::function<void(float)>;
+
+  // Linear static solve of a beam model: Euler-Bernoulli and Timoshenko elements (chosen per
+  // element), supports as allowed motion / rotation bases (inclined ones included), nodal
+  // forces and moments, uniform distributed loads and self weight. materials is the list the
+  // elements' materialID values index into (E and G are used). Returns why the model cannot
+  // be solved (no nodes or elements, invalid section values, an unknown material, a load on a
+  // missing node or element, node ids that are not 0..n-1, a bad orientation vector, a failed
+  // solve) or "cancelled" when st was stopped. Nodes used by no element are held fixed.
+  std::expected<StaticResult, std::string> solveStatic(
+    const MeshData& mesh,
+    std::span<const anaf::MATERIAL::Material> materials,
+    std::stop_token st = {},
+    const ProgressCallback& progress = {}
+  );
 
 } // namespace FEM::BEAM end

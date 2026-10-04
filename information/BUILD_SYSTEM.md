@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
 
 ## 1. Overall flow
 
@@ -19,7 +19,7 @@ CMakeLists.txt
    +-- add_library(anaf_io STATIC ...)     mesh I/O + HDF5 array store (Gmsh, zlib, HDF5 PRIVATE)
    +-- add_library(anaf_core STATIC ...)   FEM + truss adapter (links anaf_io)
    +-- add_executable(anafinen ...)        GUI + bridge + log + main (+ portable-file-dialogs)
-   +-- tests/ (ANAFINEN_BUILD_TESTS=ON)    anaf_core_tests (anaf_core only), anaf_io_tests, anaf_array_tests, anaf_io_tool,
+   +-- tests/ (ANAFINEN_BUILD_TESTS=ON)    anaf_core_tests, anaf_beam_tests (anaf_core only), anaf_io_tests, anaf_array_tests, anaf_io_tool,
    |                                       anaf_truss_io_tests, vtk_reference_check,
    |                                       anaf_truss_library_tool (regenerates assets/objects/truss/truss1D)
    |        |
@@ -47,7 +47,7 @@ CMakeLists.txt
 |---|---|---|---|
 | `project_warnings_and_optimizations` | INTERFACE | Release flags and defines | - |
 | `anaf_io` | STATIC | `src/io/*` (model, formats, service, `array/` HDF5 store) | Gmsh, ZLIB, HDF5 (all PRIVATE). The Eigen and CHOLMOD adapters in `src/io/array/` are header-only, so `anaf_io` itself links neither. |
-| `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`), `src/solvers/*` (solver portfolio), `src/material/materialLibrary.cpp`, `src/log/anaf_info.cpp`, `src/directory/getExecutableDirectory.cpp`, `src/platform/systemInfo.cpp`. Self-contained: a front end links it and calls `solveStatic()` (no bridge or GUI code). `MAIN_DIR` (PRIVATE) for the source-tree asset fallback. | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE), nlohmann_json (PRIVATE); Windows: shell32, ole32, uuid (user config folder), dxgi, advapi32 (`systemInfo`: VRAM, CPU name from the registry) |
+| `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`), `src/objectCalcs/beam/*` (beam solver), `src/objectCalcs/common/*` (support bases), `src/solvers/*` (solver portfolio), `src/material/materialLibrary.cpp`, `src/log/anaf_info.cpp`, `src/directory/getExecutableDirectory.cpp`, `src/platform/systemInfo.cpp`. Self-contained: a front end links it and calls `solveStatic()` (no bridge or GUI code). `MAIN_DIR` (PRIVATE) for the source-tree asset fallback. | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE), nlohmann_json (PRIVATE); Windows: shell32, ole32, uuid (user config folder), dxgi, advapi32 (`systemInfo`: VRAM, CPU name from the registry) |
 | `glad_local` | STATIC | `external/glad/src/gl.c` | - |
 | `imgui_suite` | STATIC | ImGui core + GLFW/OpenGL3 backends + ImGuizmo + ImPlot | glad, GLFW, OpenGL |
 | `anafinen` | EXECUTABLE | `main.cpp`, bridge, GUI, `platform/resourceMonitor.cpp` | `anaf_core`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG; Windows: ole32, comdlg32, shell32, uuid (file dialogs), psapi (resource monitor) |

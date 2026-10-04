@@ -3,9 +3,9 @@
 This document describes the finite element calculation for 3D truss structures built from 1D two-node bar elements. It covers the data types, the math, the solver portfolio, and the energy validator.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`, Block-CG takes `dofsPerNode`, sections 7 and 11; 2026-10-03: beam data in `anaf_io`, section 13).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam solver in [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), section 13; support bases in `FEM::SUPPORT`, section 2.1; unloaded mechanisms, section 12; solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`, Block-CG takes `dofsPerNode`, sections 7 and 11; 2026-10-03: beam data in `anaf_io`, section 13).
 > Implemented: static displacement under nodal loads + self-weight.
-> Not implemented yet: mass matrix, modal analysis (Spectra), beam/frame elements, CST.
+> Not implemented yet: mass matrix, modal analysis (Spectra), CST. Beam / frame elements: [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md).
 
 ## 1. Overall flow
 
@@ -51,8 +51,8 @@ The element constructor rejects invalid input by throwing `std::invalid_argument
 ### 2.1 Node constraints
 
 - `setMovable({x, y, z})`: `true` means the DOF is free. It rebuilds the allowed-motion basis from the free axes.
-- `setAllowedMotionDirections()` accepts arbitrary directions, orthonormalizes them with Gram-Schmidt (`FEM::TRUSS::orthonormalize()`, which throws on zero or dependent vectors, relative tolerance 1e-9), and derives `m_isMovable` from them. An axis is movable only if it lies in the span of the basis.
-- `FEM::TRUSS::orthogonalComplement()` gives the perpendicular directions of a basis (each step takes the global axis with the largest part outside the span). The model editor uses it to turn restrained directions into the allowed motion.
+- `setAllowedMotionDirections()` accepts arbitrary directions, orthonormalizes them with Gram-Schmidt (`FEM::SUPPORT::orthonormalize()` in `objectCalcs/common/supportBasis.hpp`, shared with the beam node, which throws on zero or dependent vectors, relative tolerance 1e-9), and derives `m_isMovable` from them. An axis is movable only if it lies in the span of the basis.
+- `FEM::SUPPORT::orthogonalComplement()` gives the perpendicular directions of a basis (each step takes the global axis with the largest part outside the span). The model editor uses it to turn restrained directions into the allowed motion.
 - The solver works on the allowed-motion basis, not on `m_isMovable` (section 6). For an inclined support `m_isMovable` is only a summary: an axis counts as movable only when it lies fully in the span, so a roller along (1, 1, 0) reports x and y as fixed.
 - `hasInclinedSupport()` is true when a basis vector is not a global axis. `isSupported()` is true when fewer than three directions are allowed. The node is the only place a support is stored (there is no separate fixity map since 2026-10-02): `solveStatic()` copies every node's basis, and `ADAPTER::toMeshModel()` writes a `NodeConstraint` for every supported node (an inclined one with `allowedMotion`).
 
@@ -218,7 +218,7 @@ The direct solvers do not care how DOFs map to nodes. Block-CG does: `solveSelec
 | Element | `dofsPerNode` | Slots |
 |---|---|---|
 | Truss (3D bar) | 3 | allowed motion directions (`u = T q`, section 6) |
-| 3D beam (planned) | 6 | 3 translations + 3 rotations |
+| 3D beam (`FEM::BEAM`, [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 6) | 6 | 3 motion directions + 3 rotation axes |
 
 The preconditioner inverts one `dofsPerNode x dofsPerNode` block per node over its used slots; the rows and columns of unused slots stay zero. `FEM::SOLVER::maxDofsPerNode = 6` bounds the block (a stack array per node, no allocation in the CG loop). A `dofsPerNode` outside 1 … 6 or a remap table of the wrong size returns `converged = false` with a message instead of reading out of range.
 
@@ -315,22 +315,21 @@ The tests were checked against injected faults: a wrong self-weight split and a 
 ## 12. Known issues
 
 - Reaction forces are not computed.
+- The referee does not check for a singular matrix, so a mechanism the loads do not excite can get a finite answer when its pivot is round-off sized rather than exactly zero ([ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 6; verified with a beam model). `mechanismIsAnErrorNotAResult` loads its mechanism on purpose.
 
 ## 13. Planned (not in code yet)
 
 - Consistent/lumped mass matrix and the generalized eigenproblem `K φ = ω² M φ` with Spectra `SymGEigsShiftSolver` (shift-invert).
-- 2D/3D beam/frame elements (Euler-Bernoulli, Timoshenko) and 2D CST. The file side is ready since phase 2.10: `anaf_io` stores rotational fixity, prescribed rotations, nodal moments, section properties (`SecondMomentY/Z`, `TorsionConstant`, `ShearAreaY/Z`), `ElementFormulation` and the orientation vector, and defines `Rotation` and `BeamSectionForce` results ([FILE_HANDLING.md](FILE_HANDLING.md) sections 3 and 3.3). A beam solver must:
-  - build the local frame from `MeshModel::beamOrientation`: x = node 0 → node 1, z = normalize(x × v), y = z × x; a zero v needs a default rule, e.g. global Z as the reference, global X for vertical members;
-  - read `ElementFormulation` (missing = bar) and take `ShearAreaY/Z` for Timoshenko only;
-  - write `BeamSectionForce` in section convention: the values at node 0 are −(k·u) there and those at node 1 are +(k·u), so N > 0 is tension at both ends;
-  - also write `AxialForce`, and write mode shapes as `Displacement` + `Rotation`.
-- Imported BCs beyond `fixed`, `allowedMotion` and `force` (prescribed displacements, amplitudes, thermal loads, rotational fixity, prescribed rotations, nodal moments) are read by `anaf_io` but not used by either truss solver. The rotational ones are dropped without a warning ([ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 5).
+- 2D CST.
+- Beam / frame elements are solved by `FEM::BEAM` since 2026-10-04 ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md)); still missing there: the `anaf_io` adapter (read `ElementFormulation` with missing = bar, section attributes, `beamOrientation`; write `Displacement` + `Rotation`, `BeamSectionForce` and `AxialForce`), GUI, stresses, end releases.
+- Imported BCs beyond `fixed`, `allowedMotion` and `force` (prescribed displacements, amplitudes, thermal loads, rotational fixity, prescribed rotations, nodal moments) are read by `anaf_io` but not used by the truss solver. The rotational ones are dropped without a warning ([ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 5).
 
 ## 14. Related source files
 
 - Orchestration: [src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.hpp), [trussSolver.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp); model types: [trussProperties/meshData.hpp](../src/objectCalcs/truss_1D/trussProperties/meshData.hpp)
 - Container: [deformationUnderConstForce.hpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.hpp), [deformationUnderConstForce.cpp](../src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp)
 - Solvers: [solverPortfolio.hpp](../src/solvers/solverPortfolio.hpp), [solver_referee.cpp](../src/solvers/solver_referee.cpp), [direct/solver_cholmod.cpp](../src/solvers/direct/solver_cholmod.cpp), [direct/solver_simplicial.cpp](../src/solvers/direct/solver_simplicial.cpp), [iterative/solver_iterative.cpp](../src/solvers/iterative/solver_iterative.cpp)
+- Support bases: [supportBasis.hpp](../src/objectCalcs/common/supportBasis.hpp), [supportBasis.cpp](../src/objectCalcs/common/supportBasis.cpp)
 - Types: [node.hpp](../src/objectCalcs/truss_1D/trussProperties/node.hpp), [element.hpp](../src/objectCalcs/truss_1D/trussProperties/element.hpp), [appliedForce.hpp](../src/objectCalcs/truss_1D/trussProperties/appliedForce.hpp), [properties.hpp](../src/material/properties.hpp)
 - Generator: [simpleQuadranglePrismTrussCreate.cpp](../src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp)
 - Tests: [tests/coreTests.cpp](../tests/coreTests.cpp)

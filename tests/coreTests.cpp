@@ -21,6 +21,7 @@
 
 #include "testSupport.hpp"
 #include <material/materialLibrary.hpp>
+#include <objectCalcs/common/supportBasis.hpp>
 #include <trussEngine/trussSolver.hpp>
 #include <solvers/solverPortfolio.hpp>
 #include <trussProperties/element.hpp>
@@ -118,26 +119,26 @@ TEST(nodeSupportBasis) {
 
 TEST(supportDirectionsAndTheirComplement) {
   // The model editor turns restrained directions into the allowed motion and back.
-  const auto roller = FEM::TRUSS::orthonormalize({{1.0, 1.0, 0.0}}); // reaction normal to a 45 deg plane
-  const auto plane = FEM::TRUSS::orthogonalComplement(roller);
+  const auto roller = FEM::SUPPORT::orthonormalize({{1.0, 1.0, 0.0}}); // reaction normal to a 45 deg plane
+  const auto plane = FEM::SUPPORT::orthogonalComplement(roller);
   REQUIRE(plane.size() == 2);
   for (const auto& d : plane) {
     CHECK(std::abs(dot(d, roller[0])) < 1e-12);
     CHECK(std::abs(dot(d, d) - 1.0) < 1e-12);
   }
   CHECK(std::abs(dot(plane[0], plane[1])) < 1e-12);
-  const auto back = FEM::TRUSS::orthogonalComplement(plane);
+  const auto back = FEM::SUPPORT::orthogonalComplement(plane);
   REQUIRE(back.size() == 1);
   CHECK(std::abs(std::abs(dot(back[0], roller[0])) - 1.0) < 1e-12);
-  CHECK(FEM::TRUSS::orthogonalComplement({}).size() == 3);
-  CHECK(FEM::TRUSS::orthogonalComplement(FEM::TRUSS::orthonormalize({{1, 0, 0}, {0, 2, 0}, {0, 0, 3}})).empty());
-  CHECK(throws([] { (void)FEM::TRUSS::orthonormalize({{1.0, 2.0, 3.0}, {2.0, 4.0, 6.0}}); })); // dependent
-  CHECK(throws([] { (void)FEM::TRUSS::orthonormalize({{0.0, 0.0, 0.0}}); }));                   // zero
+  CHECK(FEM::SUPPORT::orthogonalComplement({}).size() == 3);
+  CHECK(FEM::SUPPORT::orthogonalComplement(FEM::SUPPORT::orthonormalize({{1, 0, 0}, {0, 2, 0}, {0, 0, 3}})).empty());
+  CHECK(throws([] { (void)FEM::SUPPORT::orthonormalize({{1.0, 2.0, 3.0}, {2.0, 4.0, 6.0}}); })); // dependent
+  CHECK(throws([] { (void)FEM::SUPPORT::orthonormalize({{0.0, 0.0, 0.0}}); }));                   // zero
 
   // An axis-aligned restraint stays an ordinary support; a skewed one is inclined, with the
   // global axes outside the plane reported as fixed.
   Node node(0, 0.0, 0.0, 0.0);
-  node.setAllowedMotionDirections(FEM::TRUSS::orthogonalComplement(FEM::TRUSS::orthonormalize({{0.0, 1.0, 0.0}})));
+  node.setAllowedMotionDirections(FEM::SUPPORT::orthogonalComplement(FEM::SUPPORT::orthonormalize({{0.0, 1.0, 0.0}})));
   CHECK(!node.hasInclinedSupport() && node.getMovable() == (std::array<bool, 3>{true, false, true}));
   node.setAllowedMotionDirections(plane);
   CHECK(node.hasInclinedSupport() && node.getMovable() == (std::array<bool, 3>{false, false, true}));

@@ -44,6 +44,11 @@ add_executable(anaf_core_tests coreTests.cpp)
 target_link_libraries(anaf_core_tests PRIVATE anaf_core project_warnings_and_optimizations)
 add_test(NAME anaf_core_tests COMMAND anaf_core_tests)
 
+# Beam / frame solver against closed-form results; anaf_core only, like anaf_core_tests.
+add_executable(anaf_beam_tests beamTests.cpp)
+target_link_libraries(anaf_beam_tests PRIVATE anaf_core project_warnings_and_optimizations)
+add_test(NAME anaf_beam_tests COMMAND anaf_beam_tests)
+
 add_executable(anaf_truss_io_tests
     trussIoTests.cpp
     ${PROJECT_SOURCE_DIR}/src/bridge/generalStatus.cpp # the bridge itself is under test (resetModel, user materials)

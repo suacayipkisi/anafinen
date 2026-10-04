@@ -10,7 +10,7 @@ This document describes `anaf_io`, the mesh import/export library:
 For a caller-side guide (public headers, functions, code examples), see [IO_USAGE.md](IO_USAGE.md).
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (HDF5 array store `src/io/array/`; 2026-10-03: rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names, link to the interoperability plan; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (beam solver exists in `anaf_core`, adapter still missing, its default orientation rule; HDF5 array store `src/io/array/`; 2026-10-03: rotational constraints, nodal moments, beam section attributes, `ElementFormulation`, `beamOrientation`, beam / dynamic result names, link to the interoperability plan; earlier: truss adapter supports, step kinds, global data, `.pvd`, thermal BCs, amplitudes, initial conditions, damping).
 > Replaces the former `src/fileOperations` module (STEP/MSH through the Gmsh API, custom VTK), which was removed.
 
 ## 1. Overall flow
@@ -69,7 +69,7 @@ For a caller-side guide (public headers, functions, code examples), see [IO_USAG
 | `initialConditions` | `vector<InitialCondition{quantity, components, values}>` | Nodal initial state: `InitialQuantity::Displacement` (3), `Velocity` (3), `Rotation` (3), `AngularVelocity` (3), `Temperature` (1), or any name |
 | `damping` | `optional<Damping>` | Rayleigh `alpha` [1/s], `beta` [s] (C = αM + βK) and `modalRatios` (one per mode) |
 | `elementAttributes` | `map<string, vector<double>>` | Per-element scalars: `MaterialID`, `CrossSectionArea` [m²], beam section data `SecondMomentY` / `SecondMomentZ` / `TorsionConstant` [m⁴], `ShearAreaY` / `ShearAreaZ` [m², k·A], `ElementFormulation` (0 / missing = bar, 1 = Euler-Bernoulli, 2 = Timoshenko), and any other attribute (thickness, …) |
-| `beamOrientation` | `vector<array<double, 3>>` | Per-element reference vector v [global axes], empty = none. Local x = node 0 → node 1, v in the local x–y plane, z = x × v, y = z × x; a zero vector leaves the choice to the solver |
+| `beamOrientation` | `vector<array<double, 3>>` | Per-element reference vector v [global axes], empty = none. Local x = node 0 → node 1, v in the local x–y plane, z = x × v, y = z × x; a zero vector leaves the choice to the solver (`FEM::BEAM`: +Y, or +X for members parallel to Y, [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 3) |
 | `globalData` | `vector<GlobalArray{name, components, values}>` | Model-level arrays that belong to no node or element (natural frequencies, modal masses, …) |
 | `lengthUnit`, `title`, `warnings` | | Metadata; readers append non-fatal issues to `warnings` |
 
@@ -416,7 +416,7 @@ The plan for the format and data model gaps below (Abaqus `.inp`, CalculiX `.frd
 - Step labels (load case names) are not stored in VTK / VTU / `.pvd`.
 - No complex values (harmonic response with phase) yet.
 - BCs and loads are nodal only: no element-face loads (pressure, surface heat flux, convection), no nodal springs or dashpots.
-- Beam data is stored but no beam solver exists yet. The truss adapter (`toMeshData`) reads only `fixed` and `force`: it silently drops `fixedRotation`, `prescribedRotation`, `moment` and treats every Line2 as a bar whatever its `ElementFormulation`. Importing a frame file into the truss solver therefore ignores moments without a warning ([ARCHITECTURE.md](ARCHITECTURE.md) section 8).
+- Beam data is stored and `anaf_core` has a beam solver (`FEM::BEAM`, [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md)), but no beam adapter connects the two yet. The truss adapter (`toMeshData`) reads only `fixed` and `force`: it silently drops `fixedRotation`, `prescribedRotation`, `moment` and treats every Line2 as a bar whatever its `ElementFormulation`. Importing a frame file into the truss solver therefore ignores moments without a warning ([ARCHITECTURE.md](ARCHITECTURE.md) section 8).
 - Not covered yet (section 3.3): beam end releases, distributed element loads, concentrated nodal mass / rotary inertia, node-local frames for skewed rotational supports, `ElementNode` field location.
 - STEP export writes line elements only; the rest of the model is in the sidecar.
 - Gmsh-based CAD import cannot be interrupted inside Gmsh; cancellation waits for the current Gmsh call.
