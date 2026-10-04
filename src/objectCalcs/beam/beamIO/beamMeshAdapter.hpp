@@ -21,7 +21,8 @@
 // (FEM::BEAM::MeshData), the counterpart of FEM::TRUSS::ADAPTER.
 //
 // What a file carries for a beam model (every format keeps all of it):
-//   elements    Line2; ElementFormulation 1 (Euler-Bernoulli) / 2 (Timoshenko); beamOrientation
+//   elements    Line2; ElementFormulation 1 (Euler-Bernoulli) / 2 (Timoshenko); beamOrientation;
+//               EndReleases (hinges, RELEASE bits; written only when an element has one)
 //   materials   "Material:<name>" element sets (+ MaterialID index), matched by name
 //   sections    "Section:<name>" element sets, SectionShape + SectionDimension1..5 (the shape),
 //               and the numbers CrossSectionArea, SecondMomentY/Z, TorsionConstant,

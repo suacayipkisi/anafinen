@@ -67,6 +67,7 @@ namespace anaf::GUI {
     const glm::vec4 kNoStressColor(0.55f, 0.55f, 0.55f, 1.0f);
     const glm::vec4 kSelectedColor(1.0f, 0.7f, 0.2f, 1.0f);
     const glm::vec4 kSupportColor(1.0f, 0.3f, 0.3f, 1.0f);
+    const glm::vec4 kHingeColor(0.96f, 0.96f, 0.98f, 1.0f);
 
     glm::vec3 toVec(const std::array<double, 3>& v) {
       return glm::vec3(static_cast<float>(v[0]), static_cast<float>(v[1]), static_cast<float>(v[2]));
@@ -524,6 +525,12 @@ namespace anaf::GUI {
         };
         draw.rotation0 = local(a.getRotation());
         draw.rotation1 = local(b.getRotation());
+        if (sampled && element.endReleases != 0) { // a hinged end turns on its own
+          const auto ends = FEM::BEAM::elementEndDisplacements(mesh, static_cast<std::size_t>(index), loads[static_cast<std::size_t>(index)],
+                                                               materials, sections);
+          draw.rotation0 = glm::vec3(static_cast<float>(ends[3]), static_cast<float>(ends[4]), static_cast<float>(ends[5]));
+          draw.rotation1 = glm::vec3(static_cast<float>(ends[9]), static_cast<float>(ends[10]), static_cast<float>(ends[11]));
+        }
         draw.fullMesh = fullOf[element.sectionID];
         draw.simpleMesh = simpleOf[element.sectionID];
         draw.halfSize = halfOf[element.sectionID];
@@ -644,6 +651,24 @@ namespace anaf::GUI {
           m_renderer_->addPoint(position[id], color, static_cast<int>(id), selected ? 18.0f : 12.0f);
         }
         m_nodeLabels.emplace_back(id, position[id]);
+      }
+    }
+
+    // End releases: a light ball just inside the released element end (picks the element).
+    for (std::size_t e = 0; e < mesh.elements.size() && e < m_beamElements.size(); ++e) {
+      const auto releases = mesh.elements[e].endReleases;
+      const auto& draw = m_beamElements[e];
+      if (releases == 0 || draw.stations.size() < 2) continue;
+      const float radius = std::max(1.15f * draw.halfSize, 1e-4f);
+      const bool selected = e == m_selectedElement;
+      for (int end = 0; end < 2; ++end) {
+        if (FEM::BEAM::RELEASE::ofEnd(releases, end) == 0) continue;
+        const glm::vec3 from = end == 0 ? draw.stations.front() : draw.stations.back();
+        const glm::vec3 next = end == 0 ? draw.stations[1] : draw.stations[draw.stations.size() - 2];
+        const glm::vec3 chord = (end == 0 ? draw.stations.back() : draw.stations.front()) - from;
+        const float inset = std::min(2.0f * radius, 0.25f * glm::length(chord));
+        const glm::vec3 inward = glm::length(next - from) > 0.0f ? glm::normalize(next - from) : draw.axisX;
+        m_beamRenderer_->addSphere(from + inward * inset, radius, selected ? kSelectedColor : kHingeColor, -static_cast<int>(e) - 2);
       }
     }
 

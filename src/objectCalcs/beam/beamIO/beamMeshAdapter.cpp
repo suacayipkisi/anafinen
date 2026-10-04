@@ -125,7 +125,8 @@ namespace FEM::BEAM::ADAPTER {
 
     const std::size_t count = mesh.elements.size();
     auto& block = model.blockFor(io::ElementType::Line2);
-    std::vector<double> material(count), area(count), iy(count), iz(count), torsion(count), asy(count), asz(count), formulation(count), shape(count);
+    std::vector<double> material(count), area(count), iy(count), iz(count), torsion(count), asy(count), asz(count), formulation(count), shape(count),
+      releases(count);
     std::array<std::vector<double>, 5> dimensions;
     std::array<std::vector<double>, 3> loadGlobal, loadLocal;
     for (auto& v : dimensions) v.assign(count, 0.0);
@@ -144,6 +145,7 @@ namespace FEM::BEAM::ADAPTER {
       formulation[e] = static_cast<double>(element.formulation == Formulation::Timoshenko ? io::ElementFormulation::TimoshenkoBeam
                                                                                           : io::ElementFormulation::EulerBernoulliBeam);
       model.beamOrientation.push_back(element.orientation);
+      releases[e] = static_cast<double>(element.endReleases);
       byMaterial[element.materialID].push_back(static_cast<std::uint32_t>(e));
       if (element.sectionID < sections.size()) {
         bySection[element.sectionID].push_back(static_cast<std::uint32_t>(e));
@@ -177,6 +179,7 @@ namespace FEM::BEAM::ADAPTER {
     attributes[io::Attribute::ShearAreaZ] = std::move(asz);
     attributes[io::Attribute::ElementFormulation] = std::move(formulation);
     attributes[io::Attribute::SectionShape] = std::move(shape);
+    if (std::ranges::any_of(releases, [](const double v) { return v != 0.0; })) attributes[io::Attribute::EndReleases] = std::move(releases);
     for (std::size_t k = 0; k < 5; ++k) attributes[kDimensions[k]] = std::move(dimensions[k]);
     for (std::size_t axis = 0; axis < 3; ++axis) {
       attributes[kLoadGlobal[axis]] = std::move(loadGlobal[axis]);
@@ -261,6 +264,7 @@ namespace FEM::BEAM::ADAPTER {
     const auto* materialIds = attribute(io::Attribute::MaterialId);
     const auto* formulations = attribute(io::Attribute::ElementFormulation);
     const auto* shapes = attribute(io::Attribute::SectionShape);
+    const auto* releases = attribute(io::Attribute::EndReleases);
     const std::array<const std::vector<double>*, 6> numbers{
       attribute(io::Attribute::CrossSectionArea), attribute(io::Attribute::SecondMomentY), attribute(io::Attribute::SecondMomentZ),
       attribute(io::Attribute::TorsionConstant), attribute(io::Attribute::ShearAreaY), attribute(io::Attribute::ShearAreaZ)};
@@ -327,7 +331,7 @@ namespace FEM::BEAM::ADAPTER {
     };
 
     std::vector<std::uint32_t> beamOfGlobal(model.elementCount(), static_cast<std::uint32_t>(-1));
-    std::size_t bars = 0, skipped = 0, invalidMaterialIds = 0;
+    std::size_t bars = 0, skipped = 0, invalidMaterialIds = 0, invalidReleases = 0;
     std::size_t global = 0;
     for (const auto& block : model.blocks) {
       const auto n = static_cast<std::size_t>(io::elementInfo(block.type).nodeCount);
@@ -362,6 +366,10 @@ namespace FEM::BEAM::ADAPTER {
         }
         element.sectionID = resolveSection(sectionName[global], *shape);
         if (global < model.beamOrientation.size()) element.orientation = model.beamOrientation[global];
+        if (const double bits = value(releases, global); bits != 0.0) {
+          if (bits > 0.0 && bits <= static_cast<double>(RELEASE::allMask) && bits == std::floor(bits)) element.endReleases = static_cast<std::uint16_t>(bits);
+          else ++invalidReleases;
+        }
 
         beamOfGlobal[global] = static_cast<std::uint32_t>(mesh.elements.size());
         Vec3 qGlobal{}, qLocal{};
@@ -444,6 +452,10 @@ namespace FEM::BEAM::ADAPTER {
     if (skipped > 0) result.notes.push_back(std::format("warning: {} elements that are not Line2 were skipped (the beam solver uses Line2)", skipped));
     if (!result.newSections.empty()) result.notes.push_back(std::format("{} sections added from the file", result.newSections.size()));
     if (invalidMaterialIds > 0) result.notes.push_back(std::format("warning: {} elements have a MaterialID outside the list and use material 0", invalidMaterialIds));
+    if (invalidReleases > 0) result.notes.push_back(std::format("warning: {} elements have an invalid EndReleases value (ignored: rigid ends)", invalidReleases));
+    if (const auto hinged = std::ranges::count_if(mesh.elements, [](const BeamElement& e) { return e.endReleases != 0; }); hinged > 0) {
+      result.notes.push_back(std::format("{} elements with end releases (hinges)", hinged));
+    }
     if (prescribed > 0) result.notes.push_back(std::format("warning: prescribed displacements / rotations on {} nodes are ignored (held at zero)", prescribed));
     if (withAmplitude > 0) result.notes.push_back(std::format("warning: {} loads have an amplitude; static solve uses the reference value", withAmplitude));
     return result;

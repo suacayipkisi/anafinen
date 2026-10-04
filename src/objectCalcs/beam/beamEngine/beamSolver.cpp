@@ -59,6 +59,7 @@ namespace FEM::BEAM {
           && (!positive(properties.shearAreaY) || !positive(properties.shearAreaZ))) {
         return std::format("a Timoshenko element needs positive shear areas Asy and Asz (section '{}')", section.getName());
       }
+      if ((element.endReleases & ~RELEASE::allMask) != 0) return std::format("unknown end release bits {:#x}", element.endReleases);
       if (!std::ranges::all_of(element.orientation, [](const double v) { return std::isfinite(v); })) {
         return "the orientation vector is not finite";
       }
@@ -215,6 +216,7 @@ namespace FEM::BEAM {
     if (st.stop_requested()) return cancelled();
     report(0.40f);
     container.applyLoads(solved->nodalLoads, solved->distributedLoads, solved->gravity, materials);
+    if (auto dofs = container.buildNodeDofs(); !dofs) return std::unexpected(dofs.error());
     report(0.50f);
     if (!container.calculateDisplacements(st)) {
       if (st.stop_requested()) return cancelled();

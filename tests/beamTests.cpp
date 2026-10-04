@@ -31,7 +31,7 @@
 #include <beam/beamSection/sectionTriangulation.hpp>
 #include <beam/beamTypes/beamLibrary.hpp>
 #include <material/materialLibrary.hpp>
-#include <directory/getExecutableDirectory.hpp>
+#include <io/core/pathUtf8.hpp>
 #include <io/meshIo.hpp>
 #include <truss_1D/trussIO/trussMeshAdapter.hpp>
 
@@ -229,6 +229,12 @@ namespace {
   }
 
   bool contains(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
+
+  // The repository's assets, not findAssetPath(): that prefers an installed package
+  // (/usr/share/anafinen/assets), which may hold an older library or catalogue.
+  std::filesystem::path sourceAsset(const std::filesystem::path& subpath) {
+    return anaf::IO::pathFromUtf8(MAIN_DIR) / "assets" / subpath;
+  }
 
   template <typename Callable>
   bool throws(Callable&& callable) {
@@ -459,6 +465,210 @@ TEST(formulationForAllThenSingleElements) {
   CHECK(near(solved.mesh->nodes[2].getDisplacement()[1], bending + shearOfTipHalf, 1e-10));
 }
 
+// ---- end releases (hinges) --------------------------------------------------------------------
+
+namespace {
+  namespace R = FEM::BEAM::RELEASE;
+
+  // Beam along +X through nodes at x = 0, L, 2L, ... with only the x-y plane loaded; ux and the
+  // twist are held at node 0, the x-z plane is held by w = 0 at every node.
+  MeshData beamLine(const std::size_t spans, const Formulation formulation) {
+    MeshData mesh;
+    mesh.gravity = {0.0, 0.0, 0.0};
+    for (std::uint32_t i = 0; i <= spans; ++i) mesh.nodes.emplace_back(i, kL * i, 0.0, 0.0);
+    for (std::uint32_t i = 0; i < spans; ++i) mesh.elements.push_back(beam(i, i + 1, formulation));
+    return mesh;
+  }
+} // namespace end
+
+TEST(releaseCondensationKeepsTheElementConsistent) {
+  // Condensed k* is symmetric, has zero rows / columns at the released DOFs, and a recovered
+  // released DOF makes the released end force vanish: k u - f0 = 0 there.
+  const auto k = FEM::BEAM::localStiffness(kE, kG, kSection, Formulation::Timoshenko, kL);
+  const auto f0 = FEM::BEAM::equivalentNodalLoads(Eigen::Vector3d(1e3, -4e3, 2e3), kL);
+  const std::uint16_t releases = R::hinge | R::torsion | R::atNode2(R::momentZ);
+  auto condensed = k;
+  auto loads = f0;
+  REQUIRE(FEM::BEAM::condenseReleases(releases, condensed, loads));
+  CHECK((condensed - condensed.transpose()).norm() <= 1e-12 * condensed.norm());
+  for (Eigen::Index dof = 0; dof < 12; ++dof) {
+    if (!(releases & (1U << dof))) continue;
+    CHECK(condensed.row(dof).isZero(0.0) && condensed.col(dof).isZero(0.0) && loads[dof] == 0.0);
+  }
+  FEM::BEAM::Vector12 u;
+  u << 1e-3, -2e-3, 5e-4, 0.0, 0.0, 0.0, -1e-3, 3e-3, 2e-4, 1e-3, -2e-3, 0.0;
+  FEM::BEAM::recoverReleasedDisplacements(releases, k, f0, u);
+  const FEM::BEAM::Vector12 full = k * u - f0;
+  const FEM::BEAM::Vector12 reduced = condensed * u - loads;
+  for (Eigen::Index dof = 0; dof < 12; ++dof) {
+    if (releases & (1U << dof)) CHECK(std::abs(full[dof]) <= 1e-9 * full.norm());
+    else CHECK(std::abs(full[dof] - reduced[dof]) <= 1e-9 * full.norm()); // same end forces
+  }
+  // Mechanisms inside the element.
+  for (const std::uint16_t bad : {std::uint16_t(R::axial | R::atNode2(R::axial)), std::uint16_t(R::torsion | R::atNode2(R::torsion)),
+                                  std::uint16_t(R::momentZ | R::shearY | R::atNode2(R::momentZ))}) {
+    auto copy = k;
+    auto copyLoads = f0;
+    CHECK(!FEM::BEAM::condenseReleases(bad, copy, copyLoads) && copy == k);
+  }
+}
+
+TEST(hingeInAClampedBeamGivesTwoCantilevers) {
+  // Clamped at x = 0 and 2L, hinge at mid span (element 0 released about z at node 1), load P
+  // at the hinge: two equal cantilevers share P, so v = P L^3 / (6 E Iz) [+ P L / (2 G Asy)],
+  // clamp moments P L / 2, no moment at the hinge, and the two sides turn in opposite senses.
+  const double P = -12e3;
+  for (const auto formulation : {Formulation::EulerBernoulli, Formulation::Timoshenko}) {
+    auto mesh = beamLine(2, formulation);
+    mesh.nodes[0].fixAll();
+    mesh.nodes[2].fixAll();
+    mesh.elements[0].endReleases = R::atNode2(R::momentZ);
+    mesh.nodalLoads = {{1, {0.0, P, 0.0}, {}}};
+    const auto solved = solve(mesh);
+    const bool timoshenko = formulation == Formulation::Timoshenko;
+    const double cantilever = std::pow(kL, 3) / (3.0 * kE * kSection.secondMomentZ) + (timoshenko ? kL / (kG * kSection.shearAreaY) : 0.0);
+    CHECK(near(solved.mesh->nodes[1].getDisplacement()[1], 0.5 * P * cantilever, 1e-10));
+    const auto& left = solved.mesh->elements[0].sectionForces;
+    const auto& right = solved.mesh->elements[1].sectionForces;
+    CHECK(near(left[11], 0.0, 0.0, 1e-6) && near(right[5], 0.0, 0.0, 1e-6)); // no moment at the hinge
+    CHECK(near(std::abs(left[5]), 0.5 * std::abs(P) * kL, 1e-9) && near(std::abs(right[11]), 0.5 * std::abs(P) * kL, 1e-9));
+    CHECK(near(right[1] - left[1], -P, 1e-9)); // V = V0 - q x: a load along +y lowers it
+
+    // Node 1 turns with the rigid side (element 1); the hinged end of element 0 the other way.
+    const auto properties = FEM::BEAM::elementSectionProperties(solved.mesh->elements, sections(), materials());
+    const auto loads = FEM::BEAM::elementLocalLoads(solved.mesh->nodes, solved.mesh->elements, properties, solved.mesh->distributedLoads,
+                                                    solved.mesh->gravity, materials());
+    const auto ends = FEM::BEAM::elementEndDisplacements(*solved.mesh, 0, loads[0], materials(), sections());
+    const double tipRotation = 0.5 * P * kL * kL / (2.0 * kE * kSection.secondMomentZ);
+    CHECK(near(solved.mesh->nodes[1].getRotation()[2], -tipRotation, 1e-9)); // cantilever from x = 2L
+    CHECK(near(ends[11], tipRotation, 1e-9));
+    CHECK(near(ends[7], solved.mesh->nodes[1].getDisplacement()[1], 1e-12)); // translation stays connected
+    CHECK(solved.energyCheckPassed);
+  }
+}
+
+TEST(hingeOverASupportGivesSimpleSpans) {
+  // Two spans on pin / roller supports, uniform q, hinge over the middle support: two simply
+  // supported spans. M = q L^2 / 8 and v = 5 q L^4 / (384 E Iz) at mid span (diagrams), the end
+  // slopes q L^3 / (24 E Iz) on either side of the hinge.
+  const double q = 6e3;
+  auto mesh = beamLine(2, Formulation::EulerBernoulli);
+  mesh.nodes[0].setMovable({false, false, false});
+  mesh.nodes[0].setRotatable({false, true, true});
+  for (const std::uint32_t n : {1U, 2U}) mesh.nodes[n].setMovable({true, false, false});
+  mesh.elements[0].endReleases = R::atNode2(R::momentZ);
+  mesh.distributedLoads = {{0, {0.0, -q, 0.0}, FEM::BEAM::LoadFrame::Global}, {1, {0.0, -q, 0.0}, FEM::BEAM::LoadFrame::Global}};
+  const auto solved = solve(mesh);
+  const double slope = q * std::pow(kL, 3) / (24.0 * kE * kSection.secondMomentZ);
+  CHECK(near(solved.mesh->nodes[1].getRotation()[2], -slope, 1e-9)); // left end of span 2 (rigid side), sagging: clockwise
+  for (std::size_t e = 0; e < 2; ++e) {
+    const auto& s = solved.mesh->elements[e].sectionForces;
+    CHECK(near(s[5], 0.0, 0.0, 1e-6) && near(s[11], 0.0, 0.0, 1e-6));
+    CHECK(near(std::abs(s[1]), q * kL / 2.0, 1e-9));
+    const auto middle = FEM::BEAM::sampleAllElements(*solved.mesh, 3, materials(), sections())[e][1];
+    CHECK(near(middle.forces[5], q * kL * kL / 8.0, 1e-9));
+    CHECK(near(middle.localDisplacement[1], -5.0 * q * std::pow(kL, 4) / (384.0 * kE * kSection.secondMomentZ), 1e-9));
+  }
+  const auto properties = FEM::BEAM::elementSectionProperties(solved.mesh->elements, sections(), materials());
+  const auto loads = FEM::BEAM::elementLocalLoads(solved.mesh->nodes, solved.mesh->elements, properties, solved.mesh->distributedLoads,
+                                                  solved.mesh->gravity, materials());
+  CHECK(near(FEM::BEAM::elementEndDisplacements(*solved.mesh, 0, loads[0], materials(), sections())[11], slope, 1e-9));
+  CHECK(solved.energyCheckPassed);
+}
+
+TEST(pinnedGirderAndThreeHingedFrame) {
+  // Portal frame, span 2L, columns of height h, uniform q on the girder.
+  // (a) Clamped columns, girder pinned at both ends: a simply supported girder (M = q (2L)^2 / 8
+  //     at mid span), columns carry q L each and no moment.
+  // (b) Pinned bases and a crown hinge: the three-hinged frame, H = q (2L)^2 / (8 h), column top
+  //     moment H h, crown moment zero.
+  const double q = 5e3, h = 4.0, span = 2.0 * kL;
+  for (const bool threeHinged : {false, true}) {
+    MeshData mesh;
+    mesh.gravity = {0.0, 0.0, 0.0};
+    mesh.nodes = {Node{0, 0, 0, 0}, Node{1, 0, h, 0}, Node{2, kL, h, 0}, Node{3, span, h, 0}, Node{4, span, 0, 0}};
+    mesh.elements = {beam(0, 1), beam(1, 2), beam(2, 3), beam(4, 3)};
+    for (const std::uint32_t base : {0U, 4U}) {
+      if (threeHinged) {
+        mesh.nodes[base].setMovable({false, false, false});
+        mesh.nodes[base].setRotatable({false, false, true}); // pinned in the frame plane
+      } else {
+        mesh.nodes[base].fixAll();
+      }
+    }
+    if (threeHinged) mesh.elements[1].endReleases = R::atNode2(R::momentZ); // crown
+    else mesh.elements[1].endReleases = mesh.elements[2].endReleases = R::hinge | R::atNode2(R::hinge);
+    mesh.distributedLoads = {{1, {0, -q, 0}, FEM::BEAM::LoadFrame::Global}, {2, {0, -q, 0}, FEM::BEAM::LoadFrame::Global}};
+    const auto solved = solve(mesh);
+    CHECK(solved.energyCheckPassed);
+    const auto& column = solved.mesh->elements[0].sectionForces;
+    const auto& girder = solved.mesh->elements[1].sectionForces;
+    CHECK(near(column[0], -q * kL, 1e-9)); // compression
+    if (threeHinged) {
+      const double H = q * span * span / (8.0 * h);
+      CHECK(near(std::abs(column[1]), H, 1e-9));              // local y = global X for a vertical column
+      CHECK(near(std::abs(column[11]), H * h, 1e-9));         // column top
+      CHECK(near(column[5], 0.0, 0.0, 1e-6));                 // pinned base
+      CHECK(near(girder[11], 0.0, 0.0, 1e-6));                // crown hinge
+      CHECK(near(girder[0], -H, 1e-9));                       // the girder is pushed together
+    } else {
+      for (const std::size_t i : {1U, 2U, 4U, 5U, 7U, 8U, 10U, 11U}) CHECK(near(column[i], 0.0, 0.0, 1e-6));
+      CHECK(near(girder[5], 0.0, 0.0, 1e-6) && near(girder[11], q * kL * kL / 2.0, 1e-9)); // mid span q (2L)^2 / 8
+      // Pinned at both ends, the girders give nodes 1 and 3 no rotational stiffness of their own
+      // about z, but the columns do: nothing is held.
+    }
+  }
+}
+
+TEST(freeHingeDirectionsAreHeldOrReported) {
+  // Two beams meeting at node 1, both released about z there: node 1 has no stiffness about z.
+  // Unloaded, that direction is held (the solve is the hinged result); a moment about z on it is
+  // a mechanism.
+  auto mesh = beamLine(2, Formulation::EulerBernoulli);
+  mesh.nodes[0].fixAll();
+  mesh.nodes[2].fixAll();
+  mesh.elements[0].endReleases = R::atNode2(R::momentZ);
+  mesh.elements[1].endReleases = R::momentZ;
+  mesh.nodalLoads = {{1, {0.0, -1e4, 0.0}, {0.0, 0.0, 0.0}}};
+  const auto solved = solve(mesh);
+  CHECK(solved.mesh->nodes[1].getRotation()[2] == 0.0);
+  CHECK(near(solved.mesh->nodes[1].getDisplacement()[1], -0.5e4 * std::pow(kL, 3) / (3.0 * kE * kSection.secondMomentZ), 1e-10));
+  CHECK(solved.energyCheckPassed);
+
+  mesh.nodalLoads = {{1, {0.0, -1e4, 0.0}, {0.0, 0.0, 500.0}}};
+  CHECK(contains(errorOf(mesh), "node 1 can rotate freely"));
+  mesh.nodalLoads = {{1, {0.0, -1e4, 0.0}, {500.0, 200.0, 0.0}}}; // torsion and My still carried
+  CHECK(errorOf(mesh).empty());
+
+  auto broken = beamLine(1, Formulation::EulerBernoulli);
+  broken.nodes[0].fixAll();
+  broken.elements[0].endReleases = R::axial | R::atNode2(R::axial);
+  CHECK(contains(errorOf(broken), "mechanism"));
+  broken.elements[0].endReleases = 0x1000;
+  CHECK(contains(errorOf(broken), "unknown end release bits"));
+}
+
+TEST(endReleasesSurviveTheFileAdapter) {
+  // Written only when some element has releases; read back bit for bit; invalid codes warn.
+  auto mesh = beamLine(2, Formulation::EulerBernoulli);
+  mesh.nodes[0].fixAll();
+  mesh.nodes[2].fixAll();
+  auto model = FEM::BEAM::ADAPTER::toMeshModel(mesh, materials(), sections());
+  CHECK(!model.elementAttributes.contains(anaf::IO::Attribute::EndReleases));
+  mesh.elements[0].endReleases = R::atNode2(R::hinge) | R::torsion;
+  model = FEM::BEAM::ADAPTER::toMeshModel(mesh, materials(), sections());
+  REQUIRE(model.elementAttributes.contains(anaf::IO::Attribute::EndReleases));
+  CHECK(model.elementAttributes.at(anaf::IO::Attribute::EndReleases)[0] == 3072.0 + 8.0);
+  auto imported = FEM::BEAM::ADAPTER::toMeshData(model, materials(), sections());
+  REQUIRE(imported.has_value());
+  CHECK(imported->mesh->elements[0].endReleases == mesh.elements[0].endReleases && imported->mesh->elements[1].endReleases == 0);
+  model.elementAttributes[anaf::IO::Attribute::EndReleases][1] = 5000.0;
+  imported = FEM::BEAM::ADAPTER::toMeshData(model, materials(), sections());
+  REQUIRE(imported.has_value());
+  CHECK(imported->mesh->elements[1].endReleases == 0);
+  CHECK(std::ranges::any_of(imported->notes, [](const std::string& n) { return contains(n, "invalid EndReleases"); }));
+}
+
 // ---- results along the element ----------------------------------------------------------------
 
 TEST(diagramsAlongACantileverMatchTheHandSolution) {
@@ -658,7 +868,7 @@ TEST(catalogMatchesPublishedTables) {
   // Values from the EN 10365 / EN 10210-2 tables (cm units). Our y / z are the tables' z / y:
   // the strong axis of an I-section is local z here.
   using namespace FEM::BEAM;
-  const auto catalog = loadSectionLibrary(anaf::DIRECTORY::findAssetPath(kSectionCatalogAsset));
+  const auto catalog = loadSectionLibrary(sourceAsset(kSectionCatalogAsset));
   if (!catalog) std::printf("      %s\n", catalog.error().c_str());
   REQUIRE(catalog.has_value() && catalog->size() > 50);
   const auto find = [&](const char* name) -> const BeamSection& {
@@ -752,7 +962,7 @@ TEST(solverUsesTheSectionShape) {
   const double kappa = 10.0 * 1.3 / (12.0 + 11.0 * 0.3);
   CHECK(near(solved.mesh->nodes[1].getDisplacement()[1], P * std::pow(kL, 3) / (3.0 * kE * Iz) + P * kL / (kG * kappa * A), 1e-10));
   // An IPE 300 from the catalogue, Euler-Bernoulli: the strong axis carries the gravity-direction load.
-  const auto catalog = FEM::BEAM::loadSectionLibrary(anaf::DIRECTORY::findAssetPath(FEM::BEAM::kSectionCatalogAsset));
+  const auto catalog = FEM::BEAM::loadSectionLibrary(sourceAsset(FEM::BEAM::kSectionCatalogAsset));
   REQUIRE(catalog.has_value());
   std::uint32_t ipe = 0;
   while (ipe < catalog->size() && (*catalog)[ipe].getName() != "IPE 300") ++ipe;
@@ -912,7 +1122,7 @@ TEST(shearAndTorsionStressesMatchClosedForms) {
 TEST(elementStressAlongTheElement) {
   using namespace FEM::BEAM;
   // Cantilever, catalogue IPE 300, tip load down: sigma = P L (h/2) / Iz at the clamp.
-  const auto catalog = loadSectionLibrary(anaf::DIRECTORY::findAssetPath(kSectionCatalogAsset));
+  const auto catalog = loadSectionLibrary(sourceAsset(kSectionCatalogAsset));
   REQUIRE(catalog.has_value());
   std::uint32_t ipe = 0;
   while (ipe < catalog->size() && (*catalog)[ipe].getName() != "IPE 300") ++ipe;
@@ -977,6 +1187,7 @@ namespace {
     auto mesh = frameModel(Eigen::Matrix3d::Identity());
     mesh.nodes[4].setAllowedRotationAxes({{0.0, 0.0, 1.0}});
     mesh.elements.push_back(beam(1, 3, Formulation::Timoshenko, {0, 1, 0}, 1)); // a brace, for the fifth shape
+    mesh.elements.back().endReleases = FEM::BEAM::RELEASE::hinge | FEM::BEAM::RELEASE::atNode2(FEM::BEAM::RELEASE::hinge); // pinned
     for (std::uint32_t e = 0; e < mesh.elements.size(); ++e) mesh.elements[e].sectionID = e; // general, rectangle, box, I, pipe
     mesh.nodalLoads.push_back({4, {0.0, 0.0, 0.0}, {0.0, 0.0, 1.5e3}});
     return solve(mesh, fileSections());
@@ -1015,7 +1226,7 @@ namespace {
       const auto& x = a.elements[e];
       const auto& y = b.elements[e];
       ok = x.node1 == y.node1 && x.node2 == y.node2 && x.materialID == y.materialID && x.sectionID == y.sectionID
-        && x.formulation == y.formulation && x.orientation == y.orientation && x.sectionForces == y.sectionForces
+        && x.formulation == y.formulation && x.orientation == y.orientation && x.endReleases == y.endReleases && x.sectionForces == y.sectionForces
         && x.stress.available == y.stress.available && near(x.stress.maxVonMises, y.stress.maxVonMises, 1e-12, 1e-6);
     }
     for (std::size_t l = 0; ok && l < a.nodalLoads.size(); ++l) {
@@ -1174,15 +1385,15 @@ namespace {
   const BuiltInLists& builtInLists() {
     static const BuiltInLists lists = [] {
       BuiltInLists l;
-      auto materials = anaf::MATERIAL::loadMaterialLibrary(anaf::DIRECTORY::findAssetPath("bridge/materialProperties.json"));
-      auto sections = FEM::BEAM::loadSectionLibrary(anaf::DIRECTORY::findAssetPath(FEM::BEAM::kSectionCatalogAsset));
+      auto materials = anaf::MATERIAL::loadMaterialLibrary(sourceAsset("bridge/materialProperties.json"));
+      auto sections = FEM::BEAM::loadSectionLibrary(sourceAsset(FEM::BEAM::kSectionCatalogAsset));
       if (materials) l.materials = std::move(*materials);
       if (sections) l.sections = std::move(*sections);
       return l;
     }();
     return lists;
   }
-  std::filesystem::path beamLibraryDir() { return anaf::DIRECTORY::findAssetPath(FEM::BEAM::LIBRARY::kLibrarySubdir); }
+  std::filesystem::path beamLibraryDir() { return sourceAsset(std::filesystem::path(FEM::BEAM::LIBRARY::kLibrarySubdir)); }
 
   std::string readText(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);

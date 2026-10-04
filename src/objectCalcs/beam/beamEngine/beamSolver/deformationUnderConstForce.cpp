@@ -19,6 +19,7 @@
 #include <log/anaf_info.hpp>
 #include <solvers/solverPortfolio.hpp>
 
+#include <Eigen/Eigenvalues>
 #include <Eigen/Geometry> // cross()
 #include <algorithm>
 #include <cmath>
@@ -60,6 +61,54 @@ namespace FEM::BEAM {
         for (Eigen::Index axis = 0; axis < 3; ++axis) basis(3 + axis, 3 + static_cast<Eigen::Index>(k)) = rotation[k][axis];
       }
       return basis;
+    }
+
+    // Released and kept local DOF indices of a RELEASE bit set.
+    struct ReleaseSplit {
+      std::array<Eigen::Index, 12> released{};
+      std::array<Eigen::Index, 12> kept{};
+      Eigen::Index releasedCount{};
+      Eigen::Index keptCount{};
+    };
+
+    ReleaseSplit splitReleases(const std::uint16_t releases) {
+      ReleaseSplit split;
+      for (Eigen::Index dof = 0; dof < 12; ++dof) {
+        if (releases & (1U << dof)) split.released[static_cast<std::size_t>(split.releasedCount++)] = dof;
+        else split.kept[static_cast<std::size_t>(split.keptCount++)] = dof;
+      }
+      return split;
+    }
+
+    // k_rr, k_rc and f0_r of a split.
+    struct ReleasedBlocks {
+      Eigen::MatrixXd rr;
+      Eigen::MatrixXd rc;
+      Eigen::VectorXd f;
+    };
+
+    ReleasedBlocks releasedBlocks(const ReleaseSplit& split, const Matrix12& k, const Vector12& f0) {
+      const Eigen::Index r = split.releasedCount, c = split.keptCount;
+      ReleasedBlocks blocks{Eigen::MatrixXd(r, r), Eigen::MatrixXd(r, c), Eigen::VectorXd(r)};
+      for (Eigen::Index i = 0; i < r; ++i) {
+        const Eigen::Index row = split.released[static_cast<std::size_t>(i)];
+        for (Eigen::Index j = 0; j < r; ++j) blocks.rr(i, j) = k(row, split.released[static_cast<std::size_t>(j)]);
+        for (Eigen::Index j = 0; j < c; ++j) blocks.rc(i, j) = k(row, split.kept[static_cast<std::size_t>(j)]);
+        blocks.f[i] = f0[row];
+      }
+      return blocks;
+    }
+
+    // k_rr is symmetric positive semi-definite; it is singular when the released DOFs allow a
+    // rigid motion. Checked on the unit-diagonal scaled matrix (translations and rotations have
+    // different units).
+    bool regular(const Eigen::MatrixXd& rr) {
+      const Eigen::VectorXd diagonal = rr.diagonal();
+      if ((diagonal.array() <= 0.0).any()) return false;
+      const Eigen::VectorXd scale = diagonal.cwiseSqrt().cwiseInverse();
+      const Eigen::MatrixXd scaled = scale.asDiagonal() * rr * scale.asDiagonal();
+      const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen(scaled, Eigen::EigenvaluesOnly);
+      return eigen.eigenvalues().minCoeff() > 1e-10 * eigen.eigenvalues().maxCoeff();
     }
 
     Vector12 elementDisplacements(const Node& start, const Node& end) {
@@ -163,6 +212,41 @@ namespace FEM::BEAM {
     return f;
   }
 
+  bool condenseReleases(const std::uint16_t releases, Matrix12& k, Vector12& f0) {
+    if ((releases & RELEASE::allMask) == 0) return true;
+    const auto split = splitReleases(releases);
+    const auto blocks = releasedBlocks(split, k, f0);
+    if (!regular(blocks.rr)) return false;
+    const Eigen::LDLT<Eigen::MatrixXd> rr(blocks.rr);
+    const Eigen::MatrixXd transfer = rr.solve(blocks.rc); // k_rr^-1 k_rc
+    const Eigen::VectorXd loads = rr.solve(blocks.f);     // k_rr^-1 f0_r
+
+    Matrix12 condensed = Matrix12::Zero();
+    Vector12 condensedLoads = Vector12::Zero();
+    for (Eigen::Index i = 0; i < split.keptCount; ++i) {
+      const Eigen::Index row = split.kept[static_cast<std::size_t>(i)];
+      // k_cr k_rr^-1 = (k_rr^-1 k_rc)^T since k is symmetric.
+      condensedLoads[row] = f0[row] - blocks.rc.col(i).dot(loads);
+      for (Eigen::Index j = 0; j < split.keptCount; ++j) {
+        const Eigen::Index col = split.kept[static_cast<std::size_t>(j)];
+        condensed(row, col) = k(row, col) - blocks.rc.col(i).dot(transfer.col(j));
+      }
+    }
+    k = 0.5 * (condensed + condensed.transpose());
+    f0 = condensedLoads;
+    return true;
+  }
+
+  void recoverReleasedDisplacements(const std::uint16_t releases, const Matrix12& k, const Vector12& f0, Vector12& u) {
+    if ((releases & RELEASE::allMask) == 0) return;
+    const auto split = splitReleases(releases);
+    const auto blocks = releasedBlocks(split, k, f0);
+    Eigen::VectorXd kept(split.keptCount);
+    for (Eigen::Index j = 0; j < split.keptCount; ++j) kept[j] = u[split.kept[static_cast<std::size_t>(j)]];
+    const Eigen::VectorXd released = Eigen::LDLT<Eigen::MatrixXd>(blocks.rr).solve(blocks.f - blocks.rc * kept);
+    for (Eigen::Index i = 0; i < split.releasedCount; ++i) u[split.released[static_cast<std::size_t>(i)]] = released[i];
+  }
+
   std::vector<SectionProperties> elementSectionProperties(
     const std::span<const BeamElement> elements,
     const std::span<const BeamSection> sections,
@@ -228,6 +312,12 @@ namespace FEM::BEAM {
       frame.localStiffness = localStiffness(
         material.getElasticityModulus(), material.getShearModulus(), m_properties[index], element.formulation, frame.length
       );
+      Vector12 noLoads = Vector12::Zero();
+      if (!condenseReleases(element.endReleases, frame.localStiffness, noLoads)) {
+        errors[index] = "the end releases make the element a mechanism (e.g. N or T released at both ends, "
+                        "or a shear release on an element pinned at both ends)";
+        continue;
+      }
       const Matrix12 transformation = elementTransformation(frame.axes);
       frame.globalStiffness = transformation.transpose() * frame.localStiffness * transformation;
       frame.fixedEndLoads = Vector12::Zero();
@@ -239,7 +329,8 @@ namespace FEM::BEAM {
         return std::unexpected(std::format("element {} (nodes {} - {}): {}", index, element.node1, element.node2, errors[index]));
       }
     }
-    anaf::LOG::info("Beam elements built: {} (12x12 local stiffness each)", m_elements.size());
+    const auto released = std::ranges::count_if(m_elements, [](const BeamElement& element) { return element.endReleases != 0; });
+    anaf::LOG::info("Beam elements built: {} (12x12 local stiffness each, {} with end releases)", m_elements.size(), released);
     return {};
   }
 
@@ -264,6 +355,13 @@ namespace FEM::BEAM {
       const auto& element = m_elements[index];
       auto& frame = m_frames[index];
       frame.fixedEndLoads = equivalentNodalLoads(localLoads[index], frame.length);
+      if (element.endReleases != 0 && !frame.fixedEndLoads.isZero(0.0)) {
+        // The condensed load needs the uncondensed stiffness (regular: checked in buildElements()).
+        const auto& material = materials[element.materialID];
+        Matrix12 k = localStiffness(material.getElasticityModulus(), material.getShearModulus(), m_properties[index],
+                                    element.formulation, frame.length);
+        condenseReleases(element.endReleases, k, frame.fixedEndLoads);
+      }
       if (frame.fixedEndLoads.isZero(0.0)) continue;
 
       const Vector12 global = elementTransformation(frame.axes).transpose() * frame.fixedEndLoads;
@@ -278,8 +376,82 @@ namespace FEM::BEAM {
     anaf::LOG::info("Applied {} nodal loads and {} distributed loads (plus self weight)", nodalLoads.size(), distributedLoads.size());
   }
 
+  std::expected<void, std::string> Beam_3D_Container::buildNodeDofs() {
+    const std::size_t nodeCount = m_nodes.size();
+    m_nodeDofs.assign(nodeCount, NodeDofs{});
+    m_heldFreeDirections = 0;
+    for (std::size_t node = 0; node < nodeCount; ++node) {
+      m_nodeDofs[node].basis = nodeBasis(m_nodes[node]);
+      m_nodeDofs[node].motion = static_cast<std::uint32_t>(m_nodes[node].getAllowedMotionDirections().size());
+      m_nodeDofs[node].rotation = static_cast<std::uint32_t>(m_nodes[node].getAllowedRotationAxes().size());
+    }
+    if (std::ranges::none_of(m_elements, [](const BeamElement& element) { return element.endReleases != 0; })) return {};
+
+    // Without releases every beam end stiffens all six directions of its node. With them, a
+    // direction may be free at a node: the node's diagonal stiffness block (positive
+    // semi-definite) has a null vector there, and K being semi-definite, that DOF is coupled to
+    // nothing. Such null vectors are pure translations or pure rotations (a released DOF is
+    // one of them in local axes), so the two 3x3 groups are checked on their own.
+    std::vector<Matrix6> diagonal(nodeCount, Matrix6::Zero());
+    std::vector<bool> nearRelease(nodeCount, false);
+    for (std::size_t index = 0; index < m_elements.size(); ++index) {
+      const auto& element = m_elements[index];
+      diagonal[element.node1] += m_frames[index].globalStiffness.block<6, 6>(0, 0);
+      diagonal[element.node2] += m_frames[index].globalStiffness.block<6, 6>(6, 6);
+      if (element.endReleases != 0) nearRelease[element.node1] = nearRelease[element.node2] = true;
+    }
+    std::array<double, 2> loadScale{};
+    for (std::size_t i = 0; i < m_force.size(); ++i) {
+      auto& scale = loadScale[(i % dofsPerNode) / 3];
+      scale = std::max(scale, std::abs(m_force[i]));
+    }
+
+    for (std::size_t node = 0; node < nodeCount; ++node) {
+      if (!nearRelease[node]) continue;
+      auto& dofs = m_nodeDofs[node];
+      for (const Eigen::Index group : {Eigen::Index{0}, Eigen::Index{3}}) {
+        auto& count = group == 0 ? dofs.motion : dofs.rotation;
+        if (count == 0) continue;
+        const auto n = static_cast<Eigen::Index>(count);
+        const Eigen::MatrixXd basis = dofs.basis.block(group, group, 3, n);
+        const Eigen::MatrixXd reduced = basis.transpose() * diagonal[node].block<3, 3>(group, group) * basis;
+        const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen(reduced);
+        const double largest = eigen.eigenvalues().cwiseAbs().maxCoeff();
+        std::vector<Eigen::Index> stiff;
+        for (Eigen::Index k = 0; k < n; ++k) {
+          if (largest > 0.0 && eigen.eigenvalues()[k] > 1e-9 * largest) {
+            stiff.push_back(k);
+            continue;
+          }
+          const Eigen::Vector3d direction = basis * eigen.eigenvectors().col(k);
+          const Eigen::Vector3d load(m_force.data() + dofsPerNode * node + group);
+          const double scale = loadScale[static_cast<std::size_t>(group / 3)];
+          if (scale > 0.0 && std::abs(direction.dot(load)) > 1e-9 * scale) {
+            return std::unexpected(std::format(
+              "node {} can {} freely along ({:.3g}, {:.3g}, {:.3g}): every element end at it is released in that direction, "
+              "but a {} acts along it (a mechanism; keep one element connected or add a support)",
+              node, group == 0 ? "move" : "rotate", direction[0], direction[1], direction[2], group == 0 ? "force" : "moment"));
+          }
+          ++m_heldFreeDirections;
+        }
+        if (stiff.size() == count) continue;
+        dofs.basis.block(group, group, 3, 3).setZero();
+        for (std::size_t k = 0; k < stiff.size(); ++k) {
+          dofs.basis.block(group, group + static_cast<Eigen::Index>(k), 3, 1) = basis * eigen.eigenvectors().col(stiff[k]);
+        }
+        count = static_cast<std::uint32_t>(stiff.size());
+      }
+    }
+    if (m_heldFreeDirections > 0) {
+      anaf::LOG::info("{} node directions are free at hinges (every element end there is released) and held at zero",
+                      m_heldFreeDirections);
+    }
+    return {};
+  }
+
   bool Beam_3D_Container::calculateDisplacements(const std::stop_token stopToken) {
     const auto nodeCount = static_cast<std::uint32_t>(m_nodes.size());
+    if (m_nodeDofs.size() != nodeCount) (void)buildNodeDofs();
 
     // Reduced DOF of slot s of node n at dofsPerNode * n + s, -1 when unused (Block-CG node blocks).
     std::vector<std::int32_t> nodeDofSlots(static_cast<std::size_t>(nodeCount) * dofsPerNode, -1);
@@ -287,12 +459,11 @@ namespace FEM::BEAM {
     std::vector<std::uint32_t> usedSlots(nodeCount, 0);
     std::int32_t activeDofCount = 0;
     for (std::uint32_t node = 0; node < nodeCount; ++node) {
-      bases[node] = nodeBasis(m_nodes[node]);
-      const std::size_t motion = m_nodes[node].getAllowedMotionDirections().size();
-      const std::size_t rotation = m_nodes[node].getAllowedRotationAxes().size();
-      for (std::size_t k = 0; k < motion; ++k) nodeDofSlots[dofsPerNode * node + k] = activeDofCount++;
-      for (std::size_t k = 0; k < rotation; ++k) nodeDofSlots[dofsPerNode * node + 3 + k] = activeDofCount++;
-      usedSlots[node] = static_cast<std::uint32_t>(motion + rotation);
+      const auto& dofs = m_nodeDofs[node];
+      bases[node] = dofs.basis;
+      for (std::size_t k = 0; k < dofs.motion; ++k) nodeDofSlots[dofsPerNode * node + k] = activeDofCount++;
+      for (std::size_t k = 0; k < dofs.rotation; ++k) nodeDofSlots[dofsPerNode * node + 3 + k] = activeDofCount++;
+      usedSlots[node] = dofs.motion + dofs.rotation;
     }
 
     // Element e contributes B^T K_e B, B = blockdiag(B_n1, B_n2); with n used slots it has

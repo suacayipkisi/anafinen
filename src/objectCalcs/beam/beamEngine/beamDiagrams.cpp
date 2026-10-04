@@ -49,6 +49,43 @@ namespace FEM::BEAM {
     };
   }
 
+  Eigen::Matrix<double, 12, 1> elementEndDisplacements(
+    const MeshData& solved,
+    const std::size_t element,
+    const Eigen::Vector3d& localLoad,
+    const std::span<const anaf::MATERIAL::Material> materials,
+    const std::span<const BeamSection> sections
+  ) {
+    if (!solved.hasResults) throw std::invalid_argument("the beam model has no results");
+    if (element >= solved.elements.size()) throw std::invalid_argument("element index out of range");
+    const auto& beam = solved.elements[element];
+    if (beam.materialID >= materials.size() || beam.sectionID >= sections.size()) {
+      throw std::invalid_argument("material or section index out of range");
+    }
+    const auto& start = solved.nodes[beam.node1];
+    const auto& end = solved.nodes[beam.node2];
+    const Eigen::Matrix3d axes = localAxes(start.getLocation(), end.getLocation(), beam.orientation);
+    Vector12 u;
+    u.segment<3>(0) = axes * Eigen::Vector3d(start.getDisplacement().data());
+    u.segment<3>(3) = axes * Eigen::Vector3d(start.getRotation().data());
+    u.segment<3>(6) = axes * Eigen::Vector3d(end.getDisplacement().data());
+    u.segment<3>(9) = axes * Eigen::Vector3d(end.getRotation().data());
+    if (beam.endReleases == 0) return u;
+
+    const auto& material = materials[beam.materialID];
+    const double L = (Eigen::Vector3d(end.getLocation().data()) - Eigen::Vector3d(start.getLocation().data())).norm();
+    const SectionProperties s = computeProperties(sections[beam.sectionID].getShape(), material.getPoisson());
+    const Matrix12 k = localStiffness(material.getElasticityModulus(), material.getShearModulus(), s, beam.formulation, L);
+    Matrix12 condensed = k;
+    Vector12 loads = equivalentNodalLoads(localLoad, L);
+    Vector12 condensedLoads = loads;
+    if (!condenseReleases(beam.endReleases, condensed, condensedLoads)) {
+      throw std::invalid_argument("the end releases make the element a mechanism");
+    }
+    recoverReleasedDisplacements(beam.endReleases, k, loads, u);
+    return u;
+  }
+
   SectionState sectionAt(
     const MeshData& solved,
     const std::size_t element,
@@ -73,11 +110,12 @@ namespace FEM::BEAM {
     const double x = xi * L;
     const Eigen::Matrix3d axes = localAxes(start.getLocation(), end.getLocation(), beam.orientation);
 
-    // Nodal values in local axes.
-    const Eigen::Vector3d u1 = axes * Eigen::Vector3d(start.getDisplacement().data());
-    const Eigen::Vector3d r1 = axes * Eigen::Vector3d(start.getRotation().data());
-    const Eigen::Vector3d u2 = axes * Eigen::Vector3d(end.getDisplacement().data());
-    const Eigen::Vector3d r2 = axes * Eigen::Vector3d(end.getRotation().data());
+    // End values in local axes (released DOFs: the element end's own motion).
+    const Vector12 ends = elementEndDisplacements(solved, element, localLoad, materials, sections);
+    const Eigen::Vector3d u1 = ends.segment<3>(0);
+    const Eigen::Vector3d r1 = ends.segment<3>(3);
+    const Eigen::Vector3d u2 = ends.segment<3>(6);
+    const Eigen::Vector3d r2 = ends.segment<3>(9);
 
     const auto& material = materials[beam.materialID];
     const double E = material.getElasticityModulus();

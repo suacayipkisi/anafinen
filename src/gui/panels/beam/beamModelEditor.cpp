@@ -62,6 +62,15 @@ namespace anaf::GUI {
       return formulation == Formulation::Timoshenko ? "TI" : "EB";
     }
 
+    // "", "  hinge A", "  hinge B" or "  hinge A B" for the element list.
+    std::string releaseLabel(const std::uint16_t releases) {
+      if (releases == 0) return {};
+      std::string label = "  hinge";
+      if (FEM::BEAM::RELEASE::ofEnd(releases, 0) != 0) label += " A";
+      if (FEM::BEAM::RELEASE::ofEnd(releases, 1) != 0) label += " B";
+      return label;
+    }
+
     // Results no longer match an edited model.
     void dropResults(BeamMeshData& mesh) {
       if (!mesh.hasResults) return;
@@ -215,6 +224,7 @@ namespace anaf::GUI {
     m_elementNodeB = 1;
     m_formulation = 0;
     m_orientation = {0.0, 0.0, 0.0};
+    m_releases = 0;
     m_distributed = {0.0, 0.0, 0.0};
     m_distributedFrame = 0;
     m_loadedElement = kNone;
@@ -260,6 +270,7 @@ namespace anaf::GUI {
         if (selected.sectionID < bridge.allSections.size()) m_sectionID = bridge.allSections[selected.sectionID].getSectionID();
         m_formulation = static_cast<int>(selected.formulation);
         m_orientation = selected.orientation;
+        m_releases = selected.endReleases;
       }
     }
   }
@@ -519,6 +530,8 @@ namespace anaf::GUI {
     ImGui::SetItemTooltip("Vector in the local x-y plane (global axes). 0 0 0 = automatic: local y as close to +Y as\n"
                           "possible, +X for vertical members. A section's height lies along local y.");
 
+    renderReleaseInputs();
+
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.3f);
     ImGui::InputScalar("##beam_node_a", ImGuiDataType_U32, &m_elementNodeA);
     ImGui::SameLine();
@@ -540,6 +553,7 @@ namespace anaf::GUI {
       element.sectionID = *section;
       element.formulation = static_cast<Formulation>(m_formulation);
       element.orientation = m_orientation;
+      element.endReleases = static_cast<std::uint16_t>(m_releases & FEM::BEAM::RELEASE::allMask);
       return {};
     };
 
@@ -593,7 +607,8 @@ namespace anaf::GUI {
           const auto index = static_cast<std::uint32_t>(row);
           const auto& element = mesh->elements[index];
           const std::string section = element.sectionID < bridge.allSections.size() ? bridge.allSections[element.sectionID].getName() : "?";
-          std::string label = std::format("{}: {} - {}  {}  {}", index, element.node1, element.node2, section, formulationShort(element.formulation));
+          std::string label = std::format("{}: {} - {}  {}  {}{}", index, element.node1, element.node2, section,
+                                          formulationShort(element.formulation), releaseLabel(element.endReleases));
           if (element.stress.available) label += std::format("  {:.1f} MPa", element.stress.maxVonMises / 1e6);
           ImGui::PushID(row);
           if (element.stress.isStressExceeded) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
@@ -631,6 +646,46 @@ namespace anaf::GUI {
       }
     }
     ImGui::EndDisabled();
+  }
+
+  void BeamModelEditor::renderReleaseInputs() {
+    namespace R = FEM::BEAM::RELEASE;
+    ImGui::SeparatorText("End Releases (Hinges)");
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("A released force is zero at that element end; the end moves on its own in that\n"
+                          "direction (local axes). My + Mz = a bending hinge (pin), torsion still carried.\n"
+                          "Release only one side of a joint: when every element end at a node is free about\n"
+                          "an axis, the node rotation there is undefined (held at zero; a moment on it is a\n"
+                          "mechanism). N or T released at both ends of an element is a mechanism too.\n"
+                          "Used by Add Element and Apply to Selected.");
+    constexpr std::array<const char*, 6> kForces{"N", "Vy", "Vz", "T", "My", "Mz"};
+    if (ImGui::BeginTable("##beam_releases", 7, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV)) {
+      ImGui::TableSetupColumn("End");
+      for (const char* force : kForces) ImGui::TableSetupColumn(force);
+      ImGui::TableHeadersRow();
+      for (int end = 0; end < 2; ++end) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(end == 0 ? "Node A" : "Node B");
+        for (int dof = 0; dof < 6; ++dof) {
+          ImGui::TableNextColumn();
+          ImGui::PushID(end * 6 + dof);
+          ImGui::CheckboxFlags("##release", &m_releases, 1U << (6 * end + dof));
+          ImGui::PopID();
+        }
+      }
+      ImGui::EndTable();
+    }
+    if (ImGui::SmallButton("Hinge A##beam_release")) m_releases = R::hinge;
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Hinge B##beam_release")) m_releases = R::atNode2(R::hinge);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Pinned Both Ends##beam_release")) m_releases = R::hinge | R::atNode2(R::hinge);
+    ImGui::SetItemTooltip("My and Mz released at both ends: the member carries axial force, shear from its own\n"
+                          "load and torsion, like a pin-jointed strut or a simply supported beam.");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("None##beam_release")) m_releases = 0;
   }
 
   void BeamModelEditor::renderElementLoads(const std::uint32_t element) {
@@ -716,6 +771,18 @@ namespace anaf::GUI {
       });
       if (ok) setStatus("Material and section set on every element", false);
       else setStatus("Nothing changed: the model has no elements", true);
+    }
+    if (ImGui::Button("Remove All End Releases##beam", ImVec2(-1.0f, 0.0f))) {
+      std::size_t removed = 0;
+      editModel(bridge, [&](BeamMeshData& mesh) {
+        for (auto& element : mesh.elements) {
+          if (element.endReleases == 0) continue;
+          element.endReleases = 0;
+          ++removed;
+        }
+        return removed > 0;
+      });
+      setStatus(removed > 0 ? std::format("End releases removed from {} elements", removed) : "No element has end releases", false);
     }
   }
 

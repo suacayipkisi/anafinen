@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (Frame Editor "Built-in Models" (40 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (end releases: Frame Editor "End Releases (Hinges)" table and presets, hinge markers in the viewport, hinged end rotations in the drawn shape, sections 2.5 and 3.9; Frame Editor "Built-in Models" (46 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
 
 ## 1. Overall flow (one frame)
 
@@ -207,14 +207,20 @@ Built-in Models (top collapsing header): a combo grouped by category from `asset
 | Force [N], Moment [N m]  [Apply Load] [Remove Load]   |
 |-- Elements -------------------------------------------|
 | Material, Section, [Materials...] [Sections...]       |
-| Formulation, Orientation v, Node A - B  [Add Element] |
-| element list (section, EB/TI, max von Mises; red over |
-|   yield), [Apply to Selected] [Delete Element]        |
+| Formulation, Orientation v                            |
+| End Releases (Hinges): Node A / Node B x N Vy Vz T My |
+|   Mz checkboxes; [Hinge A] [Hinge B] [Pinned Both     |
+|   Ends] [None]                                        |
+| Node A - B  [Add Element]                             |
+| element list (section, EB/TI, "hinge A B", max von    |
+|   Mises; red over yield)                              |
+| [Apply to Selected] [Delete Element]                  |
 |-- Distributed Loads & Self Weight --------------------|
 | [x] Self weight; loads of the selected element        |
 | q [N/m], Axes global / local  [Add Load] [Remove]     |
 |-- Whole Model (collapsed) ----------------------------|
-| Formulation for all; material and section for all     |
+| Formulation for all; material and section for all;    |
+| [Remove All End Releases]                             |
 |-------------------------------------------------------|
 | [Run Solver for Beam], progress                       |
 | [Load Example Frame] [Clear Model]                    |
@@ -226,9 +232,10 @@ Built-in Models (top collapsing header): a combo grouped by category from `asset
 2. Node ids stay `0..n-1`. "Delete Node" removes the node's elements, nodal loads and the distributed loads on those elements, and moves later ids down. "Delete Element" keeps the distributed loads of the other elements pointing at them.
 3. Supports: both modes of each group (translations, rotations) become one basis of allowed directions (`SupportInput::allowedBasis()`), written with `Node::setAllowedMotionDirections()` / `setAllowedRotationAxes()`: the global-axis checkboxes are turned into unit vectors the same way as inclined input, so the node only ever stores vectors. Inclined vectors are read as restrained or allowed directions, as in the truss editor (section 2.4 item 8); switching mode or reading keeps the support. A node whose stored basis is not along the global axes is shown in inclined mode. An inclined rotation support is solved as given, but files keep rotational fixity per global axis only, so export warns (the panel says so).
 4. "Add Element" checks the nodes (existing, different, no duplicate), the material and section, and the orientation with `FEM::BEAM::localAxes()` (zero length, v parallel to the axis). Selecting an element in the list copies its properties into the inputs and sets `bridge.selectedElementId`, shared with the diagram panel.
-5. "Run Solver for Beam" starts `BEAM_WORKER::startSolve()`: copies of the material and section lists, `FEM::BEAM::solveStatic()` on the worker thread, publication into `activeBeamMesh` unless the model was reset ([BRIDGE.md](BRIDGE.md) section 5).
-6. "Load Example Frame" builds a 3D portal frame (HEB 200 columns, IPE 300 girder with a uniform load, a lateral and an out-of-plane nodal load, clamped bases, self weight).
-7. The viewport draws the beam model (section 3.9); nodes and elements can be picked there or selected by id.
+5. End releases: the table edits `m_releases` (the `FEM::BEAM::RELEASE` bits, local axes of the element); "Add Element" and "Apply to Selected" write it into `BeamElement::endReleases`, selecting an element loads it. "Hinge A" / "Hinge B" release My + Mz at one end, "Pinned Both Ends" at both (torsion stays connected); any other combination is ticked by hand. The tooltip states the rules of [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 6.1 (release one side of a joint; N or T at both ends is a mechanism). Invalid combinations are reported by the solver, not the editor. The element list shows "hinge A", "hinge B" or "hinge A B".
+6. "Run Solver for Beam" starts `BEAM_WORKER::startSolve()`: copies of the material and section lists, `FEM::BEAM::solveStatic()` on the worker thread, publication into `activeBeamMesh` unless the model was reset ([BRIDGE.md](BRIDGE.md) section 5).
+7. "Load Example Frame" builds a 3D portal frame (HEB 200 columns, IPE 300 girder with a uniform load, a lateral and an out-of-plane nodal load, clamped bases, self weight).
+8. The viewport draws the beam model (section 3.9); nodes and elements can be picked there or selected by id.
 
 ### 2.6 Section Handler (`SectionHandler`)
 
@@ -376,7 +383,7 @@ deformation scale changed -> applyBeamDeformation()
    section frame per station: twist = scale × local rx, linear between the nodes; bending: the
    frame turned (Rodrigues, smallest rotation) from the undeformed axis onto the drawn tangent,
    which is x + scale × (rz y − ry z) at the nodes and a central difference inside
-every rebuild           -> buildBeamScene(): node squares / spheres, inclined supports, force,
+every rebuild           -> buildBeamScene(): node squares / spheres, hinge balls, inclined supports, force,
                            moment and distributed-load arrows, then pushBeamInstances()
 camera moved (level of detail only) -> pushBeamInstances() alone
 ```
@@ -386,7 +393,8 @@ camera moved (level of detail only) -> pushBeamInstances() alone
 3. The bending rotation shown is the slope of the drawn axis, exact for Euler-Bernoulli; for Timoshenko the section rotation differs from it by the shear angle. Rotations are scaled like the displacements, so a large scale over-twists visibly.
 4. Spheres: radius = 1.3 × the largest section half size at the node (larger than the elements), selected × 1.25.
 5. Level of detail, only above 4000 elements: the on-screen section size `2 × halfSize × focal / distance` picks the real section (≥ 10 px), the simple mesh (≥ 2 px) or a line; the selected element always gets the real section. Only the instance lists change with the camera (the meshes stay on the GPU); 13 120 elements drew at 59 FPS on a Radeon 680M.
-6. Arrows are sized from the scene radius (15 % for forces and moments, 45 % of that for distributed loads).
+6. A released element end gets a light ball of 1.15 × the section half size, set in from the node by two radii (at most a quarter of the element), entity ID of the element (picking it selects the element). With results, a hinged end's rotation comes from `elementEndDisplacements()` (the element end's own rotation), so the drawn sections kink at the hinge.
+7. Arrows are sized from the scene radius (15 % for forces and moments, 45 % of that for distributed loads).
 
 ## 4. Window and platform details
 

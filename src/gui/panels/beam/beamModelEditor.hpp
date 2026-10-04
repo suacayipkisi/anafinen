@@ -32,7 +32,7 @@
 namespace anaf::GUI {
 
   // Editor and solver front end for beam_frame: nodes, beam elements (material, section,
-  // formulation, orientation), supports (6 DOFs), nodal and distributed loads, self weight.
+  // formulation, orientation, end releases / hinges), supports (6 DOFs), nodal and distributed loads, self weight.
   // Every edit publishes a new snapshot into bridge.activeBeamMesh and drops stale results.
   class BeamModelEditor : public IPanel {
   private:
@@ -68,6 +68,7 @@ namespace anaf::GUI {
     std::uint32_t m_sectionID{0};
     int m_formulation{0};                 // FEM::BEAM::Formulation
     std::array<double, 3> m_orientation{0.0, 0.0, 0.0};
+    unsigned int m_releases{0};           // FEM::BEAM::RELEASE bits
     std::array<double, 3> m_distributed{0.0, 0.0, 0.0};
     int m_distributedFrame{0};            // FEM::BEAM::LoadFrame
     std::uint32_t m_loadedElement{kNone};
@@ -94,6 +95,7 @@ namespace anaf::GUI {
     // Inputs of one group; returns its allowed basis or nothing when the input is invalid.
     std::optional<std::vector<std::array<double, 3>>> renderSupportGroup(const char* id, const char* axisNames, SupportInput& input);
     void renderElements(std::uint32_t element);
+    void renderReleaseInputs();
     void renderElementLoads(std::uint32_t element);
     void renderWholeModel();
     void renderSolve();

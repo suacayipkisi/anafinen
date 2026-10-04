@@ -51,6 +51,27 @@ namespace FEM::BEAM {
     bool isStressExceeded{false}; // maxVonMises > the material's yield strength
   };
 
+  // End releases (hinges) of BeamElement::endReleases. Bit k frees local DOF k of an element
+  // end from its node, DOF order {ux, uy, uz, rx, ry, rz}, so it names the section force that
+  // becomes zero there: {N, Vy, Vz, T, My, Mz}. Bits 0..5 belong to node 1, bits 6..11 to node 2
+  // (atNode2()). The released DOFs are condensed out of the element (static condensation): the
+  // element end moves on its own in that direction, the node keeps its other connections.
+  namespace RELEASE {
+    inline constexpr std::uint16_t axial = 1U << 0;    // N  (ux)
+    inline constexpr std::uint16_t shearY = 1U << 1;   // Vy (uy)
+    inline constexpr std::uint16_t shearZ = 1U << 2;   // Vz (uz)
+    inline constexpr std::uint16_t torsion = 1U << 3;  // T  (rx)
+    inline constexpr std::uint16_t momentY = 1U << 4;  // My (ry)
+    inline constexpr std::uint16_t momentZ = 1U << 5;  // Mz (rz)
+    inline constexpr std::uint16_t hinge = momentY | momentZ; // bending hinge (pin), torsion kept
+    inline constexpr std::uint16_t endMask = 0x3F;   // the six bits of one end
+    inline constexpr std::uint16_t allMask = 0xFFF;  // both ends
+    constexpr std::uint16_t atNode2(const std::uint16_t endBits) { return static_cast<std::uint16_t>((endBits & endMask) << 6); }
+    constexpr std::uint16_t ofEnd(const std::uint16_t releases, const int end) {
+      return static_cast<std::uint16_t>((releases >> (6 * end)) & endMask);
+    }
+  } // namespace RELEASE end
+
   // Two-node 3D beam as the snapshot keeps it.
   //
   // Local axes (Nastran CBEAM / ANSYS convention, the same as anaf_io BeamOrientation):
@@ -65,6 +86,7 @@ namespace FEM::BEAM {
     std::uint32_t sectionID{};  // index into the section list (like materialID)
     Formulation formulation{Formulation::EulerBernoulli};
     std::array<double, 3> orientation{}; // v; zero = default rule above
+    std::uint16_t endReleases{};         // RELEASE bits; 0 = rigidly connected at both ends
 
     // Result: end forces in section sign convention, local axes,
     // {N, Vy, Vz, T, My, Mz} at node1, then the same at node2 (N, m).

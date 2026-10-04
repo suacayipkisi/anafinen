@@ -24,6 +24,8 @@
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <span>
 #include <stop_token>
@@ -51,6 +53,20 @@ namespace FEM::BEAM {
   // Work equivalent nodal loads of a uniform load q (local axes, N/m) over the element. The
   // same for both formulations: the Timoshenko shape functions integrate to wL/2 and wL^2/12.
   Vector12 equivalentNodalLoads(const Eigen::Vector3d& localLoad, double length);
+
+  // Static condensation of end releases (RELEASE bits). With the end forces p of the nodes,
+  // k u = p + f0 and p_r = 0 on the released DOFs r give
+  //   u_r = k_rr^-1 (f0_r - k_rc u_c),  k* = k_cc - k_cr k_rr^-1 k_rc,  f0* = f0_c - k_cr k_rr^-1 f0_r
+  // for the kept DOFs c. k and f0 become k* and f0*, with zero rows / columns and entries at the
+  // released DOFs. Returns false (k and f0 unchanged) when k_rr is singular: the released DOFs
+  // alone let the element move (e.g. N or T released at both ends, a pin at both ends plus a
+  // shear release). releases = 0 changes nothing.
+  bool condenseReleases(std::uint16_t releases, Matrix12& k, Vector12& f0);
+
+  // Fills the released entries of u (local end displacements, kept entries given) with the
+  // element end's own motion u_r above. k and f0 are the uncondensed element values; k_rr must
+  // be regular (condenseReleases() returned true).
+  void recoverReleasedDisplacements(std::uint16_t releases, const Matrix12& k, const Vector12& f0, Vector12& u);
 
   // Section properties of every element: its section's shape with its material's Poisson's
   // ratio (the shear coefficients depend on it). Indices must be valid (checked by solveStatic).
@@ -86,11 +102,21 @@ namespace FEM::BEAM {
       Vector12 fixedEndLoads;    // local equivalent nodal loads of the element's total uniform load
     };
 
+    // DOF slots of one node: columns 0..motion-1 and 3..3+rotation-1 of basis (6-component
+    // global vectors), the node's allowed directions minus those without any stiffness.
+    struct NodeDofs {
+      Eigen::Matrix<double, 6, 6> basis;
+      std::uint32_t motion{};
+      std::uint32_t rotation{};
+    };
+
     std::span<Node> m_nodes;
     std::span<BeamElement> m_elements;
     std::span<const SectionProperties> m_properties; // one per element
     std::vector<ElementFrame> m_frames;
     std::vector<double> m_force; // 6 per node, global: fx fy fz mx my mz
+    std::vector<NodeDofs> m_nodeDofs;
+    std::size_t m_heldFreeDirections{};
 
     bool m_isCalculationValid{false};
     double m_energyDiff{};
@@ -105,8 +131,9 @@ namespace FEM::BEAM {
       m_properties = properties;
     }
 
-    // Local axes and stiffness of every element. Fails on a zero length element or an
-    // orientation vector parallel to the element axis.
+    // Local axes and stiffness of every element (end releases condensed). Fails on a zero
+    // length element, an orientation vector parallel to the element axis or releases that make
+    // the element a mechanism.
     std::expected<void, std::string> buildElements(std::span<const anaf::MATERIAL::Material> materials);
 
     // Nodal loads, distributed loads and self weight (density * area * gravity) into the
@@ -117,6 +144,13 @@ namespace FEM::BEAM {
       const std::array<double, 3>& gravity,
       std::span<const anaf::MATERIAL::Material> materials
     );
+
+    // DOF slots of every node (after buildElements() and applyLoads()). A node direction in
+    // which every element end at the node is released (e.g. all beams meeting there are hinged
+    // about the same axis) has no stiffness; it is held at zero, which changes nothing, unless a
+    // load acts along it: then the model is a mechanism and this fails.
+    std::expected<void, std::string> buildNodeDofs();
+    inline std::size_t getHeldFreeDirections() const {return m_heldFreeDirections;}
 
     // False when the solve failed or was stopped; displacements and rotations are then zero.
     bool calculateDisplacements(std::stop_token stopToken = {});

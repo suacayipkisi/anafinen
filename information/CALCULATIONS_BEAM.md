@@ -3,9 +3,9 @@
 This document describes the linear static calculation of 3D frames built from two-node beam elements (Euler-Bernoulli and Timoshenko): data types, local axes, element matrices, loads, supports, results along the element and the tests.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (built-in beam library `FEM::BEAM::LIBRARY`, section 12, catalogue grown to 118 profiles; section face triangulation for rendering, section 2.2; file adapter: section 11; GUI: [GUI.md](GUI.md) sections 2.5-2.7; stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
-> Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 118 standard profiles; normal, shear and von Mises stresses with a yield check.
-> Not implemented yet: point-wise stresses inside the section, channels / angles / tees, end releases (hinges), mass matrix, reactions.
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (end releases / hinges: section 6.1, `BeamElement::endReleases`, library category Hinges & Pins with 6 models, 46 in all; built-in beam library `FEM::BEAM::LIBRARY`, section 12, catalogue grown to 118 profiles; section face triangulation for rendering, section 2.2; file adapter: section 11; GUI: [GUI.md](GUI.md) sections 2.5-2.7; stresses: section 7.2, `BeamElement::stress`; cross-section library: shapes, catalogue, `sectionID`, section 2.2; first version the same day: `FEM::BEAM::solveStatic()`, diagrams along the element, `anaf_beam_tests`).
+> Implemented in `anaf_core`: static solve under nodal forces / moments, uniform distributed loads and self weight; supports as allowed motion / rotation bases; end releases (hinges) by static condensation; section forces; displacement and internal forces at any point of an element; cross-section library (general, rectangle, circle, pipe, box, I) with a catalogue of 118 standard profiles; normal, shear and von Mises stresses with a yield check.
+> Not implemented yet: point-wise stresses inside the section, channels / angles / tees, partial (spring) end fixity, mass matrix, reactions.
 
 ## 1. Overall flow
 
@@ -18,13 +18,16 @@ solveStatic(mesh, materials, sections, st, progress)  (beamSolver.cpp)       pro
    |                        load indices checked; computeProperties(shape, v)
    |                        per element; unused nodes fixed
    +-- Beam_3D_Container                                (deformationUnderConstForce.cpp)
-   |     +-- buildElements()     local axes R, k (12x12), T^T k T per element    0.40
-   |     +-- applyLoads()        nodal F / M; elementLocalLoads() -> wL/2,       0.50
-   |     |                       wL^2/12 equivalent loads -> global f
+   |     +-- buildElements()     local axes R, k (12x12), releases condensed     0.40
+   |     |                       (k*), T^T k* T per element
+   |     +-- applyLoads()        nodal F / M; elementLocalLoads() -> wL/2,
+   |     |                       wL^2/12 equivalent loads (condensed f0*) -> f
+   |     +-- buildNodeDofs()     node bases; directions free at hinges held      0.50
+   |     |                       (or a mechanism error when loaded)
    |     +-- calculateDisplacements()   u = T q per node (6 slots), B^T K_e B
    |     |                              straight into reduced triplets,
    |     |                              SOLVER::solveSelected(dofsPerNode = 6)   0.85
-   |     +-- calculateSectionForces()   p = k (T u_e) - f0, section convention
+   |     +-- calculateSectionForces()   p = k* (T u_e) - f0*, section convention
    +-- calculateStresses()   elementStress() per element: extremes along it,
    |                         yield check                                         0.90
    |     +-- runValidator()             U = W / 2                                0.95
@@ -34,6 +37,7 @@ solveStatic(mesh, materials, sections, st, progress)  (beamSolver.cpp)       pro
 after the solve (beamDiagrams.cpp):
    sectionAt() / sampleElement() / sampleAllElements()
         exact displacement and {N, Vy, Vz, T, My, Mz} at any x of an element
+   elementEndDisplacements()   end values incl. the released DOFs (u_r recovered)
 ```
 
 ## 2. Data types
@@ -45,11 +49,11 @@ after the solve (beamDiagrams.cpp):
 | `SectionShape` | `beamSection/beamSection.hpp` | `std::variant` of `GeneralSection`, `RectangleSection`, `CircleSection`, `PipeSection`, `BoxSection`, `ISection` (dimensions in m) |
 | `BeamSection` | `beamSection/beamSection.hpp` | name, `SectionShape`, built-in flag, stable ID: the library object elements reference |
 | `Formulation` | `beamProperties/element.hpp` | `EulerBernoulli`, `Timoshenko` |
-| `BeamElement` | `beamProperties/element.hpp` | node1, node2, material index, section index, `Formulation`, orientation vector v, result `sectionForces[12]` |
+| `BeamElement` | `beamProperties/element.hpp` | node1, node2, material index, section index, `Formulation`, orientation vector v, `endReleases` (`RELEASE` bits, section 6.1), result `sectionForces[12]` |
 | `NodalLoad` | `beamProperties/loads.hpp` | node, force [N], moment [N m], global axes |
 | `DistributedLoad` | `beamProperties/loads.hpp` | element, uniform value [N/m], `LoadFrame::Global` or `Local` |
 | `MeshData` | `beamProperties/meshData.hpp` | nodes, elements, nodal loads, distributed loads, `gravity` (default {0, −9.80665, 0}; zero = no self weight), `hasResults` |
-| `Beam_3D_Container` | `beamEngine/beamSolver/deformationUnderConstForce.hpp` | Spans over nodes and elements, per-element frame (length, R, k, Tᵀ k T, fixed-end loads), global load vector (6 per node), energies |
+| `Beam_3D_Container` | `beamEngine/beamSolver/deformationUnderConstForce.hpp` | Spans over nodes and elements, per-element frame (length, R, condensed k*, Tᵀ k* T, condensed fixed-end loads), node DOF bases (`NodeDofs`), global load vector (6 per node), energies |
 | `SectionState` | `beamEngine/beamDiagrams.hpp` | position x, undeformed location, global and local displacement, {N, Vy, Vz, T, My, Mz} |
 | `SectionStress` | `beamSection/sectionStress.hpp` | one cross-section: max / min σx and their points {y, z}, τ from shear force, τ from torsion, von Mises |
 | `BeamStress` | `beamProperties/element.hpp` | result `BeamElement::stress`: available (false for a general section), max / min σx, max τ, max von Mises and its position, `isStressExceeded` |
@@ -168,6 +172,34 @@ They are the same for both formulations: the Timoshenko shape functions integrat
 5. Reduced loads f_r = B_nᵀ f_n; after the solve u_n = B_n q_n gives displacement and rotation.
 6. Nodes used by no element are fixed (warning). Supports are homogeneous.
 
+### 6.1 End releases (hinges)
+
+`BeamElement::endReleases` frees chosen local DOFs of an element end from its node. Bit k (`FEM::BEAM::RELEASE`, `element.hpp`) is local DOF k in the order {ux, uy, uz, rx, ry, rz}, so it names the section force that is zero at that end: {N, Vy, Vz, T, My, Mz}. Bits 0..5 belong to node 1, bits 6..11 to node 2 (`RELEASE::atNode2()`). `RELEASE::hinge` = My + Mz (bending hinge, torsion carried).
+
+```text
+element (local)        k u = p + f0,   p = end forces of the nodes,   p_r = 0 on the released DOFs r
+   u_r = k_rr^-1 (f0_r - k_rc u_c)                         element end's own motion
+   k*  = k_cc - k_cr k_rr^-1 k_rc   (zero rows / cols at r)   -> T^T k* T into the global system
+   f0* = f0_c - k_cr k_rr^-1 f0_r   (zero at r)               -> equivalent loads
+node                   diagonal 6x6 block of every node next to a release
+   null direction d  -> no element end at the node stiffens d (all released there)
+      unloaded       -> d removed from the node basis (held at zero, changes nothing)
+      f . d != 0     -> error "node n can rotate / move freely ..."  (a mechanism)
+```
+
+1. `condenseReleases(bits, k, f0)` (`deformationUnderConstForce.hpp`) does the condensation in `buildElements()` (k) and `applyLoads()` (f0, from a fresh uncondensed k). It refuses a singular k_rr, checked on the unit-diagonal scaled matrix (smallest eigenvalue ≤ 1e-10 × largest): the released DOFs alone let the element move, e.g. N or T released at both ends, or a pin at both ends plus a shear release. `solveStatic()` reports it as "the end releases make the element a mechanism".
+2. `buildNodeDofs()` runs after `applyLoads()`. K is positive semi-definite, so a null vector of a node's diagonal block is coupled to nothing; it is a pure translation or a pure rotation (a released DOF is one in local axes, and intersections keep that), so the 3x3 translation and rotation groups are checked on their own (eigenvalue ≤ 1e-9 × largest of the group, in the node's allowed basis). Such a direction is dropped from the node's DOF slots and counted in the log; the reported node rotation along it is zero. A load component along it larger than 1e-9 × the largest load of its kind is a mechanism (error).
+3. Section forces use k* and f0*, so released ends report exactly zero. The energy check uses Tᵀ k* T: the condensed DOFs carry no external work.
+4. `elementEndDisplacements()` (`beamDiagrams.hpp`) recomputes k and f0 and recovers u_r with `recoverReleasedDisplacements()`; `sectionAt()` builds the displacement field from these end values, so the deformed shape kinks at a hinge and the end rotation on the hinged side differs from the node's. Nothing extra is stored, so a model read from a file gets the same field.
+5. Modelling rule: release one side of a joint. A pin-ended member that ends at a foundation or airframe fitting goes to a clamped node; the release is the pin. When every member at a free node is released about the same axis, the node rotation about it has no meaning (held at zero, a moment on it is a mechanism).
+
+| Choice | Reason |
+|---|---|
+| Static condensation per element | Exact (k* is the stiffness of the released element), keeps the 6-DOF node layout, no extra unknowns; RFEM, SAP2000 and Nastran (CBAR PA / PB) do the same. A separate hinge node with coupled translations needs constraint equations or a penalty. |
+| Bits in local DOF order | The same order as `BeamSectionForce` and Nastran's PA / PB digits (1..6), one integer in the file. |
+| Free node directions held, not a tiny spring | No conditioning damage, no invented stiffness; the result is the exact hinged answer. |
+| u_r recomputed, not stored | Survives every file format and a model read from disk without a new result field. |
+
 An inclined rotation support (a rotation basis that is not global axes) is solved, but `anaf_io` stores rotational fixity only per global axis ([FILE_HANDLING.md](FILE_HANDLING.md) section 3.3, node-local frames are future work); the adapter will have to warn when it cannot write one.
 
 ## 7. Element results
@@ -243,6 +275,12 @@ The same energy balance as the truss ([CALCULATIONS.md](CALCULATIONS.md) section
 | `diagramsOfACantileverUnderItsOwnWeight` | v(x) = −w x² (6L² − 4Lx + x²) / 24EI, Mz(x), Vy(x) |
 | `diagramsTurnWithTheFrame` | Along every element of the turned frame: forces equal, displacements turned, ends equal the nodes, dM/dx = ∓V |
 | `diagramArgumentsAreChecked` | No results, bad element, ξ outside [0, 1] or NaN, fewer than 2 samples |
+| `releaseCondensationKeepsTheElementConsistent` | k* symmetric with zero rows / columns at the released DOFs; a recovered u_r makes the released end forces zero and keeps the others; three in-element mechanisms refused, k unchanged |
+| `hingeInAClampedBeamGivesTwoCantilevers` | Clamped-clamped, hinge at mid span, load at the hinge: P L³ / 6EI (+ P L / 2 G As), clamp moments P L / 2, zero moment at the hinge, opposite end rotations on the two sides, shear jump |
+| `hingeOverASupportGivesSimpleSpans` | Two spans with a hinge over the middle support: q L² / 8 and 5 q L⁴ / 384EI at mid span (diagrams), end slopes ± q L³ / 24EI on either side |
+| `pinnedGirderAndThreeHingedFrame` | Girder pinned at both ends between clamped columns (no column moment); three-hinged frame H = q L² / (8 h), column top moment H h, zero at the crown and the bases |
+| `freeHingeDirectionsAreHeldOrReported` | Both beams at a node released about z: held and solved without a moment, mechanism error with one, torsion / My still carried; element mechanism and unknown bits reported |
+| `endReleasesSurviveTheFileAdapter` | `EndReleases` written only when used, read back bit for bit, an invalid code warns |
 | `invalidModelsAreReported` | Error texts: no nodes / elements, J, Iy / Iz, area, missing shear areas, material, node references, parallel v, missing load targets, node ids, mechanisms |
 | `cancelledSolveAndProgress` | Stop request, non-decreasing progress, input unchanged |
 | `sectionPropertiesMatchClosedForms` | Rectangle (J against Roark's β for a/c = 1 and 3), circle, pipe, sharp box (subtraction, Bredt), sharp I; Cowper limits: thin pipe, square tube 20(1+ν)/(48+39ν), I without flanges = rectangle |
@@ -254,7 +292,7 @@ The same energy balance as the truss ([CALCULATIONS.md](CALCULATIONS.md) section
 | `normalStressExtremesMatchTheOutline` | No outline vertex exceeds the support-function extremes and the returned points carry them (every shape, four load cases) |
 | `shearAndTorsionStressesMatchClosedForms` | 1.5 V/A, 4V/3A, thin pipe 2V/A, sharp box and I Jourawski; Q with fillets / radii against the clipped outline integral; torsion formulas; von Mises limits |
 | `elementStressAlongTheElement` | IPE 300 cantilever P L c / I at the clamp and the yield check; simply supported beam q L²/8 at mid span (found as a stationary point without samples), 1.5 (qL/2)/A shear at the supports; general section without stresses |
-| `beamModelSurvivesEveryWritableFormat` | A solved frame (every section shape, mixed formulations, inclined translational supports, nodal force and moment, global and local line loads, gravity, results) bit-exact through MSH 4.1 / 2.2, VTU and VTK legacy; sections found again by name and shape; the imported model solves the same |
+| `beamModelSurvivesEveryWritableFormat` | A solved frame (every section shape, mixed formulations, a brace pinned at both ends, inclined translational supports, nodal force and moment, global and local line loads, gravity, results) bit-exact through MSH 4.1 / 2.2, VTU and VTK legacy; sections found again by name and shape; the imported model solves the same |
 | `beamModelSurvivesStepWithSidecar` | The same through STEP + `.anafFields` (meshing may renumber): counts, sections, loads, results, solve |
 | `beamImportAddsUnknownSections` | A missing section and one with the same name but other dimensions come back as new sections ("My I (imported)"); known ones are reused; the solve with the extended list matches |
 | `inclinedRotationSupportIsReported` | An inclined rotation support is written as fixed about all global axes outside its span, with a warning; the translational basis is kept |
@@ -266,6 +304,7 @@ The tests were checked against injected faults: in the adapter local loads writt
 
 ## 10. Known issues
 
+- A mechanism made of pinned members (for example the inner column lines of a frame whose beams are all pinned, without floor bracing) is not detected either when the loads hardly excite it; the solve returns huge displacements. The built-in models avoid it (plan bracing in `hinge_simple_connection_frame`).
 - An unloaded mechanism is not detected: when the loads do not excite a mechanism (axial load on a beam pinned at both ends that may spin about its own axis) the singular system still gets a finite answer, because the referee has no singularity check; it is shared with the truss solver ([ARCHITECTURE.md](ARCHITECTURE.md) section 8, item 6). `invalidModelsAreReported` loads its torsion mechanism with a torque on purpose.
 - Reactions are not computed.
 - The von Mises value is an upper bound (largest σ and largest τ combined, both shear directions added). Point-wise stresses at stress points of the section (as RFEM reports them) are future work.
@@ -278,6 +317,7 @@ The tests were checked against injected faults: in the adapter local loads writt
 | Model data | In the file |
 |---|---|
 | Element, formulation, orientation | Line2, `ElementFormulation` 1 / 2, `beamOrientation` |
+| End releases | `EndReleases` (the `RELEASE` bits as a number, 0..4095), written only when some element has one |
 | Material | `Material:<name>` set (+ `MaterialID`) |
 | Section | `Section:<name>` set, `SectionShape` + `SectionDimension1..5`; numbers `CrossSectionArea`, `SecondMomentY/Z`, `TorsionConstant`, `ShearAreaY/Z` (shear areas with the element's ν) |
 | Supports | `NodeConstraint`: `fixed` + `allowedMotion` (inclined), `fixedRotation` (global axes only) |
@@ -291,16 +331,28 @@ Import (`toMeshData(model, materials, sections)`):
 3. Materials by name, as in the truss adapter (unknown name: material 0 with a warning).
 4. Sections: the shape comes from `SectionShape` (or, without it, a general section from the numbers; A, Iy, Iz, J must be positive, otherwise the import fails). A section with a known name and the same shape (relative 1e-9) reuses the list entry; anything else becomes a new section in `ImportedBeam::newSections` (one per distinct name and shape), named after the file (or "Imported section N"), with " (imported)" added when the name is taken. Element indices from `sections.size()` on refer to them; the GUI appends them as user sections.
 5. Supports: `allowedMotion` (or the free axes of `fixed`) and the free axes of `fixedRotation`. Prescribed values and amplitudes are reported as ignored.
-6. Results need `Displacement` and `BeamSectionForce`; the stresses are recomputed with `elementStress()`.
+6. `EndReleases` must be an integer in 0..4095; anything else is ignored (rigid ends) with a warning.
+7. Results need `Displacement` and `BeamSectionForce`; the stresses are recomputed with `elementStress()`.
 
 Export (`toMeshModel(mesh, materials, sections)`) writes everything above; an inclined rotation support goes out as fixed about every global axis outside its span, with a message in `model.warnings` (the GUI adds it to the export report).
 
 ## 12. Built-in beam library (`beamTypes/beamLibrary.*`)
 
-`FEM::BEAM::LIBRARY` builds 40 ready-made frames in six categories (Building, Bridge, Industrial, Energy & Tower, Machine & Vehicle, Aerospace; 12 of them aerospace / space: wing spar, strut-braced wing, skid gear, engine pylon, satellite bus, station truss, lunar lander legs, thrust frame, quadcopter, fuselage frame, tail boom, solar array boom). Sections and materials are referenced by catalogue / built-in name; a missing name throws.
+`FEM::BEAM::LIBRARY` builds 46 ready-made frames in seven categories (Building, Bridge, Industrial, Energy & Tower, Machine & Vehicle, Aerospace, Hinges & Pins; 12 of them aerospace / space: wing spar, strut-braced wing, skid gear, engine pylon, satellite bus, station truss, lunar lander legs, thrust frame, quadcopter, fuselage frame, tail boom, solar array boom).
+
+Hinges & Pins (end releases, section 6.1):
+
+| id | Shows |
+|---|---|
+| `hinge_three_hinged_frame` | Statically determinate portal: pinned bases, ridge hinge (one rafter released about z), pinned ties and wall braces |
+| `hinge_gerber_girder` | Cantilever-and-suspended-span bridge: two hinges in the main span |
+| `hinge_simple_connection_frame` | Beams pinned at both ends (shear connections), pinned base plates, pin-ended vertical and plan bracing |
+| `hinge_pinned_web_truss` | Pratt trusses: continuous chords, pin-ended posts and diagonals, rigid end posts |
+| `hinge_loader_crane` | Boom pinned to the column head, luffing cylinder pinned at both ends and free to spin |
+| `hinge_braced_landing_gear` | Gear leg on a trunnion, side and drag braces pinned to clamped airframe fittings | Sections and materials are referenced by catalogue / built-in name; a missing name throws.
 
 ```
-beamLibrary.cpp --buildLibrary()--> MeshData x 40
+beamLibrary.cpp --buildLibrary()--> MeshData x 46
       |                                  |
 anaf_beam_library_tool          ADAPTER::toMeshModel  /  solveStatic + toMeshModel
       v                                  v
@@ -314,9 +366,10 @@ assets/objects/beam/beam3D/  <id>.msh (model)   <id>_solved.msh (model + results
 | `assets/objects/beam/beam3D/index.json` | id, name, category, description per model |
 
 1. Never edit the files by hand: change `beamLibrary.cpp` (or the catalogue), run `anaf_beam_library_tool`, commit the result.
-2. `builtInBeamLibraryMatchesTheGenerator` compares index.json byte-exact and the `.msh` files by content (fields with a relative tolerance).
-3. `builtInBeamsAreStableAndReasonable` imports and solves every model: no warnings, energy check passes, a 1 N / 1 N·m probe at every node finds no mechanism (displacement < 0.1 × extent), deflection < extent / 10, von Mises utilisation < 1, and the `_solved` displacements match a fresh solve.
-4. The GUI loads both files through the Frame Editor's "Built-in Models" section ([GUI.md](GUI.md) section 2.5); export into the library folder is refused.
+2. The tests read the repository's `assets/` (`MAIN_DIR`), not `findAssetPath()`, which prefers an installed package (`/usr/share/anafinen/assets`) that may hold an older library.
+3. `builtInBeamLibraryMatchesTheGenerator` compares index.json byte-exact and the `.msh` files by content (fields with a relative tolerance).
+4. `builtInBeamsAreStableAndReasonable` imports and solves every model: no warnings, energy check passes, a 1 N / 1 N·m probe at every node finds no mechanism (displacement < 0.1 × extent), deflection < extent / 10, von Mises utilisation < 1, and the `_solved` displacements match a fresh solve.
+5. The GUI loads both files through the Frame Editor's "Built-in Models" section ([GUI.md](GUI.md) section 2.5); export into the library folder is refused.
 
 ## 13. Related source files
 

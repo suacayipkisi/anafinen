@@ -31,6 +31,9 @@
 //                  N = N0 - q_x x,  Vy = Vy0 - q_y x,  Vz = Vz0 - q_z x,  T = T0,
 //                  My = My0 + Vz0 x - q_z x^2 / 2,  Mz = Mz0 - Vy0 x + q_y x^2 / 2
 // so dMz/dx = -Vy and dMy/dx = Vz, and the values at x = L are the node 2 section forces.
+// At a released element end (BeamElement::endReleases) the nodal value of that DOF is replaced
+// by the element end's own motion (recoverReleasedDisplacements()), e.g. the rotation on the
+// beam's side of a hinge.
 
 #include <beam/beamProperties/meshData.hpp>
 #include <beam/beamSection/beamSection.hpp>
@@ -57,6 +60,17 @@ namespace FEM::BEAM {
   // {N, Vy, Vz, T, My, Mz} at x from node 1, from the element's section forces and its total
   // local uniform load (the statics formulas above).
   std::array<double, 6> sectionForcesAt(const std::array<double, 12>& sectionForces, const Eigen::Vector3d& localLoad, double x);
+
+  // Local end displacements {u1, r1, u2, r2} of element `element` of a solved model, local axes:
+  // the nodes' values, with released DOFs replaced by the element end's own motion. localLoad
+  // as in sectionAt(). Throws std::invalid_argument like sectionAt().
+  Eigen::Matrix<double, 12, 1> elementEndDisplacements(
+    const MeshData& solved,
+    std::size_t element,
+    const Eigen::Vector3d& localLoad,
+    std::span<const anaf::MATERIAL::Material> materials,
+    std::span<const BeamSection> sections
+  );
 
   // State at xi = x / L in [0, 1] of element `element` of a solved model (MeshData from
   // solveStatic, hasResults = true) with the material and section lists of the solve.

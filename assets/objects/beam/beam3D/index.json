@@ -242,6 +242,42 @@
       "name": "Solar array boom",
       "category": "Aerospace",
       "description": "10 m deployed boom Tube 76.2x2.11 (6061-T6) clamped at the spacecraft. In orbit (no gravity): attitude manoeuvre inertia of the array at the tip, 40 N and 20 N lateral."
+    },
+    {
+      "id": "hinge_three_hinged_frame",
+      "name": "Three-hinged portal frame",
+      "category": "Hinges & Pins",
+      "description": "Statically determinate frame: span 20 m, eaves 5 m, ridge 6.5 m, bases pinned in the frame plane and a ridge hinge (left rafter released about its local z). Horizontal thrust H = w L^2 / (8 f). 4 frames at 6 m, columns HEB 400, rafters IPE 550; eaves and ridge ties IPE 220 and wall braces CHS 88.9x5 pinned at both ends. Roof 7.2 kN/m, wind 2.4 kN/m. S355, self weight."
+    },
+    {
+      "id": "hinge_gerber_girder",
+      "name": "Gerber girder bridge",
+      "category": "Hinges & Pins",
+      "description": "Cantilever-and-suspended-span bridge 20 + 30 + 20 m: two hinges 6 m into the main span (released about z) carry an 18 m suspended span, so the girder is statically determinate in its plane. Twin HEB 600 girders 4 m apart, cross girders IPE 400 every 10 m, deck 18 kN/m per girder. S355, self weight."
+    },
+    {
+      "id": "hinge_simple_connection_frame",
+      "name": "Braced frame with simple connections",
+      "category": "Hinges & Pins",
+      "description": "2 x 2 bays of 6 m, 3 storeys of 3.5 m. Beams IPE 360 (x) / IPE 300 (z) pinned at both ends (shear connections), so they span simply; continuous HEB 240 columns on pinned base plates; stability from pin-ended X bracing CHS 114.3x5 in every face and plan bracing CHS 76.1x4 in every bay (the floor diaphragm: without it the inner column lines are a mechanism). Floors 20 / 5 kN/m, wind 15 kN per node of the x = 0 face. S355, self weight."
+    },
+    {
+      "id": "hinge_pinned_web_truss",
+      "name": "Roof truss with pin-ended web",
+      "category": "Hinges & Pins",
+      "description": "Two 24 m Pratt trusses 2.4 m deep, 6 m apart: continuous SHS 120x120x8 chords, posts SHS 80x80x6.3 and diagonals CHS 88.9x5 pinned at both ends (axial force only), rigid end posts. Purlins IPE 160 pinned, roof bracing CHS 60.3x4 in the end panels. Pin and roller bearings, 12 kN per top chord node. S355, self weight."
+    },
+    {
+      "id": "hinge_loader_crane",
+      "name": "Loader crane (pinned boom and cylinder)",
+      "category": "Hinges & Pins",
+      "description": "2 m column RHS 300x200x12.5 clamped to the truck frame; 4 m boom RHS 250x150x10 at 15 deg, pinned to the column head about z; luffing cylinder (CHS 114.3x5) pinned at both ends and free to spin, so it carries axial force only. 1 t at the tip plus a 0.5 kN side pull. S355, self weight."
+    },
+    {
+      "id": "hinge_braced_landing_gear",
+      "name": "Main landing gear (pinned braces)",
+      "category": "Hinges & Pins",
+      "description": "Cantilever main gear leg CHS 168.3x8 hung from a trunnion that is free about the fore-aft axis (retraction); a side brace and a drag brace (CHS 76.1x4) pinned at both ends to the knee lock it. Landing load at the wheel: 40 kN up, 12 kN drag, 6 kN side. AISI 4130, Timoshenko leg, self weight."
     }
   ]
 }

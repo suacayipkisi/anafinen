@@ -52,10 +52,17 @@ namespace FEM::BEAM::LIBRARY {
     constexpr std::string_view kAl7075 = "Aluminum 7075-T6";
     constexpr std::string_view kTi64 = "Titanium Ti-6Al-4V (Grade 5, annealed)";
     constexpr std::string_view kDouglasFir = "Douglas Fir (along the grain)";
-    constexpr std::string_view kStainless = "Stainless Steel AISI 304 (annealed)";
 
     constexpr Formulation kEB = Formulation::EulerBernoulli;
     constexpr Formulation kTI = Formulation::Timoshenko;
+
+    // End releases: a pin about the local z axis (in-plane hinge of a member whose local y is
+    // up), a bending hinge (My + Mz) and a member pinned at both ends.
+    constexpr std::uint16_t kPinZAtA = RELEASE::momentZ;
+    constexpr std::uint16_t kPinZAtB = RELEASE::atNode2(RELEASE::momentZ);
+    constexpr std::uint16_t kPinnedBothEnds = RELEASE::hinge | RELEASE::atNode2(RELEASE::hinge);
+    // A pin-ended strut that may also spin about its own axis (rod end): torsion freed at one end.
+    constexpr std::uint16_t kStrut = kPinnedBothEnds | RELEASE::atNode2(RELEASE::torsion);
 
     // A model being built: nodes, elements by section / material name, supports, loads.
     class Draft {
@@ -88,6 +95,12 @@ namespace FEM::BEAM::LIBRARY {
         std::vector<std::uint32_t> elements;
         for (std::size_t i = 0; i + 1 < nodes.size(); ++i) elements.push_back(beam(nodes[i], nodes[i + 1], section, material, orientation, formulation));
         return elements;
+      }
+
+      // End releases (RELEASE bits) on an element; see hingeA() / hingeB() / pinned() below.
+      void release(const std::uint32_t element, const std::uint16_t bits) { mesh.elements[element].endReleases |= bits; }
+      void release(const std::vector<std::uint32_t>& elements, const std::uint16_t bits) {
+        for (const auto e : elements) release(e, bits);
       }
 
       void clamp(const std::uint32_t n) { mesh.nodes[n].fixAll(); }
@@ -1069,6 +1082,173 @@ namespace FEM::BEAM::LIBRARY {
                   "of the array at the tip, 40 N and 20 N lateral.");
     }
 
+    // ---- Hinges & Pins (end releases) -----------------------------------------------------------
+    // A pin is an end release on one side of a joint: the other member keeps the node's rotation
+    // defined. Pin-ended members that end at an airframe or foundation fitting go to a clamped
+    // node, the release being the pin.
+
+    LibraryBeam threeHingedFrame(const Lists& l) {
+      Draft d(l.materials, l.sections);
+      const double span = 20.0, eaves = 5.0, ridge = 6.5, spacing = 6.0;
+      std::vector<std::array<std::uint32_t, 5>> frames;
+      for (int f = 0; f < 4; ++f) {
+        const double z = f * spacing, share = (f == 0 || f == 3) ? 0.5 : 1.0;
+        const std::array<std::uint32_t, 5> n{d.node(0, 0, z), d.node(0, eaves, z), d.node(span / 2, ridge, z), d.node(span, eaves, z), d.node(span, 0, z)};
+        for (const auto base : {n[0], n[4]}) d.support(base, {true, true, true}, {true, true, false}); // pinned in the frame plane
+        d.line(d.beam(n[0], n[1], "HEB 400", kS355, {1, 0, 0}), {2.4 * kKN * share, 0, 0}); // wind on the windward column
+        d.beam(n[4], n[3], "HEB 400", kS355, {1, 0, 0});
+        const auto left = d.beam(n[1], n[2], "IPE 550", kS355);
+        d.line(d.beam(n[2], n[3], "IPE 550", kS355), {0, -7.2 * kKN * share, 0});
+        d.line(left, {0, -7.2 * kKN * share, 0});
+        d.release(left, kPinZAtB); // ridge hinge
+        frames.push_back(n);
+      }
+      for (std::size_t f = 0; f + 1 < frames.size(); ++f) {
+        for (const std::size_t k : {1u, 2u, 3u}) d.release(d.beam(frames[f][k], frames[f + 1][k], "IPE 220", kS355), kPinnedBothEnds);
+      }
+      for (const std::size_t f : {0u, 2u}) { // wall bracing in two bays of both side walls
+        for (const std::size_t side : {0u, 4u}) {
+          const std::size_t top = side == 0 ? 1 : 3;
+          d.release(d.beam(frames[f][side], frames[f + 1][top], "CHS 88.9x5", kS355), kPinnedBothEnds);
+        }
+      }
+      return make(std::move(d), "hinge_three_hinged_frame", "Three-hinged portal frame", "Hinges & Pins",
+                  "Statically determinate frame: span 20 m, eaves 5 m, ridge 6.5 m, bases pinned in the frame plane and a ridge hinge (left rafter "
+                  "released about its local z). Horizontal thrust H = w L^2 / (8 f). 4 frames at 6 m, columns HEB 400, rafters IPE 550; eaves "
+                  "and ridge ties IPE 220 and wall braces CHS 88.9x5 pinned at both ends. Roof 7.2 kN/m, wind 2.4 kN/m. S355, self weight.");
+    }
+
+    LibraryBeam gerberGirder(const Lists& l) {
+      Draft d(l.materials, l.sections);
+      const double width = 4.0;
+      std::array<std::vector<std::uint32_t>, 2> girders;
+      for (std::size_t g = 0; g < 2; ++g) {
+        const double z = static_cast<double>(g) * width;
+        girders[g] = line(d, {0, 0, z}, {70, 0, z}, 35); // 2 m segments
+        const auto elements = d.chain(girders[g], "HEB 600", kS355);
+        d.line(elements, {0, -18 * kKN, 0});
+        d.release(elements[12], kPinZAtB); // hinges 6 m into the main span (x = 26 m and 44 m)
+        d.release(elements[22], kPinZAtA);
+        for (const std::size_t at : {0u, 10u, 25u, 35u}) { // abutments and piers; x held at the first pier
+          d.support(girders[g][at], {at == 10, true, true}, {true, false, false});
+        }
+      }
+      for (std::size_t i = 0; i < girders[0].size(); i += 5) d.beam(girders[0][i], girders[1][i], "IPE 400", kS355, {0, 1, 0});
+      return make(std::move(d), "hinge_gerber_girder", "Gerber girder bridge", "Hinges & Pins",
+                  "Cantilever-and-suspended-span bridge 20 + 30 + 20 m: two hinges 6 m into the main span (released about z) carry an 18 m "
+                  "suspended span, so the girder is statically determinate in its plane. Twin HEB 600 girders 4 m apart, cross girders IPE 400 "
+                  "every 10 m, deck 18 kN/m per girder. S355, self weight.");
+    }
+
+    LibraryBeam simpleConnectionFrame(const Lists& l) {
+      Draft d(l.materials, l.sections);
+      auto g = buildGrid(d, steps(6.0, 2), steps(6.0, 2), steps(3.5, 3), "HEB 240", "IPE 360", "IPE 300", kS355);
+      for (std::size_t j = 0; j < g.zs.size(); ++j) {
+        for (std::size_t i = 0; i < g.xs.size(); ++i) d.support(g.at(i, j, 0), {true, true, true}, {false, true, false}); // pinned base plates
+      }
+      d.release(g.beamsX, kPinnedBothEnds); // simple (shear) connections
+      d.release(g.beamsZ, kPinnedBothEnds);
+      d.line(g.beamsX, {0, -20 * kKN, 0});
+      d.line(g.beamsZ, {0, -5 * kKN, 0});
+      for (std::size_t k = 0; k + 1 < g.ys.size(); ++k) { // X bracing in one bay of every face
+        for (const std::size_t j : {std::size_t{0}, g.zs.size() - 1}) {
+          d.release(d.beam(g.at(0, j, k), g.at(1, j, k + 1), "CHS 114.3x5", kS355), kStrut);
+          d.release(d.beam(g.at(1, j, k), g.at(0, j, k + 1), "CHS 114.3x5", kS355), kStrut);
+        }
+        for (const std::size_t i : {std::size_t{0}, g.xs.size() - 1}) {
+          d.release(d.beam(g.at(i, 0, k), g.at(i, 1, k + 1), "CHS 114.3x5", kS355), kStrut);
+          d.release(d.beam(g.at(i, 1, k), g.at(i, 0, k + 1), "CHS 114.3x5", kS355), kStrut);
+        }
+      }
+      // Plan bracing in every bay of every floor stands in for the floor diaphragm: pinned beams
+      // alone carry no shear, so the inner column lines would sway freely (a mechanism).
+      for (std::size_t k = 1; k < g.ys.size(); ++k) {
+        for (std::size_t j = 0; j + 1 < g.zs.size(); ++j) {
+          for (std::size_t i = 0; i + 1 < g.xs.size(); ++i) {
+            d.release(d.beam(g.at(i, j, k), g.at(i + 1, j + 1, k), "CHS 76.1x4", kS355), kStrut);
+            d.release(d.beam(g.at(i + 1, j, k), g.at(i, j + 1, k), "CHS 76.1x4", kS355), kStrut);
+          }
+        }
+        for (std::size_t j = 0; j < g.zs.size(); ++j) d.load(g.at(0, j, k), {15 * kKN, 0, 0}); // wind in x
+      }
+      return make(std::move(d), "hinge_simple_connection_frame", "Braced frame with simple connections", "Hinges & Pins",
+                  "2 x 2 bays of 6 m, 3 storeys of 3.5 m. Beams IPE 360 (x) / IPE 300 (z) pinned at both ends (shear connections), so they "
+                  "span simply; continuous HEB 240 columns on pinned base plates; stability from pin-ended X bracing CHS 114.3x5 in every face and plan "
+                  "bracing CHS 76.1x4 in every bay (the floor diaphragm: without it the inner column lines are a mechanism). "
+                  "Floors 20 / 5 kN/m, wind 15 kN per node of the x = 0 face. S355, self weight.");
+    }
+
+    LibraryBeam pinnedWebTruss(const Lists& l) {
+      Draft d(l.materials, l.sections);
+      const double span = 24.0, depth = 2.4, spacing = 6.0;
+      const int panels = 8;
+      std::array<std::vector<std::uint32_t>, 2> tops;
+      for (std::size_t t = 0; t < 2; ++t) {
+        const double z = static_cast<double>(t) * spacing;
+        const auto bottom = line(d, {0, 0, z}, {span, 0, z}, panels);
+        const auto top = line(d, {0, depth, z}, {span, depth, z}, panels);
+        d.chain(bottom, "SHS 120x120x8", kS355); // continuous chords
+        d.chain(top, "SHS 120x120x8", kS355);
+        for (int p = 0; p <= panels; ++p) {
+          const auto post = d.beam(bottom[p], top[p], "SHS 80x80x6.3", kS355, {1, 0, 0});
+          if (p != 0 && p != panels) d.release(post, kPinnedBothEnds); // end posts rigid: portal action out of plane
+        }
+        for (int p = 0; p < panels; ++p) { // Pratt diagonals, in tension under gravity
+          const bool left = p < panels / 2;
+          d.release(d.beam(left ? top[p] : bottom[p], left ? bottom[p + 1] : top[p + 1], "CHS 88.9x5", kS355), kStrut);
+        }
+        d.support(bottom.front(), {true, true, true}, {true, true, false});
+        d.support(bottom.back(), {false, true, true}, {true, true, false});
+        for (int p = 0; p <= panels; ++p) d.load(top[p], {0, (p == 0 || p == panels ? -6.0 : -12.0) * kKN, 0});
+        tops[t] = top;
+      }
+      for (int p = 0; p <= panels; ++p) d.release(d.beam(tops[0][p], tops[1][p], "IPE 160", kS355), kPinnedBothEnds); // purlins
+      for (const int p : {0, panels - 1}) { // roof bracing in the end panels
+        d.release(d.beam(tops[0][p], tops[1][p + 1], "CHS 60.3x4", kS355), kStrut);
+        d.release(d.beam(tops[1][p], tops[0][p + 1], "CHS 60.3x4", kS355), kStrut);
+      }
+      return make(std::move(d), "hinge_pinned_web_truss", "Roof truss with pin-ended web", "Hinges & Pins",
+                  "Two 24 m Pratt trusses 2.4 m deep, 6 m apart: continuous SHS 120x120x8 chords, posts SHS 80x80x6.3 and diagonals CHS 88.9x5 "
+                  "pinned at both ends (axial force only), rigid end posts. Purlins IPE 160 pinned, roof bracing CHS 60.3x4 in the end panels. "
+                  "Pin and roller bearings, 12 kN per top chord node. S355, self weight.");
+    }
+
+    LibraryBeam loaderCrane(const Lists& l) {
+      Draft d(l.materials, l.sections);
+      const double angle = kPi / 12, reach = 4.0;
+      const auto at = [&](const double s) { return P{s * std::cos(angle), 2.0 + s * std::sin(angle), 0.0}; };
+      const auto base = d.node(0, 0, 0), lug = d.node(0, 0.8, 0), top = d.node(0, 2.0, 0);
+      const auto ram = d.node(at(1.2)[0], at(1.2)[1], 0), mid = d.node(at(2.6)[0], at(2.6)[1], 0), tip = d.node(at(reach)[0], at(reach)[1], 0);
+      d.clamp(base);
+      d.chain({base, lug, top}, "RHS 300x200x12.5", kS355, {1, 0, 0});
+      const auto boom = d.chain({top, ram, mid, tip}, "RHS 250x150x10", kS355);
+      d.release(boom.front(), kPinZAtA); // boom pivot at the column head
+      d.release(d.beam(lug, ram, "CHS 114.3x5", kS355), kStrut); // luffing cylinder, clevis pins at both ends
+      d.load(tip, {0, -10 * kKN, 0.5 * kKN});
+      return make(std::move(d), "hinge_loader_crane", "Loader crane (pinned boom and cylinder)", "Hinges & Pins",
+                  "2 m column RHS 300x200x12.5 clamped to the truck frame; 4 m boom RHS 250x150x10 at 15 deg, pinned to the column head "
+                  "about z; luffing cylinder (CHS 114.3x5) pinned at both ends and free to spin, so it carries axial force only. 1 t at the "
+                  "tip plus a 0.5 kN side pull. S355, self weight.");
+    }
+
+    LibraryBeam bracedLandingGear(const Lists& l) {
+      Draft d(l.materials, l.sections);
+      const auto trunnion = d.node(0, 0, 0), knee = d.node(0, -0.7, 0), axle = d.node(0, -1.6, 0), wheel = d.node(0, -1.6, 0.15);
+      const auto sideFitting = d.node(0, 0, -0.9), dragFitting = d.node(0.8, 0, 0);
+      d.support(trunnion, {true, true, true}, {false, true, true}); // trunnion bearing: free about x (retraction)
+      d.clamp(sideFitting);
+      d.clamp(dragFitting);
+      d.chain({trunnion, knee, axle}, "CHS 168.3x8", kSteel4130, {1, 0, 0}, kTI);
+      d.beam(axle, wheel, "CHS 114.3x5", kSteel4130, {}, kTI);
+      d.release(d.beam(sideFitting, knee, "CHS 76.1x4", kSteel4130), kStrut); // side brace (locks the retraction)
+      d.release(d.beam(dragFitting, knee, "CHS 76.1x4", kSteel4130), kStrut); // drag brace
+      d.load(wheel, {-12 * kKN, 40 * kKN, -6 * kKN});
+      return make(std::move(d), "hinge_braced_landing_gear", "Main landing gear (pinned braces)", "Hinges & Pins",
+                  "Cantilever main gear leg CHS 168.3x8 hung from a trunnion that is free about the fore-aft axis (retraction); a side brace "
+                  "and a drag brace (CHS 76.1x4) pinned at both ends to the knee lock it. Landing load at the wheel: 40 kN up, 12 kN drag, "
+                  "6 kN side. AISI 4130, Timoshenko leg, self weight.");
+    }
+
   } // namespace end
 
   std::vector<LibraryBeam> buildLibrary(const std::span<const anaf::MATERIAL::Material> materials, const std::span<const BeamSection> sections) {
@@ -1080,7 +1260,8 @@ namespace FEM::BEAM::LIBRARY {
                         windTurbineTower, telecomMonopole, solarTracker, offshoreJacket,
                         machineFrame, ladderChassis, bicycleFrame, rollCage, cncGantry, robotArm,
                         wingSpar, strutBracedWing, skidGear, enginePylon, satelliteBus, spaceTruss, lunarLander, thrustFrame,
-                        quadcopter, fuselageSection, tailBoom, solarArrayBoom}) {
+                        quadcopter, fuselageSection, tailBoom, solarArrayBoom,
+                        threeHingedFrame, gerberGirder, simpleConnectionFrame, pinnedWebTruss, loaderCrane, bracedLandingGear}) {
       library.push_back(build(lists));
     }
     return library;

@@ -201,6 +201,11 @@ namespace anaf::IO {
     inline constexpr const char* UniformLoadLocalX = "UniformLoadLocalX";
     inline constexpr const char* UniformLoadLocalY = "UniformLoadLocalY";
     inline constexpr const char* UniformLoadLocalZ = "UniformLoadLocalZ";
+    // Beam end releases (hinges) as a bit set stored in a double (0..4095): bit k frees local
+    // DOF k {ux, uy, uz, rx, ry, rz} of node 1 (k = 0..5) or node 2 (k = 6..11), i.e. the section
+    // force {N, Vy, Vz, T, My, Mz} at that end is zero. Missing / 0 = rigidly connected. A
+    // bending hinge at node 1 is 48 (My + Mz), at node 2 3072, at both ends 3120.
+    inline constexpr const char* EndReleases = "EndReleases";
   }
 
   // Values of the "ElementFormulation" attribute. A Line2 / Line3 element is a bar (axial only,

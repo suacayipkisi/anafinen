@@ -47,6 +47,7 @@ add_test(NAME anaf_core_tests COMMAND anaf_core_tests)
 # Beam / frame solver against closed-form results; anaf_core only, like anaf_core_tests.
 add_executable(anaf_beam_tests beamTests.cpp)
 target_link_libraries(anaf_beam_tests PRIVATE anaf_core project_warnings_and_optimizations)
+target_compile_definitions(anaf_beam_tests PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}") # the committed library and catalogue
 add_test(NAME anaf_beam_tests COMMAND anaf_beam_tests)
 
 add_executable(anaf_truss_io_tests

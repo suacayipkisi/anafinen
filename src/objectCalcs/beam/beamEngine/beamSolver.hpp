@@ -48,13 +48,15 @@ namespace FEM::BEAM {
 
   // Linear static solve of a beam model: Euler-Bernoulli and Timoshenko elements (chosen per
   // element), supports as allowed motion / rotation bases (inclined ones included), nodal
-  // forces and moments, uniform distributed loads and self weight. materials and sections are
-  // the lists the elements' materialID and sectionID values index into (E, G, density and
-  // Poisson's ratio are used; the section properties come from computeProperties()). Returns
-  // why the model cannot be solved (no nodes or elements, an unknown material or section, an
-  // invalid section, a load on a missing node or element, node ids that are not 0..n-1, a bad
-  // orientation vector, a failed solve) or "cancelled" when st was stopped. Nodes used by no
-  // element are held fixed.
+  // forces and moments, uniform distributed loads, self weight and end releases (hinges, by
+  // static condensation; a node direction released at every element end there is held when
+  // unloaded). materials and sections are the lists the elements' materialID and sectionID
+  // values index into (E, G, density and Poisson's ratio are used; the section properties come
+  // from computeProperties()). Returns why the model cannot be solved (no nodes or elements, an
+  // unknown material or section, an invalid section, a load on a missing node or element, node
+  // ids that are not 0..n-1, a bad orientation vector, end releases that make an element or a
+  // loaded node a mechanism, a failed solve) or "cancelled" when st was stopped. Nodes used by
+  // no element are held fixed.
   std::expected<StaticResult, std::string> solveStatic(
     const MeshData& mesh,
     std::span<const anaf::MATERIAL::Material> materials,
