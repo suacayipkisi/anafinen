@@ -83,6 +83,8 @@ namespace anaf::GUI {
     void renderInclinedSupportInputs();
     void setSupportVectors(const std::vector<std::array<double, 3>>& vectors);
     void renderSolve();
+    // Import File... / Clear Model, shown for both load kinds.
+    void renderModelButtons();
 
   public:
     ~TrussModelEditor() override = default;

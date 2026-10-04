@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <bridge/generalStatus.hpp>
 #include <guiMaterials/iPanel.hpp>
 #include <panels/dynamicAnalysisInputs.hpp>
 #include <truss_1D/trussProperties/appliedForce.hpp>
@@ -47,6 +48,15 @@ namespace anaf::GUI {
     std::array<bool, 3> m_fixed{false, false, false};
     std::uint32_t m_lastFixNode{std::numeric_limits<std::uint32_t>::max()};
     DynamicAnalysisInputs m_dynamic; // shown for LoadKind::dynamic
+
+    void renderSummary(BRIDGE::Gui_Calc_Bridge& bridge);
+    void renderGridTab(BRIDGE::Gui_Calc_Bridge& bridge);
+    // Builds the grid with the current inputs on the worker and publishes it.
+    void startPreview(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t materialIndex);
+    // dynamic: supports only (the loads stay in the inputs).
+    void renderLoadsTab(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t currentSelectedNode, bool dynamic);
+    // Deformation scale and the run button (constant load kind).
+    void renderSolve(BRIDGE::Gui_Calc_Bridge& bridge);
   public:
     ~TrussControlPanel() override = default;
     std::function<void()> onOpenMaterialHandler;

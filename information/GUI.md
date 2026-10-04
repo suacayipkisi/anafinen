@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (analysis selector: "Select Analysis" asks for the load kind (constant / dynamic) after Analyze > Truss or Beam; dynamic shows a "Dynamic Analysis" section instead of the static loads and solve, section 2; end releases: Frame Editor "End Releases (Hinges)" table and presets, hinge markers in the viewport, hinged end rotations in the drawn shape, sections 2.5 and 3.9; Frame Editor "Built-in Models" (49 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (editor layout: the three left editors share a summary card, Model / Supports & Loads / Analysis tabs and a fixed footer with the run button, `panels/editorLayout.hpp`, section 2.4; analysis selector: "Select Analysis" asks for the load kind (constant / dynamic) after Analyze > Truss or Beam; dynamic shows the dynamic inputs in the Analysis tab instead of the static loads and solve, section 2; end releases: Frame Editor "End Releases (Hinges)" table and presets, hinge markers in the viewport, hinged end rotations in the drawn shape, sections 2.5 and 3.9; Frame Editor "Built-in Models" (49 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
 
 ## 1. Overall flow (one frame)
 
@@ -67,11 +67,11 @@ Load kind (`BRIDGE::LoadKind`, `bridge.m_loadKind`): "Constant Load (Static)" or
 
 | Panel | Constant | Dynamic |
 |---|---|---|
-| `TrussControlPanel` | force inputs, deformation scale, Run Solver for Truss | constraints only, "Dynamic Analysis" section, Run Modal Analysis (disabled) |
-| `TrussModelEditor` | "Supports & Loads", deformation scale, Run Solver | "Supports" (no force inputs), "Dynamic Analysis", Run Modal Analysis (disabled) |
-| `BeamModelEditor` | "Supports & Nodal Loads", "Distributed Loads & Self Weight", deformation scale, Run Solver | "Supports", no element loads, "Dynamic Analysis", Run Modal Analysis (disabled) |
+| `TrussControlPanel` | "Supports & Loads" tab with the force input; footer: deformation scale, Run Solver for Truss | "Supports" tab (fixity only); Analysis tab with the dynamic inputs; footer: Run Modal Analysis (disabled) |
+| `TrussModelEditor` | "Supports & Loads" tab; footer: deformation scale, Run Solver | "Supports" tab (no force input); dynamic inputs; Run Modal Analysis (disabled) |
+| `BeamModelEditor` | "Supports & Loads" tab with nodal loads, distributed loads and self weight; footer: deformation scale, Run Solver | "Supports" tab (no loads); dynamic inputs; Run Modal Analysis (disabled) |
 
-The "Dynamic Analysis" section (`panels/dynamicAnalysisInputs.hpp`, one `DynamicAnalysisInputs` per editor) has the analysis type (only Modal selectable; Harmonic and Transient listed disabled), number of modes and mass matrix (consistent / lumped). Nothing reads these yet: the modal solver is still to come. Loads entered in the constant mode stay in the model and the panel inputs, only hidden.
+The Analysis tab (`renderAnalysisTab()` in `panels/dynamicAnalysisInputs.hpp`, one `DynamicAnalysisInputs` per editor) names the load kind; for constant loads it says what the static solve uses, for dynamic loads it has the analysis type (only Modal selectable; Harmonic and Transient listed disabled), number of modes and mass matrix (consistent / lumped). Nothing reads these yet: the modal solver is still to come. Loads entered in the constant mode stay in the model and the panel inputs, only hidden.
 
 Object type switch: selecting the type that is already active only reopens its panel. Selecting a different type goes through `Gui_Calc_Bridge::resetModel()` ([BRIDGE.md](BRIDGE.md) section 4.1), so no model, fixity, selection, result or panel input of the previous type survives, and a solve still running for it cannot publish.
 
@@ -81,7 +81,7 @@ Object type switch: selecting the type that is already active only reopens its p
 | `ViewportToolbar` | `panels/viewportToolbar.cpp` | "Viewport Toolbar" | Reset Camera and the display toggles, docked above the viewport (section 3.7) |
 | `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking (nodes, beam elements), overlays, legends; truss as lines, beams with their sections (section 3.9) |
 | `AnalysisSelector` | `panels/analysisSelector.cpp` | "Select Analysis" | Opened by Analyze > Truss / Beam (`open(StructureFamily)`). Truss: "Imported / Self-Built" (first, preselected) or "Simple Quadrangle" (generated grid). Both: load type "Constant Load (Static)" or "Dynamic Load" (preselects the active one). Warns that a type change clears the model. |
-| `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). `resetState()` restores the default inputs. |
+| `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Layout of section 2.4: summary card (grid, bars, supports, loads, result state); tabs Grid (cells, edge, material, area, Generate Preview, Load Demo), Supports & Loads (node, fixity, force), Analysis; footer deformation scale, Run Solver, Clear All. Starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). `resetState()` restores the default inputs. |
 | `TrussModelEditor` | `panels/truss/importedTruss/trussModelEditor.cpp` | "Truss(1D) Model Editor" | For `truss_imported_or_entered`, see section 2.4. |
 | `BeamModelEditor` | `panels/beam/beamModelEditor.cpp` | "Beam(3D) Frame Editor" | For `beam_frame`, see section 2.5. |
 | `SectionHandler` | `panels/beam/sectionHandler.cpp` | "Section Handler" (floating, not dockable) | Beam sections, see section 2.6. |
@@ -152,39 +152,49 @@ File > Export Model... (Ctrl+E)
 - **Object type:** a file with beam elements (`ElementFormulation` 1 / 2) becomes a `beam_frame` model; every other file switches to `truss_imported_or_entered` (from any type) and opens the truss model editor. An import still running when the model is reset (type change, Clear) is discarded: `FileIoPanel` compares `modelGeneration` with the value taken at start.
 - **Solving imported models:** bars are solved in the model editor (section 2.4). Surface / volume meshes are shown as wireframe edges (`RenderElement::isWireframe`) and are never solved.
 
-### 2.4 Model editor (`TrussModelEditor`)
+### 2.4 Editor layout and the truss model editor (`TrussModelEditor`)
+
+The three editors docked on the left (`TrussControlPanel`, `TrussModelEditor`, `BeamModelEditor`) share one layout, built from `panels/editorLayout.hpp` (`anaf::GUI::LAYOUT`):
+
+| Part | Helper | Content |
+|---|---|---|
+| Summary card | `beginCard()` / `endCard()`, `beginStats()` + `stat()` | Bordered child sized to its content: a four-column grid of counts, the result state (green: solved, energy check passed), the last edit message |
+| Tab bar | ImGui tab bar | Model (Grid for the SQPT panel) / Supports & Loads (Supports for dynamic loads, same tab through a `###` ID) / Analysis |
+| Tab body | `beginBody()` / `endBody()` | Scrolling child that ends where the footer starts, so long tabs never push the run button off screen |
+| Footer | `footerHeight()`, `primaryButton()` | Deformation scale, progress bar while solving, the accent-colored run button, model buttons (two equal halves via `splitWidth()`) |
+| Fields | `field()` | Label on the left at a fixed column (7 em), the widget fills the rest; every input row lines up |
+
+Built-in model descriptions sit in a framed box of at most five lines that scrolls. The footer height is computed from its rows each frame (one more while the progress bar shows).
 
 ```text
 +-- Truss(1D) Model Editor ------------------------------+
-| [Import File...]                                       |
-| Nodes / Bars / wireframe edges / loads / supports      |
-| results state + last edit message                      |
-|-- Built-in Models (collapsed) ------------------------|
-| combo grouped by category, description                |
-| [Load Built-in Model]   (read-only; copy in memory)   |
-|-- Whole Model: Section & Material --------------------|
-| Material, Area [cm^2], [ ] also wireframe edges       |
-| [Apply to Whole Model]                                |
-|-- Nodes ----------------------------------------------|
-| Position [m] x y z            [Add Node]              |
-| Selected node (viewport click or typed id)            |
-| Position [m] x y z  [Move Node] [Delete Node]         |
-|-- Bars -----------------------------------------------|
-| Material, [Open Material Handler], Area [cm^2]        |
-| Node A - B                    [Add Bar]               |
-| bar list (clipped, click to select)                   |
-| [Apply to Selected] [Delete Bar]                      |
-|-- Supports & Loads (selected node) -------------------|
-| (o) Global axes  ( ) Inclined / skewed                |
-|   axes:     Fix X / Y / Z                             |
-|   inclined: Restrained / Allowed motion, Vectors 1 2 3|
-|             d1..d3 x y z, resulting line / plane      |
-|                               [Apply Support]         |
-| Force [N] x y z   [Apply Load] [Remove Load]          |
-|-------------------------------------------------------|
-| Deformation Scale, [Run Solver for Truss], progress   |
-| [Clear Model]                                         |
-+-------------------------------------------------------+
+| +- summary --------------------------------------------+|
+| | Nodes  n   Bars n  Supports n  Loads n               ||
+| | wireframe edges (if any); results state; last edit   ||
+| +------------------------------------------------------+|
+| [ Model ][ Supports & Loads ][ Analysis ]              |
+| Model:                                                 |
+|   Built-in Models (collapsed): combo, description box, |
+|     [Load Built-in Model] (read-only; copy in memory)  |
+|   Nodes: New [m] x y z [Add Node]; Selected (viewport  |
+|     click or id); Position [m]; [Move Node][Delete Node]|
+|   Bars: Material, [Open Material Handler], Area [cm^2],|
+|     Node A - B, [Add Bar], bar list (clipped),         |
+|     [Apply to Selected][Delete Bar]                    |
+|   Whole Model (collapsed): Material, Area, [ ] also    |
+|     wireframe edges, [Apply to Whole Model]            |
+| Supports & Loads (selected node):                      |
+|   (o) Global axes ( ) Inclined / skewed                |
+|     axes: Fix X / Y / Z | inclined: Restrained /       |
+|     Allowed motion, Vectors 1 2 3, d1..d3, line / plane|
+|   [Apply Support]; Nodal Load: Force [N] x y z,        |
+|   [Apply Load][Remove Load]                            |
+| Analysis: load kind, static note or dynamic inputs     |
+|--------------------------------------------------------|
+| Deformation [scale]                                    |
+| [######## Run Solver for Truss ########], progress     |
+| [Import File...] [Clear Model]                         |
++--------------------------------------------------------+
 ```
 
 1. Every edit copies the active snapshot (an empty one if there is none), changes it, drops stale results and publishes it ([BRIDGE.md](BRIDGE.md) section 5). Editing is disabled while a worker runs, because the solve result would overwrite the edit.
@@ -198,48 +208,50 @@ File > Export Model... (Ctrl+E)
 
 ### 2.5 Beam frame editor (`BeamModelEditor`)
 
-Built-in Models (top collapsing header): a combo grouped by category from `assets/objects/beam/beam3D/index.json`, the model description, and two buttons. "Load Model" imports `<id>.msh`, "Load Solved Results" imports `<id>_solved.msh`; both call `onLoadBuiltin`, which `gui.cpp` binds to `FileIoPanel::importFile`. File > Export refuses targets inside the truss or beam library folders ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 12).
+Built-in Models (first collapsing header of the Model tab): a combo grouped by category from `assets/objects/beam/beam3D/index.json`, the model description (scrolling box), and two buttons. "Load Model" imports `<id>.msh`, "Load Solved" imports `<id>_solved.msh`; both call `onLoadBuiltin`, which `gui.cpp` binds to `FileIoPanel::importFile`. File > Export refuses targets inside the truss or beam library folders ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 12).
+
+Layout as in section 2.4 (summary card, tabs, fixed footer):
 
 ```text
-+-- Beam(3D) Frame Editor ------------------------------+
-| Nodes / Elements / Supported / loads / self weight     |
-| results: energy check, max displacement, max von Mises |
-|   (element), elements over yield, last edit message    |
-|-- Nodes ----------------------------------------------|
-| Position [m] x y z            [Add Node]              |
-| Selected node (typed id)                              |
-| Position [m] x y z  [Move Node] [Delete Node]         |
-|-- Supports & Nodal Loads (selected node) -------------|
-| [Fixed] [Pinned] [Free]                               |
-| Translation: (o) Global axes ( ) Inclined / skewed    |
-|   axes: Fix Ux Uy Uz | inclined: Restrained / Allowed,|
-|   Vectors 1 2 3, d1..d3, "Held along ..." summary     |
-| Rotation: the same with Rx Ry Rz                      |
-|                               [Apply Support]         |
-| Force [N], Moment [N m]  [Apply Load] [Remove Load]   |
-|-- Elements -------------------------------------------|
-| Material, Section, [Materials...] [Sections...]       |
-| Formulation, Orientation v                            |
-| End Releases (Hinges): Node A / Node B x N Vy Vz T My |
-|   Mz checkboxes; [Hinge A] [Hinge B] [Pinned Both     |
-|   Ends] [None]                                        |
-| Node A - B  [Add Element]                             |
-| element list (section, EB/TI, "hinge A B", max von    |
-|   Mises; red over yield)                              |
-| [Apply to Selected] [Delete Element]                  |
-|-- Distributed Loads & Self Weight --------------------|
-| [x] Self weight; loads of the selected element        |
-| q [N/m], Axes global / local  [Add Load] [Remove]     |
-|-- Whole Model (collapsed) ----------------------------|
-| Formulation for all; material and section for all;    |
-| [Remove All End Releases]                             |
-|-------------------------------------------------------|
-| [Run Solver for Beam], progress                       |
-| [Load Example Frame] [Clear Model]                    |
-+-------------------------------------------------------+
++-- Beam(3D) Frame Editor -------------------------------+
+| +- summary --------------------------------------------+|
+| | Nodes n  Elements n  Supports n  Self weight on/off  ||
+| | Nodal loads n  Line loads n                          ||
+| | energy check, max displacement, max von Mises        ||
+| | (element), elements over yield, last edit message    ||
+| +------------------------------------------------------+|
+| [ Model ][ Supports & Loads ][ Analysis ]              |
+| Model:                                                 |
+|   Built-in Models (collapsed): combo, description box, |
+|     [Load Model] [Load Solved]                         |
+|   Nodes: New [m] [Add Node]; Selected (viewport click  |
+|     or id); Position [m]; [Move Node] [Delete Node]    |
+|   Elements: Material, Section, [Materials...]          |
+|     [Sections...], Formulation, Orientation v,         |
+|     End Releases (Hinges) table + presets;             |
+|     Add / Edit: Node A - B, [Add Element], element list|
+|     (section, EB/TI, hinges, max von Mises; red over   |
+|     yield), [Apply to Selected] [Delete Element]       |
+|   Whole Model (collapsed): formulation, material and   |
+|     section for all, [Remove All End Releases]         |
+| Supports & Loads:                                      |
+|   Supports & Nodal Loads (selected node): presets      |
+|     Fixed / Pinned / Free; Translation and Rotation:   |
+|     global axes or inclined vectors; [Apply Support];  |
+|     Nodal Load: Force [N], Moment [N m],               |
+|     [Apply Load] [Remove Load]                         |
+|   Distributed Loads & Self Weight: [x] self weight;    |
+|     loads of the selected element, q [N/m], Axes,      |
+|     [Add Load] [Remove Loads]                          |
+| Analysis: load kind, static note or dynamic inputs     |
+|--------------------------------------------------------|
+| Deformation [scale] [Auto]                             |
+| [######## Run Solver for Beam ########], progress      |
+| [Load Example Frame] [Clear Model]                     |
++--------------------------------------------------------+
 ```
 
-0. "Deformation Scale" (next to Run Solver) sets `bridge.deformScale`; "Auto" picks the scale that draws the largest nodal displacement as 5 % of the model's bounding-box diagonal.
+0. "Deformation" (footer, above Run Solver) sets `bridge.deformScale`; "Auto" picks the scale that draws the largest nodal displacement as 5 % of the model's bounding-box diagonal.
 1. Every edit copies `bridge.activeBeamMesh` (an empty one if there is none), changes it, drops stale results (displacements, rotations, section forces, stresses) and publishes it. Editing is disabled while a worker runs.
 2. Node ids stay `0..n-1`. "Delete Node" removes the node's elements, nodal loads and the distributed loads on those elements, and moves later ids down. "Delete Element" keeps the distributed loads of the other elements pointing at them.
 3. Supports: both modes of each group (translations, rotations) become one basis of allowed directions (`SupportInput::allowedBasis()`), written with `Node::setAllowedMotionDirections()` / `setAllowedRotationAxes()`: the global-axis checkboxes are turned into unit vectors the same way as inclined input, so the node only ever stores vectors. Inclined vectors are read as restrained or allowed directions, as in the truss editor (section 2.4 item 8); switching mode or reading keeps the support. A node whose stored basis is not along the global axes is shown in inclined mode. An inclined rotation support is solved as given, but files keep rotational fixity per global axis only, so export warns (the panel says so).
@@ -439,5 +451,5 @@ camera moved (level of detail only) -> pushBeamInstances() alone
 - Frame loop and wiring: [src/gui/gui.hpp](../src/gui/gui.hpp), [src/gui/gui.cpp](../src/gui/gui.cpp)
 - Infrastructure: [iPanel.hpp](../src/gui/guiMaterials/iPanel.hpp), [imGuiLayer.hpp](../src/gui/guiMaterials/imGuiLayer.hpp), [imGuiLayer.cpp](../src/gui/guiMaterials/imGuiLayer.cpp), [glHandle.hpp](../src/gui/guiMaterials/glHandle.hpp), [framebuffer.hpp](../src/gui/guiMaterials/framebuffer.hpp), [framebuffer.cpp](../src/gui/guiMaterials/framebuffer.cpp)
 - Viewport: [viewportPanel.hpp](../src/gui/panels/viewportPanel.hpp), [viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [viewportRenderer.hpp](../src/gui/panels/viewportRenderer.hpp), [viewportRenderer.cpp](../src/gui/panels/viewportRenderer.cpp), [beamSceneRenderer.hpp](../src/gui/panels/beamSceneRenderer.hpp), [beamSceneRenderer.cpp](../src/gui/panels/beamSceneRenderer.cpp), [shaderProgram.cpp](../src/gui/guiMaterials/shaderProgram.cpp)
-- Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp), [trussWorker.hpp](../src/gui/panels/truss/trussWorker.hpp), [analysisSelector.cpp](../src/gui/panels/analysisSelector.cpp), [dynamicAnalysisInputs.hpp](../src/gui/panels/dynamicAnalysisInputs.hpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [beamModelEditor.cpp](../src/gui/panels/beam/beamModelEditor.cpp), [beamWorker.cpp](../src/gui/panels/beam/beamWorker.cpp), [sectionHandler.cpp](../src/gui/panels/beam/sectionHandler.cpp), [sectionCombo.hpp](../src/gui/panels/beam/sectionCombo.hpp), [beamDiagramPanel.cpp](../src/gui/panels/beam/beamDiagramPanel.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
+- Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp), [trussWorker.hpp](../src/gui/panels/truss/trussWorker.hpp), [analysisSelector.cpp](../src/gui/panels/analysisSelector.cpp), [dynamicAnalysisInputs.hpp](../src/gui/panels/dynamicAnalysisInputs.hpp), [editorLayout.hpp](../src/gui/panels/editorLayout.hpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [beamModelEditor.cpp](../src/gui/panels/beam/beamModelEditor.cpp), [beamWorker.cpp](../src/gui/panels/beam/beamWorker.cpp), [sectionHandler.cpp](../src/gui/panels/beam/sectionHandler.cpp), [sectionCombo.hpp](../src/gui/panels/beam/sectionCombo.hpp), [beamDiagramPanel.cpp](../src/gui/panels/beam/beamDiagramPanel.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
 - Platform: [linuxCursor.hpp](../src/gui/linuxCursor.hpp), [getExecutableDirectory.cpp](../src/directory/getExecutableDirectory.cpp)

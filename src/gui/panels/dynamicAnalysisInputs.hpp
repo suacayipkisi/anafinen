@@ -18,6 +18,7 @@
 #pragma once
 
 #include <bridge/generalStatus.hpp>
+#include <panels/editorLayout.hpp>
 
 #include "imgui.h"
 
@@ -37,17 +38,11 @@ namespace anaf::GUI {
   inline constexpr std::array<const char*, 3> kDynamicAnalysisTypes{"Modal (natural frequencies)", "Harmonic", "Transient"};
   inline constexpr std::array<const char*, 2> kMassMatrixTypes{"Consistent", "Lumped"};
 
-  // One line under the panel summary: which load kind the panel shows.
-  inline void renderLoadKindLine(const BRIDGE::LoadKind kind) {
-    ImGui::TextDisabled("Load type: %s", kind == BRIDGE::LoadKind::dynamic ? "Dynamic" : "Constant (static)");
-    ImGui::SetItemTooltip("Change it in the Analyze menu; the model is kept.");
-  }
-
-  // "Dynamic Analysis" section: analysis type, mode count, mass matrix.
+  // Dynamic inputs: analysis type, mode count, mass matrix.
   inline void renderDynamicAnalysisInputs(DynamicAnalysisInputs& inputs) {
-    if (!ImGui::CollapsingHeader("Dynamic Analysis", ImGuiTreeNodeFlags_DefaultOpen)) return;
     ImGui::PushID("dynamic_analysis");
-    if (ImGui::BeginCombo("Analysis", kDynamicAnalysisTypes[static_cast<std::size_t>(inputs.analysisType)])) {
+    LAYOUT::field("Analysis");
+    if (ImGui::BeginCombo("##type", kDynamicAnalysisTypes[static_cast<std::size_t>(inputs.analysisType)])) {
       for (std::size_t i = 0; i < kDynamicAnalysisTypes.size(); ++i) {
         // Only modal is planned next; the others are listed to show where this goes.
         const ImGuiSelectableFlags flags = i == 0 ? ImGuiSelectableFlags_None : ImGuiSelectableFlags_Disabled;
@@ -57,19 +52,38 @@ namespace anaf::GUI {
       }
       ImGui::EndCombo();
     }
-    if (ImGui::InputInt("Number of Modes", &inputs.modeCount)) inputs.modeCount = std::clamp(inputs.modeCount, 1, 1000);
-    ImGui::Combo("Mass Matrix", &inputs.massMatrix, kMassMatrixTypes.data(), static_cast<int>(kMassMatrixTypes.size()));
+    LAYOUT::field("Modes");
+    if (ImGui::InputInt("##modes", &inputs.modeCount)) inputs.modeCount = std::clamp(inputs.modeCount, 1, 1000);
+    ImGui::SetItemTooltip("Number of lowest natural frequencies and mode shapes to extract");
+    LAYOUT::field("Mass matrix");
+    ImGui::Combo("##mass", &inputs.massMatrix, kMassMatrixTypes.data(), static_cast<int>(kMassMatrixTypes.size()));
     ImGui::SetItemTooltip("Consistent: from the element shape functions.\nLumped: diagonal, half of the element mass at each node.");
-    ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("Uses supports, materials (density) and sections; static loads are not used.");
-    ImGui::PopTextWrapPos();
     ImGui::PopID();
+  }
+
+  // Content of the editors' "Analysis" tab: the load kind and what the run button will do.
+  inline void renderAnalysisTab(const BRIDGE::LoadKind kind, DynamicAnalysisInputs& inputs) {
+    const bool dynamic = kind == BRIDGE::LoadKind::dynamic;
+    ImGui::SeparatorText(dynamic ? "Dynamic Analysis" : "Linear Static Analysis");
+    ImGui::TextDisabled("Load type: %s", dynamic ? "Dynamic" : "Constant (static)");
+    ImGui::SetItemTooltip("Change it in the Analyze menu; the model is kept.");
+    ImGui::PushTextWrapPos(0.0f);
+    if (dynamic) {
+      ImGui::TextDisabled("Uses supports, materials (density) and sections; static loads are not used.");
+      ImGui::PopTextWrapPos();
+      ImGui::Spacing();
+      renderDynamicAnalysisInputs(inputs);
+    } else {
+      ImGui::TextDisabled("Solves K u = f for the supports and loads of the Supports & Loads tab. The solver "
+                          "(CHOLMOD, LDLT or Block CG) is chosen from the model size and the free memory.");
+      ImGui::PopTextWrapPos();
+    }
   }
 
   // Run button of the dynamic analysis, disabled until the solver exists.
   inline void renderDynamicRunButton() {
     ImGui::BeginDisabled();
-    ImGui::Button("Run Modal Analysis##dynamic", ImVec2(-1.0f, 32.0f));
+    LAYOUT::primaryButton("Run Modal Analysis##dynamic");
     ImGui::EndDisabled();
     ImGui::SetItemTooltip("Not implemented yet");
   }
