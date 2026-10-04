@@ -127,6 +127,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp
     src/gui/panels/truss/importedTruss/trussModelEditor.cpp
     src/gui/panels/viewportPanel.cpp
+    src/gui/panels/viewportToolbar.cpp
     src/gui/panels/viewportRenderer.cpp
     src/gui/panels/fileIoPanel.cpp
     src/gui/panels/aboutPanel.cpp

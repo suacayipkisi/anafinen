@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (window icon: 128 px + 32 px; StartupNotify=false).
+> Verified against: `v0.2.0-alpha` (in development; last release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-04 (window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
 
 ## 1. Overall flow (one frame)
 
@@ -59,7 +59,8 @@ Object type switch: selecting the type that is already active only reopens its p
 
 | Panel | File | Window title | Status |
 |---|---|---|---|
-| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D; Help: "About anafinen...". Builds the default dock layout once (left: analysis set and model editor, right: model tree, bottom: console, center: viewport). |
+| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D; Panels: reopen closed panels (section 2.0); Help: "About anafinen...". Builds the default dock layout once (left: analysis set and model editor, right: model tree, bottom: console, center: viewport with the viewport toolbar strip above it). |
+| `ViewportToolbar` | `panels/viewportToolbar.cpp` | "Viewport Toolbar" | Reset Camera and the display toggles, docked above the viewport (section 3.7) |
 | `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking, overlays, legends |
 | `TrussSelector` | `panels/truss/trussTypePanel.cpp` | "Select Truss Type" | "Imported / Self-Built" (first, preselected) or "Simple Quadrangle" (generated grid). Warns that a type change clears the model. |
 | `TrussControlPanel` | `panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp` | "Truss(1D) Analysis Set" | Geometry, material, loads, fixity, deform scale, preview/solve/demo/clear, starts the worker. The material combo keeps the stable material ID and resolves it to an index when a job starts (falls back to the first material if the selected one was removed). `resetState()` restores the default inputs. |
@@ -70,6 +71,21 @@ Object type switch: selecting the type that is already active only reopens its p
 | `StatusBar` (component, not a panel) | `panels/statusBar.cpp` | footer of "Console" | One line under the log, so it spans the console's width. Left: worker state (IDLE / SOLVING n% / PREVIEW) and, right next to it, a hardware summary built once on the first frame (`Ryzen 7 7735HS 16T  \|  Radeon 680M 2 GB  \|  13.3 GB RAM`, also logged at startup). Right: process CPU %, process memory, system RAM % from `PLATFORM::ResourceMonitor`, sampled every 500 ms (system RAM through `PLATFORM::queryMemory()`, the same reading the solver referee logs). GPU name: `GL_RENDERER` shortened; VRAM: `GL_NVX_gpu_memory_info` (NVIDIA, Mesa), else amdgpu sysfs (Linux) or DXGI (Windows). |
 | `AboutPanel` | `panels/aboutPanel.cpp` | "About anafinen" (modal) | GPLv3 "Appropriate Legal Notices": version, copyright, no-warranty text, full `LICENSE` and `THIRD_PARTY_LICENSES.md` (read from the exe folder, `/usr/share/doc/anafinen` or the source tree). The same notice is logged at startup (`main.cpp`). |
 | `FileIoPanel` | `panels/fileIoPanel.cpp` | none (popups + bottom-right overlay) | Import / export: native file chooser, CAD and export option dialogs, progress bar with Cancel, result notices. Always "open"; draws only while needed. |
+
+### 2.0 Panels menu
+
+The menu bar's "Panels" menu reopens (or closes) the panels that have a close button. `gui.cpp` `bindAnalysisFlow()` registers them with `MainDockSpaceHost::addPanelMenuEntry()`; each entry points at the panel's `isOpen` (checkmark = open) and may carry an availability check on `bridge.m_objectType`, so only the panels of the active analysis can be opened:
+
+| Entry | Available when | Disabled hint |
+|---|---|---|
+| 3D Simulation Viewport | always | - |
+| Truss(1D) Analysis Set | `truss_SQPT` | Simple Quadrangle only |
+| Truss(1D) Model Editor | `truss_imported_or_entered` | imported / self-built only |
+| Material Handler | any type selected | select an analysis first |
+| Model Tree | any type selected | select an analysis first |
+| Console | always | - |
+
+The type selector is reopened through Analyze. The status bar is the console's footer, so it is hidden while the console is closed. The "Viewport Toolbar" draws only while the viewport is open (`ViewportToolbar` holds a pointer to the viewport panel), so it closes and reopens with it.
 
 ### 2.1 ImGui layer (`guiMaterials/imGuiLayer.*`)
 
@@ -192,7 +208,7 @@ Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (
    - Applied forces become arrows with a fixed world length of 3 m: a shaft plus a 4-line head, each duplicated as a glow line.
    - Draw position = `location + displacement * deformScale`, with `deformScale` read from the bridge (`Gui_Calc_Bridge::deformScale`, a view setting) when the snapshot is reloaded.
 2. `fbo.bind()`, depth test on, `fbo.clear(color, entity = -1)`.
-3. `renderGrid(GridView)`: blended, depth writes off, minor spacing `10^floor(log10(distance/12))`, fade distance `max(40 × distance, 6 × scene radius)`. The grid used to be one ±8000 m quad; close to the camera its clipped, interpolated world positions lost precision and the lines bent and swam.
+3. `renderGrid(GridView)` (only while the "Grid" toggle is on, off by default): blended, depth writes off, minor spacing `10^floor(log10(distance/12))`, fade distance `max(40 × distance, 6 × scene radius)`. The grid used to be one ±8000 m quad; close to the camera its clipped, interpolated world positions lost precision and the lines bent and swam.
 4. `render()`:
    - lines at 1.5 px with `GL_LINE_SMOOTH` + alpha blend
    - glow lines at 6 px with additive blend and depth writes off
@@ -211,11 +227,11 @@ Resolve order matters. On radeonsi, a blit from an MSAA FBO that is still bound 
 | Right drag | Orbit (yaw/pitch, no pitch limit: the camera passes over the poles and turns upside down) |
 | Middle drag, or Shift + right drag | Pan target |
 | Mouse wheel | Zoom (distance × (1 − 0.15 × wheel), from 0.001 to max(2000, 50 × scene radius)) |
-| `R` or "Reset Camera" button | Fit to mesh bounds (distance = 2.2 × radius) |
+| `R` or "Reset Camera" toolbar button | Fit to mesh bounds (distance = 2.2 × radius) |
 
 View: `lookAt(target + orbitDirection() × distance, target, orbitUp())`. `orbitUp()` is −∂(orbitDirection)/∂pitch, so it is +Y at zero pitch and stays perpendicular to the view direction at any pitch (no gimbal flip at ±90°). Upside down, the yaw drag is mirrored so the view still follows the mouse.
 
-Projection: `perspective(45°, aspect, near, far)` with `far = 2 × (distance + |target − scene centre| + scene radius)` and `near = max(0.005 × distance, 1e-6 × far)`, so the depth range follows the zoom from millimetre parts to 300 m stadiums. The axis lines reach `max(8000, 200 × scene radius)`, beyond the largest far plane. Scene centre and radius are recomputed (`updateSceneBounds()`) whenever a new snapshot is drawn.
+Projection: `perspective(45°, aspect, near, far)` with `far = 2 × (distance + |target − scene centre| + scene radius)` and `near = max(0.005 × distance, 1e-6 × far)`, so the depth range follows the zoom from millimetre parts to 300 m stadiums. The axis lines (drawn only with the "Axes" toggle on) reach `max(8000, 200 × scene radius)`, beyond the largest far plane. Scene centre and radius are recomputed (`updateSceneBounds()`) whenever a new snapshot is drawn.
 
 ### 3.6 Picking
 
@@ -227,15 +243,40 @@ left click in viewport
    -> m_meshNeedsUpdate = true (re-color selection)
 ```
 
-Only node points write a real entity ID. Lines, grid, and text write -1, so only nodes are pickable, and only while "Nodes: Visible" is on. The ID is the integer `nodeID` stored in the R32I attachment; there is no color encoding. The read is synchronous and stalls the pipeline for one pixel, which is acceptable for click-rate reads.
+Only node points write a real entity ID. Lines, grid, and text write -1, so only nodes are pickable, and only while the "Nodes" toggle is on. The ID is the integer `nodeID` stored in the R32I attachment; there is no color encoding. The read is synchronous and stalls the pipeline for one pixel, which is acceptable for click-rate reads.
 
-### 3.7 2D overlay (ImGui draw list)
+### 3.7 Viewport toolbar
+
+`ViewportToolbar` (`panels/viewportToolbar.*`) is its own `IPanel` with its own window, "Viewport Toolbar" (`ViewportToolbar::kWindowName`). `MainDockSpaceHost` splits it off the top of the viewport's dock node, so it has the viewport's width; the node has no tab bar, no vertical resize and accepts no other window, and its height is `ViewportToolbar::windowHeight()` (frame height + 2 × 6 px padding, at least `WindowMinSize.y`). The buttons never cover the scene or trigger picking.
+
+```text
+ViewportToolbar::onImGuiRender()        writes   ViewportDisplayOptions (shared_ptr, made in gui.cpp openPanels())
+   toggle      -> show* flipped, changed = true
+   Reset Camera -> resetCameraRequested = true
+ViewportPanel::renderSceneOpenGL()       next frame, before the snapshot check
+   changed              -> m_meshNeedsUpdate = true, changed = false
+   resetCameraRequested -> resetCamera(),         flag cleared
+```
+
+Both run on the GUI thread, so the struct needs no lock.
+
+| Button | `ViewportDisplayOptions` field | Default | Effect |
+|---|---|---|---|
+| Reset Camera | - | - | `resetCamera()`, same as `R` |
+| Grid | `showGrid` | off | `renderGrid()` pass |
+| Axes | `showAxes` | off | 3D X / Y / Z axis lines in `buildSceneBatches()`; the corner gizmo is always drawn |
+| Nodes | `showNodes` | off | node points, node labels, picking, displacement colorbar |
+| Forces | `showForces` | on | force arrows |
+| Stress | `showStress` | on | jet stress coloring of the elements and the stress colorbar; off = the unsolved element color |
+
+Hover and press do not change a button's color: a toggle that is on is drawn in `ButtonActive`, everything else (off toggles, Reset Camera) in `Button`. Every toggle makes the viewport rebuild its batches on the next frame.
+
+### 3.8 2D overlay (ImGui draw list)
 
 Drawn by `renderOverlay2D()` on top of the image:
 - axis gizmo (camera rotation only)
-- "Nodes: Visible/Hidden" toggle
 - FPS counter, red below 30 FPS
-- stress colorbar (`|Stress| (MPa)`, 0 … max magnitude) and displacement colorbar (`Disp (mm)`)
+- stress colorbar (`|Stress| (MPa)`, 0 … max magnitude, with "Stress" on) and displacement colorbar (`Disp (mm)`, with "Nodes" on)
 
 ## 4. Window and platform details
 

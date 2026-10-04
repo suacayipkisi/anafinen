@@ -235,7 +235,7 @@ namespace anaf::GUI {
       bridge.dataVersion.fetch_add(1, std::memory_order_release); // redraw the highlight
     }
     if (selectedNode == kNone) {
-      ImGui::TextDisabled("Click a node in the viewport (Nodes: Visible) or type its id.");
+      ImGui::TextDisabled("Click a node in the viewport (Nodes toolbar toggle on) or type its id.");
       return;
     }
 

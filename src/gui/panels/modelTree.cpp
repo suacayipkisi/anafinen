@@ -144,7 +144,7 @@ namespace anaf::GUI {
   void ModelTree::onImGuiRender() {
     auto& bridge = anaf::BRIDGE::buildBridge();
 
-    ImGui::Begin("Model Tree");
+    ImGui::Begin("Model Tree", &isOpen);
 
     // Read every frame, so the tree follows a type change (and its reset) immediately.
     const anaf::BRIDGE::ObjectType latestType = bridge.m_objectType.load();

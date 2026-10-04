@@ -50,6 +50,7 @@
 #include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
 #include "panels/truss/trussTypePanel.hpp"
 #include "panels/viewportPanel.hpp"
+#include "panels/viewportToolbar.hpp"
 
 #include "linuxCursor.hpp"
 
@@ -142,6 +143,7 @@ namespace anaf::GUI {
       TrussSelector* selector = nullptr;
       TrussControlPanel* control = nullptr;
       ModelTree* tree = nullptr;
+      LogTerminal* console = nullptr;
       MaterialHandler* matWindow = nullptr;
       FileIoPanel* fileIo = nullptr;
       AboutPanel* about = nullptr;
@@ -177,6 +179,23 @@ namespace anaf::GUI {
       panels.editor->onRequestImport = [panels] { panels.fileIo->requestImport(); };
       panels.editor->onLoadBuiltin = [panels](const std::filesystem::path& path) { panels.fileIo->importFile(path); };
 
+      // Panels menu: only the panels the active analysis uses can be reopened.
+      const auto activeType = [] { return anaf::BRIDGE::buildBridge().m_objectType.load(); };
+      panels.dock->addPanelMenuEntry({"3D Simulation Viewport", panels.viewport, {}, nullptr});
+      panels.dock->addPanelMenuEntry({"Truss(1D) Analysis Set", panels.control,
+        [activeType] { return activeType() == anaf::BRIDGE::ObjectType::truss_SQPT; },
+        "Only for the Simple Quadrangle truss (Analyze > Truss (1D Element))"});
+      panels.dock->addPanelMenuEntry({"Truss(1D) Model Editor", panels.editor,
+        [activeType] { return activeType() == anaf::BRIDGE::ObjectType::truss_imported_or_entered; },
+        "Only for an imported / self-built truss (Analyze > Truss (1D Element))"});
+      panels.dock->addPanelMenuEntry({"Material Handler", panels.matWindow,
+        [activeType] { return activeType() != anaf::BRIDGE::ObjectType::no_type; },
+        "Select an analysis first (Analyze > Truss (1D Element))"});
+      panels.dock->addPanelMenuEntry({"Model Tree", panels.tree,
+        [activeType] { return activeType() != anaf::BRIDGE::ObjectType::no_type; },
+        "Select an analysis first (Analyze > Truss (1D Element))"});
+      panels.dock->addPanelMenuEntry({"Console", panels.console, {}, nullptr});
+
       panels.dock->on_show_about = [panels] { panels.about->isOpen = true; };
       panels.dock->on_import_mesh = [panels] { panels.fileIo->requestImport(); };
       panels.dock->on_export_results = [panels] { panels.fileIo->requestExport(); };
@@ -193,11 +212,14 @@ namespace anaf::GUI {
 
     std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, const std::shared_ptr<Framebuffer>& fbo) {
       auto dock = panelManager.addPanel<MainDockSpaceHost>(window);
-      auto viewport = panelManager.addPanel<ViewportPanel>(fbo);
+      // Both share the display toggles; the viewport reads them in renderSceneOpenGL().
+      auto display = std::make_shared<ViewportDisplayOptions>();
+      auto viewport = panelManager.addPanel<ViewportPanel>(fbo, display);
+      panelManager.addPanel<ViewportToolbar>(display, viewport.get());
       auto tree = panelManager.addPanel<ModelTree>();
       auto trussSelector = panelManager.addPanel<TrussSelector>();
       auto trussControl = panelManager.addPanel<TrussControlPanel>();
-      panelManager.addPanel<LogTerminal>();
+      auto console = panelManager.addPanel<LogTerminal>();
       auto matWindow = panelManager.addPanel<MaterialHandler>();
       auto fileIo = panelManager.addPanel<FileIoPanel>();
       auto about = panelManager.addPanel<AboutPanel>();
@@ -209,6 +231,7 @@ namespace anaf::GUI {
         trussSelector.get(),
         trussControl.get(),
         tree.get(),
+        console.get(),
         matWindow.get(),
         fileIo.get(),
         about.get(),

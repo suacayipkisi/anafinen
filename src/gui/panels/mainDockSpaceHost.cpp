@@ -16,11 +16,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "mainDockSpaceHost.hpp"
+#include "viewportToolbar.hpp"
 
 #include "imgui.h"
 #include "imgui_internal.h" // DockBuilder API
 
+#include <algorithm>
+
 namespace anaf::GUI {
+
+  void MainDockSpaceHost::renderPanelsMenu() {
+    if (!ImGui::BeginMenu("Panels")) return;
+    for (auto& entry : m_panelMenu_) {
+      const bool available = !entry.isAvailable || entry.isAvailable();
+      // A panel of another analysis type stays closed; the checkmark shows what is open now.
+      ImGui::MenuItem(entry.label, nullptr, &entry.panel->isOpen, available);
+      if (!available && entry.unavailableHint && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("%s", entry.unavailableHint);
+      }
+    }
+    ImGui::EndMenu();
+  }
 
   void MainDockSpaceHost::onImGuiRender() {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -64,6 +80,8 @@ namespace anaf::GUI {
         ImGui::EndMenu();
       }
 
+      renderPanelsMenu();
+
       if (ImGui::BeginMenu("Help")) {
         if (ImGui::MenuItem("About anafinen...")) {
           if (on_show_about) on_show_about();
@@ -100,11 +118,21 @@ namespace anaf::GUI {
       ImGuiID dock_bottom_id = ImGui::DockBuilderSplitNode(
         dock_main_id, ImGuiDir_Down, 0.25f, nullptr, &dock_main_id);
 
+      // 4. Thin toolbar strip on top of the viewport, same width, fixed height and no tab bar
+      const float toolbarHeight = ViewportToolbar::windowHeight();
+      const float centerHeight = ImGui::DockBuilderGetNode(dock_main_id)->Size.y;
+      ImGuiID dock_toolbar_id = ImGui::DockBuilderSplitNode(
+        dock_main_id, ImGuiDir_Up, std::clamp(toolbarHeight / centerHeight, 0.01f, 0.5f), nullptr, &dock_main_id);
+      ImGuiDockNode* toolbarNode = ImGui::DockBuilderGetNode(dock_toolbar_id);
+      toolbarNode->LocalFlags |= ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoResizeY | ImGuiDockNodeFlags_NoDockingOverMe;
+      ImGui::DockBuilderSetNodeSize(dock_toolbar_id, ImVec2(toolbarNode->Size.x, toolbarHeight));
+
       // Dock windows into respective nodes
       ImGui::DockBuilderDockWindow("Truss(1D) Analysis Set", dock_left_id);
       ImGui::DockBuilderDockWindow("Truss(1D) Model Editor", dock_left_id);
       ImGui::DockBuilderDockWindow("Model Tree", dock_right_id);
       ImGui::DockBuilderDockWindow("Console", dock_bottom_id);
+      ImGui::DockBuilderDockWindow(ViewportToolbar::kWindowName, dock_toolbar_id);
       ImGui::DockBuilderDockWindow("3D Simulation Viewport", dock_main_id);
 
       ImGui::DockBuilderFinish(dockspace_id);

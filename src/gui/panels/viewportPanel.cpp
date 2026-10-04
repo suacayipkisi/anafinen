@@ -39,9 +39,10 @@
 
 namespace anaf::GUI {
 
-  ViewportPanel::ViewportPanel(std::shared_ptr<Framebuffer> fbo) :
+  ViewportPanel::ViewportPanel(std::shared_ptr<Framebuffer> fbo, std::shared_ptr<ViewportDisplayOptions> display) :
     m_fbo_(std::move(fbo)),
-    m_renderer_(std::make_unique<ViewportRenderer>())
+    m_renderer_(std::make_unique<ViewportRenderer>()),
+    m_display(std::move(display))
   {}
 
   namespace {
@@ -160,12 +161,14 @@ namespace anaf::GUI {
   void ViewportPanel::buildSceneBatches() {
     m_renderer_->clearBuffers();
 
-    // Coordinate axes X, Y, Z, extended far past the camera's far clip plane so they appear infinite (EntityID = -1)
+    // Coordinate axes X, Y, Z (only with the axes toggle on), extended far past the camera's far clip plane so they appear infinite (EntityID = -1)
     // farPlane() stays below ~100 scene radii at the widest zoom, so 200 radii look infinite.
-    const float axisReach = std::max(8000.0f, m_sceneRadius * 200.0f);
-    m_renderer_->addLine(glm::vec3(-axisReach, 0.0f, 0.0f), glm::vec3(axisReach, 0.0f, 0.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f), -1);
-    m_renderer_->addLine(glm::vec3(0.0f, -axisReach, 0.0f), glm::vec3(0.0f, axisReach, 0.0f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f), -1);
-    m_renderer_->addLine(glm::vec3(0.0f, 0.0f, -axisReach), glm::vec3(0.0f, 0.0f, axisReach), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
+    if (m_display->showAxes) {
+      const float axisReach = std::max(8000.0f, m_sceneRadius * 200.0f);
+      m_renderer_->addLine(glm::vec3(-axisReach, 0.0f, 0.0f), glm::vec3(axisReach, 0.0f, 0.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f), -1);
+      m_renderer_->addLine(glm::vec3(0.0f, -axisReach, 0.0f), glm::vec3(0.0f, axisReach, 0.0f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f), -1);
+      m_renderer_->addLine(glm::vec3(0.0f, 0.0f, -axisReach), glm::vec3(0.0f, 0.0f, axisReach), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
+    }
 
     if (!m_currentMesh || m_currentMesh->trussNodes.empty()) {
       m_cachedMaxStress = 0.0;
@@ -192,9 +195,11 @@ namespace anaf::GUI {
     m_cachedMaxStress = maxStress;
 
     const double deformScale = m_deformScale;
+    // Without stress coloring the elements keep the color of an unsolved model.
+    const bool colorByStress = m_display->showStress && maxStress > 1e-9;
 
     auto stressColor = [&](double val) -> glm::vec4 {
-      if (maxStress <= 1e-9) {
+      if (!colorByStress) {
         return glm::vec4(0.4f, 0.6f, 0.85f, 1.0f);
       }
       const float t = static_cast<float>(std::sqrt(std::clamp(std::abs(val) / maxStress, 0.0, 1.0)));
@@ -234,7 +239,7 @@ namespace anaf::GUI {
     }
 
     // Interactive Nodes (Points in FBO)
-    if (m_showNodes) {
+    if (m_display->showNodes) {
       auto displacementColor = [&](double magnitude) -> glm::vec4 {
         const double t = (maxDisp > 0.0) ? std::clamp(magnitude / maxDisp, 0.0, 1.0) : 0.0;
         float r = static_cast<float>(t);
@@ -309,6 +314,7 @@ namespace anaf::GUI {
     const glm::vec4 forceGlowColor(1.0f, 0.3f, 0.3f, 0.35f);
 
     for (const auto& force : mesh.appliedForces) {
+      if (!m_display->showForces) break;
       const uint32_t targetId = force.getAppliedNode();
       if (targetId > maxNodeId) continue;
 
@@ -347,6 +353,16 @@ namespace anaf::GUI {
     auto& bridge = BRIDGE::buildBridge();
     const uint64_t currentVersion = bridge.dataVersion.load(std::memory_order_acquire);
 
+    // Toolbar requests from the previous ImGui frame.
+    if (m_display->changed) {
+      m_display->changed = false;
+      truss_1d_gui_prop.m_meshNeedsUpdate = true;
+    }
+    if (m_display->resetCameraRequested) {
+      m_display->resetCameraRequested = false;
+      resetCamera();
+    }
+
     if (truss_1d_gui_prop.m_meshNeedsUpdate || currentVersion != truss_1d_gui_prop.m_lastRenderedVersion) {
       {
         std::lock_guard<std::mutex> lock(bridge.dataMutex);
@@ -372,7 +388,7 @@ namespace anaf::GUI {
     m_fbo_->clear(0.08f, 0.09f, 0.11f, 1.0f, -1);
 
     const glm::mat4 mvp = getViewProjectionMatrix();
-    {
+    if (m_display->showGrid) {
       GridView grid;
       grid.spacing = std::pow(10.0f, std::floor(std::log10(m_cameraDistance / 12.0f)));
       // Local origin snapped to the major grid, computed in double so a far-panned camera keeps
@@ -395,7 +411,7 @@ namespace anaf::GUI {
 
     // Node number labels, rendered as OpenGL glyph quads (ImGui font atlas) instead of an ImGui 2D overlay.
     m_renderer_->clearTextBuffer();
-    if (m_showNodes && m_currentMesh && !m_currentMesh->trussNodes.empty()) {
+    if (m_display->showNodes && m_currentMesh && !m_currentMesh->trussNodes.empty()) {
       std::uint32_t selectedId = std::numeric_limits<std::uint32_t>::max();
       {
         std::lock_guard<std::mutex> lock(bridge.dataMutex);
@@ -476,13 +492,6 @@ namespace anaf::GUI {
 
     // Node ID labels are rendered directly in the OpenGL scene pass (see renderSceneOpenGL), not here.
 
-    // show-hide nodes
-    ImGui::SetCursorScreenPos(ImVec2(origin.x + 4.0f, origin.y + 36.0f));
-    if (ImGui::Button(m_showNodes ? "Nodes: Visible" : "Nodes: Hidden")) {
-      m_showNodes = !m_showNodes;
-      truss_1d_gui_prop.m_meshNeedsUpdate = true;
-    }
-
     // FPS Monitor
     {
       const float fps = ImGui::GetIO().Framerate;
@@ -545,9 +554,13 @@ namespace anaf::GUI {
 
       const float startX = origin.x + 20.0f;
       const float startY = origin.y + size.y - barHeight - 25.0f;
-      drawColorbar(startX, startY, "|Stress| (MPa)", m_cachedMaxStress / 1.0e6);
-      if (m_showNodes) {
-        drawColorbar(startX, startY - 220.0f, "Disp (mm)", m_cachedMaxDisp * 1000.0);
+      float nextTop = startY;
+      if (m_display->showStress) {
+        drawColorbar(startX, nextTop, "|Stress| (MPa)", m_cachedMaxStress / 1.0e6);
+        nextTop -= 220.0f;
+      }
+      if (m_display->showNodes) {
+        drawColorbar(startX, nextTop, "Disp (mm)", m_cachedMaxDisp * 1000.0);
       }
     }
   }
@@ -578,12 +591,6 @@ namespace anaf::GUI {
     ImGui::Image(texId, availSize, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
 
     m_viewportHovered_ = ImGui::IsItemHovered();
-
-    // Keep the camera reset accessible without requiring keyboard focus.
-    ImGui::SetCursorScreenPos(ImVec2(origin.x + 4.0f, origin.y + 4.0f));
-    if (ImGui::Button("Reset Camera")) {
-      resetCamera();
-    }
 
     // GPU Pixel Picking Interaction
     if (m_viewportHovered_ && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {

@@ -32,7 +32,7 @@ namespace anaf::GUI {
   void LogTerminal::onImGuiRender() {
     ImGui::PushFont(ImGuiLayer::font_console);
 
-    ImGui::Begin("Console");
+    ImGui::Begin("Console", &isOpen);
 
     if (ImGui::Button("Clear")) {
       std::lock_guard<std::mutex> lock(g_log_mutex);

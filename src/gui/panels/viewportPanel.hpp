@@ -21,6 +21,7 @@
 #include <guiMaterials/framebuffer.hpp>
 #include <bridge/generalStatus.hpp>
 #include "viewportRenderer.hpp"
+#include "viewportToolbar.hpp"
 
 #include "imgui.h"
 
@@ -53,7 +54,7 @@ namespace anaf::GUI{
 
     bool m_draggingView {false};
     bool m_fitRequested_ {false};
-    bool m_showNodes {false};
+    std::shared_ptr<ViewportDisplayOptions> m_display; // toggles set in ViewportToolbar
     ImVec2 m_viewportSize{0.0f, 0.0f};
 
     Truss_1D_GUI_PROPERTIES truss_1d_gui_prop{};
@@ -75,7 +76,7 @@ namespace anaf::GUI{
     void renderOverlay2D(const ImVec2& origin, const ImVec2& size);
 
   public:
-    explicit ViewportPanel(std::shared_ptr<Framebuffer> fbo);
+    ViewportPanel(std::shared_ptr<Framebuffer> fbo, std::shared_ptr<ViewportDisplayOptions> display);
     ~ViewportPanel() override = default;
 
     void renderSceneOpenGL();
