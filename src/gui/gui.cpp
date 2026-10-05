@@ -54,6 +54,7 @@
 #include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
 #include "panels/viewportPanel.hpp"
 #include "panels/viewportToolbar.hpp"
+#include "panels/welcomePanel.hpp"
 
 #include "linuxCursor.hpp"
 
@@ -154,6 +155,7 @@ namespace anaf::GUI {
       BeamModelEditor* beamEditor = nullptr;
       SectionHandler* sections = nullptr;
       BeamDiagramPanel* diagrams = nullptr;
+      WelcomePanel* welcome = nullptr;
     };
 
     void closeBeamPanels(const UIPanels& panels) {
@@ -241,6 +243,15 @@ namespace anaf::GUI {
       panels.dock->addPanelMenuEntry({"Console", panels.console, {}, nullptr});
 
       panels.dock->on_show_about = [panels] { panels.about->isOpen = true; };
+      panels.dock->on_show_welcome = [panels] { panels.welcome->open(); };
+      panels.welcome->onNewBeam = [panels] { panels.selector->open(StructureFamily::beam); };
+      panels.welcome->onNewTruss = [panels] { panels.selector->open(StructureFamily::truss); };
+      panels.welcome->onImport = [panels] { panels.fileIo->requestImport(); };
+      // The example is solved for the static loads, so the editors must show those.
+      panels.welcome->onOpenExample = [panels](const std::filesystem::path& path) {
+        anaf::BRIDGE::buildBridge().m_loadKind = anaf::BRIDGE::LoadKind::constant;
+        panels.fileIo->importFile(path);
+      };
       panels.dock->on_import_mesh = [panels] { panels.fileIo->requestImport(); };
       panels.dock->on_export_results = [panels] { panels.fileIo->requestExport(); };
       panels.fileIo->onImportedBeam = [panels] {
@@ -252,6 +263,7 @@ namespace anaf::GUI {
         panels.beamEditor->isOpen = true;
         panels.tree->isOpen = true;
         panels.diagrams->isOpen = true;
+        panels.viewport->requestFit();
       };
       // The import itself reset the bridge to truss_imported_or_entered (FileIoPanel::pollTasks).
       panels.fileIo->onImported = [panels] {
@@ -282,6 +294,8 @@ namespace anaf::GUI {
       auto beamEditor = panelManager.addPanel<BeamModelEditor>();
       auto sections = panelManager.addPanel<SectionHandler>();
       auto diagrams = panelManager.addPanel<BeamDiagramPanel>();
+      // Last, so it is drawn (and focused) on top of the docked panels.
+      auto welcome = panelManager.addPanel<WelcomePanel>();
 
       UIPanels panels{
         dock.get(),
@@ -296,7 +310,8 @@ namespace anaf::GUI {
         editor.get(),
         beamEditor.get(),
         sections.get(),
-        diagrams.get()
+        diagrams.get(),
+        welcome.get()
       };
 
       analysisSelector->isOpen = false;

@@ -1205,6 +1205,24 @@ namespace anaf::GUI {
       drawList->AddText(textPos, (fps < 30.0f) ? IM_COL32(255, 90, 90, 255) : IM_COL32(100, 255, 120, 255), fpsBuffer);
     }
 
+    // Empty workspace: where to start (the Welcome panel may have been closed).
+    if (!hasModel()) {
+      constexpr const char* lines[] = {
+        "No model loaded",
+        "Analyze: pick a truss or beam / frame analysis",
+        "File > Import: open a mesh, result or CAD file",
+        "Help > Welcome: open a solved example",
+      };
+      const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+      float y = origin.y + (size.y - lineHeight * static_cast<float>(std::size(lines))) * 0.5f;
+      for (std::size_t i = 0; i < std::size(lines); ++i) {
+        const float width = ImGui::CalcTextSize(lines[i]).x;
+        const ImU32 color = i == 0 ? IM_COL32(200, 200, 205, 220) : IM_COL32(140, 142, 150, 200);
+        drawList->AddText(ImVec2(origin.x + (size.x - width) * 0.5f, y), color, lines[i]);
+        y += lineHeight * (i == 0 ? 1.5f : 1.0f);
+      }
+    }
+
     // Colorbars
     if (hasModel()) {
       constexpr float barWidth = 10.0f;

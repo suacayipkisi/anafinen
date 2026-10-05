@@ -48,6 +48,7 @@ namespace anaf::GUI {
     std::function<void()> on_import_mesh;
     std::function<void()> on_export_results;
     std::function<void()> on_show_about;
+    std::function<void()> on_show_welcome; // Help > Welcome
 
     explicit MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
 

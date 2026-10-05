@@ -84,6 +84,9 @@ namespace anaf::GUI {
       renderPanelsMenu();
 
       if (ImGui::BeginMenu("Help")) {
+        if (ImGui::MenuItem("Welcome...")) {
+          if (on_show_welcome) on_show_welcome();
+        }
         if (ImGui::MenuItem("About anafinen...")) {
           if (on_show_about) on_show_about();
         }

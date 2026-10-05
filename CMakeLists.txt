@@ -149,6 +149,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/beamSceneRenderer.cpp
     src/gui/panels/fileIoPanel.cpp
     src/gui/panels/aboutPanel.cpp
+    src/gui/panels/welcomePanel.cpp
     src/gui/panels/statusBar.cpp
     src/platform/resourceMonitor.cpp
     src/gui/fileDialogs/nativeFileDialog.cpp
