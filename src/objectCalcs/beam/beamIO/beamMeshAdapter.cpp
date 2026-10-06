@@ -35,7 +35,6 @@
 namespace FEM::BEAM::ADAPTER {
 
   namespace {
-    
     template <class... Ts>
     struct Overloaded : Ts... {
       using Ts::operator()...;

@@ -450,8 +450,7 @@ namespace FEM::BEAM {
 
   bool Beam_3D_Container::calculateDisplacements(const std::stop_token stopToken) {
     const auto nodeCount = static_cast<std::uint32_t>(m_nodes.size());
-    auto placeholder = buildNodeDofs();
-    if (m_nodeDofs.size() != nodeCount) (void)placeholder;
+    if (m_nodeDofs.size() != nodeCount) (void)buildNodeDofs();
 
     // Reduced DOF of slot s of node n at dofsPerNode * n + s, -1 when unused (Block-CG node blocks).
     std::vector<std::int32_t> nodeDofSlots(static_cast<std::size_t>(nodeCount) * dofsPerNode, -1);

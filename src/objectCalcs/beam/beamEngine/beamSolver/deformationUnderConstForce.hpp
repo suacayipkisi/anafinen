@@ -34,7 +34,6 @@
 
 namespace FEM::BEAM {
 
-
   // Rows are the local x, y, z axes in global components (see BeamElement for the rule).
   // Throws std::invalid_argument for a zero length element or a v parallel to its axis.
   Eigen::Matrix3d localAxes(

@@ -26,7 +26,10 @@ namespace FEM::BEAM {
   namespace {
     constexpr double pi = std::numbers::pi;
 
-    template <class... Ts> struct Overloaded : Ts... { using Ts::operator()...; };
+    template <class... Ts>
+    struct Overloaded : Ts... {
+      using Ts::operator()...;
+    };
 
     // Value of max (a y + b z) over the shape and the point where it is reached.
     struct Support {
