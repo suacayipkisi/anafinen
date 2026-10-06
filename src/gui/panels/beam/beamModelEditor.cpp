@@ -52,12 +52,11 @@ namespace anaf::GUI {
     using FEM::BEAM::BeamElement;
     using FEM::BEAM::Formulation;
     using FEM::BEAM::LoadFrame;
-    using Vec3 = std::array<double, 3>;
 
     constexpr std::uint32_t kNone = std::numeric_limits<std::uint32_t>::max();
     constexpr std::array<const char*, 2> kFormulations{"Euler-Bernoulli", "Timoshenko"};
     constexpr std::array<const char*, 2> kFrames{"Global axes", "Local axes"};
-    constexpr Vec3 kGravity{0.0, -9.80665, 0.0};
+    constexpr std::array<double, 3> kGravity{0.0, -9.80665, 0.0};
 
     const char* formulationShort(const Formulation formulation) {
       return formulation == Formulation::Timoshenko ? "TI" : "EB";
@@ -108,15 +107,15 @@ namespace anaf::GUI {
     }
 
     // True when the global axis lies in the span of an orthonormal basis.
-    bool axisFree(const std::vector<Vec3>& basis, const std::size_t axis) {
-      Vec3 unit{};
+    bool axisFree(const std::vector<std::array<double, 3>>& basis, const std::size_t axis) {
+      std::array<double, 3> unit{};
       unit[axis] = 1.0;
       const auto rest = FEM::SUPPORT::componentOutside(unit, basis);
       return std::sqrt(rest[0] * rest[0] + rest[1] * rest[1] + rest[2] * rest[2]) <= 1e-12;
     }
 
-    bool alongGlobalAxes(const std::vector<Vec3>& basis) {
-      return std::ranges::all_of(basis, [](const Vec3& v) { return std::ranges::count(v, 0.0) == 2; });
+    bool alongGlobalAxes(const std::vector<std::array<double, 3>>& basis) {
+      return std::ranges::all_of(basis, [](const std::array<double, 3>& v) { return std::ranges::count(v, 0.0) == 2; });
     }
 
     // Removes the elements for which drop(element) is true; distributed loads follow their
@@ -179,12 +178,12 @@ namespace anaf::GUI {
 
   } // namespace end
 
-  std::optional<std::vector<Vec3>> BeamModelEditor::SupportInput::allowedBasis(std::string& error) const {
+  std::optional<std::vector<std::array<double, 3>>> BeamModelEditor::SupportInput::allowedBasis(std::string& error) const {
     if (!inclined) {
-      std::vector<Vec3> allowed;
+      std::vector<std::array<double, 3>> allowed;
       for (std::size_t axis = 0; axis < 3; ++axis) {
         if (fixed[axis]) continue;
-        Vec3 unit{};
+        std::array<double, 3> unit{};
         unit[axis] = 1.0;
         allowed.push_back(unit);
       }
@@ -199,7 +198,7 @@ namespace anaf::GUI {
     }
   }
 
-  void BeamModelEditor::SupportInput::load(const std::vector<Vec3>& allowed) {
+  void BeamModelEditor::SupportInput::load(const std::vector<std::array<double, 3>>& allowed) {
     inclined = !alongGlobalAxes(allowed);
     for (std::size_t axis = 0; axis < 3; ++axis) fixed[axis] = !axisFree(allowed, axis);
     if (!inclined) return;
@@ -288,7 +287,7 @@ namespace anaf::GUI {
         LAYOUT::stat("Nodes", std::to_string(mesh->nodes.size()));
         LAYOUT::stat("Elements", std::to_string(mesh->elements.size()));
         LAYOUT::stat("Supports", std::to_string(supported));
-        LAYOUT::stat("Self weight", mesh->gravity == Vec3{} ? "off" : "on");
+        LAYOUT::stat("Self weight", mesh->gravity == std::array<double, 3>{} ? "off" : "on");
         LAYOUT::stat("Nodal loads", std::to_string(mesh->nodalLoads.size()));
         LAYOUT::stat("Line loads", std::to_string(mesh->distributedLoads.size()));
         ImGui::EndTable();
@@ -441,11 +440,11 @@ namespace anaf::GUI {
     ImGui::InputScalarN("##beam_force", ImGuiDataType_Double, m_force.data(), 3, nullptr, nullptr, "%.4g");
     LAYOUT::field("Moment [N m]");
     ImGui::InputScalarN("##beam_moment", ImGuiDataType_Double, m_moment.data(), 3, nullptr, nullptr, "%.4g");
-    const auto setLoad = [&](const Vec3& force, const Vec3& moment) {
+    const auto setLoad = [&](const std::array<double, 3>& force, const std::array<double, 3>& moment) {
       return editModel(bridge, [&](BeamMeshData& mesh) {
         if (node >= mesh.nodes.size()) return false;
         std::erase_if(mesh.nodalLoads, [&](const FEM::BEAM::NodalLoad& load) { return load.node == node; });
-        if (force != Vec3{} || moment != Vec3{}) mesh.nodalLoads.push_back({node, force, moment});
+        if (force != std::array<double, 3>{} || moment != std::array<double, 3>{}) mesh.nodalLoads.push_back({node, force, moment});
         return true;
       });
     };
@@ -460,7 +459,7 @@ namespace anaf::GUI {
     }
   }
 
-  std::optional<std::vector<Vec3>> BeamModelEditor::renderSupportGroup(const char* id, const char* axisNames, SupportInput& input) {
+  std::optional<std::vector<std::array<double, 3>>> BeamModelEditor::renderSupportGroup(const char* id, const char* axisNames, SupportInput& input) {
     ImGui::PushID(id);
     int mode = input.inclined ? 1 : 0;
     ImGui::RadioButton("Global axes", &mode, 0);
@@ -721,10 +720,10 @@ namespace anaf::GUI {
     auto& bridge = BRIDGE::buildBridge();
     const auto mesh = currentMesh(bridge);
 
-    bool selfWeight = !mesh || mesh->gravity != Vec3{};
+    bool selfWeight = !mesh || mesh->gravity != std::array<double, 3>{};
     if (ImGui::Checkbox("Self weight (density x area x g, -Y)##beam", &selfWeight)) {
       editModel(bridge, [&](BeamMeshData& edited) {
-        edited.gravity = selfWeight ? kGravity : Vec3{};
+        edited.gravity = selfWeight ? kGravity : std::array<double, 3>{};
         return true;
       });
     }
@@ -748,7 +747,7 @@ namespace anaf::GUI {
     LAYOUT::field("Axes");
     ImGui::Combo("##beam_q_frame", &m_distributedFrame, kFrames.data(), static_cast<int>(kFrames.size()));
     if (ImGui::Button("Add Load##beam_q", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
-      if (m_distributed == Vec3{}) {
+      if (m_distributed == std::array<double, 3>{}) {
         setStatus("Enter a non-zero load", true);
       } else if (editModel(bridge, [&](BeamMeshData& edited) {
                    if (element >= edited.elements.size()) return false;
@@ -931,7 +930,7 @@ namespace anaf::GUI {
     ImGui::BeginDisabled(!mesh || !mesh->hasResults);
     if (ImGui::Button("Auto##beam_scale")) {
       double size = 0.0, largest = 0.0;
-      Vec3 low{1e300, 1e300, 1e300}, high{-1e300, -1e300, -1e300};
+      std::array<double, 3> low{1e300, 1e300, 1e300}, high{-1e300, -1e300, -1e300};
       for (const auto& node : mesh->nodes) {
         for (std::size_t axis = 0; axis < 3; ++axis) {
           low[axis] = std::min(low[axis], node.getLocation()[axis]);
