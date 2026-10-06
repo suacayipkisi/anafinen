@@ -34,8 +34,6 @@
 
 namespace FEM::BEAM {
 
-  using Matrix12 = Eigen::Matrix<double, 12, 12>;
-  using Vector12 = Eigen::Matrix<double, 12, 1>;
 
   // Rows are the local x, y, z axes in global components (see BeamElement for the rule).
   // Throws std::invalid_argument for a zero length element or a v parallel to its axis.
@@ -48,11 +46,11 @@ namespace FEM::BEAM {
   // 12x12 local stiffness, DOF order per node {ux, uy, uz, rx, ry, rz} (Przemieniecki).
   // Timoshenko uses the interdependent interpolation element: phi = 12 E I / (G As L^2) per
   // bending plane; phi = 0 gives Euler-Bernoulli exactly, and there is no shear locking.
-  Matrix12 localStiffness(double E, double G, const SectionProperties& section, Formulation formulation, double length);
+  Eigen::Matrix<double, 12, 12> localStiffness(double E, double G, const SectionProperties& section, Formulation formulation, double length);
 
   // Work equivalent nodal loads of a uniform load q (local axes, N/m) over the element. The
   // same for both formulations: the Timoshenko shape functions integrate to wL/2 and wL^2/12.
-  Vector12 equivalentNodalLoads(const Eigen::Vector3d& localLoad, double length);
+  Eigen::Matrix<double, 12, 1> equivalentNodalLoads(const Eigen::Vector3d& localLoad, double length);
 
   // Static condensation of end releases (RELEASE bits). With the end forces p of the nodes,
   // k u = p + f0 and p_r = 0 on the released DOFs r give
@@ -61,12 +59,12 @@ namespace FEM::BEAM {
   // released DOFs. Returns false (k and f0 unchanged) when k_rr is singular: the released DOFs
   // alone let the element move (e.g. N or T released at both ends, a pin at both ends plus a
   // shear release). releases = 0 changes nothing.
-  bool condenseReleases(std::uint16_t releases, Matrix12& k, Vector12& f0);
+  bool condenseReleases(std::uint16_t releases, Eigen::Matrix<double, 12, 12>& k, Eigen::Matrix<double, 12, 1>& f0);
 
   // Fills the released entries of u (local end displacements, kept entries given) with the
   // element end's own motion u_r above. k and f0 are the uncondensed element values; k_rr must
   // be regular (condenseReleases() returned true).
-  void recoverReleasedDisplacements(std::uint16_t releases, const Matrix12& k, const Vector12& f0, Vector12& u);
+  void recoverReleasedDisplacements(std::uint16_t releases, const Eigen::Matrix<double, 12, 12>& k, const Eigen::Matrix<double, 12, 1>& f0, Eigen::Matrix<double, 12, 1>& u);
 
   // Section properties of every element: its section's shape with its material's Poisson's
   // ratio (the shear coefficients depend on it). Indices must be valid (checked by solveStatic).
@@ -99,9 +97,9 @@ namespace FEM::BEAM {
       // Zero-initialized: m_frames.assign() copies a default frame, and GCC 14 warns
       // (-Wmaybe-uninitialized) about copying uninitialized Eigen storage.
       Eigen::Matrix3d axes{Eigen::Matrix3d::Zero()};       // rows: local x, y, z
-      Matrix12 localStiffness{Matrix12::Zero()};           // k
-      Matrix12 globalStiffness{Matrix12::Zero()};          // T^T k T
-      Vector12 fixedEndLoads{Vector12::Zero()};            // local equivalent nodal loads of the element's total uniform load
+      Eigen::Matrix<double, 12, 12> localStiffness{Eigen::Matrix<double, 12, 12>::Zero()};           // k
+      Eigen::Matrix<double, 12, 12> globalStiffness{Eigen::Matrix<double, 12, 12>::Zero()};          // T^T k T
+      Eigen::Matrix<double, 12, 1> fixedEndLoads{Eigen::Matrix<double, 12, 1>::Zero()};            // local equivalent nodal loads of the element's total uniform load
     };
 
     // DOF slots of one node: columns 0..motion-1 and 3..3+rotation-1 of basis (6-component

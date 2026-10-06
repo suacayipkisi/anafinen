@@ -65,7 +65,7 @@ namespace FEM::BEAM {
     const auto& start = solved.nodes[beam.node1];
     const auto& end = solved.nodes[beam.node2];
     const Eigen::Matrix3d axes = localAxes(start.getLocation(), end.getLocation(), beam.orientation);
-    Vector12 u;
+    Eigen::Matrix<double, 12, 1> u;
     u.segment<3>(0) = axes * Eigen::Vector3d(start.getDisplacement().data());
     u.segment<3>(3) = axes * Eigen::Vector3d(start.getRotation().data());
     u.segment<3>(6) = axes * Eigen::Vector3d(end.getDisplacement().data());
@@ -75,10 +75,10 @@ namespace FEM::BEAM {
     const auto& material = materials[beam.materialID];
     const double L = (Eigen::Vector3d(end.getLocation().data()) - Eigen::Vector3d(start.getLocation().data())).norm();
     const SectionProperties s = computeProperties(sections[beam.sectionID].getShape(), material.getPoisson());
-    const Matrix12 k = localStiffness(material.getElasticityModulus(), material.getShearModulus(), s, beam.formulation, L);
-    Matrix12 condensed = k;
-    Vector12 loads = equivalentNodalLoads(localLoad, L);
-    Vector12 condensedLoads = loads;
+    const Eigen::Matrix<double, 12, 12> k = localStiffness(material.getElasticityModulus(), material.getShearModulus(), s, beam.formulation, L);
+    Eigen::Matrix<double, 12, 12> condensed = k;
+    Eigen::Matrix<double, 12, 1> loads = equivalentNodalLoads(localLoad, L);
+    Eigen::Matrix<double, 12, 1> condensedLoads = loads;
     if (!condenseReleases(beam.endReleases, condensed, condensedLoads)) {
       throw std::invalid_argument("the end releases make the element a mechanism");
     }
@@ -111,7 +111,7 @@ namespace FEM::BEAM {
     const Eigen::Matrix3d axes = localAxes(start.getLocation(), end.getLocation(), beam.orientation);
 
     // End values in local axes (released DOFs: the element end's own motion).
-    const Vector12 ends = elementEndDisplacements(solved, element, localLoad, materials, sections);
+    const Eigen::Matrix<double, 12, 1> ends = elementEndDisplacements(solved, element, localLoad, materials, sections);
     const Eigen::Vector3d u1 = ends.segment<3>(0);
     const Eigen::Vector3d r1 = ends.segment<3>(3);
     const Eigen::Vector3d u2 = ends.segment<3>(6);

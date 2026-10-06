@@ -32,17 +32,16 @@ namespace FEM::BEAM {
 
   namespace {
     constexpr std::uint32_t dofsPerNode = 6;
-    using Matrix6 = Eigen::Matrix<double, 6, 6>;
 
     // T = blockdiag(R, R, R, R): global element DOFs -> local element DOFs.
-    Matrix12 elementTransformation(const Eigen::Matrix3d& axes) {
-      Matrix12 transformation = Matrix12::Zero();
+    Eigen::Matrix<double, 12, 12> elementTransformation(const Eigen::Matrix3d& axes) {
+      Eigen::Matrix<double, 12, 12> transformation = Eigen::Matrix<double, 12, 12>::Zero();
       for (Eigen::Index block = 0; block < 4; ++block) transformation.block<3, 3>(3 * block, 3 * block) = axes;
       return transformation;
     }
 
     // Writes a 4x4 bending block at the DOF indices of one bending plane.
-    void placeBending(Matrix12& k, const std::array<Eigen::Index, 4>& dofs, const Eigen::Matrix4d& block) {
+    void placeBending(Eigen::Matrix<double, 12, 12>& k, const std::array<Eigen::Index, 4>& dofs, const Eigen::Matrix4d& block) {
       for (Eigen::Index row = 0; row < 4; ++row) {
         for (Eigen::Index col = 0; col < 4; ++col) k(dofs[row], dofs[col]) = block(row, col);
       }
@@ -50,8 +49,8 @@ namespace FEM::BEAM {
 
     // Columns are the node's DOF slots: slot k < 3 = allowed motion direction k, slot 3 + k =
     // allowed rotation axis k, as 6-component global vectors. Unused slots are zero columns.
-    Matrix6 nodeBasis(const Node& node) {
-      Matrix6 basis = Matrix6::Zero();
+    Eigen::Matrix<double, 6, 6> nodeBasis(const Node& node) {
+      Eigen::Matrix<double, 6, 6> basis = Eigen::Matrix<double, 6, 6>::Zero();
       const auto& motion = node.getAllowedMotionDirections();
       const auto& rotation = node.getAllowedRotationAxes();
       for (std::size_t k = 0; k < motion.size(); ++k) {
@@ -87,7 +86,7 @@ namespace FEM::BEAM {
       Eigen::VectorXd f;
     };
 
-    ReleasedBlocks releasedBlocks(const ReleaseSplit& split, const Matrix12& k, const Vector12& f0) {
+    ReleasedBlocks releasedBlocks(const ReleaseSplit& split, const Eigen::Matrix<double, 12, 12>& k, const Eigen::Matrix<double, 12, 1>& f0) {
       const Eigen::Index r = split.releasedCount, c = split.keptCount;
       ReleasedBlocks blocks{Eigen::MatrixXd(r, r), Eigen::MatrixXd(r, c), Eigen::VectorXd(r)};
       for (Eigen::Index i = 0; i < r; ++i) {
@@ -111,8 +110,8 @@ namespace FEM::BEAM {
       return eigen.eigenvalues().minCoeff() > 1e-10 * eigen.eigenvalues().maxCoeff();
     }
 
-    Vector12 elementDisplacements(const Node& start, const Node& end) {
-      Vector12 u;
+    Eigen::Matrix<double, 12, 1> elementDisplacements(const Node& start, const Node& end) {
+      Eigen::Matrix<double, 12, 1> u;
       for (Eigen::Index axis = 0; axis < 3; ++axis) {
         u[axis] = start.getDisplacement()[axis];
         u[3 + axis] = start.getRotation()[axis];
@@ -153,7 +152,7 @@ namespace FEM::BEAM {
     return axes;
   }
 
-  Matrix12 localStiffness(
+  Eigen::Matrix<double, 12, 12> localStiffness(
     const double E,
     const double G,
     const SectionProperties& section,
@@ -169,7 +168,7 @@ namespace FEM::BEAM {
     const double phiY = timoshenko ? 12.0 * E * section.secondMomentZ / (G * section.shearAreaY * L2) : 0.0;
     const double phiZ = timoshenko ? 12.0 * E * section.secondMomentY / (G * section.shearAreaZ * L2) : 0.0;
 
-    Matrix12 k = Matrix12::Zero();
+    Eigen::Matrix<double, 12, 12> k = Eigen::Matrix<double, 12, 12>::Zero();
     const double axial = E * section.area / L;
     k(0, 0) = axial;  k(0, 6) = -axial;
     k(6, 0) = -axial; k(6, 6) = axial;
@@ -197,10 +196,10 @@ namespace FEM::BEAM {
     return k;
   }
 
-  Vector12 equivalentNodalLoads(const Eigen::Vector3d& localLoad, const double length) {
+  Eigen::Matrix<double, 12, 1> equivalentNodalLoads(const Eigen::Vector3d& localLoad, const double length) {
     const double half = 0.5 * length;
     const double moment = length * length / 12.0;
-    Vector12 f = Vector12::Zero();
+    Eigen::Matrix<double, 12, 1> f = Eigen::Matrix<double, 12, 1>::Zero();
     for (Eigen::Index axis = 0; axis < 3; ++axis) {
       f[axis] = localLoad[axis] * half;
       f[6 + axis] = localLoad[axis] * half;
@@ -212,7 +211,7 @@ namespace FEM::BEAM {
     return f;
   }
 
-  bool condenseReleases(const std::uint16_t releases, Matrix12& k, Vector12& f0) {
+  bool condenseReleases(const std::uint16_t releases, Eigen::Matrix<double, 12, 12>& k, Eigen::Matrix<double, 12, 1>& f0) {
     if ((releases & RELEASE::allMask) == 0) return true;
     const auto split = splitReleases(releases);
     const auto blocks = releasedBlocks(split, k, f0);
@@ -221,8 +220,8 @@ namespace FEM::BEAM {
     const Eigen::MatrixXd transfer = rr.solve(blocks.rc); // k_rr^-1 k_rc
     const Eigen::VectorXd loads = rr.solve(blocks.f);     // k_rr^-1 f0_r
 
-    Matrix12 condensed = Matrix12::Zero();
-    Vector12 condensedLoads = Vector12::Zero();
+    Eigen::Matrix<double, 12, 12> condensed = Eigen::Matrix<double, 12, 12>::Zero();
+    Eigen::Matrix<double, 12, 1> condensedLoads = Eigen::Matrix<double, 12, 1>::Zero();
     for (Eigen::Index i = 0; i < split.keptCount; ++i) {
       const Eigen::Index row = split.kept[static_cast<std::size_t>(i)];
       // k_cr k_rr^-1 = (k_rr^-1 k_rc)^T since k is symmetric.
@@ -237,7 +236,7 @@ namespace FEM::BEAM {
     return true;
   }
 
-  void recoverReleasedDisplacements(const std::uint16_t releases, const Matrix12& k, const Vector12& f0, Vector12& u) {
+  void recoverReleasedDisplacements(const std::uint16_t releases, const Eigen::Matrix<double, 12, 12>& k, const Eigen::Matrix<double, 12, 1>& f0, Eigen::Matrix<double, 12, 1>& u) {
     if ((releases & RELEASE::allMask) == 0) return;
     const auto split = splitReleases(releases);
     const auto blocks = releasedBlocks(split, k, f0);
@@ -312,15 +311,15 @@ namespace FEM::BEAM {
       frame.localStiffness = localStiffness(
         material.getElasticityModulus(), material.getShearModulus(), m_properties[index], element.formulation, frame.length
       );
-      Vector12 noLoads = Vector12::Zero();
+      Eigen::Matrix<double, 12, 1> noLoads = Eigen::Matrix<double, 12, 1>::Zero();
       if (!condenseReleases(element.endReleases, frame.localStiffness, noLoads)) {
         errors[index] = "the end releases make the element a mechanism (e.g. N or T released at both ends, "
                         "or a shear release on an element pinned at both ends)";
         continue;
       }
-      const Matrix12 transformation = elementTransformation(frame.axes);
+      const Eigen::Matrix<double, 12, 12> transformation = elementTransformation(frame.axes);
       frame.globalStiffness = transformation.transpose() * frame.localStiffness * transformation;
-      frame.fixedEndLoads = Vector12::Zero();
+      frame.fixedEndLoads = Eigen::Matrix<double, 12, 1>::Zero();
     }
 
     for (std::size_t index = 0; index < errors.size(); ++index) {
@@ -358,13 +357,13 @@ namespace FEM::BEAM {
       if (element.endReleases != 0 && !frame.fixedEndLoads.isZero(0.0)) {
         // The condensed load needs the uncondensed stiffness (regular: checked in buildElements()).
         const auto& material = materials[element.materialID];
-        Matrix12 k = localStiffness(material.getElasticityModulus(), material.getShearModulus(), m_properties[index],
+        Eigen::Matrix<double, 12, 12> k = localStiffness(material.getElasticityModulus(), material.getShearModulus(), m_properties[index],
                                     element.formulation, frame.length);
         condenseReleases(element.endReleases, k, frame.fixedEndLoads);
       }
       if (frame.fixedEndLoads.isZero(0.0)) continue;
 
-      const Vector12 global = elementTransformation(frame.axes).transpose() * frame.fixedEndLoads;
+      const Eigen::Matrix<double, 12, 1> global = elementTransformation(frame.axes).transpose() * frame.fixedEndLoads;
       const std::array<std::size_t, 2> base{dofsPerNode * element.node1, dofsPerNode * element.node2};
       for (std::size_t end = 0; end < 2; ++end) {
         for (std::size_t dof = 0; dof < dofsPerNode; ++dof) {
@@ -392,7 +391,7 @@ namespace FEM::BEAM {
     // semi-definite) has a null vector there, and K being semi-definite, that DOF is coupled to
     // nothing. Such null vectors are pure translations or pure rotations (a released DOF is
     // one of them in local axes), so the two 3x3 groups are checked on their own.
-    std::vector<Matrix6> diagonal(nodeCount, Matrix6::Zero());
+    std::vector<Eigen::Matrix<double, 6, 6>> diagonal(nodeCount, Eigen::Matrix<double, 6, 6>::Zero());
     std::vector<bool> nearRelease(nodeCount, false);
     for (std::size_t index = 0; index < m_elements.size(); ++index) {
       const auto& element = m_elements[index];
@@ -451,11 +450,12 @@ namespace FEM::BEAM {
 
   bool Beam_3D_Container::calculateDisplacements(const std::stop_token stopToken) {
     const auto nodeCount = static_cast<std::uint32_t>(m_nodes.size());
-    if (m_nodeDofs.size() != nodeCount) (void)buildNodeDofs();
+    auto placeholder = buildNodeDofs();
+    if (m_nodeDofs.size() != nodeCount) (void)placeholder;
 
     // Reduced DOF of slot s of node n at dofsPerNode * n + s, -1 when unused (Block-CG node blocks).
     std::vector<std::int32_t> nodeDofSlots(static_cast<std::size_t>(nodeCount) * dofsPerNode, -1);
-    std::vector<Matrix6> bases(nodeCount);
+    std::vector<Eigen::Matrix<double, 6, 6>> bases(nodeCount);
     std::vector<std::uint32_t> usedSlots(nodeCount, 0);
     std::int32_t activeDofCount = 0;
     for (std::uint32_t node = 0; node < nodeCount; ++node) {
@@ -479,10 +479,10 @@ namespace FEM::BEAM {
     #pragma omp parallel for schedule(static)
     for (long long index = 0; index < elementCount; ++index) {
       const auto& element = m_elements[index];
-      Matrix12 basis = Matrix12::Zero();
+      Eigen::Matrix<double, 12, 12> basis = Eigen::Matrix<double, 12, 12>::Zero();
       basis.block<6, 6>(0, 0) = bases[element.node1];
       basis.block<6, 6>(6, 6) = bases[element.node2];
-      const Matrix12 reduced = basis.transpose() * m_frames[index].globalStiffness * basis;
+      const Eigen::Matrix<double, 12, 12> reduced = basis.transpose() * m_frames[index].globalStiffness * basis;
 
       std::array<std::int32_t, 12> map{};
       for (std::size_t slot = 0; slot < dofsPerNode; ++slot) {
@@ -561,10 +561,10 @@ namespace FEM::BEAM {
     for (long long index = 0; index < elementCount; ++index) {
       auto& element = m_elements[index];
       const auto& frame = m_frames[index];
-      const Vector12 local = elementTransformation(frame.axes)
+      const Eigen::Matrix<double, 12, 1> local = elementTransformation(frame.axes)
         * elementDisplacements(m_nodes[element.node1], m_nodes[element.node2]);
       // End forces the nodes apply to the element: k u = p + f0  ->  p = k u - f0.
-      const Vector12 endForces = frame.localStiffness * local - frame.fixedEndLoads;
+      const Eigen::Matrix<double, 12, 1> endForces = frame.localStiffness * local - frame.fixedEndLoads;
       for (Eigen::Index i = 0; i < 6; ++i) {
         element.sectionForces[static_cast<std::size_t>(i)] = -endForces[i];
         element.sectionForces[static_cast<std::size_t>(6 + i)] = endForces[6 + i];
@@ -578,7 +578,7 @@ namespace FEM::BEAM {
     #pragma omp parallel for schedule(static) reduction(+:internalEnergy)
     for (long long index = 0; index < elementCount; ++index) {
       const auto& element = m_elements[index];
-      const Vector12 u = elementDisplacements(m_nodes[element.node1], m_nodes[element.node2]);
+      const Eigen::Matrix<double, 12, 1> u = elementDisplacements(m_nodes[element.node1], m_nodes[element.node2]);
       internalEnergy += 0.5 * u.dot(m_frames[index].globalStiffness * u);
     }
     m_elasticDeformationEnergy_internal = internalEnergy;

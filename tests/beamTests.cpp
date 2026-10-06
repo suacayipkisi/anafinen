@@ -57,7 +57,6 @@ using FEM::BEAM::BeamElement;
 using FEM::BEAM::Formulation;
 using FEM::BEAM::MeshData;
 using FEM::BEAM::Node;
-using Vec = std::array<double, 3>;
 
 namespace {
   constexpr double kE = 210e9;  // Pa
@@ -96,7 +95,7 @@ namespace {
     return std::abs(actual - expected) <= relative * std::abs(expected) + absolute;
   }
 
-  bool nearVec(const Vec& actual, const Vec& expected, const double tolerance) {
+  bool nearVec(const std::array<double, 3>& actual, const std::array<double, 3>& expected, const double tolerance) {
     double scale = 0.0;
     for (const double v : expected) scale = std::max(scale, std::abs(v));
     for (std::size_t i = 0; i < 3; ++i) {
@@ -106,7 +105,7 @@ namespace {
   }
 
   BeamElement beam(const std::uint32_t a, const std::uint32_t b, const Formulation formulation = Formulation::EulerBernoulli,
-                   const Vec orientation = {}, const std::uint32_t material = 0) {
+                   const std::array<double, 3> orientation = {}, const std::uint32_t material = 0) {
     BeamElement element;
     element.node1 = a;
     element.node2 = b;
@@ -145,13 +144,13 @@ namespace {
   // local distributed loads, self weight, an inclined roller and an inclined rotation
   // support. R turns the whole model (local loads stay as they are).
   MeshData frameModel(const Eigen::Matrix3d& R) {
-    const auto turn = [&](const Vec& v) {
+    const auto turn = [&](const std::array<double, 3>& v) {
       const Eigen::Vector3d t = R * Eigen::Vector3d(v[0], v[1], v[2]);
-      return Vec{t[0], t[1], t[2]};
+      return std::array<double, 3>{t[0], t[1], t[2]};
     };
     MeshData mesh;
     mesh.gravity = turn({0.0, -9.80665, 0.0});
-    const std::vector<Vec> points{{0, 0, 0}, {0, 3, 0}, {4, 3, 0}, {4, 3, 2.5}, {4, 0, 2.5}};
+    const std::vector<std::array<double, 3>> points{{0, 0, 0}, {0, 3, 0}, {4, 3, 0}, {4, 3, 2.5}, {4, 0, 2.5}};
     for (std::uint32_t i = 0; i < points.size(); ++i) {
       const auto p = turn(points[i]);
       mesh.nodes.emplace_back(i, p[0], p[1], p[2]);
@@ -270,7 +269,7 @@ TEST(stiffnessIsSymmetricAndTimoshenkoTendsToEulerBernoulli) {
   const auto ti = FEM::BEAM::localStiffness(kE, kG, kSection, Formulation::Timoshenko, kL);
   CHECK(eb.isApprox(eb.transpose()) && ti.isApprox(ti.transpose()));
   // Six rigid body modes: rank 6.
-  Eigen::SelfAdjointEigenSolver<FEM::BEAM::Matrix12> eigen(ti);
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 12, 12>> eigen(ti);
   int zero = 0;
   for (Eigen::Index i = 0; i < 12; ++i) zero += std::abs(eigen.eigenvalues()[i]) < 1e-6 * eigen.eigenvalues().maxCoeff() ? 1 : 0;
   CHECK(zero == 6 && eigen.eigenvalues().minCoeff() > -1e-6 * eigen.eigenvalues().maxCoeff());
@@ -306,7 +305,7 @@ TEST(cantileverTipLoadsMatchTheHandSolution) {
     CHECK(near(r[0], T * kL / (kG * kSection.torsionConstant), 1e-10));
     CHECK(near(r[1], -Pz * kL * kL / (2.0 * kE * kSection.secondMomentY), 1e-10)); // ry = -dw/dx
     CHECK(near(r[2], Py * kL * kL / (2.0 * kE * kSection.secondMomentZ), 1e-10));
-    CHECK(solved.mesh->nodes[0].getDisplacement() == (Vec{0, 0, 0}) && solved.mesh->nodes[0].getRotation() == (Vec{0, 0, 0}));
+    CHECK(solved.mesh->nodes[0].getDisplacement() == (std::array<double, 3>{0, 0, 0}) && solved.mesh->nodes[0].getRotation() == (std::array<double, 3>{0, 0, 0}));
 
     // Section forces {N, Vy, Vz, T, My, Mz}: N, V, T constant; the moment grows to the clamp.
     const auto& s = solved.mesh->elements[0].sectionForces;
@@ -424,9 +423,9 @@ TEST(rotatedFrameGivesRotatedResults) {
   const auto turned = solve(frameModel(R));
   CHECK(base.energyCheckPassed && turned.energyCheckPassed);
   for (std::size_t n = 0; n < base.mesh->nodes.size(); ++n) {
-    const auto rotate = [&](const Vec& v) {
+    const auto rotate = [&](const std::array<double, 3>& v) {
       const Eigen::Vector3d t = R * Eigen::Vector3d(v[0], v[1], v[2]);
-      return Vec{t[0], t[1], t[2]};
+      return std::array<double, 3>{t[0], t[1], t[2]};
     };
     CHECK(nearVec(turned.mesh->nodes[n].getDisplacement(), rotate(base.mesh->nodes[n].getDisplacement()), 1e-9));
     CHECK(nearVec(turned.mesh->nodes[n].getRotation(), rotate(base.mesh->nodes[n].getRotation()), 1e-9));
@@ -495,11 +494,11 @@ TEST(releaseCondensationKeepsTheElementConsistent) {
     if (!(releases & (1U << dof))) continue;
     CHECK(condensed.row(dof).isZero(0.0) && condensed.col(dof).isZero(0.0) && loads[dof] == 0.0);
   }
-  FEM::BEAM::Vector12 u;
+  Eigen::Matrix<double, 12, 1> u;
   u << 1e-3, -2e-3, 5e-4, 0.0, 0.0, 0.0, -1e-3, 3e-3, 2e-4, 1e-3, -2e-3, 0.0;
   FEM::BEAM::recoverReleasedDisplacements(releases, k, f0, u);
-  const FEM::BEAM::Vector12 full = k * u - f0;
-  const FEM::BEAM::Vector12 reduced = condensed * u - loads;
+  const Eigen::Matrix<double, 12, 1> full = k * u - f0;
+  const Eigen::Matrix<double, 12, 1> reduced = condensed * u - loads;
   for (Eigen::Index dof = 0; dof < 12; ++dof) {
     if (releases & (1U << dof)) CHECK(std::abs(full[dof]) <= 1e-9 * full.norm());
     else CHECK(std::abs(full[dof] - reduced[dof]) <= 1e-9 * full.norm()); // same end forces
@@ -728,7 +727,7 @@ TEST(diagramsOfAClampedBeamUnderUniformLoad) {
       CHECK(near(all[0][0].forces[i], s[i], 1e-12, 1e-9));
       CHECK(near(all[0][4].forces[i], s[6 + i], 1e-9, 1e-6));
     }
-    CHECK(all[0][0].displacement == (Vec{0, 0, 0}));
+    CHECK(all[0][0].displacement == (std::array<double, 3>{0, 0, 0}));
     CHECK(near(all[0][4].displacement[1], 0.0, 0.0, 1e-18));
   }
 }
@@ -1195,7 +1194,7 @@ namespace {
   }
 
   // Same span (projector) of two orthonormal bases.
-  bool sameSpan(const std::vector<Vec>& a, const std::vector<Vec>& b) {
+  bool sameSpan(const std::vector<std::array<double, 3>>& a, const std::vector<std::array<double, 3>>& b) {
     if (a.size() != b.size()) return false;
     Eigen::Matrix3d pa = Eigen::Matrix3d::Zero(), pb = Eigen::Matrix3d::Zero();
     for (const auto& v : a) pa += Eigen::Vector3d(v[0], v[1], v[2]) * Eigen::Vector3d(v[0], v[1], v[2]).transpose();
@@ -1204,8 +1203,8 @@ namespace {
   }
 
   // Sum of the uniform loads per element and frame (the file stores the sums).
-  std::map<std::pair<std::uint32_t, int>, Vec> loadSums(const MeshData& mesh) {
-    std::map<std::pair<std::uint32_t, int>, Vec> sums;
+  std::map<std::pair<std::uint32_t, int>, std::array<double, 3>> loadSums(const MeshData& mesh) {
+    std::map<std::pair<std::uint32_t, int>, std::array<double, 3>> sums;
     for (const auto& load : mesh.distributedLoads) {
       auto& sum = sums[{load.element, static_cast<int>(load.frame)}];
       for (std::size_t k = 0; k < 3; ++k) sum[k] += load.value[k];
@@ -1598,7 +1597,7 @@ TEST(cancelledSolveAndProgress) {
   for (std::size_t i = 1; i < reported.size(); ++i) increasing = increasing && reported[i] >= reported[i - 1];
   CHECK(increasing && reported.back() == 1.0f);
   // The input is not changed by the solve.
-  CHECK(mesh.nodes[1].getDisplacement() == (Vec{0, 0, 0}) && !mesh.hasResults);
+  CHECK(mesh.nodes[1].getDisplacement() == (std::array<double, 3>{0, 0, 0}) && !mesh.hasResults);
 }
 
 int main(int argc, char** argv) {
