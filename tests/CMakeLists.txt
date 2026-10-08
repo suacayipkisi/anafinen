@@ -50,13 +50,10 @@ target_link_libraries(anaf_beam_tests PRIVATE anaf_core project_warnings_and_opt
 target_compile_definitions(anaf_beam_tests PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}") # the committed library and catalogue
 add_test(NAME anaf_beam_tests COMMAND anaf_beam_tests)
 
-add_executable(anaf_truss_io_tests
-    trussIoTests.cpp
-    ${PROJECT_SOURCE_DIR}/src/bridge/generalStatus.cpp # the bridge itself is under test (resetModel, user materials)
-)
+add_executable(anaf_truss_io_tests trussIoTests.cpp)
 # The tests read the committed library files and fixtures from the source tree.
 target_compile_definitions(anaf_truss_io_tests PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}")
-target_link_libraries(anaf_truss_io_tests PRIVATE anaf_core project_warnings_and_optimizations)
+target_link_libraries(anaf_truss_io_tests PRIVATE anaf_bridge project_warnings_and_optimizations) # the bridge itself is under test (resetModel, user materials)
 if(ANAFINEN_HAS_CHOLMOD)
     target_compile_definitions(anaf_truss_io_tests PRIVATE ANAFINEN_HAS_CHOLMOD)
 endif()

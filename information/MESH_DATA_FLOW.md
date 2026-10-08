@@ -31,17 +31,17 @@ Every model reaches the solver as a `MeshData` snapshot; only the source differs
                     +---------+---------+                   |
                               |                             |
                               v                             |
-            +------------------------------------+         |
-            | FEM::TRUSS::solveStatic()          |         |
-            |  buildSolverModel: snapshot ->     |         |
-            |    TrussElement_1D, node supports  |         |
-            |  setForce: loads -> m_forceVec     |         |
-            |  Truss_1D_Container: K triplets,   |         |
-            |    self weight, T^T K T q = T^T f, |         |
-            |    stress, energy check            |         |
-            |  -> StaticResult (solved copy)      |         |
-            +------------------+-----------------+         |
-                               |                           |
+            +------------------------------------+          |
+            | FEM::TRUSS::solveStatic()          |          |
+            |  buildSolverModel: snapshot ->     |          |
+            |    TrussElement_1D, node supports  |          |
+            |  setForce: loads -> m_forceVec     |          |
+            |  Truss_1D_Container: K triplets,   |          |
+            |    self weight, T^T K T q = T^T f, |          |
+            |    stress, energy check            |          |
+            |  -> StaticResult (solved copy)     |          |
+            +------------------+-----------------+          |
+                               |                            |
                                +-- publish (same model generation) --> activeMesh
                                                                  |
                                                                  v

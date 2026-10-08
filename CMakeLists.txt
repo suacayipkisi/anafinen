@@ -27,6 +27,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(ANAFINEN_NATIVE_OPTIMIZATIONS "Enable CPU-specific native optimizations" OFF)
 option(ANAFINEN_BUILD_TESTS "Build the anaf_io test suite (ctest)" OFF)
+option(ANAFINEN_BUILD_CLI "Build the command-line front end (anafinen-cli)" ON)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -124,9 +125,22 @@ target_link_libraries(anaf_core PUBLIC
     project_warnings_and_optimizations
 )
 
+# Front-end state shared by every front end (GUI / CLI): model, materials, sections, results.
+# Kept out of anaf_core, which stays a stateless FEM layer; no GUI dependency.
+set(ANAF_BRIDGE_SOURCES
+    src/bridge/generalStatus.cpp
+)
+
+add_library(anaf_bridge STATIC ${ANAF_BRIDGE_SOURCES})
+target_link_libraries(anaf_bridge
+    PUBLIC
+        anaf_core
+    PRIVATE
+        project_warnings_and_optimizations
+)
+
 set(ANAFINEN_SOURCES
     src/main.cpp
-    src/bridge/generalStatus.cpp
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
     src/gui/guiMaterials/framebuffer.cpp
@@ -190,7 +204,7 @@ else()
 endif()
 
 target_link_libraries(anafinen PRIVATE
-    anaf_core
+    anaf_bridge
     ${GUI_DEPENDENCIES}
     ${GLAD_TARGET}
     ${GLFW_TARGET}
@@ -269,6 +283,10 @@ if(WIN32)
     if(EXISTS "${GMSH_DLL}")
         install(FILES "${GMSH_DLL}" DESTINATION .)
     endif()
+endif()
+
+if(ANAFINEN_BUILD_CLI)
+    add_subdirectory(src/cli)
 endif()
 
 if(ANAFINEN_BUILD_TESTS)
