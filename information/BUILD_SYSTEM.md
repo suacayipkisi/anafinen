@@ -3,14 +3,14 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (released 2026-10-05; previous release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-05 (v0.2.0-alpha release check: package descriptions and `.desktop` comment, section 8; Debian GCC 14 `-Wmaybe-uninitialized` fixed, release packages built in the containers, section 8.1.1; 2026-10-04: `anaf_beam_library_tool`, beam library sources in `anaf_core`; section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
+> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-08 (version 0.3.0; `anaf_bridge` library, `anafinen_cli` target and `ANAFINEN_BUILD_CLI` option, sections 1-3, 7, 8; 2026-10-05: v0.2.0-alpha release check: package descriptions and `.desktop` comment, section 8; Debian GCC 14 `-Wmaybe-uninitialized` fixed, release packages built in the containers, section 8.1.1; 2026-10-04: `anaf_beam_library_tool`, beam library sources in `anaf_core`; section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
 
 ## 1. Overall flow
 
 ```text
 CMakeLists.txt
    |
-   +-- project(anafinen VERSION 0.2.0), C++23, compile_commands.json
+   +-- project(anafinen VERSION 0.3.0), C++23, compile_commands.json
    |
    +-- include(CompilerOptions)  -> project_warnings_and_optimizations (INTERFACE)
    +-- include(Dependencies)     -> Eigen, OpenMP, OpenGL, PNG, HDF5, CHOLMOD?, Gmsh, Spectra, glm
@@ -18,7 +18,9 @@ CMakeLists.txt
    |
    +-- add_library(anaf_io STATIC ...)     mesh I/O + HDF5 array store (Gmsh, zlib, HDF5 PRIVATE)
    +-- add_library(anaf_core STATIC ...)   FEM + truss adapter (links anaf_io)
-   +-- add_executable(anafinen ...)        GUI + bridge + log + main (+ portable-file-dialogs)
+   +-- add_library(anaf_bridge STATIC ...) front-end state shared by GUI and CLI (links anaf_core)
+   +-- add_executable(anafinen ...)        GUI + main (+ portable-file-dialogs), links anaf_bridge
+   +-- src/cli/ (ANAFINEN_BUILD_CLI=ON)    anafinen_cli -> anafinen-cli, next to anafinen, links anaf_bridge
    +-- tests/ (ANAFINEN_BUILD_TESTS=ON)    anaf_core_tests, anaf_beam_tests (anaf_core only), anaf_io_tests, anaf_array_tests, anaf_io_tool,
    |                                       anaf_truss_io_tests, vtk_reference_check,
    |                                       anaf_truss_library_tool (regenerates assets/objects/truss/truss1D)
@@ -41,6 +43,7 @@ CMakeLists.txt
 | `ANAFINEN_NATIVE_OPTIMIZATIONS` | option, OFF | Adds `/arch:AVX2` (MSVC) or `-march=native` (GCC/Clang). Local builds only: the binary then needs the build machine's CPU. Packages are protected twice: `package.sh` and `PKGBUILD` pass `-DANAFINEN_NATIVE_OPTIMIZATIONS=OFF` (so a value cached in `build/` cannot leak in), and when the option is ON, `Packaging.cmake` adds a `CPACK_PRE_BUILD_SCRIPTS` guard that makes every `cpack` run (RPM, DEB, TGZ, Windows ZIP) fail with an explanation. (Before 0.1.3 it passed `-march=x86-64`, the baseline, which had no effect.) |
 | `ANAFINEN_WARNINGS_AS_ERRORS` | option, OFF (`cmake/CompilerOptions.cmake`) | Adds `-Werror` / `/WX`. For CI and pre-commit checks; the tree builds warning-free with it. |
 | `ANAFINEN_BUILD_TESTS` | option, OFF | Builds the `tests/` directory and enables `ctest` |
+| `ANAFINEN_BUILD_CLI` | option, ON | Adds `src/cli/` (target `anafinen_cli`, binary `anafinen-cli`) |
 
 ## 3. Targets
 
@@ -51,15 +54,18 @@ CMakeLists.txt
 | `anaf_core` | STATIC | `src/objectCalcs/truss_1D/*` (incl. `trussIO/trussMeshAdapter.cpp`), `src/objectCalcs/beam/*` (beam solver), `src/objectCalcs/common/*` (support bases), `src/solvers/*` (solver portfolio), `src/material/materialLibrary.cpp`, `src/log/anaf_info.cpp`, `src/directory/getExecutableDirectory.cpp`, `src/platform/systemInfo.cpp`. Self-contained: a front end links it and calls `solveStatic()` (no bridge or GUI code). `MAIN_DIR` (PRIVATE) for the source-tree asset fallback. | anaf_io, Eigen3, Spectra, OpenMP, CHOLMOD (optional, PRIVATE), nlohmann_json (PRIVATE); Windows: shell32, ole32, uuid (user config folder), dxgi, advapi32 (`systemInfo`: VRAM, CPU name from the registry) |
 | `glad_local` | STATIC | `external/glad/src/gl.c` | - |
 | `imgui_suite` | STATIC | ImGui core + GLFW/OpenGL3 backends + ImGuizmo + ImPlot | glad, GLFW, OpenGL |
-| `anafinen` | EXECUTABLE | `main.cpp`, bridge, GUI, `platform/resourceMonitor.cpp` | `anaf_core`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG; Windows: ole32, comdlg32, shell32, uuid (file dialogs), psapi (resource monitor) |
+| `anaf_bridge` | STATIC | `src/bridge/generalStatus.cpp` (`Gui_Calc_Bridge`): front-end state shared by the GUI, the CLI and `anaf_truss_io_tests`. No GUI dependency. | `anaf_core` (PUBLIC) |
+| `anafinen` | EXECUTABLE | `main.cpp`, GUI, `platform/resourceMonitor.cpp` | `anaf_bridge`, `imgui_suite`, glad, GLFW, OpenGL, glm, PNG; Windows: ole32, comdlg32, shell32, uuid (file dialogs), psapi (resource monitor) |
+
+| `anafinen_cli` | EXECUTABLE (`src/cli/CMakeLists.txt`) | `cli.cpp`, `main_cli.cpp`. `OUTPUT_NAME` `anafinen-cli`, `RUNTIME_OUTPUT_DIRECTORY` = the `anafinen` target's binary directory (multi-config generators add `<Config>/` to both), so it shares the copied `assets/`. Defines `ANAFINEN_VERSION`. Windows: copies the Gmsh DLL next to itself. | `anaf_bridge` (OpenMP, Eigen and include directories come through it) |
 
 Compile definitions on `anafinen` (there is no `ANAF_GUI` / `ANAF_CLI` macro: the log picks its sinks at run time, `anaf::LOG::setCallback()` / `setConsoleOutput()`):
 - `GLFW_INCLUDE_NONE`: GLAD provides the GL headers.
 - `MAIN_DIR="<source dir>"`: used as an asset search fallback in development builds.
 
-**Adding a source file:** append it to `ANAF_IO_SOURCES` (file formats), `ANAF_CORE_SOURCES` (FEM, adapters) or `ANAFINEN_SOURCES` (GUI) in `CMakeLists.txt`. There is no globbing.
+**Adding a source file:** append it to `ANAF_IO_SOURCES` (file formats), `ANAF_CORE_SOURCES` (FEM, adapters), `ANAF_BRIDGE_SOURCES` (front-end state) or `ANAFINEN_SOURCES` (GUI) in `CMakeLists.txt`, or to `ANAFINEN_CLI_SOURCES` in `src/cli/CMakeLists.txt`. There is no globbing.
 
-**Front ends and macros:** shared libraries never change their types with `ANAF_GUI` or similar macros. A static library is compiled once and linked into several executables (GUI now, CLI later), and a type that differs between them would violate the ODR. GUI-only code lives in `anafinen` sources; a CLI will be a separate executable linking `anaf_core` + `anaf_io`.
+**Front ends and macros:** shared libraries never change their types with `ANAF_GUI` or similar macros. A static library is compiled once and linked into several executables (GUI and CLI), and a type that differs between them would violate the ODR. GUI-only code lives in `anafinen` sources, CLI-only code in `src/cli/`; both executables link `anaf_bridge` (and through it `anaf_core` + `anaf_io`). The GUI's `main()` installs the console callback (`setCallback`), the CLI's turns on stdout (`setConsoleOutput(true)`).
 
 ## 4. Compiler options (`cmake/CompilerOptions.cmake`)
 
@@ -68,7 +74,7 @@ Compile definitions on `anafinen` (there is no `ANAF_GUI` / `ANAF_CLI` macro: th
 | GCC / Clang | `-O3 -ffast-math -fno-finite-math-only` | Linker: `mold` if found, else `lld` (Linux only) |
 | MSVC | `/O2`, `/utf-8` (sources and literals are UTF-8) | `NOMINMAX`, `_CRT_SECURE_NO_WARNINGS`, `WIN32_LEAN_AND_MEAN` |
 
-Warnings (all configurations, through `project_warnings_and_optimizations`, so only first-party targets: `anaf_io`, `anaf_core`, `anafinen`, tests):
+Warnings (all configurations, through `project_warnings_and_optimizations`, so only first-party targets: `anaf_io`, `anaf_core`, `anaf_bridge`, `anafinen`, `anafinen_cli`, tests):
 
 | Compiler | Flags | Notes |
 |---|---|---|
@@ -170,7 +176,8 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
   3. `./assets`
   4. `MAIN_DIR/assets`
 - `assets/bridge/materialProperties.json` is the built-in material library and `assets/bridge/sectionCatalog.json` the beam section catalogue. The `POST_BUILD` copy runs only when `anafinen` relinks, so the custom target `anafinen_material_library` (ALL) copies these two files with `copy_if_different` on every build; editing them needs no relink.
-- `anafinen_run.log` is written to the current working directory.
+- `anafinen-cli` is built into the same directory as `anafinen` and has no `POST_BUILD` asset copy of its own: it finds `<exe dir>/assets` from the GUI's copy. Built alone (`--target anafinen_cli`) in a fresh tree, it falls through to an installed package or `MAIN_DIR/assets`.
+- `anafinen_run.log` is written to the current working directory (GUI and CLI alike).
 
 ## 8. Install and packaging (`cmake/Packaging.cmake`)
 
@@ -180,6 +187,8 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 | Windows | Flat: `anafinen.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES`, app-local MSVC runtime (`InstallRequiredSystemLibraries`, including `vcomp140.dll` for `/openmp`, so no Visual C++ Redistributable is needed; added after the 0.1.3 release) | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
 
 Package descriptions: `CPACK_PACKAGE_DESCRIPTION_SUMMARY` ("3D FEM Analysis Engine", also `pkgdesc` in `PKGBUILD`) and a long `CPACK_PACKAGE_DESCRIPTION` that also states that dynamic analysis is not available yet. DEB reads it on its own; RPM only reads `CPACK_RPM_PACKAGE_DESCRIPTION` (or `CPACK_PACKAGE_DESCRIPTION_FILE`), so that is set to the same text (before 0.2.0 the RPM carried CPack's generic "This is an installer created using CPack" template). The `.desktop` `Comment` says "3D finite element analysis of trusses and beam frames (linear static)" (it claimed dynamic and modal analysis before 0.2.0).
+
+`anafinen-cli` is built in package builds too (`ANAFINEN_BUILD_CLI` is ON) but not installed: no package contains it yet.
 
 Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: hdf5` (and `suitesparse` when CHOLMOD is enabled).
 
@@ -286,3 +295,4 @@ package/tools/render-icons.py
 - [package/tools/render-icons.py](../package/tools/render-icons.py), [assets/icons/](../assets/icons/), [src/anafinen.rc](../src/anafinen.rc)
 - [.gitmodules](../.gitmodules)
 - [tests/CMakeLists.txt](../tests/CMakeLists.txt)
+- [src/cli/CMakeLists.txt](../src/cli/CMakeLists.txt)

@@ -1,9 +1,9 @@
 # GUI - Calculation Bridge
 
-This document describes `anaf::BRIDGE`, the shared state between the GUI thread and the calculation worker. It covers what the bridge stores, who reads and writes each field, and which synchronization rule protects it.
+This document describes `anaf::BRIDGE`, the front-end state shared by the GUI and the CLI (library `anaf_bridge`), and between the GUI thread and the calculation worker. It covers what the bridge stores, who reads and writes each field, and which synchronization rule protects it.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (released 2026-10-05; previous release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-05 (v0.2.0-alpha release check; 2026-10-04: `m_loadKind`, constant / dynamic, section 2; beam: `beam_frame`, `activeBeamMesh`, `allSections`, `selectedElementId`, section 5.2).
+> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-08 (version 0.3.0; the bridge is the `anaf_bridge` library shared by the GUI and the CLI, sections 6 and 7; 2026-10-05: v0.2.0-alpha release check; 2026-10-04: `m_loadKind`, constant / dynamic, section 2; beam: `beam_frame`, `activeBeamMesh`, `allSections`, `selectedElementId`, section 5.2).
 
 ## 1. Overall flow
 
@@ -217,11 +217,12 @@ Sections follow the material scheme: `BeamElement::sectionID` is an index into `
 - Atomics (`m_progress`, `m_isRunning`, ...) may be written from the worker directly.
 - Publish results only through the protocol in section 4, and only if `modelGeneration` is still the value taken at start (section 4.1).
 - Call `joinWorker()` before setting `m_isRunning` / `m_isGeneratingPreview` for the new job.
-- `buildBridge()` returns a process-wide singleton. The bridge is GUI-side only (since 2026-10-02 the FEM core has no bridge dependency; `MeshData` lives in `anaf_core` and `anaf::BRIDGE::MeshData` is an alias). A CLI needs no bridge: it calls `FEM::TRUSS::solveStatic()` directly. New GUI solve jobs go through `TRUSS_WORKER::startSolve()`, which already follows these rules.
+- `buildBridge()` returns a process-wide singleton. The bridge is the static library `anaf_bridge` (since 2026-10-08), linked by `anafinen`, `anafinen-cli` and `anaf_truss_io_tests`; it depends on `anaf_core` only, never on GUI code, so keep GUI types out of `generalStatus.*`. The FEM core has no bridge dependency (since 2026-10-02; `MeshData` lives in `anaf_core` and `anaf::BRIDGE::MeshData` is an alias). The CLI builds the bridge at startup like the GUI (materials, sections; [ARCHITECTURE.md](ARCHITECTURE.md) section 5.1). New GUI solve jobs go through `TRUSS_WORKER::startSolve()`, which already follows these rules.
 
 ## 7. Related source files
 
-- Bridge and `MeshData`: [src/bridge/generalStatus.hpp](../src/bridge/generalStatus.hpp), [src/bridge/generalStatus.cpp](../src/bridge/generalStatus.cpp)
+- Bridge and `MeshData`: [src/bridge/generalStatus.hpp](../src/bridge/generalStatus.hpp), [src/bridge/generalStatus.cpp](../src/bridge/generalStatus.cpp) (library `anaf_bridge`, [CMakeLists.txt](../CMakeLists.txt))
+- Front ends that build the bridge: [src/main.cpp](../src/main.cpp) (GUI), [src/cli/main_cli.cpp](../src/cli/main_cli.cpp) (CLI)
 - Worker creation and publishing: [src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [src/gui/panels/truss/importedTruss/trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp)
 - Object type switch and panel resets: [src/gui/gui.cpp](../src/gui/gui.cpp) (`bindAnalysisFlow`)
 - Snapshot consumer: [src/gui/panels/viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [src/gui/panels/modelTree.cpp](../src/gui/panels/modelTree.cpp) (copies the pointer under the lock; no deep copy per frame)

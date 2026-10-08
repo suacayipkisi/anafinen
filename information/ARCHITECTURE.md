@@ -3,7 +3,7 @@
 This document is the entry point for the project documentation. It describes how the program is split into modules, how those modules talk to each other, and where each topic is documented in detail.
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (released 2026-10-05; previous release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-05 (v0.2.0-alpha release check: dynamic analysis listed as not available (8.1), Debian beam test crash and GCC 14 warnings fixed (8.2); 2026-10-04: beam end releases (hinges), library grown to 49 models (3 large structures of about 3000 elements), known issue 6 extended, beam tests read the repository's assets (8.2); built-in beam library `FEM::BEAM::LIBRARY`; beam rendering in the viewport; beam GUI panels, beam file adapter, known issue 5 narrowed; beam stresses; beam cross-section library and catalogue; beam solver `FEM::BEAM` in `anaf_core` and [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), support bases moved to `FEM::SUPPORT`, known issues 5 and 6; linear solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`; Block-CG takes `dofsPerNode`; `check.sh` fails when no tests run; HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
+> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-08 (version 0.3.0; CLI executable `anafinen-cli` and the shared `anaf_bridge` library, sections 2, 3, 5 and 8.1; 2026-10-05: v0.2.0-alpha release check: dynamic analysis listed as not available (8.1), Debian beam test crash and GCC 14 warnings fixed (8.2); 2026-10-04: beam end releases (hinges), library grown to 49 models (3 large structures of about 3000 elements), known issue 6 extended, beam tests read the repository's assets (8.2); built-in beam library `FEM::BEAM::LIBRARY`; beam rendering in the viewport; beam GUI panels, beam file adapter, known issue 5 narrowed; beam stresses; beam cross-section library and catalogue; beam solver `FEM::BEAM` in `anaf_core` and [CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md), support bases moved to `FEM::SUPPORT`, known issues 5 and 6; linear solver portfolio moved to `src/solvers/`, namespace `FEM::SOLVER`; Block-CG takes `dofsPerNode`; `check.sh` fails when no tests run; HDF5 array store `anaf::IO::ARRAY`, MinGW cross-build removed; 2026-10-03: beam / rotational data in `anaf_io`, known issue 5, interoperability plan).
 > Update this file set on every version bump or structural change (see section 7).
 
 ## 1. Documentation map
@@ -26,15 +26,17 @@ This document is the entry point for the project documentation. It describes how
 
 ```text
 +---------------------------------------------------------------------------+
-| anafinen (executable)                                                     |
+| anafinen (GUI executable)            anafinen-cli (CLI executable)        |
 |                                                                           |
-|  main.cpp ---> LOG init ---> materials ---> OpenMP ---> GUI::initgui()    |
+|  main.cpp:     LOG (file + GUI sink) -> bridge -> OpenMP -> initgui()     |
+|  main_cli.cpp: LOG (file + stdout)   -> bridge -> OpenMP -> initcli()     |
 |                                                                           |
 |  +-------------------+     +--------------------+     +----------------+  |
-|  | GUI               |     | BRIDGE             |     | LOG            |  |
-|  | src/gui/          |<--->| src/bridge/        |     | src/log/       |  |
-|  | panels, viewport, |     | Gui_Calc_Bridge    |     | file + stdout  |  |
-|  | framebuffer, GL   |     | MeshData snapshot  |     | + GUI sink     |  |
+|  | GUI (anafinen     |     | anaf_bridge        |     | LOG            |  |
+|  | only), src/gui/   |<--->| (static library)   |     | src/log/       |  |
+|  | panels, viewport, |     | src/bridge/        |     | file + stdout  |  |
+|  | framebuffer, GL   |     | Gui_Calc_Bridge    |     | + GUI sink     |  |
+|  | CLI: src/cli/     |     | MeshData snapshot  |     | (anaf_core)    |  |
 |  +---------+---------+     +---------+----------+     +----------------+  |
 |            | std::jthread worker      ^                                   |
 |            v                          | publish snapshot                  |
@@ -58,10 +60,12 @@ This document is the entry point for the project documentation. It describes how
 +---------------------------------------------------------------------------+
 ```
 
-- `anaf_io` is the file layer shared by every front end: GUI now, CLI later, and the tests. It does not know about any solver.
+- `anaf_io` is the file layer shared by every front end (GUI, CLI) and the tests. It does not know about any solver.
 - `anaf_core` holds the FEM code and the solver-specific adapters.
 - `anaf_core` is self-contained (since 2026-10-02): the model types (`MeshData`), `solveStatic()`, the material library, the log and the asset lookup. A front end links it and needs nothing from the GUI.
-- `anafinen` adds the GUI, the bridge (`Gui_Calc_Bridge`: snapshot publication, worker, materials for the panels) and the entry point.
+- `anaf_bridge` (since 2026-10-08) is the front-end state shared by the GUI and the CLI: `Gui_Calc_Bridge` (model snapshot publication, worker handle, materials, sections). It links `anaf_core` and has no GUI dependency; `anaf_core` itself stays stateless.
+- `anafinen` adds the GUI and its entry point (`main.cpp`); it links `anaf_bridge`.
+- `anafinen-cli` (target `anafinen_cli`, `src/cli/`, option `ANAFINEN_BUILD_CLI`, ON by default) is the command-line front end: `main_cli.cpp` + `anaf::CLI`. It links `anaf_bridge` only and is built next to `anafinen`, so both use the same copied `assets/`.
 
 ## 3. Namespaces
 
@@ -73,7 +77,8 @@ This document is the entry point for the project documentation. It describes how
 | `FEM::BEAM::ADAPTER` | `src/objectCalcs/beam/beamIO/` | `MeshModel` ↔ beam model conversion; `isBeamModel()` routes beam files ([CALCULATIONS_BEAM.md](CALCULATIONS_BEAM.md) section 11) |
 | `FEM::SUPPORT` | `src/objectCalcs/common/` | `orthonormalize`, `orthogonalComplement`, `componentOutside`: support bases of every node type and the GUI support editor |
 | `FEM::SOLVER` | `src/solvers/` (`direct/`, `iterative/`) | Linear solver portfolio and referee, shared by every element type; callers pass their DOF slots per node (truss 3, 3D beam 6), see [CALCULATIONS.md](CALCULATIONS.md) section 7 |
-| `anaf::BRIDGE` | `src/bridge/` | Shared state between GUI thread and worker thread |
+| `anaf::BRIDGE` | `src/bridge/` | Front-end state shared by the GUI and the CLI (library `anaf_bridge`): model snapshot, materials, sections, worker handle |
+| `anaf::CLI` | `src/cli/` | Command-line front end (`anafinen-cli`): `initcli()`; argument parsing and solve commands still to write |
 | `anaf::GUI` | `src/gui/` | Window, ImGui layer, panels, OpenGL renderer |
 | `anaf::IO` | `src/io/` | Format-neutral mesh model, readers / writers, async I/O service (library `anaf_io`) |
 | `anaf::IO::ARRAY` | `src/io/array/` | HDF5 store for dense / sparse arrays (`ArrayFile`) and its std, Eigen and CHOLMOD adapters (part of `anaf_io`) |
@@ -112,6 +117,14 @@ Rules:
    2. Loads GLAD (startup stops with an error if the OpenGL functions cannot be loaded), then ImGui and the fonts.
    3. Creates the `Framebuffer` and registers the panels.
    4. Enters the frame loop.
+
+### 5.1 CLI startup (`anafinen-cli`)
+
+1. `anaf::LOG::setConsoleOutput(true)`: log lines go to stdout (ANSI colored). No GUI callback is installed.
+2. `anaf::LOG::init("anafinen_run.log")` opens the log file in the working directory.
+3. The bridge is built and filled as in the GUI: `setStaticInfo()`, `loadUserMaterials()`, `loadSectionCatalog()`, `loadUserSections()`.
+4. `anaf::CLI::initcli()` runs; its return value becomes the exit code (0 or 1).
+5. The log is closed. The OpenMP thread count is not limited (all cores; the GUI keeps two free).
 
 ## 6. Shutdown sequence
 
@@ -153,7 +166,7 @@ Update the documents when any of the following happens:
 ### 8.1 Deferred by design
 
 - Dynamic analysis does not exist in `v0.2.0-alpha` (modal, harmonic, transient). There is no mass matrix and no eigen solver call yet. Analyze > ... > "Dynamic Load (not available yet)" only shows the inputs modal analysis will use (analysis type, mode count, mass matrix), with a warning and a disabled run button ([GUI.md](GUI.md) section 2). Modal analysis with Spectra is the next analysis step ([CALCULATIONS.md](CALCULATIONS.md) section 13).
-- The CLI executable itself does not exist yet. Its prerequisite is done (2026-10-02): `anaf_core` links on its own and `FEM::TRUSS::solveStatic()` takes no GUI type, so a CLI is `main()` + argument parsing + `anaf_io` + `solveStatic()` (with `anaf::LOG::setConsoleOutput(true)`).
+- The CLI is a skeleton (2026-10-08): `anafinen-cli` builds and sets up the log, the bridge, the materials and the sections (section 5.1), but `initcli()` has no argument parsing or solve commands yet. It is not installed or packaged (`cmake/Packaging.cmake` installs `anafinen` only).
 
 ### 8.2 Fixed
 

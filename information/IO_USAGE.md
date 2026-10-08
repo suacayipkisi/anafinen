@@ -5,7 +5,7 @@ This guide shows how code outside `src/io/` reads and writes model files through
 For the file formats themselves (which data goes where in MSH, VTK, VTU, `.pvd` and the STEP sidecar), see [FILE_HANDLING.md](FILE_HANDLING.md).
 
 > **Document status**
-> Verified against: `v0.2.0-alpha` (released 2026-10-05; previous release `v0.1.3-alpha`, 2026-10-01), content checked 2026-10-05 (v0.2.0-alpha release check; 2026-10-04: beam adapter, its well-known names, section 7; beam solver default orientation; HDF5 array store, section 9; 2026-10-03: rotational constraints, nodal moments, beam section data and orientation, beam / dynamic result names).
+> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-08 (version 0.3.0; 2026-10-05: v0.2.0-alpha release check; 2026-10-04: beam adapter, its well-known names, section 7; beam solver default orientation; HDF5 array store, section 9; 2026-10-03: rotational constraints, nodal moments, beam section data and orientation, beam / dynamic result names).
 
 ## 1. Overview
 

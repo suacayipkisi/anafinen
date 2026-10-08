@@ -22,6 +22,7 @@
 namespace anaf::CLI {
 
   int initcli() {
+    std::cout << ">>> " ;
     std::cout << "Hello anafinen"  << '\n';
     return 0;
   }
