@@ -15,18 +15,29 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "cli.hpp"
-#include "cliLoop.hpp"
+#pragma once
 
-#include <iostream>
+#include <string_view>
 
 namespace anaf::CLI {
 
-  int initcli() {
-    std::cout << "Hello anafinen"  << '\n';
+  namespace SIDE_COMMANDS { 
 
-    cliLoop();
-    return 0;
-  }
+    enum SIDE_COMMANDS {
+      HELP,
+      OPERATIONS,
+      LICENSE,
+      TRHIR_PARTY_LICENSES,
+      EXIT
+    };
+
+    int help();
+    int operations();
+    int license();
+    int thirdPartyLicenses();
+
+    bool mainSideCommands(const std::string_view operation);
+
+  } // namespace SIDE_COMMANDS end
 
 } // namespace anaf::CLI end

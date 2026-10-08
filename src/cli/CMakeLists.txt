@@ -8,6 +8,11 @@
 set(ANAFINEN_CLI_SOURCES
     cli.cpp
     main_cli.cpp
+    cliLoop.cpp
+    operations/help.cpp
+    operations/operations.cpp
+    operations/licenses.cpp
+    operations/sideCommands.cpp 
 )
 
 add_executable(anafinen_cli ${ANAFINEN_CLI_SOURCES})

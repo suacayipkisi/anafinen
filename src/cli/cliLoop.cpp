@@ -15,18 +15,30 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "cli.hpp"
 #include "cliLoop.hpp"
-
+#include "cli/operations/sideCommands.hpp"
 #include <iostream>
+#include <string>
+#include <string_view>
 
 namespace anaf::CLI {
 
-  int initcli() {
-    std::cout << "Hello anafinen"  << '\n';
+  void cliLoop() {
+    while(true) {
+      std::cout << ">>> ";
+      std::string userInput{};
+      std::cin >> userInput;
+      std::string_view operation = userInput;
+      if(operation.starts_with("-")) {
+        operation.remove_prefix(1);
 
-    cliLoop();
-    return 0;
+        // exits loop if input is: "-exit"
+        if(!SIDE_COMMANDS::mainSideCommands(operation)) {
+          break;
+        }
+      }
+      //std::cout << userInput << '\n';
+    }
   }
 
 } // namespace anaf::CLI end

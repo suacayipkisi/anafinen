@@ -21,4 +21,4 @@ namespace anaf::CLI {
 
   int initcli();
 
-} // namespace anaf::CLI
+} // namespace anaf::CLI end
