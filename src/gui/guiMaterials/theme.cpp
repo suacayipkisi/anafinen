@@ -42,6 +42,7 @@ namespace anaf::GUI::THEME {
     constexpr ImVec4 kCore = rgb(0x3FD6D0);
 
     constexpr ThemePalette kSteelCyan{
+      .key = "steel_cyan",
       .name = "Steel Blue / Cyan",
       .base = rgb(0x111418),
       .panel = rgb(0x171B21),
@@ -74,6 +75,7 @@ namespace anaf::GUI::THEME {
     };
 
     constexpr ThemePalette kGraphiteOrange{
+      .key = "graphite_orange",
       .name = "Graphite / Orange",
       .base = rgb(0x141416),
       .panel = rgb(0x1B1B1E),
@@ -106,6 +108,7 @@ namespace anaf::GUI::THEME {
     };
 
     constexpr ThemePalette kClassicFem{
+      .key = "classic_fem",
       .name = "Classic FEM",
       .base = rgb(0x16191E),
       .panel = rgb(0x1E2126),
@@ -138,6 +141,7 @@ namespace anaf::GUI::THEME {
     };
 
     constexpr ThemePalette kMidnightViolet{
+      .key = "midnight_violet",
       .name = "Midnight / Violet",
       .base = rgb(0x0F1020),
       .panel = rgb(0x151729),
@@ -170,6 +174,7 @@ namespace anaf::GUI::THEME {
     };
 
     constexpr ThemePalette kEmeraldSlate{
+      .key = "slate_emerald",
       .name = "Slate / Emerald",
       .base = rgb(0x111615),
       .panel = rgb(0x171D1C),
@@ -203,6 +208,7 @@ namespace anaf::GUI::THEME {
 
     // Light theme: dark text, deeper status colors (readable on white), light viewport gradient.
     constexpr ThemePalette kStudioLight{
+      .key = "studio_light",
       .name = "Studio Light",
       .light = true,
       .base = rgb(0xD9DDE3),
@@ -335,6 +341,13 @@ namespace anaf::GUI::THEME {
       case ThemeId::SteelCyan: break;
     }
     return kSteelCyan;
+  }
+
+  ThemeId themeFromKey(const std::string_view key) {
+    for (const ThemeId id : kAllThemes) {
+      if (key == palette(id).key) return id;
+    }
+    return ThemeId::SteelCyan;
   }
 
   const ThemePalette& theme() { return palette(g_current); }

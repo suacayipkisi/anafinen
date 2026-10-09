@@ -144,6 +144,7 @@ set(ANAFINEN_SOURCES
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
     src/gui/guiMaterials/theme.cpp
+    src/gui/guiMaterials/userSettings.cpp
     src/gui/guiMaterials/framebuffer.cpp
     src/gui/guiMaterials/shaderProgram.cpp
     src/gui/panels/logTerminal.cpp
@@ -212,6 +213,7 @@ target_link_libraries(anafinen PRIVATE
     OpenGL::GL
     glm::glm
     PNG::PNG
+    nlohmann_json::nlohmann_json # userSettings.json
     project_warnings_and_optimizations
 )
 
@@ -233,14 +235,18 @@ add_custom_command(
 )
 
 # The POST_BUILD copy above runs only when anafinen relinks; keep the editable
-# material library and section catalogue current on every build.
+# material library, section catalogue and default user settings current on every build.
 add_custom_target(anafinen_material_library ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:anafinen>/assets/bridge
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_CURRENT_SOURCE_DIR}/assets/bridge/materialProperties.json
         ${CMAKE_CURRENT_SOURCE_DIR}/assets/bridge/sectionCatalog.json
         $<TARGET_FILE_DIR:anafinen>/assets/bridge/
-    COMMENT "Syncing assets/bridge/materialProperties.json and sectionCatalog.json"
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:anafinen>/assets/settings
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/settings/userSettings.json
+        $<TARGET_FILE_DIR:anafinen>/assets/settings/
+    COMMENT "Syncing assets/bridge/materialProperties.json, sectionCatalog.json and assets/settings/userSettings.json"
 )
 
 # Window icons rendered at configure time (or the committed fallbacks, see cmake/Dependencies.cmake)

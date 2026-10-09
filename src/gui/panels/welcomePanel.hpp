@@ -40,8 +40,6 @@ namespace anaf::GUI {
     std::function<void()> onImport;
 
   private:
-    void saveSettings() const;
-
     bool m_showOnStartup{true};
     bool m_focusRequested{true};
     bool m_autoCenter{true}; // until the user drags it: follows window resizes and its own height

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "theme": "steel_cyan",
+  "welcome": {
+    "showOnStartup": true
+  },
+  "viewport": {
+    "legends": {
+      "stress": { "collapsed": false, "placed": false, "x": 0.0, "y": 0.0 },
+      "displacement": { "collapsed": false, "placed": false, "x": 0.0, "y": 0.0 }
+    }
+  }
+}

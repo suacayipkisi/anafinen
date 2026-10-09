@@ -21,6 +21,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string_view>
 
 // UI themes. One palette holds every color the GUI uses outside the scene's semantic colors
 // (supports, loads, selection, result colormap): ImGui surfaces, the accent, status colors,
@@ -41,7 +42,8 @@ namespace anaf::GUI::THEME {
                                                      ThemeId::MidnightViolet, ThemeId::EmeraldSlate,   ThemeId::StudioLight};
 
   struct ThemePalette {
-    const char* name{""};
+    const char* key{""};  // stable id in userSettings.json
+    const char* name{""}; // shown in Settings > Theme
     bool light{false}; // ImGui's light defaults under the palette instead of the dark ones
 
     // Surfaces (in the dark themes from darkest to lightest).
@@ -87,6 +89,8 @@ namespace anaf::GUI::THEME {
   const ThemePalette& theme();
   ThemeId currentTheme();
   const ThemePalette& palette(ThemeId id);
+  // Theme with this key; SteelCyan for an unknown key.
+  ThemeId themeFromKey(std::string_view key);
 
   // Sets the palette and rewrites the ImGui style colors. ImPlot follows ImGui's colors on its own.
   void applyTheme(ThemeId id);

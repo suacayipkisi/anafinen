@@ -20,6 +20,7 @@
 #include <beam/beamTypes/beamLibrary.hpp>
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
+#include <guiMaterials/userSettings.hpp>
 #include <log/anaf_info.hpp>
 #include <panels/editorLayout.hpp>
 
@@ -29,10 +30,8 @@
 #include <algorithm>
 #include <cfloat>
 #include <format>
-#include <fstream>
 #include <string>
 #include <string_view>
-#include <system_error>
 
 namespace anaf::GUI {
 
@@ -41,29 +40,6 @@ namespace anaf::GUI {
     // (line loads, wind, self weight), so the solved diagrams and stress colors show at once.
     constexpr std::string_view kExampleId = "building_portal_frame";
     constexpr std::string_view kExampleName = "Portal frame (pitched roof)";
-
-    // Per-user GUI settings, one "key=value" per line.
-    constexpr const char* kSettingsFile = "guiSettings.ini";
-    constexpr std::string_view kShowOnStartupKey = "showWelcomeOnStartup";
-
-    std::filesystem::path settingsPath() {
-      const auto dir = anaf::DIRECTORY::getUserConfigDirectory();
-      return dir.empty() ? dir : dir / kSettingsFile;
-    }
-
-    bool readShowOnStartup() {
-      const auto path = settingsPath();
-      if (path.empty()) return true;
-      std::ifstream file(path);
-      std::string line;
-      while (std::getline(file, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        const auto eq = line.find('=');
-        if (eq == std::string::npos || std::string_view(line).substr(0, eq) != kShowOnStartupKey) continue;
-        return line.substr(eq + 1) != "0";
-      }
-      return true; // no file yet: first start
-    }
 
     // Button on the left, wrapped explanation next to it, both centered on the taller of the two;
     // true when clicked.
@@ -90,7 +66,7 @@ namespace anaf::GUI {
   } // namespace end
 
   WelcomePanel::WelcomePanel() {
-    m_showOnStartup = readShowOnStartup();
+    m_showOnStartup = SETTINGS::settings().showWelcomeOnStartup;
     isOpen = m_showOnStartup;
     m_examplePath = anaf::DIRECTORY::findAssetPath(
       std::filesystem::path(FEM::BEAM::LIBRARY::kLibrarySubdir) / (std::string(kExampleId) + "_solved.msh"));
@@ -101,19 +77,6 @@ namespace anaf::GUI {
     isOpen = true;
     m_focusRequested = true;
     m_autoCenter = true;
-  }
-
-  void WelcomePanel::saveSettings() const {
-    const auto path = settingsPath();
-    if (path.empty()) return;
-    std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
-    std::ofstream file(path, std::ios::trunc);
-    if (!file) {
-      anaf::LOG::warn("Welcome: could not write the GUI settings file");
-      return;
-    }
-    file << kShowOnStartupKey << '=' << (m_showOnStartup ? 1 : 0) << '\n';
   }
 
   void WelcomePanel::onImGuiRender() {
@@ -174,7 +137,10 @@ namespace anaf::GUI {
     ImGui::Spacing();
     ImGui::TextColored(THEME::theme().note, "Dynamic analysis (modal, harmonic, transient) is not available in this version.");
     ImGui::Separator();
-    if (ImGui::Checkbox("Show on startup", &m_showOnStartup)) saveSettings();
+    if (ImGui::Checkbox("Show on startup", &m_showOnStartup)) {
+      SETTINGS::settings().showWelcomeOnStartup = m_showOnStartup;
+      SETTINGS::save();
+    }
     ImGui::SameLine();
     ImGui::TextDisabled("(Help > Welcome opens it again)");
 

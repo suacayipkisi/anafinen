@@ -19,6 +19,7 @@
 #include "viewportToolbar.hpp"
 
 #include <guiMaterials/theme.hpp>
+#include <guiMaterials/userSettings.hpp>
 
 #include "imgui.h"
 #include "imgui_internal.h" // DockBuilder API
@@ -44,10 +45,19 @@ namespace anaf::GUI {
     if (!ImGui::BeginMenu("Settings")) return;
     if (ImGui::BeginMenu("Theme")) {
       for (const THEME::ThemeId id : THEME::kAllThemes) {
-        if (ImGui::MenuItem(THEME::palette(id).name, nullptr, THEME::currentTheme() == id)) THEME::applyTheme(id);
+        if (ImGui::MenuItem(THEME::palette(id).name, nullptr, THEME::currentTheme() == id)) {
+          THEME::applyTheme(id);
+          SETTINGS::settings().theme = THEME::palette(id).key;
+          SETTINGS::save();
+        }
       }
       ImGui::EndMenu();
     }
+    if (ImGui::MenuItem("Reset Legend Positions")) {
+      for (auto* legend : {&SETTINGS::settings().stressLegend, &SETTINGS::settings().displacementLegend}) *legend = {};
+      SETTINGS::save();
+    }
+    ImGui::SetItemTooltip("Put the result legends back into the bottom-left corner of the viewport, expanded.");
     ImGui::EndMenu();
   }
 

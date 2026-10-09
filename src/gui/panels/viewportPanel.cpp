@@ -22,6 +22,7 @@
 #include <beam/beamSection/sectionTriangulation.hpp>
 #include <bridge/generalStatus.hpp>
 #include <guiMaterials/theme.hpp>
+#include <guiMaterials/userSettings.hpp>
 #include <objectCalcs/common/supportBasis.hpp>
 
 #include "imgui.h"
@@ -1261,7 +1262,10 @@ namespace anaf::GUI {
       }
     }
 
-    // Result legends, stacked upwards from the bottom-left corner.
+    // Result legends: stacked upwards from the bottom-left corner until the user drags one by its
+    // header; a click on the header (without dragging) collapses it to the header alone, a
+    // double click puts it back into the corner. State lives in SETTINGS (userSettings.json).
+    m_legendRects.clear();
     if (hasModel()) {
       // Compact cards in a smaller font than the UI (18 px), still readable at a glance.
       constexpr float fontSize = 13.0f;
@@ -1271,48 +1275,136 @@ namespace anaf::GUI {
       constexpr int tickCount = 6; // labels at 0, 1/5, ..., 1 of the bar
       constexpr float padding = 6.0f;
       constexpr float tickLength = 3.0f;
+      constexpr float cornerMargin = 12.0f;
+      constexpr float stackGap = 6.0f;
       ImGui::PushFont(nullptr, fontSize);
+      const float lineHeight = ImGui::GetTextLineHeight();
+      const float arrowSize = lineHeight * 0.55f;
+      const float titleIndent = arrowSize + 5.0f; // title starts after the collapse arrow
 
       auto getJetColor = [](float t) -> ImU32 {
         const glm::vec4 color = jet(static_cast<double>(t));
         return IM_COL32(static_cast<int>(color.r * 255.0f), static_cast<int>(color.g * 255.0f), static_cast<int>(color.b * 255.0f), 255);
       };
 
-      // Card with title and unit, jet gradient (max at the top), ticks and their values. The
-      // values follow the scene's color mapping: sqrtScale = the color position is sqrt(value / max)
-      // (truss stresses), so the label at bar position t reads max * t^2. Returns the card height.
-      auto drawLegend = [&](const float left, const float bottom, const char* title, const char* unit, const double maxValue,
-                            const bool sqrtScale) -> float {
-        const float lineHeight = ImGui::GetTextLineHeight();
-
+      struct Legend {
+        const char* id;
+        SETTINGS::LegendSettings* state;
+        const char* title;
+        const char* unit;
+        double maxValue;
+        // The color position is sqrt(value / max) (truss stresses), so the label at bar position t reads max * t^2.
+        bool sqrtScale;
         std::array<std::array<char, 32>, tickCount> labels{};
+        ImVec2 size{0.0f, 0.0f};
+        float headerHeight{0.0f};
+      };
+
+      std::vector<Legend> legends;
+      using enum ElementColoring;
+      if (m_display->coloring == Displacement || m_display->showNodes()) {
+        legends.push_back({"displacement", &SETTINGS::settings().displacementLegend, "Displacement", "[mm]", m_cachedMaxDisp * 1000.0, false});
+      }
+      if (m_display->coloring == Stress) {
+        // Truss colors use sqrt(|stress| / max) (buildTrussScene), beams are linear in von Mises.
+        const bool beam = m_currentBeamMesh != nullptr;
+        legends.push_back({"stress", &SETTINGS::settings().stressLegend, beam ? "von Mises" : "|Axial stress|", "[MPa]",
+                           m_cachedMaxStress / 1.0e6, !beam});
+      }
+
+      // Sizes: the header is the title row (plus the sqrt note when expanded); a collapsed card is the header alone.
+      for (Legend& legend : legends) {
+        const float titleWidth = titleIndent + ImGui::CalcTextSize(legend.title).x + 5.0f + ImGui::CalcTextSize(legend.unit).x;
+        if (legend.state->collapsed) {
+          legend.headerHeight = padding + lineHeight + padding;
+          legend.size = ImVec2(padding * 2.0f + titleWidth, legend.headerHeight);
+          continue;
+        }
         float labelWidth = 0.0f;
         for (int i = 0; i < tickCount; ++i) {
           const double t = static_cast<double>(i) / static_cast<double>(tickCount - 1);
-          std::snprintf(labels[static_cast<std::size_t>(i)].data(), labels[0].size(), "%.3e", maxValue * (sqrtScale ? t * t : t));
-          labelWidth = std::max(labelWidth, ImGui::CalcTextSize(labels[static_cast<std::size_t>(i)].data()).x);
+          auto& label = legend.labels[static_cast<std::size_t>(i)];
+          std::snprintf(label.data(), label.size(), "%.3e", legend.maxValue * (legend.sqrtScale ? t * t : t));
+          labelWidth = std::max(labelWidth, ImGui::CalcTextSize(label.data()).x);
         }
+        legend.headerHeight = padding + lineHeight * (legend.sqrtScale ? 2.0f : 1.0f) + 4.0f;
+        const float contentWidth = std::max({barWidth + tickLength + 4.0f + labelWidth, titleWidth,
+                                             legend.sqrtScale ? ImGui::CalcTextSize("sqrt color scale").x : 0.0f});
+        legend.size = ImVec2(padding * 2.0f + contentWidth, legend.headerHeight + lineHeight * 0.25f + barHeight + lineHeight * 0.5f + padding);
+      }
 
-        const float headerHeight = lineHeight * (sqrtScale ? 2.0f : 1.0f) + 4.0f;
-        const float contentWidth = std::max({barWidth + tickLength + 4.0f + labelWidth, ImGui::CalcTextSize(title).x + 5.0f +
-                                             ImGui::CalcTextSize(unit).x, sqrtScale ? ImGui::CalcTextSize("sqrt color scale").x : 0.0f});
-        const float cardHeight = padding + headerHeight + barHeight + lineHeight * 0.5f + padding;
-        const ImVec2 cardMin(left, bottom - cardHeight);
-        const ImVec2 cardMax(left + padding * 2.0f + contentWidth, bottom);
+      float stackBottom = origin.y + size.y - cornerMargin;
+      for (Legend& legend : legends) {
+        SETTINGS::LegendSettings& state = *legend.state;
+
+        // Top-left corner: the saved fraction of the viewport, or the next slot of the corner stack.
+        ImVec2 cardMin;
+        if (state.placed) {
+          cardMin = ImVec2(origin.x + state.x * size.x, origin.y + state.y * size.y);
+        } else {
+          cardMin = ImVec2(origin.x + cornerMargin, stackBottom - legend.size.y);
+          stackBottom = cardMin.y - stackGap;
+        }
+        const auto clampIntoView = [&](ImVec2 p) {
+          p.x = std::clamp(p.x, origin.x, std::max(origin.x, origin.x + size.x - legend.size.x));
+          p.y = std::clamp(p.y, origin.y, std::max(origin.y, origin.y + size.y - legend.size.y));
+          return p;
+        };
+        cardMin = clampIntoView(cardMin);
+
+        // Header: an invisible button that moves the card when dragged and toggles it when clicked.
+        ImGui::PushID(legend.id);
+        ImGui::SetCursorScreenPos(cardMin);
+        ImGui::InvisibleButton("##legendHeader", ImVec2(legend.size.x, legend.headerHeight));
+        const bool headerHovered = ImGui::IsItemHovered();
+        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3.0f)) {
+          m_legendDragged = true;
+          cardMin = clampIntoView(ImVec2(cardMin.x + ImGui::GetIO().MouseDelta.x, cardMin.y + ImGui::GetIO().MouseDelta.y));
+          state.placed = true;
+          state.x = size.x > 0.0f ? (cardMin.x - origin.x) / size.x : 0.0f;
+          state.y = size.y > 0.0f ? (cardMin.y - origin.y) / size.y : 0.0f;
+        }
+        if (headerHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) state.placed = false;
+        if (ImGui::IsItemDeactivated()) {
+          if (!m_legendDragged) state.collapsed = !state.collapsed;
+          m_legendDragged = false;
+          SETTINGS::save();
+        }
+        if (headerHovered && !ImGui::IsItemActive()) {
+          ImGui::PopFont(); // the tooltip uses the UI font
+          ImGui::SetTooltip("Drag to move, click to %s, double-click to put it back in the corner.",
+                            state.collapsed ? "expand" : "collapse");
+          ImGui::PushFont(nullptr, fontSize);
+        }
+        ImGui::PopID();
+
+        const ImVec2 cardMax(cardMin.x + legend.size.x, cardMin.y + legend.size.y);
+        m_legendRects.push_back({cardMin, cardMax});
 
         drawList->AddRectFilled(cardMin, cardMax, cardFill, cardRounding);
-        drawList->AddRect(cardMin, cardMax, cardBorder, cardRounding);
+        drawList->AddRect(cardMin, cardMax, headerHovered ? THEME::toU32(palette.accent) : cardBorder, cardRounding);
         // Accent strip along the top edge marks the card as the active result.
         drawList->AddRectFilled(cardMin, ImVec2(cardMax.x, cardMin.y + 2.0f), THEME::toU32(palette.accent), cardRounding,
                                 ImDrawFlags_RoundCornersTop);
 
         const float x = cardMin.x + padding;
-        float y = cardMin.y + padding;
-        drawList->AddText(ImVec2(x, y), textColor, title);
-        drawList->AddText(ImVec2(x + ImGui::CalcTextSize(title).x + 5.0f, y), textDimColor, unit);
-        if (sqrtScale) drawList->AddText(ImVec2(x, y + lineHeight), textDimColor, "sqrt color scale");
+        const float y = cardMin.y + padding;
+        // Collapse arrow: pointing down while expanded, right while collapsed.
+        const ImVec2 arrowCenter(x + arrowSize * 0.5f, y + lineHeight * 0.5f);
+        const float h = arrowSize * 0.5f;
+        if (state.collapsed) {
+          drawList->AddTriangleFilled(ImVec2(arrowCenter.x - h * 0.6f, arrowCenter.y - h), ImVec2(arrowCenter.x - h * 0.6f, arrowCenter.y + h),
+                                      ImVec2(arrowCenter.x + h * 0.8f, arrowCenter.y), textDimColor);
+        } else {
+          drawList->AddTriangleFilled(ImVec2(arrowCenter.x - h, arrowCenter.y - h * 0.6f), ImVec2(arrowCenter.x + h, arrowCenter.y - h * 0.6f),
+                                      ImVec2(arrowCenter.x, arrowCenter.y + h * 0.8f), textDimColor);
+        }
+        drawList->AddText(ImVec2(x + titleIndent, y), textColor, legend.title);
+        drawList->AddText(ImVec2(x + titleIndent + ImGui::CalcTextSize(legend.title).x + 5.0f, y), textDimColor, legend.unit);
+        if (state.collapsed) continue;
+        if (legend.sqrtScale) drawList->AddText(ImVec2(x, y + lineHeight), textDimColor, "sqrt color scale");
 
-        const float top = y + headerHeight + lineHeight * 0.25f;
+        const float top = cardMin.y + legend.headerHeight + lineHeight * 0.25f;
         const float stepHeight = barHeight / static_cast<float>(colorSteps);
         for (int i = 0; i < colorSteps; ++i) {
           const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
@@ -1333,21 +1425,8 @@ namespace anaf::GUI {
           drawList->AddLine(ImVec2(x + barWidth + 1.0f, tickY), ImVec2(x + barWidth + 1.0f + tickLength, tickY), textDimColor);
           const bool extreme = i == 0 || i == tickCount - 1;
           drawList->AddText(ImVec2(x + barWidth + tickLength + 4.0f, tickY - lineHeight * 0.5f), extreme ? textColor : textDimColor,
-                            labels[static_cast<std::size_t>(i)].data());
+                            legend.labels[static_cast<std::size_t>(i)].data());
         }
-        return cardHeight;
-      };
-
-      const float left = origin.x + 12.0f;
-      float bottom = origin.y + size.y - 12.0f;
-      using enum ElementColoring;
-      if (m_display->coloring == Displacement || m_display->showNodes()) {
-        bottom -= drawLegend(left, bottom, "Displacement", "[mm]", m_cachedMaxDisp * 1000.0, false) + 6.0f;
-      }
-      if (m_display->coloring == Stress) {
-        // Truss colors use sqrt(|stress| / max) (buildTrussScene), beams are linear in von Mises.
-        const bool beam = m_currentBeamMesh != nullptr;
-        drawLegend(left, bottom, beam ? "von Mises" : "|Axial stress|", "[MPa]", m_cachedMaxStress / 1.0e6, !beam);
       }
       ImGui::PopFont();
     }
@@ -1379,6 +1458,13 @@ namespace anaf::GUI {
     ImGui::Image(texId, availSize, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
 
     m_viewportHovered_ = ImGui::IsItemHovered();
+    // The legends (last frame's rectangles) take the mouse: no picking or camera input through them.
+    if (m_viewportHovered_) {
+      const ImVec2 mouse = ImGui::GetMousePos();
+      for (const auto& [rectMin, rectMax] : m_legendRects) {
+        if (mouse.x >= rectMin.x && mouse.x <= rectMax.x && mouse.y >= rectMin.y && mouse.y <= rectMax.y) m_viewportHovered_ = false;
+      }
+    }
 
     // GPU Pixel Picking Interaction
     if (m_viewportHovered_ && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {

@@ -17,6 +17,7 @@
 
 #include "imGuiLayer.hpp"
 #include "theme.hpp"
+#include "userSettings.hpp"
 
 #include <directory/getExecutableDirectory.hpp>
 #include <io/core/pathUtf8.hpp> // ImGui opens files from UTF-8 names
@@ -51,8 +52,8 @@ namespace anaf::GUI {
     style.ItemInnerSpacing  = ImVec2(6.0f, 4.0f);
     style.ScrollbarSize     = 10.0f;
 
-    // Colors come from the active palette (Settings > Theme switches it at run time).
-    THEME::applyTheme(THEME::currentTheme());
+    // Colors come from the saved theme (Settings > Theme switches and saves it at run time).
+    THEME::applyTheme(THEME::themeFromKey(SETTINGS::settings().theme));
   }
 
   void ImGuiLayer::init(GLFWwindow* window) {

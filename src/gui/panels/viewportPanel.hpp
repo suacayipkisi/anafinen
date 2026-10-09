@@ -29,6 +29,7 @@
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float3.hpp>
 
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -72,6 +73,8 @@ namespace anaf::GUI{
     double m_cachedMaxStress{0.0};
     double m_cachedMaxDisp{0.0};
     std::uint32_t m_themeRevision{0}; // THEME::themeRevision() the buffers were built with
+    std::vector<std::array<ImVec2, 2>> m_legendRects; // legend cards drawn last frame (min, max), block picking
+    bool m_legendDragged{false}; // the active legend header moved, so its release is no click
     std::uint32_t m_selectedNode{kNone};    // bridge selections, compared every frame so a
     std::uint32_t m_selectedElement{kNone}; // selection made in a panel redraws the highlight
     std::vector<std::pair<std::uint32_t, glm::vec3>> m_nodeLabels; // id, drawn position

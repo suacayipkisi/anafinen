@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-09 (`anafinen-cli` installed into the GUI package, section 8; 2026-10-08: version 0.3.0; `anaf_bridge` library, `anafinen_cli` target and `ANAFINEN_BUILD_CLI` option, sections 1-3, 7, 8; 2026-10-05: v0.2.0-alpha release check: package descriptions and `.desktop` comment, section 8; Debian GCC 14 `-Wmaybe-uninitialized` fixed, release packages built in the containers, section 8.1.1; 2026-10-04: `anaf_beam_library_tool`, beam library sources in `anaf_core`; section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
+> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-09 (`assets/settings/userSettings.json` synced into the build, `anafinen` links nlohmann_json, section 7; `anafinen-cli` installed into the GUI package, section 8; 2026-10-08: version 0.3.0; `anaf_bridge` library, `anafinen_cli` target and `ANAFINEN_BUILD_CLI` option, sections 1-3, 7, 8; 2026-10-05: v0.2.0-alpha release check: package descriptions and `.desktop` comment, section 8; Debian GCC 14 `-Wmaybe-uninitialized` fixed, release packages built in the containers, section 8.1.1; 2026-10-04: `anaf_beam_library_tool`, beam library sources in `anaf_core`; section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
 
 ## 1. Overall flow
 
@@ -175,7 +175,7 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
   2. `/usr/share/anafinen/assets`
   3. `./assets`
   4. `MAIN_DIR/assets`
-- `assets/bridge/materialProperties.json` is the built-in material library and `assets/bridge/sectionCatalog.json` the beam section catalogue. The `POST_BUILD` copy runs only when `anafinen` relinks, so the custom target `anafinen_material_library` (ALL) copies these two files with `copy_if_different` on every build; editing them needs no relink.
+- `assets/bridge/materialProperties.json` is the built-in material library and `assets/bridge/sectionCatalog.json` the beam section catalogue. The `POST_BUILD` copy runs only when `anafinen` relinks, so the custom target `anafinen_material_library` (ALL) copies these two files, and the default GUI settings `assets/settings/userSettings.json`, with `copy_if_different` on every build; editing them needs no relink. Packages carry the settings file with the rest of `assets/`.
 - `anafinen-cli` is built into the same directory as `anafinen` and has no `POST_BUILD` asset copy of its own: it finds `<exe dir>/assets` from the GUI's copy. Built alone (`--target anafinen_cli`) in a fresh tree, it falls through to an installed package or `MAIN_DIR/assets`.
 - `anafinen_run.log` is written to the current working directory (GUI and CLI alike).
 
