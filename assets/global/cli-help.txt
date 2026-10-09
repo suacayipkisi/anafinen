@@ -15,9 +15,26 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
--help : opens help
--operations : lists operations and abilities and whic circumstances 
-              it available to use
--license
--third-party-licenses
--exit : exits
+ANAFINEN command line: build, solve and inspect truss and beam / frame models.
+
+Syntax
+  -<command> [arguments] [key=value ...]
+  - Ids start at 0. Lists of nodes / elements: all, 3, 0,4,7, 2-9 or a mix (0,4-6).
+  - Materials and sections are named ("IPE 300", quoted when the name has spaces)
+    or given by their list index: #3.
+  - Vectors are comma separated without spaces: orient=0,0,1.
+  - '#' starts a comment (except "#<digit>", an index).
+  - Units are SI: m, m^2, m^4, N, N m, N/m, Pa, kg/m^3.
+
+Typical session
+  -new beam
+  -node add 0 0 0  4 0 0
+  -element add 0 1 section="HEB 200"
+  -support 0 fixed
+  -load node 1 0 -10000 0
+  -solve
+  -results elements
+
+Start the program with a file name to run a script, with -e "<command>" to run single
+commands, or with --quiet to keep the log lines off the terminal. -operations lists what
+each analysis supports.

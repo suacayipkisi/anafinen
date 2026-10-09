@@ -73,6 +73,7 @@ set(ANAF_CORE_SOURCES
     src/material/materialLibrary.cpp
     src/objectCalcs/common/supportBasis.cpp
     src/objectCalcs/truss_1D/trussProperties/node.cpp
+    src/objectCalcs/truss_1D/trussProperties/meshEdit.cpp
     src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
     src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
     src/objectCalcs/truss_1D/trussTypes/trussLibrary.cpp
@@ -83,6 +84,7 @@ set(ANAF_CORE_SOURCES
     src/solvers/solver_referee.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp
     src/objectCalcs/beam/beamProperties/node.cpp
+    src/objectCalcs/beam/beamProperties/meshEdit.cpp
     src/objectCalcs/beam/beamSection/beamSection.cpp
     src/objectCalcs/beam/beamSection/sectionLibrary.cpp
     src/objectCalcs/beam/beamSection/sectionStress.cpp
@@ -236,7 +238,8 @@ add_custom_command(
 )
 
 # The POST_BUILD copy above runs only when anafinen relinks; keep the editable
-# material library, section catalogue and default user settings current on every build.
+# material library, section catalogue, default user settings and the CLI texts
+# (help, operations, licenses) current on every build.
 add_custom_target(anafinen_material_library ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:anafinen>/assets/bridge
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -247,7 +250,14 @@ add_custom_target(anafinen_material_library ALL
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_CURRENT_SOURCE_DIR}/assets/settings/userSettings.json
         $<TARGET_FILE_DIR:anafinen>/assets/settings/
-    COMMENT "Syncing assets/bridge/materialProperties.json, sectionCatalog.json and assets/settings/userSettings.json"
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:anafinen>/assets/global
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/global/cli-help.txt
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/global/operations.txt
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/global/license.txt
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/global/thirdPartyLicenses.txt
+        $<TARGET_FILE_DIR:anafinen>/assets/global/
+    COMMENT "Syncing assets/bridge/*.json, assets/settings/userSettings.json and assets/global/*.txt"
 )
 
 # Window icons rendered at configure time (or the committed fallbacks, see cmake/Dependencies.cmake)

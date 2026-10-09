@@ -17,26 +17,22 @@
 
 #pragma once
 
+#include <ostream>
 #include <string_view>
 
 namespace anaf::CLI {
 
-  namespace SIDE_COMMANDS { 
+  namespace SIDE_COMMANDS {
 
-    enum SIDE_COMMANDS {
-      HELP,
-      OPERATIONS,
-      LICENSE,
-      TRHIR_PARTY_LICENSES,
-      EXIT
-    };
+    // Print a text file from assets/global/; false (and a logged error) when it is missing.
+    bool help(std::ostream& out);
+    bool operations(std::ostream& out);
+    bool license(std::ostream& out);
+    bool thirdPartyLicenses(std::ostream& out);
 
-    int help();
-    int operations();
-    int license();
-    int thirdPartyLicenses();
-
-    bool mainSideCommands(const std::string_view operation);
+    // Prints assets/global/<fileName> without its leading "//" header lines (the SPDX notice
+    // of the asset itself).
+    bool printAssetText(std::string_view fileName, std::ostream& out);
 
   } // namespace SIDE_COMMANDS end
 

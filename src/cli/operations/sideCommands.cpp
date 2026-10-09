@@ -17,27 +17,31 @@
 
 #include "sideCommands.hpp"
 
-#include <string_view>
+#include "directory/getExecutableDirectory.hpp"
+#include "io/detail/textIo.hpp"
+#include "log/anaf_info.hpp"
+
+#include <filesystem>
+#include <sstream>
+#include <string>
 
 namespace anaf::CLI {
 
-  namespace SIDE_COMMANDS { 
+  namespace SIDE_COMMANDS {
 
-    bool mainSideCommands(const std::string_view operation){
-      if(operation == "help"){
-        help();
-      }
-      else if(operation == "operations") {
-        operations();
-      }
-      else if(operation == "license") {
-        license();
-      }
-      else if(operation == "third-party-licenses") {
-        thirdPartyLicenses();
-      }
-      else if(operation == "exit"){
+    bool printAssetText(const std::string_view fileName, std::ostream& out) {
+      const std::filesystem::path path = anaf::DIRECTORY::findAssetPath(std::filesystem::path("global") / fileName);
+      if (path.empty()) {
+        anaf::LOG::error("Text file not found: assets/global/{}", fileName);
         return false;
+      }
+      std::istringstream text(IO::detail::readWholeFile(path));
+      std::string line;
+      bool inHeader = true;
+      while (std::getline(text, line)) {
+        if (inHeader && (line.starts_with("//") || line.empty())) continue;
+        inHeader = false;
+        out << line << '\n';
       }
       return true;
     }

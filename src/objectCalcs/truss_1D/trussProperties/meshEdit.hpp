@@ -17,15 +17,20 @@
 
 #pragma once
 
-#include "cli/session.hpp"
+#include "meshData.hpp"
 
-#include <istream>
+#include <cstdint>
 
-namespace anaf::CLI {
+namespace FEM::TRUSS {
 
-  // Reads commands from in until -exit or end of input. Interactive (a terminal): a prompt,
-  // and a failing command only prints its error. Otherwise (piped input) the run stops at
-  // the first failing command, like a script. Returns the exit code (0, or 1 after a failure).
-  int cliLoop(Session& session, std::istream& in, bool interactive);
+  // Edits shared by every front end (GUI model editor, CLI): node ids stay equal to positions.
 
-} // namespace anaf::CLI end
+  // Results no longer match an edited model: displacements and stresses are zeroed and
+  // hasResults is cleared.
+  void dropResults(MeshData& mesh);
+
+  // Removes node k with its bars and loads; later ids move down by one (ids = positions: the
+  // solver and the viewport index nodes by id). The other nodes keep their supports.
+  void deleteNode(MeshData& mesh, std::uint32_t k);
+
+} // namespace FEM::TRUSS end

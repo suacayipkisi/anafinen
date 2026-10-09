@@ -17,8 +17,18 @@
 
 #pragma once
 
+#include <span>
+#include <string>
+
 namespace anaf::CLI {
 
-  int initcli();
+  // Runs the CLI with the command-line arguments (UTF-8, without the program name):
+  //   (none)              interactive prompt (or the commands piped into stdin)
+  //   <script> ...        runs the script files in order
+  //   -e "<command>" ...  runs the given command lines in order
+  //   --quiet / -q        no log lines on the terminal (the log file is still written)
+  //   --help, --version
+  // Returns the process exit code: 0, or 1 when a command failed.
+  int initcli(std::span<const std::string> args);
 
 } // namespace anaf::CLI end

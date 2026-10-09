@@ -15,25 +15,14 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <filesystem>
-#include <iostream>
-#include "directory/getExecutableDirectory.hpp"
-#include "io/detail/textIo.hpp"
-#include "log/anaf_info.hpp"
+#include "sideCommands.hpp"
 
 namespace anaf::CLI {
 
   namespace SIDE_COMMANDS {
 
-    int operations() {
-      const std::filesystem::path operationsFilePath = anaf::DIRECTORY::findAssetPath(std::filesystem::path("global") / "operations.txt");
-      if (operationsFilePath.empty()) {
-        anaf::LOG::error("Help file not found: assets/global/operations.txt");
-        std::cerr << "Help file not found: assets/global/operations.txt\n";
-        return 0;
-      }
-      std::cout << IO::detail::readWholeFile(operationsFilePath) << '\n';
-      return 1;
+    bool operations(std::ostream& out) {
+      return printAssetText("operations.txt", out);
     }
 
   } // namespace SIDE_COMMANDS end

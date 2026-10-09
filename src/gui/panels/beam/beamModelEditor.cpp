@@ -20,6 +20,7 @@
 #include <guiMaterials/theme.hpp>
 
 #include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp> // localAxes()
+#include <beam/beamProperties/meshEdit.hpp>
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
@@ -55,7 +56,6 @@ namespace anaf::GUI {
     using FEM::BEAM::Formulation;
     using FEM::BEAM::LoadFrame;
 
-    constexpr std::uint32_t kNone = std::numeric_limits<std::uint32_t>::max();
     constexpr std::array<const char*, 2> kFormulations{"Euler-Bernoulli", "Timoshenko"};
     constexpr std::array<const char*, 2> kFrames{"Global axes", "Local axes"};
     constexpr std::array<double, 3> kGravity{0.0, -9.80665, 0.0};
@@ -73,20 +73,6 @@ namespace anaf::GUI {
       return label;
     }
 
-    // Results no longer match an edited model.
-    void dropResults(BeamMeshData& mesh) {
-      if (!mesh.hasResults) return;
-      for (auto& node : mesh.nodes) {
-        node.setDisplacement({0.0, 0.0, 0.0});
-        node.setRotation({0.0, 0.0, 0.0});
-      }
-      for (auto& element : mesh.elements) {
-        element.sectionForces = {};
-        element.stress = {};
-      }
-      mesh.hasResults = false;
-    }
-
     // Runs edit on a copy of the active beam snapshot (an empty one if there is none) under
     // dataMutex and publishes the copy. edit returns false to publish nothing.
     template <typename Edit>
@@ -95,7 +81,7 @@ namespace anaf::GUI {
         std::lock_guard lock(bridge.dataMutex);
         auto mesh = bridge.activeBeamMesh ? std::make_shared<BeamMeshData>(*bridge.activeBeamMesh) : std::make_shared<BeamMeshData>();
         if (!edit(*mesh)) return false;
-        dropResults(*mesh);
+        FEM::BEAM::dropResults(*mesh);
         bridge.activeBeamMesh = std::move(mesh);
         bridge.m_isValid = false;
       }
@@ -118,47 +104,6 @@ namespace anaf::GUI {
 
     bool alongGlobalAxes(const std::vector<std::array<double, 3>>& basis) {
       return std::ranges::all_of(basis, [](const std::array<double, 3>& v) { return std::ranges::count(v, 0.0) == 2; });
-    }
-
-    // Removes the elements for which drop(element) is true; distributed loads follow their
-    // element (and disappear with it).
-    template <typename Predicate>
-    void removeElements(BeamMeshData& mesh, Predicate&& drop) {
-      std::vector<std::uint32_t> newIndex(mesh.elements.size(), kNone);
-      std::vector<BeamElement> kept;
-      for (std::size_t i = 0; i < mesh.elements.size(); ++i) {
-        if (drop(mesh.elements[i])) continue;
-        newIndex[i] = static_cast<std::uint32_t>(kept.size());
-        kept.push_back(mesh.elements[i]);
-      }
-      mesh.elements = std::move(kept);
-      std::erase_if(mesh.distributedLoads, [&](const FEM::BEAM::DistributedLoad& load) {
-        return load.element >= newIndex.size() || newIndex[load.element] == kNone;
-      });
-      for (auto& load : mesh.distributedLoads) load.element = newIndex[load.element];
-    }
-
-    // Removes node k with its elements and loads; later ids move down by one (ids = positions).
-    void deleteNode(BeamMeshData& mesh, const std::uint32_t k) {
-      const auto shift = [k](const std::uint32_t id) { return id > k ? id - 1 : id; };
-      std::vector<FEM::BEAM::Node> nodes;
-      nodes.reserve(mesh.nodes.size());
-      for (const auto& node : mesh.nodes) {
-        if (node.getNodeID() == k) continue;
-        const auto& p = node.getLocation();
-        FEM::BEAM::Node renumbered(shift(node.getNodeID()), p[0], p[1], p[2]);
-        renumbered.setAllowedMotionDirections(node.getAllowedMotionDirections());
-        renumbered.setAllowedRotationAxes(node.getAllowedRotationAxes());
-        nodes.push_back(std::move(renumbered));
-      }
-      mesh.nodes = std::move(nodes);
-      removeElements(mesh, [k](const BeamElement& element) { return element.node1 == k || element.node2 == k; });
-      for (auto& element : mesh.elements) {
-        element.node1 = shift(element.node1);
-        element.node2 = shift(element.node2);
-      }
-      std::erase_if(mesh.nodalLoads, [k](const FEM::BEAM::NodalLoad& load) { return load.node == k; });
-      for (auto& load : mesh.nodalLoads) load.node = shift(load.node);
     }
 
     void setSelectedNode(Gui_Calc_Bridge& bridge, const std::uint32_t node) {
@@ -378,7 +323,7 @@ namespace anaf::GUI {
     if (ImGui::Button("Delete Node##beam", ImVec2(-FLT_MIN, 0.0f))) {
       if (editModel(bridge, [&](BeamMeshData& mesh) {
             if (node >= mesh.nodes.size()) return false;
-            deleteNode(mesh, node);
+            FEM::BEAM::deleteNode(mesh, node);
             return true;
           })) {
         setSelectedNode(bridge, kNone);
@@ -668,7 +613,7 @@ namespace anaf::GUI {
       if (editModel(bridge, [&](BeamMeshData& edited) {
             if (selected >= edited.elements.size()) return false;
             std::uint32_t index = 0;
-            removeElements(edited, [&](const BeamElement&) { return index++ == selected; });
+            FEM::BEAM::removeElements(edited, [&](const BeamElement&) { return index++ == selected; });
             return true;
           })) {
         setSelectedElement(bridge, kNone);

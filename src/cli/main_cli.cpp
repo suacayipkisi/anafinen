@@ -17,21 +17,61 @@
 
 #include "bridge/generalStatus.hpp"
 #include "directory/getExecutableDirectory.hpp"
+#include "io/core/pathUtf8.hpp"
 #include "log/anaf_info.hpp"
 #include <omp.h>
 
 #include "cli.hpp"
 
+#include <algorithm>
+#include <filesystem>
+#include <string>
+#include <vector>
+
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <shellapi.h>
+
 extern "C" {
   __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
   __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 #endif
 
-int main() {
+namespace {
 
-  anaf::LOG::setConsoleOutput(true);
+  // The arguments as UTF-8, without the program name. On Windows argv is in the ANSI code
+  // page, so the wide command line is converted instead (non-ASCII script paths).
+  std::vector<std::string> commandLineArguments([[maybe_unused]] const int argc, [[maybe_unused]] char** argv) {
+    std::vector<std::string> args;
+#ifdef _WIN32
+    int count = 0;
+    if (LPWSTR* wide = CommandLineToArgvW(GetCommandLineW(), &count)) {
+      for (int i = 1; i < count; ++i) args.push_back(anaf::IO::pathToUtf8(std::filesystem::path(wide[i])));
+      LocalFree(wide);
+    }
+#else
+    for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
+#endif
+    return args;
+  }
+
+} // namespace end
+
+int main(int argc, char** argv) {
+#ifdef _WIN32
+  // UTF-8 in and out of the console (names such as "Çelik", non-ASCII paths).
+  SetConsoleOutputCP(CP_UTF8);
+  SetConsoleCP(CP_UTF8);
+#endif
+  const std::vector<std::string> args = commandLineArguments(argc, argv);
+  const bool quiet = std::ranges::any_of(args, [](const std::string& arg) { return arg == "--quiet" || arg == "-q"; });
+
+  // The log file is always written; --quiet keeps the log lines off the terminal.
+  anaf::LOG::setConsoleOutput(!quiet);
 
   if (!anaf::LOG::init("anafinen_run.log")) {
     anaf::LOG::error("Failed to open log file!");
@@ -47,10 +87,9 @@ int main() {
   CLI_CALC_BRIDGE.loadSectionCatalog();
   CLI_CALC_BRIDGE.loadUserSections(anaf::DIRECTORY::getUserConfigDirectory() / "userSections.json");
 
-  
   anaf::LOG::info("OpenMP thread limit set to {} of {} available threads", omp_get_max_threads(), omp_get_num_procs());
 
-  const int cliStatus = anaf::CLI::initcli();
+  const int cliStatus = anaf::CLI::initcli(args);
 
   anaf::LOG::core("Anafinen is closing.");
   anaf::LOG::close();

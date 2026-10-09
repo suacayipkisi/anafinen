@@ -15,4 +15,43 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-under construction
+What the command line can do (v0.3.0). Analyses: linear static only; dynamic (modal,
+harmonic, transient) analysis is not available yet.
+
+Any time
+  -help, -operations, -license, -third-party-licenses, -version, -exit / -quit
+  -run <script>        commands from a file, stops at the first error
+  -status, -set        model summary, element defaults
+  -materials, -material show / add / remove     (user materials are saved)
+  -sections, -section show / add / remove       (user sections are saved)
+  -library list / show / load                   built-in truss and beam models
+  -new truss|beam, -generate sqpt, -import <file>
+
+Truss model (3D bars, 3 DOFs per node)
+  Editing    -node, -nodes, -element (material=, area=), -elements
+  Supports   -support: fixed, free, fix=ux,uy,uz, inclined motion=<v>/<v>
+  Loads      -load node <nodes> fx fy fz; self weight is always on (-Y, 9.80665 m/s^2)
+  Solve      -solve: displacements, axial stress, energy check (U = W / 2)
+  Results    -results, -results nodes, -results elements (stress, N, elongation)
+  Not here   moments, line loads, end releases, -gravity, -diagram
+
+Beam / frame model (6 DOFs per node)
+  Editing    -node, -nodes, -element (material=, section=, formulation=, orient=), -elements
+  Elements   Euler-Bernoulli or Timoshenko (-formulation), end releases / hinges (-release)
+  Supports   -support: fixed, pinned, free, fix=ux,...,rz, inclined motion= / rotation=
+  Loads      -load node (forces and moments), -load element (uniform N/m, global or local),
+             self weight with -gravity (off switches it off)
+  Solve      -solve: displacements, rotations, section forces, stresses, yield check
+  Results    -results, -results nodes, -results elements, -diagram <element>
+  Sections   rectangle, circle, pipe, box, I (doubly symmetric) or general (A, I, J given);
+             general sections have no stresses
+
+Files (-import / -export)
+  Read       MSH 1 / 2 / 4, VTK legacy 2.0-5.1, VTU, PVD, STEP / IGES / BREP (meshed)
+  Write      MSH 4.1 / 2.2, VTU, PVD, VTK legacy 5.1 / 4.2, STEP (+ .anafFields sidecar)
+  Files with beam elements open as beam models, all others as trusses. Results are
+  written with the model and read back.
+
+Not available in the command line yet
+  Viewing the model or results in a window (-render); use the GUI (anafinen).
+  Reactions, modal / dynamic analysis, springs and partial end fixity.

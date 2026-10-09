@@ -15,24 +15,14 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <filesystem>
-#include <iostream>
-#include "directory/getExecutableDirectory.hpp"
-#include "io/detail/textIo.hpp"
-#include "log/anaf_info.hpp"
+#include "sideCommands.hpp"
 
 namespace anaf::CLI {
 
   namespace SIDE_COMMANDS {
 
-    int help() {
-      const std::filesystem::path cliHelpFilePath = anaf::DIRECTORY::findAssetPath(std::filesystem::path("global") / "cli-help.txt");
-      if (cliHelpFilePath.empty()) {
-        anaf::LOG::error("Help file not found: assets/global/cli-help.txt");
-        return 0;
-      }
-      std::cout << IO::detail::readWholeFile(cliHelpFilePath) << '\n';
-      return 1;
+    bool help(std::ostream& out) {
+      return printAssetText("cli-help.txt", out);
     }
 
   } // namespace SIDE_COMMANDS end

@@ -22,6 +22,7 @@
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
+#include <truss_1D/trussProperties/meshEdit.hpp>
 #include <objectCalcs/common/supportBasis.hpp>
 #include <panels/editorLayout.hpp>
 #include <panels/truss/materialCombo.hpp>
@@ -52,17 +53,6 @@ namespace anaf::GUI {
 
     constexpr double kCm2ToM2 = 1e-4;
 
-    // Results no longer match an edited model.
-    void dropResults(MeshData& mesh) {
-      if (!mesh.hasResults) return;
-      for (auto& node : mesh.trussNodes) node.setDisplacements({0.0, 0.0, 0.0});
-      for (auto& element : mesh.trussElements) {
-        element.stress = 0.0f;
-        element.isStressExceeded = false;
-      }
-      mesh.hasResults = false;
-    }
-
     // Runs edit on a copy of the active snapshot (an empty one if there is none) under
     // dataMutex and publishes the copy. edit returns false to publish nothing.
     template <typename Edit>
@@ -71,43 +61,12 @@ namespace anaf::GUI {
         std::lock_guard lock(bridge.dataMutex);
         auto mesh = bridge.activeMesh ? std::make_shared<MeshData>(*bridge.activeMesh) : std::make_shared<MeshData>();
         if (!edit(*mesh)) return false;
-        dropResults(*mesh);
+        FEM::TRUSS::dropResults(*mesh);
         bridge.activeMesh = std::move(mesh);
         bridge.m_isValid = false;
       }
       bridge.dataVersion.fetch_add(1, std::memory_order_release);
       return true;
-    }
-
-    // Removes node k with its bars, load and support; later ids move down by one so that ids
-    // stay equal to positions (the solver and the viewport index nodes by id).
-    void deleteNode(MeshData& mesh, const std::uint32_t k) {
-      const auto shift = [k](const std::uint32_t id) { return id > k ? id - 1 : id; };
-
-      std::vector<FEM::TRUSS::Node> nodes;
-      nodes.reserve(mesh.trussNodes.size());
-      for (const auto& node : mesh.trussNodes) {
-        if (node.getNodeID() == k) continue;
-        FEM::TRUSS::Node renumbered(shift(node.getNodeID()), node.getLocX(), node.getLocY(), node.getLocZ());
-        renumbered.setAllowedMotionDirections(node.getAllowedMotionDirections()); // keeps the support
-        renumbered.setDisplacements(node.getDisplacement());
-        nodes.push_back(std::move(renumbered));
-      }
-      mesh.trussNodes = std::move(nodes);
-
-      std::erase_if(mesh.trussElements, [k](const BRIDGE::RenderElement& element) {
-        return element.node1 == k || element.node2 == k;
-      });
-      for (auto& element : mesh.trussElements) {
-        element.node1 = shift(element.node1);
-        element.node2 = shift(element.node2);
-      }
-
-      std::vector<FEM::TRUSS::ForceApplied> forces;
-      for (const auto& force : mesh.appliedForces) {
-        if (force.getAppliedNode() != k) forces.emplace_back(shift(force.getAppliedNode()), force.getForce());
-      }
-      mesh.appliedForces = std::move(forces);
     }
 
     std::shared_ptr<const MeshData> currentMesh(Gui_Calc_Bridge& bridge) {
@@ -257,7 +216,7 @@ namespace anaf::GUI {
     if (ImGui::Button("Delete Node", ImVec2(-FLT_MIN, 0.0f))) {
       const bool deleted = editModel(bridge, [&](MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
-        deleteNode(mesh, selectedNode);
+        FEM::TRUSS::deleteNode(mesh, selectedNode);
         return true;
       });
       if (deleted) {
