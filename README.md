@@ -26,8 +26,6 @@
 
 **Not available yet:** dynamic analysis of any kind (modal, harmonic, transient). The GUI already offers a "Dynamic Load" analysis type that shows the planned inputs (mode count, mass matrix), but it cannot be run in v0.2.0-alpha; every solve is linear static. Modal analysis is the next step.
 
-Documentation, design decisions and progress are in the [`information/`](information/ARCHITECTURE.md) folder.
-
 ## Roadmap
 
 1. Static displacement under applied force: trusses and beams / frames done
@@ -132,7 +130,7 @@ Mesh engine:
 - https://gmsh.info/bin/Windows/?C=M;O=D  
 - As of 2 Sep 2026 the latest is "gmsh-4.15.2-Windows64-sdk.zip". Do not use the git snapshots.  
 - Extract the `.zip` anywhere, for example `C:\libs\gmsh-sdk` (the folder must contain `bin`, `include`, `lib` and `share`).
-- CMake finds the SDK and vcpkg on its own, on any drive: `GMSH_SDK_DIR` / `VCPKG_ROOT` environment variables, `vcpkg` on `PATH`, then folders such as `<drive>:\libs\gmsh-sdk`, `<drive>:\gmsh-*-Windows64-sdk` and `<drive>:\vcpkg`. The configure log prints what it found (`Gmsh SDK auto-detected: ...`). For any other location set `GMSH_SDK_DIR` (environment variable or `-DGMSH_SDK_DIR=...`). Details: [information/BUILD_SYSTEM.md](information/BUILD_SYSTEM.md) section 5.2.
+- CMake finds the SDK and vcpkg on its own, on any drive: `GMSH_SDK_DIR` / `VCPKG_ROOT` environment variables, `vcpkg` on `PATH`, then folders such as `<drive>:\libs\gmsh-sdk`, `<drive>:\gmsh-*-Windows64-sdk` and `<drive>:\vcpkg`. The configure log prints what it found (`Gmsh SDK auto-detected: ...`). For any other location set `GMSH_SDK_DIR` (environment variable or `-DGMSH_SDK_DIR=...`).
 
 ### Finally Open Visual Studio
 

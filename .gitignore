@@ -20,6 +20,8 @@ build-mingw/
 build-rpm/
 .claude/settings.local.json
 REVIEW_GUIDE.md
+# Design documents: own private repository (cloned into information/), never in the public one
+information/
 build-containers/
 tests/matlab
 

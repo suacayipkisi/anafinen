@@ -1458,7 +1458,7 @@ TEST(builtInBeamsAreStableAndReasonable) {
   // Every model imports with catalogue sections only (no new user sections, no warnings),
   // solves with a passing energy check, stays elastic (von Mises below yield) and is no
   // mechanism: small loads on every DOF must give small displacements (an unloaded mechanism
-  // would not show in the design load case, ARCHITECTURE.md known issue 6). Its _solved file
+  // would not show in the design load case: the solver has no singularity check yet). Its _solved file
   // carries the same results.
   namespace IO = anaf::IO;
   const auto& lists = builtInLists();

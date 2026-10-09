@@ -38,8 +38,8 @@ run `package/tools/render-icons.py` to regenerate the committed `.ico` and PNGs.
 
 To check the Debian and Arch packages without those systems, run
 `package/tools/container-check.sh debian package` or `package/tools/container-check.sh arch package`
-(podman or docker). The packages land in `build-containers/<distro>/`; see
-`information/BUILD_SYSTEM.md` section 8.1.1. To build both and collect them for a release:
+(podman or docker). The packages land in `build-containers/<distro>/`. To build both and
+collect them for a release:
 
 ```bash
 package/tools/container-check.sh all package && \
@@ -59,8 +59,8 @@ copies their DLLs (`hdf5.dll`, `zlib1.dll`, ...) into the ZIP.
 
 vcpkg and the Gmsh SDK may live on any drive: CMake finds them on its own
 (`VCPKG_ROOT` / `GMSH_SDK_DIR` environment variables, `vcpkg` on `PATH`, then
-`<drive>:/vcpkg`, `<drive>:/libs/gmsh-sdk`, `<drive>:/gmsh-*-Windows64-sdk`, ... on every drive;
-see `information/BUILD_SYSTEM.md` section 5.2). A minimal `.vscode/settings.json` is enough:
+`<drive>:/vcpkg`, `<drive>:/libs/gmsh-sdk`, `<drive>:/gmsh-*-Windows64-sdk`, ... on every
+drive). A minimal `.vscode/settings.json` is enough:
 ```json
 {
   "cmake.generator": "Ninja",
