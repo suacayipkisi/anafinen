@@ -3,7 +3,7 @@
 This document describes how CMake configures, builds, and packages ANAFINEN, and how each dependency is detected.
 
 > **Document status**
-> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-08 (version 0.3.0; `anaf_bridge` library, `anafinen_cli` target and `ANAFINEN_BUILD_CLI` option, sections 1-3, 7, 8; 2026-10-05: v0.2.0-alpha release check: package descriptions and `.desktop` comment, section 8; Debian GCC 14 `-Wmaybe-uninitialized` fixed, release packages built in the containers, section 8.1.1; 2026-10-04: `anaf_beam_library_tool`, beam library sources in `anaf_core`; section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
+> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-09 (`anafinen-cli` installed into the GUI package, section 8; 2026-10-08: version 0.3.0; `anaf_bridge` library, `anafinen_cli` target and `ANAFINEN_BUILD_CLI` option, sections 1-3, 7, 8; 2026-10-05: v0.2.0-alpha release check: package descriptions and `.desktop` comment, section 8; Debian GCC 14 `-Wmaybe-uninitialized` fixed, release packages built in the containers, section 8.1.1; 2026-10-04: `anaf_beam_library_tool`, beam library sources in `anaf_core`; section catalogue synced like the material library; beam sources and `objectCalcs/common/` in `anaf_core`, `anaf_beam_tests`; solver sources in `src/solvers/`; `check.sh` turns tests on and fails when none run; HDF5 added, MinGW cross-build removed; new logo with a small-size variant and 16/24/32 px icons; SVG MIME sniffing fix, RPM no longer owns shared icon directories).
 
 ## 1. Overall flow
 
@@ -183,12 +183,12 @@ The ImGui submodule tracks the `docking` branch (`.gitmodules`). Docking APIs (`
 
 | Platform | Install layout | CPack generator | Package name |
 |---|---|---|---|
-| Linux | `bin/anafinen`, `share/anafinen/assets` (without the `.desktop` file), `share/applications/anafinen.desktop`, hicolor icons (scalable SVG, 128 px PNG, and 16 / 24 / 32 px PNGs from `anafinen-small.svg`) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
-| Windows | Flat: `anafinen.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES`, app-local MSVC runtime (`InstallRequiredSystemLibraries`, including `vcomp140.dll` for `/openmp`, so no Visual C++ Redistributable is needed; added after the 0.1.3 release) | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
+| Linux | `bin/anafinen`, `bin/anafinen-cli`, `share/anafinen/assets` (without the `.desktop` file), `share/applications/anafinen.desktop`, hicolor icons (scalable SVG, 128 px PNG, and 16 / 24 / 32 px PNGs from `anafinen-small.svg`) | `RPM;TGZ` (DEB through `package.sh`) | `anafinen-<ver>-alpha`, RPM release `1.alpha` |
+| Windows | Flat: `anafinen.exe`, `anafinen-cli.exe`, `assets/`, Gmsh DLL, vcpkg runtime DLLs via `RUNTIME_DEPENDENCIES`, app-local MSVC runtime (`InstallRequiredSystemLibraries`, including `vcomp140.dll` for `/openmp`, so no Visual C++ Redistributable is needed; added after the 0.1.3 release) | `ZIP` | `anafinen-<ver>-windows-<arch>-alpha` |
 
 Package descriptions: `CPACK_PACKAGE_DESCRIPTION_SUMMARY` ("3D FEM Analysis Engine", also `pkgdesc` in `PKGBUILD`) and a long `CPACK_PACKAGE_DESCRIPTION` that also states that dynamic analysis is not available yet. DEB reads it on its own; RPM only reads `CPACK_RPM_PACKAGE_DESCRIPTION` (or `CPACK_PACKAGE_DESCRIPTION_FILE`), so that is set to the same text (before 0.2.0 the RPM carried CPack's generic "This is an installer created using CPack" template). The `.desktop` `Comment` says "3D finite element analysis of trusses and beam frames (linear static)" (it claimed dynamic and modal analysis before 0.2.0).
 
-`anafinen-cli` is built in package builds too (`ANAFINEN_BUILD_CLI` is ON) but not installed: no package contains it yet.
+`anafinen-cli` is installed into the same package as the GUI (2026-10-09, `if(TARGET anafinen_cli)` in `cmake/Packaging.cmake`, so `-DANAFINEN_BUILD_CLI=OFF` packages the GUI alone): `bin/anafinen-cli` on Linux (it finds `share/anafinen/assets` like the GUI), next to `anafinen.exe` in the Windows ZIP (its DLLs are a subset of the GUI's, both link `anaf_bridge`). There is no separate CLI package on purpose; a headless / GPU-less split is left for later.
 
 Linux RPM: `CPACK_RPM_PACKAGE_AUTOREQPROV ON`, plus an explicit `Requires: hdf5` (and `suitesparse` when CHOLMOD is enabled).
 

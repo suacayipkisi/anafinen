@@ -4,6 +4,13 @@ if(WIN32)
     install(TARGETS anafinen
         RUNTIME DESTINATION .
     )
+    # The CLI goes into the same package, next to the GUI. Its DLLs are a subset of the GUI's
+    # (both link anaf_bridge), so the RUNTIME_DEPENDENCIES set in CMakeLists.txt covers it.
+    if(TARGET anafinen_cli)
+        install(TARGETS anafinen_cli
+            RUNTIME DESTINATION .
+        )
+    endif()
 
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
         DESTINATION "assets"
@@ -33,6 +40,13 @@ else()
     install(TARGETS anafinen
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
+    # The CLI goes into the same package; it finds the installed assets through
+    # share/anafinen/assets like the GUI does (getExecutableDirectory.cpp).
+    if(TARGET anafinen_cli)
+        install(TARGETS anafinen_cli
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+    endif()
     # The desktop entry is installed once, under applications/ (see below).
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/anafinen/assets"
