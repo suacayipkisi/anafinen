@@ -47,7 +47,7 @@ package/tools/container-check.sh all package && \
 ```
 
 Known issue on Debian 13: its `libgmsh4.13` aborts inside second-order 3D
-meshing (an Eigen assertion in Gmsh itself), so `anaf_io_tests` aborts there.
+meshing (an Eigen assertion in Gmsh itself), so the mesh I/O tests abort there.
 The package builds and installs normally.
 
 ## Packaging for Windows

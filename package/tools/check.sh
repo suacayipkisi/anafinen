@@ -43,11 +43,11 @@ build() {
   local log="$dir/check-build.log"
   mkdir -p "$dir"
   if [[ ! -f "$dir/CMakeCache.txt" ]]; then
-    cmake -S "$REPO_ROOT" -B "$dir" -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_BUILD_TESTS=ON "$@" > "$dir/check-configure.log" 2>&1 \
+    cmake -S "$REPO_ROOT" -B "$dir" -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_BUILD_TESTS=ON -DANAFINEN_BUILD_TOOLS=ON "$@" > "$dir/check-configure.log" 2>&1 \
       || { echo "[$name] configure FAILED (see ${dir#$REPO_ROOT/}/check-configure.log)"; tail -5 "$dir/check-configure.log"; FAILED=1; return 1; }
   else
     # An existing tree may have been configured without tests (e.g. by hand); turn them on.
-    cmake -S "$REPO_ROOT" -B "$dir" -DANAFINEN_BUILD_TESTS=ON > "$dir/check-configure.log" 2>&1 \
+    cmake -S "$REPO_ROOT" -B "$dir" -DANAFINEN_BUILD_TESTS=ON -DANAFINEN_BUILD_TOOLS=ON > "$dir/check-configure.log" 2>&1 \
       || { echo "[$name] configure FAILED"; tail -5 "$dir/check-configure.log"; FAILED=1; return 1; }
   fi
 
@@ -73,7 +73,7 @@ run_ctest() {
   (cd "$dir" && ctest --output-on-failure > "$log" 2>&1)
   local status=$?
   if grep -q "No tests were found" "$log"; then
-    echo "[$name] no tests were found (ANAFINEN_BUILD_TESTS is off?)"
+    echo "[$name] no tests were found (ANAFINEN_BUILD_TESTS off, or no test repository in tests/?)"
     FAILED=1
     return
   fi

@@ -216,13 +216,13 @@ cmake --build build
 
 File > Import / Export uses the desktop's own file chooser: install `zenity` (GNOME and most desktops) or `kdialog` (KDE).
 
-### Tests (optional)
+### Built-in library generators (optional)
+The models under `assets/objects/` are generated from `trussLibrary.cpp` / `beamLibrary.cpp`; never edit them by hand.
 ```bash
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_BUILD_TESTS=ON
-cmake --build build
-cd build && ctest --output-on-failure
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANAFINEN_BUILD_TOOLS=ON
+cmake --build build --target anaf_truss_library_tool anaf_beam_library_tool
+./build/tools/anaf_truss_library_tool && ./build/tools/anaf_beam_library_tool
 ```
-With the Python `vtk` package installed, the tests also cross-check every VTK/VTU variant against the official VTK library.
 
 ## Packaging
 

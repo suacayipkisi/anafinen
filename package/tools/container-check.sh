@@ -60,12 +60,18 @@ done
 [[ ${#DISTROS[@]} -eq 0 ]] && DISTROS=(debian arch)
 [[ "$MODE" == shell && ${#DISTROS[@]} -ne 1 ]] && { echo "shell needs exactly one distro"; exit 2; }
 
-# Tracked files (submodules included) plus untracked, non-ignored files of the working tree.
+# Tracked files (submodules included) plus untracked, non-ignored files of the working tree,
+# and the same for the test repository in tests/ when it is there (git-ignored in this one).
 # Build directories and .git stay out, so the container always starts from a clean tree.
 source_tar() {
   (cd "$REPO_ROOT" && {
     git ls-files -z --cached --recurse-submodules
     git ls-files -z --others --exclude-standard
+    if [[ -e tests/.git ]]; then
+      git -C tests ls-files -z --cached --others --exclude-standard | while IFS= read -r -d '' f; do
+        printf 'tests/%s\0' "$f"
+      done
+    fi
   } | while IFS= read -r -d '' f; do
     [[ -e "$f" || -L "$f" ]] && printf '%s\0' "$f"
   done | tar -c --null --no-recursion -T -)

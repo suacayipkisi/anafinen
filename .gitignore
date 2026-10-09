@@ -22,8 +22,9 @@ build-rpm/
 REVIEW_GUIDE.md
 # Design documents: own private repository (cloned into information/), never in the public one
 information/
+# Test suite: own private repository (cloned into tests/), never in the public one
+tests/
 build-containers/
-tests/matlab
 
 # Locally built release packages (kept on disk, never pushed)
 package/early-release-packages/

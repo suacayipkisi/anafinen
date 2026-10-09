@@ -21,7 +21,7 @@
 // ready-to-solve models (geometry, supports, loads, material, cross-section).
 //
 // The files under assets/objects/truss/truss1D/ are generated from buildLibrary() by
-// anaf_truss_library_tool and must never be edited by hand; anaf_truss_io_tests checks
+// anaf_truss_library_tool (tools/) and must never be edited by hand; the test suite checks
 // that they match the generator. The application only reads them: loading one gives an
 // in-memory copy, and export refuses to write into the library folder.
 
