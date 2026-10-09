@@ -17,6 +17,8 @@
 
 #include "beamDiagramPanel.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp>
 
 #include "imgui.h"
@@ -168,7 +170,7 @@ namespace anaf::GUI {
     if (stress.available) {
       ImGui::TextWrapped("sigma max / min: %.4g / %.4g MPa, tau max: %.4g MPa", stress.maxNormal / 1e6, stress.minNormal / 1e6, stress.maxShear / 1e6);
       ImGui::PushTextWrapPos(0.0f);
-      ImGui::TextColored(stress.isStressExceeded ? ImVec4(1.0f, 0.4f, 0.4f, 1.0f) : ImVec4(0.55f, 0.95f, 0.6f, 1.0f),
+      ImGui::TextColored(stress.isStressExceeded ? THEME::theme().bad : THEME::theme().good,
                          "von Mises max: %.4g MPa at x = %.3g m%s", stress.maxVonMises / 1e6, stress.vonMisesPosition,
                          stress.isStressExceeded ? " (exceeds yield)" : "");
       ImGui::TextDisabled("von Mises is an upper bound (largest sigma and tau combined).");
@@ -240,7 +242,7 @@ namespace anaf::GUI {
     }
     if (mesh != m_mesh || chosen != m_element) rebuild(mesh, chosen);
     if (!m_error.empty()) {
-      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "Diagram not available: %s (run the solver again)", m_error.c_str());
+      ImGui::TextColored(THEME::theme().bad, "Diagram not available: %s (run the solver again)", m_error.c_str());
     } else if (!m_states.empty()) {
       renderPlot();
       renderTable();

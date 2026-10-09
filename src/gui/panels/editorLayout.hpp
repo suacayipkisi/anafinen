@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <guiMaterials/theme.hpp>
+
 #include "imgui.h"
 
 #include <cfloat>
@@ -32,10 +34,7 @@
 namespace anaf::GUI::LAYOUT {
 
   inline constexpr float kRunButtonHeight = 32.0f;
-  inline const ImVec4 kGood{0.55f, 0.95f, 0.6f, 1.0f};
-  inline const ImVec4 kWarn{1.0f, 0.75f, 0.35f, 1.0f};
-  inline const ImVec4 kBad{1.0f, 0.45f, 0.45f, 1.0f};
-  inline const ImVec4 kNote{0.7f, 0.7f, 0.7f, 1.0f};
+  // Status colors (good / warn / bad / note) come from THEME::theme().
 
   // Bordered card that is as tall as its content. Always pair with endCard().
   inline void beginCard(const char* id) {
@@ -85,11 +84,13 @@ namespace anaf::GUI::LAYOUT {
 
   // Full-width accent button for the main action of a panel (run the solver).
   inline bool primaryButton(const char* label) {
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.36f, 0.62f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.45f, 0.75f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.13f, 0.30f, 0.52f, 1.0f));
+    const THEME::ThemePalette& palette = THEME::theme();
+    ImGui::PushStyleColor(ImGuiCol_Button, palette.primary);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.primaryHovered);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, palette.primaryActive);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
     const bool pressed = ImGui::Button(label, ImVec2(-FLT_MIN, kRunButtonHeight));
-    ImGui::PopStyleColor(3);
+    ImGui::PopStyleColor(4);
     return pressed;
   }
 

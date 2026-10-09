@@ -61,6 +61,7 @@ namespace anaf::GUI {
     glm::vec3 up{0.0f};        // camera up, scaled by tan(fovY / 2)
     float spacing{1.0f};       // minor cell size; every tenth line is a major line
     float fadeDistance{100.0f}; // the grid fades out towards this distance from the eye
+    glm::vec3 color{0.62f, 0.70f, 0.78f}; // line color (theme); alpha comes from the line coverage
   };
 
   // Move-only: every GL object is owned by a GlHandle, so copies are rejected at compile time.
@@ -90,6 +91,12 @@ namespace anaf::GUI {
     GLint m_gridSpacingLoc{-1};
     GLint m_gridAxisGapLoc{-1};
     GLint m_gridFadeLoc{-1};
+    GLint m_gridColorLoc{-1};
+
+    // Vertical gradient behind the scene, drawn with the grid's fullscreen triangle.
+    GlProgram m_backgroundProgram;
+    GLint m_backgroundTopLoc{-1};
+    GLint m_backgroundBottomLoc{-1};
 
     GlProgram m_textProgram;
     GlVertexArray m_textVao;
@@ -112,6 +119,8 @@ namespace anaf::GUI {
     void compileGridShader();
 
     void compileTextShader();
+
+    void compileBackgroundShader();
 
   public:
     ViewportRenderer();
@@ -153,6 +162,10 @@ namespace anaf::GUI {
     void render(const glm::mat4& mvp, const glm::vec3& eye, float worldPerPixel);
 
     void renderGrid(const GridView& view);
+
+    // Fills the color target with a top-to-bottom gradient (entity ID -1, depth untouched).
+    // Call right after clearing, before any scene geometry.
+    void renderBackground(const glm::vec3& top, const glm::vec3& bottom);
 
     void renderText();
   };

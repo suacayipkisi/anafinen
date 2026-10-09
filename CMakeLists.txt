@@ -143,6 +143,7 @@ set(ANAFINEN_SOURCES
     src/main.cpp
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
+    src/gui/guiMaterials/theme.cpp
     src/gui/guiMaterials/framebuffer.cpp
     src/gui/guiMaterials/shaderProgram.cpp
     src/gui/panels/logTerminal.cpp

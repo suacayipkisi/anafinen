@@ -169,10 +169,10 @@ namespace anaf::GUI {
       }
       ImGui::EndTable();
     }
-    if (hasModel) LAYOUT::wrappedColored(LAYOUT::kWarn, "Opening the example or importing a file replaces the current model.");
+    if (hasModel) LAYOUT::wrappedColored(THEME::theme().warn, "Opening the example or importing a file replaces the current model.");
 
     ImGui::Spacing();
-    ImGui::TextColored(LAYOUT::kNote, "Dynamic analysis (modal, harmonic, transient) is not available in this version.");
+    ImGui::TextColored(THEME::theme().note, "Dynamic analysis (modal, harmonic, transient) is not available in this version.");
     ImGui::Separator();
     if (ImGui::Checkbox("Show on startup", &m_showOnStartup)) saveSettings();
     ImGui::SameLine();

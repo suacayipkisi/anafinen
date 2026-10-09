@@ -17,6 +17,8 @@
 
 #include "beamModelEditor.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp> // localAxes()
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
@@ -314,7 +316,7 @@ namespace anaf::GUI {
           }
         }
         const bool valid = bridge.m_isValid.load();
-        ImGui::TextColored(valid ? LAYOUT::kGood : LAYOUT::kWarn, "%s", valid ? "Solved, energy check passed" : "Results shown (from a file, or energy check not passed)");
+        ImGui::TextColored(valid ? THEME::theme().good : THEME::theme().warn, "%s", valid ? "Solved, energy check passed" : "Results shown (from a file, or energy check not passed)");
         ImGui::TextDisabled("Max displacement");
         ImGui::SameLine();
         ImGui::Text("%.4g mm", maxDisplacement * 1e3);
@@ -323,13 +325,13 @@ namespace anaf::GUI {
           ImGui::SameLine();
           ImGui::Text("%.4g MPa (element %u)", maxVonMises / 1e6, worst);
         }
-        if (exceeded > 0) ImGui::TextColored(LAYOUT::kBad, "%zu elements exceed the yield strength", exceeded);
+        if (exceeded > 0) ImGui::TextColored(THEME::theme().bad, "%zu elements exceed the yield strength", exceeded);
         if (withoutStress > 0) ImGui::TextDisabled("%zu elements with a general section (no stresses)", withoutStress);
       } else {
         ImGui::TextDisabled("No results yet: run the solver below.");
       }
     }
-    if (!m_status.empty()) LAYOUT::wrappedColored(m_statusIsError ? LAYOUT::kBad : LAYOUT::kNote, m_status);
+    if (!m_status.empty()) LAYOUT::wrappedColored(m_statusIsError ? THEME::theme().bad : THEME::theme().note, m_status);
     LAYOUT::endCard();
   }
 
@@ -523,7 +525,7 @@ namespace anaf::GUI {
     std::string error;
     const auto allowed = input.allowedBasis(error);
     if (!allowed) {
-      ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.4f, 1.0f), "%s", error.c_str());
+      ImGui::TextColored(THEME::theme().bad, "%s", error.c_str());
     } else if (input.inclined) {
       if (allowed->empty()) ImGui::TextDisabled("Held in every direction.");
       else if (allowed->size() == 3) ImGui::TextDisabled("Free in every direction.");
@@ -639,7 +641,7 @@ namespace anaf::GUI {
                                           formulationShort(element.formulation), releaseLabel(element.endReleases));
           if (element.stress.available) label += std::format("  {:.1f} MPa", element.stress.maxVonMises / 1e6);
           ImGui::PushID(row);
-          if (element.stress.isStressExceeded) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+          if (element.stress.isStressExceeded) ImGui::PushStyleColor(ImGuiCol_Text, THEME::theme().bad);
           if (ImGui::Selectable(label.c_str(), selected == index)) {
             bridge.selectedElementId = selected == index ? kNone : index; // dataMutex held
           }

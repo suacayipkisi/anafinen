@@ -70,7 +70,7 @@ namespace anaf::GUI {
     ImGui::PushTextWrapPos(0.0f);
     if (dynamic) {
       ImGui::PopTextWrapPos();
-      LAYOUT::wrappedColored(LAYOUT::kWarn, "Not available in this version: there is no dynamic solver yet (modal, "
+      LAYOUT::wrappedColored(THEME::theme().warn, "Not available in this version: there is no dynamic solver yet (modal, "
                                             "harmonic or transient). The inputs below are a preview; use Constant Load "
                                             "(Static) to solve the model.");
       ImGui::PushTextWrapPos(0.0f);

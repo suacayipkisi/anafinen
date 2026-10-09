@@ -17,6 +17,8 @@
 
 #include "sectionHandler.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include <beam/beamSection/beamSection.hpp>
 #include <bridge/generalStatus.hpp>
 
@@ -84,7 +86,7 @@ namespace anaf::GUI {
       draw->AddLine(ImVec2(centre.x, origin.y + 4.0f), ImVec2(centre.x, origin.y + avail.y - 4.0f), axisColor);
       draw->AddText(ImVec2(origin.x + avail.x - 16.0f, centre.y - 18.0f), axisColor, "z");
       draw->AddText(ImVec2(centre.x + 5.0f, origin.y + 2.0f), axisColor, "y");
-      const ImU32 lineColor = IM_COL32(110, 180, 255, 255);
+      const ImU32 lineColor = THEME::toU32(THEME::theme().accent);
       for (const auto& loop : loops) {
         std::vector<ImVec2> points;
         points.reserve(loop.size());
@@ -151,7 +153,7 @@ namespace anaf::GUI {
       ImGui::EndTable();
     }
     if (!m_status.empty()) {
-      const ImVec4 color = m_statusIsError ? ImVec4(1.0f, 0.45f, 0.4f, 1.0f) : ImVec4(0.5f, 0.85f, 0.5f, 1.0f);
+      const ImVec4 color = m_statusIsError ? THEME::theme().bad : THEME::theme().good;
       ImGui::PushTextWrapPos(0.0f);
       ImGui::TextColored(color, "%s", m_status.c_str());
       ImGui::PopTextWrapPos();
@@ -296,7 +298,7 @@ namespace anaf::GUI {
     const auto shape = draftShape(d.shape, d.height, d.width, d.diameter, d.thickness, d.flangeThickness, d.outerRadius, d.innerRadius, general);
     const auto valid = shape ? validateShape(*shape) : std::expected<void, std::string>(std::unexpect, "unknown shape");
     if (!valid) {
-      ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.4f, 1.0f), "%s", valid.error().c_str());
+      ImGui::TextColored(THEME::theme().bad, "%s", valid.error().c_str());
     } else {
       drawSection("DraftSectionCanvas", *shape, ImVec2(-FLT_MIN, 120.0f));
       propertyLines(*shape);

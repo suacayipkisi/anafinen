@@ -157,6 +157,7 @@ namespace anaf::GUI {
       uniform float u_GridSpacing;
       uniform float u_AxisGap;
       uniform float u_FadeDistance;
+      uniform vec3 u_Color;
 
       // Anti-aliased line coverage; fades out once the cells are only a few pixels wide, before
       // they alias into moire.
@@ -183,7 +184,7 @@ namespace anaf::GUI {
         alpha *= 1.0 - smoothstep(0.5 * u_FadeDistance, u_FadeDistance, t);
         if (!hitsPlane || alpha <= 0.002 || abs(world.x) < u_AxisGap || abs(world.y) < u_AxisGap) discard;
 
-        FragColor = vec4(0.62, 0.70, 0.78, alpha);
+        FragColor = vec4(u_Color, alpha);
         EntityID = -1;
       }
     )";
@@ -199,6 +200,43 @@ namespace anaf::GUI {
     m_gridSpacingLoc = glGetUniformLocation(program, "u_GridSpacing");
     m_gridAxisGapLoc = glGetUniformLocation(program, "u_AxisGap");
     m_gridFadeLoc = glGetUniformLocation(program, "u_FadeDistance");
+    m_gridColorLoc = glGetUniformLocation(program, "u_Color");
+  }
+
+  void ViewportRenderer::compileBackgroundShader() {
+    // Same fullscreen triangle as the grid; NDC y runs from -1 (bottom) to 1 (top) on screen.
+    const char* vertexShaderSource = R"(
+      #version 460 core
+      layout (location = 0) in vec3 aPos;
+
+      out float vHeight;
+
+      void main() {
+        vHeight = aPos.y * 0.5 + 0.5;
+        gl_Position = vec4(aPos.xy, 0.0, 1.0);
+      }
+    )";
+
+    const char* fragmentShaderSource = R"(
+      #version 460 core
+      layout (location = 0) out vec4 FragColor;
+      layout (location = 1) out int EntityID;
+
+      in float vHeight;
+
+      uniform vec3 u_Top;
+      uniform vec3 u_Bottom;
+
+      void main() {
+        // Smoothstep keeps the light band near the top, like the CAD viewports it imitates.
+        FragColor = vec4(mix(u_Bottom, u_Top, smoothstep(0.0, 1.0, vHeight)), 1.0);
+        EntityID = -1;
+      }
+    )";
+
+    m_backgroundProgram = buildShaderProgram(vertexShaderSource, fragmentShaderSource, "background");
+    m_backgroundTopLoc = glGetUniformLocation(m_backgroundProgram.get(), "u_Top");
+    m_backgroundBottomLoc = glGetUniformLocation(m_backgroundProgram.get(), "u_Bottom");
   }
 
   void ViewportRenderer::compileTextShader() {
@@ -247,6 +285,7 @@ namespace anaf::GUI {
     compileShaders();
     compileGridShader();
     compileTextShader();
+    compileBackgroundShader();
 
     // Fullscreen triangle in NDC (covers the viewport, clipped by the rasterizer).
     const glm::vec3 gridVertices[] = {
@@ -400,6 +439,7 @@ namespace anaf::GUI {
     glProgramUniform1f(program, m_gridSpacingLoc, view.spacing);
     glProgramUniform1f(program, m_gridAxisGapLoc, view.spacing * 0.16f);
     glProgramUniform1f(program, m_gridFadeLoc, view.fadeDistance);
+    glProgramUniform3fv(program, m_gridColorLoc, 1, glm::value_ptr(view.color));
 
     glUseProgram(program);
     glBindVertexArray(m_gridVao.get());
@@ -409,6 +449,23 @@ namespace anaf::GUI {
     glUseProgram(0);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+  }
+
+  void ViewportRenderer::renderBackground(const glm::vec3& top, const glm::vec3& bottom) {
+    const GLuint program = m_backgroundProgram.get();
+    glProgramUniform3fv(program, m_backgroundTopLoc, 1, glm::value_ptr(top));
+    glProgramUniform3fv(program, m_backgroundBottomLoc, 1, glm::value_ptr(bottom));
+
+    // Depth stays at the clear value, so the scene draws over the gradient everywhere.
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glUseProgram(program);
+    glBindVertexArray(m_gridVao.get());
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+    glUseProgram(0);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
   }
 
   void ViewportRenderer::render(const glm::mat4& mvp, const glm::vec3& eye, const float worldPerPixel) {

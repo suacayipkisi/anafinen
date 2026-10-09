@@ -17,6 +17,8 @@
 
 #include "modelTree.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include "imgui.h"
 
 #include <array>
@@ -115,7 +117,7 @@ namespace anaf::GUI {
           ImGui::TextDisabled("No elements exceeded max stress");
         } else {
           // |stress| above the material's yield strength, in red (sign: tension > 0)
-          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+          ImGui::PushStyleColor(ImGuiCol_Text, THEME::theme().bad);
           clippedRows(m_overstressedBars.size(), [&](const std::size_t row) {
             const std::uint32_t e = m_overstressedBars[row];
             ImGui::Text("%u: %.3f(MPa)", e, static_cast<double>(meshData->trussElements[e].stress) / 1e6);
@@ -222,7 +224,7 @@ namespace anaf::GUI {
             ImGui::TextDisabled("%zu: general section, no stress", row);
             return;
           }
-          if (stress.isStressExceeded) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+          if (stress.isStressExceeded) ImGui::PushStyleColor(ImGuiCol_Text, THEME::theme().bad);
           ImGui::Text("%zu: %.3f (MPa)", row, stress.maxVonMises / 1e6);
           if (stress.isStressExceeded) ImGui::PopStyleColor();
         });

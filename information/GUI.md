@@ -3,7 +3,7 @@
 This document describes the window, the ImGui panel system, the frame loop, and the OpenGL viewport render pipeline, including entity picking.
 
 > **Document status**
-> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-08 (version 0.3.0; 2026-10-05: Welcome panel: start panel at startup with "Open Example" (solved portal frame), new beam / truss, import, "Show on startup" in `guiSettings.ini`, Help > Welcome, section 2; empty viewport hint, section 3.8; beam import fits the camera; v0.2.0-alpha release: the selector lists "Dynamic Load (not available yet)" and the dynamic Analysis tab warns that no dynamic solver exists, section 2; support symbols: toolbar "Supports: Off / Symbols / DOF", off by default, textbook symbols by support type or CAD style cones per restrained DOF, sections 3.4, 3.7 and 3.9; end releases drawn as pins along the released bending axes and collars for released torsion instead of balls, section 3.9; 2026-10-04: node squares depth tested with an eye-ward lift, hidden by members in front, section 3.4; editor layout: the three left editors share a summary card, Model / Supports & Loads / Analysis tabs and a fixed footer with the run button, `panels/editorLayout.hpp`, section 2.4; analysis selector: "Select Analysis" asks for the load kind (constant / dynamic) after Analyze > Truss or Beam; dynamic shows the dynamic inputs in the Analysis tab instead of the static loads and solve, section 2; end releases: Frame Editor "End Releases (Hinges)" table and presets, hinge markers in the viewport, hinged end rotations in the drawn shape, sections 2.5 and 3.9; Frame Editor "Built-in Models" (49 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
+> Verified against: `v0.3.0-alpha` (in development; latest release `v0.2.0-alpha`, 2026-10-05), content checked 2026-10-09 (six themes incl. Studio Light, compact legends; themes: `THEME::ThemePalette`, Settings > Theme, viewport background gradient, legend cards with ticks and the truss sqrt scale, gizmo, sections 2.1.1, 3.3, 3.4, 3.8; 2026-10-08: version 0.3.0; 2026-10-05: Welcome panel: start panel at startup with "Open Example" (solved portal frame), new beam / truss, import, "Show on startup" in `guiSettings.ini`, Help > Welcome, section 2; empty viewport hint, section 3.8; beam import fits the camera; v0.2.0-alpha release: the selector lists "Dynamic Load (not available yet)" and the dynamic Analysis tab warns that no dynamic solver exists, section 2; support symbols: toolbar "Supports: Off / Symbols / DOF", off by default, textbook symbols by support type or CAD style cones per restrained DOF, sections 3.4, 3.7 and 3.9; end releases drawn as pins along the released bending axes and collars for released torsion instead of balls, section 3.9; 2026-10-04: node squares depth tested with an eye-ward lift, hidden by members in front, section 3.4; editor layout: the three left editors share a summary card, Model / Supports & Loads / Analysis tabs and a fixed footer with the run button, `panels/editorLayout.hpp`, section 2.4; analysis selector: "Select Analysis" asks for the load kind (constant / dynamic) after Analyze > Truss or Beam; dynamic shows the dynamic inputs in the Analysis tab instead of the static loads and solve, section 2; end releases: Frame Editor "End Releases (Hinges)" table and presets, hinge markers in the viewport, hinged end rotations in the drawn shape, sections 2.5 and 3.9; Frame Editor "Built-in Models" (49 beam models, model or solved results), export refused in both built-in library folders; beam rendering: real sections with rotations, node squares / spheres, coloring modes, element picking, level of detail, sections 3.1-3.9; beam panels: Beam(3D) Frame Editor with inclined supports, Section Handler, Beam Diagrams (ImPlot) under the Model Tree, beam import / export, sections 2.3 and 2.5-2.7; support editor uses `FEM::SUPPORT`; window icon: 128 px + 32 px; StartupNotify=false; viewport toolbar: Reset Camera, Grid, Axes, Nodes, Forces, Stress).
 
 ## 1. Overall flow (one frame)
 
@@ -77,7 +77,7 @@ Object type switch: selecting the type that is already active only reopens its p
 
 | Panel | File | Window title | Status |
 |---|---|---|---|
-| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D, Beam / Frame 3D; Panels: reopen closed panels (section 2.0); Help: "Welcome...", "About anafinen...". Builds the default dock layout once (left: analysis set, truss model editor and beam frame editor, right: model tree, bottom: console, center: viewport with the viewport toolbar strip above it). |
+| `MainDockSpaceHost` | `panels/mainDockSpaceHost.cpp` | full-screen dockspace + menu bar | File: "Import Mesh / CAD..." (Ctrl+O), "Export Model..." (Ctrl+E), Exit; Analyze: Truss 1D, Beam / Frame 3D; Panels: reopen closed panels (section 2.0); Settings: Theme (section 2.1.1); Help: "Welcome...", "About anafinen...". Builds the default dock layout once (left: analysis set, truss model editor and beam frame editor, right: model tree, bottom: console, center: viewport with the viewport toolbar strip above it). |
 | `ViewportToolbar` | `panels/viewportToolbar.cpp` | "Viewport Toolbar" | Reset Camera and the display toggles, docked above the viewport (section 3.7) |
 | `ViewportPanel` | `panels/viewportPanel.cpp` | "3D Simulation Viewport" | Camera, picking (nodes, beam elements), overlays, legends; truss as lines, beams with their sections (section 3.9) |
 | `AnalysisSelector` | `panels/analysisSelector.cpp` | "Select Analysis" | Opened by Analyze > Truss / Beam (`open(StructureFamily)`). Truss: "Imported / Self-Built" (first, preselected) or "Simple Quadrangle" (generated grid). Both: load type "Constant Load (Static)" or "Dynamic Load (not available yet)" (preselects the active one; the dynamic choice shows "Not available in this version." in `LAYOUT::kWarn`). Warns that a type change clears the model. |
@@ -116,9 +116,45 @@ The type selector is reopened through Analyze. The status bar is the console's f
 
 - Config flags: keyboard navigation and docking enabled.
 - Fonts: `Inter-Medium.ttf` for the UI and `CascadiaMono.ttf` for the console, both 18 px. Falls back to the ImGui default font when the files are missing.
-- Custom theme: `setupSpecialTheme()`.
+- Style: `setupSpecialTheme()` sets sizes and rounding, then applies the active theme's colors (section 2.1.1).
 - OpenGL backend initialized with `#version 460`.
 - ImPlot context created right after the ImGui context and destroyed before it (beam diagrams).
+
+### 2.1.1 Themes (`guiMaterials/theme.*`, namespace `anaf::GUI::THEME`)
+
+One `ThemePalette` holds every color the GUI uses outside the scene's semantic colors (supports, loads, selection, hinges, axis colors, result colormap). Settings > Theme in the menu bar (`MainDockSpaceHost::renderSettingsMenu()`) switches it at run time; the choice is not saved yet, every start uses Steel Blue / Cyan.
+
+```
+  Settings > Theme  ->  THEME::applyTheme(id)
+                          |-- g_current = id, ++themeRevision
+                          `-- ImGui style colors rewritten (StyleColorsDark base + palette)
+  every frame:  panels read THEME::theme()            (status colors, primary button, log levels)
+                ViewportPanel: revision changed?  ->  rebuild scene buffers (member colors baked in)
+                renderSceneOpenGL: background gradient, grid color, node label color
+                renderOverlay2D:   gizmo / FPS / legend cards (overlay colors, accent strip)
+```
+
+| Theme | Surfaces | Accent | Viewport background |
+|---|---|---|---|
+| Steel Blue / Cyan (default) | blue-steel anthracite | cyan `#2EA8D6` | `#2A3340` -> `#0E1115` |
+| Graphite / Orange | neutral graphite | orange `#E8863A` | `#3A3C42` -> `#131416` |
+| Classic FEM | dark grey-blue | blue `#4C95FF` | `#5A7CA8` -> `#0D1828` (classic pre/post look) |
+| Midnight / Violet | deep navy | violet `#9A86FF` | `#2B2C4A` -> `#0B0C17` |
+| Slate / Emerald | green-grey slate | emerald `#2FC48D` (success is lime there) | `#2B3735` -> `#0D1110` |
+| Studio Light | light grey (`light = true`: ImGui's light defaults, deeper status colors, dark text) | blue `#1F6FD1` | `#F4F6F9` -> `#B4BECB`, dark members, grid and labels |
+
+Where the colors are used:
+
+| Palette field | Used by |
+|---|---|
+| `base` / `panel` / `raised` / `input` / `header` / `border` / `text` / `textDim` | ImGui style colors (menu bar, windows, child cards, frames and buttons, tree rows, tabs) |
+| `accent` | check marks, sliders, selected tab overline, hover / active headers, legend strip, Section Handler outline |
+| `primary*` | `LAYOUT::primaryButton()` (run buttons, white text) |
+| `good` / `warn` / `bad` / `note` / `info` / `core` | editor status lines, yield warnings, file / material / section notices, log level colors, status bar worker state, FPS counter |
+| `sceneTop` / `sceneBottom` / `grid` / `sceneLabel` / `member` / `memberNoResult` | viewport background gradient, grid lines, node labels and unsolved beam nodes, unsolved truss / beam members |
+| `overlay*` | gizmo, FPS box, empty-workspace hint, legend cards |
+
+ImPlot takes its colors from the ImGui style on its own (`IMPLOT_AUTO_COL`), so the beam diagrams follow the theme without code.
 
 ### 2.2 Log sink
 
@@ -308,6 +344,7 @@ Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (
 |---|---|---|
 | `scene` | `u_MVP * pos`, passes color, flat entity ID, `gl_PointSize` | `location 0`: color, `location 1`: entity ID |
 | `grid` | view ray per vertex (`forward + x·right + y·up`) | Ray / y = 0 plane intersection per pixel, in coordinates relative to a grid-aligned origin near the eye; anti-aliased minor + major (×10) lines (`fract` + `fwidth`) that fade out once a cell is a few pixels wide (no moiré) and towards `fadeDistance`; axis gap around X/Z axes; entity ID = -1 |
+| `background` | the grid's fullscreen triangle, height 0..1 | `mix(bottom, top, smoothstep(height))`; entity ID = -1 |
 | `text` | NDC passthrough | Samples ImGui's font atlas (RGBA32, `.a` = coverage); entity ID = -1 |
 | `beam` | places the unit-length section between the instance's start and end; section axes `normalize(mix(axis0, axis1, x))` so a rotating section stays continuous; color mixed along x | shared lit stage: color × (0.38 + 0.62 \|n · view\|) (light at the eye, two-sided), entity ID |
 | `sphere` | `centre + radius × position` | the same lit stage |
@@ -325,7 +362,7 @@ Dynamic batches are re-uploaded with `glNamedBufferData(..., GL_DYNAMIC_DRAW)` (
      - "DOF" (`addDofRestraints()`): a red cone pointing at the node for every restrained direction (`FEM::SUPPORT::orthogonalComplement()` of the allowed basis), signed so its largest component is positive.
    - Applied forces become arrows with a fixed world length of 3 m: a shaft plus a 4-line head, each duplicated as a glow line.
    - Draw position = `location + displacement * deformScale`, with `deformScale` read from the bridge (`Gui_Calc_Bridge::deformScale`, a view setting) when the snapshot is reloaded.
-2. `fbo.bind()`, depth test on, `fbo.clear(color, entity = -1)`.
+2. `fbo.bind()`, depth test on, `fbo.clear(sceneBottom, entity = -1)`, then `renderBackground(sceneTop, sceneBottom)`: the theme's vertical gradient, depth test and writes off, so depth keeps the clear value.
 3. `renderGrid(GridView)` (only while the "Grid" toggle is on, off by default): blended, depth writes off, minor spacing `10^floor(log10(distance/12))`, fade distance `max(40 × distance, 6 × scene radius)`. The grid used to be one ±8000 m quad; close to the camera its clipped, interpolated world positions lost precision and the lines bent and swam.
 4. `BeamSceneRenderer::render()` (beam sections and node spheres, opaque, depth-tested), then `ViewportRenderer::render()`:
    - lines at 1.5 px with `GL_LINE_SMOOTH` + alpha blend
@@ -395,10 +432,12 @@ Hover and press do not change a button's color: a toggle that is on (or a choice
 ### 3.8 2D overlay (ImGui draw list)
 
 Drawn by `renderOverlay2D()` on top of the image:
-- axis gizmo (camera rotation only)
-- FPS counter, red below 30 FPS
+- axis gizmo (camera rotation only) on a bordered disc: positive ends as filled circles with the axis letter, negative ends as hollow dimmed circles, drawn back to front; axis colors X red, Y green, Z blue in every theme
+- FPS counter in a card, `bad` color below 30 FPS
 - with no model: a centered hint (Analyze, File > Import, Help > Welcome)
-- element colorbar with "Color: Stress" (`|Stress| (MPa)` for trusses, `von Mises (MPa)` for beams) and displacement colorbar (`Disp (mm)`) with "Color: Displacement" or visible nodes
+- result legends (`drawLegend()`), stacked upwards from the bottom-left corner: a compact card in a 13 px font (the UI uses 18 px; `PushFont(nullptr, 13)`) with an accent strip, title and unit, a 10 × 120 px jet bar (max on top) with 6 ticks and `%.3e` values; the extremes are bright, the inner values dim
+  - displacement (`Displacement [mm]`, linear) with "Color: Displacement" or visible nodes, at the bottom
+  - stress with "Color: Stress", above it: `von Mises [MPa]` for beams (linear), `|Axial stress| [MPa]` for trusses with the note "sqrt color scale": truss colors use `sqrt(|σ| / |σ|_max)`, so the label at bar position t is `|σ|_max · t²`. (Before 2026-10-09 the legend labelled the middle of the bar with `0.5 · max` for trusses too, which read the colors wrong.)
 
 ### 3.9 Beam models
 
@@ -462,7 +501,7 @@ camera moved (level of detail only) -> pushBeamInstances() alone
 ## 7. Related source files
 
 - Frame loop and wiring: [src/gui/gui.hpp](../src/gui/gui.hpp), [src/gui/gui.cpp](../src/gui/gui.cpp)
-- Infrastructure: [iPanel.hpp](../src/gui/guiMaterials/iPanel.hpp), [imGuiLayer.hpp](../src/gui/guiMaterials/imGuiLayer.hpp), [imGuiLayer.cpp](../src/gui/guiMaterials/imGuiLayer.cpp), [glHandle.hpp](../src/gui/guiMaterials/glHandle.hpp), [framebuffer.hpp](../src/gui/guiMaterials/framebuffer.hpp), [framebuffer.cpp](../src/gui/guiMaterials/framebuffer.cpp)
+- Infrastructure: [iPanel.hpp](../src/gui/guiMaterials/iPanel.hpp), [imGuiLayer.hpp](../src/gui/guiMaterials/imGuiLayer.hpp), [imGuiLayer.cpp](../src/gui/guiMaterials/imGuiLayer.cpp), [theme.hpp](../src/gui/guiMaterials/theme.hpp), [theme.cpp](../src/gui/guiMaterials/theme.cpp), [glHandle.hpp](../src/gui/guiMaterials/glHandle.hpp), [framebuffer.hpp](../src/gui/guiMaterials/framebuffer.hpp), [framebuffer.cpp](../src/gui/guiMaterials/framebuffer.cpp)
 - Viewport: [viewportPanel.hpp](../src/gui/panels/viewportPanel.hpp), [viewportPanel.cpp](../src/gui/panels/viewportPanel.cpp), [viewportRenderer.hpp](../src/gui/panels/viewportRenderer.hpp), [viewportRenderer.cpp](../src/gui/panels/viewportRenderer.cpp), [beamSceneRenderer.hpp](../src/gui/panels/beamSceneRenderer.hpp), [beamSceneRenderer.cpp](../src/gui/panels/beamSceneRenderer.cpp), [shaderProgram.cpp](../src/gui/guiMaterials/shaderProgram.cpp)
 - Panels: [statusBar.cpp](../src/gui/panels/statusBar.cpp), [mainDockSpaceHost.cpp](../src/gui/panels/mainDockSpaceHost.cpp), [trussControlPanel.cpp](../src/gui/panels/truss/simpleQuadrangleTruss/trussControlPanel.cpp), [trussModelEditor.cpp](../src/gui/panels/truss/importedTruss/trussModelEditor.cpp), [trussWorker.hpp](../src/gui/panels/truss/trussWorker.hpp), [analysisSelector.cpp](../src/gui/panels/analysisSelector.cpp), [dynamicAnalysisInputs.hpp](../src/gui/panels/dynamicAnalysisInputs.hpp), [editorLayout.hpp](../src/gui/panels/editorLayout.hpp), [modelTree.cpp](../src/gui/panels/modelTree.cpp), [beamModelEditor.cpp](../src/gui/panels/beam/beamModelEditor.cpp), [beamWorker.cpp](../src/gui/panels/beam/beamWorker.cpp), [sectionHandler.cpp](../src/gui/panels/beam/sectionHandler.cpp), [sectionCombo.hpp](../src/gui/panels/beam/sectionCombo.hpp), [beamDiagramPanel.cpp](../src/gui/panels/beam/beamDiagramPanel.cpp), [materialHandler.cpp](../src/gui/panels/materialHandler.cpp), [logTerminal.cpp](../src/gui/panels/logTerminal.cpp)
 - Platform: [linuxCursor.hpp](../src/gui/linuxCursor.hpp), [getExecutableDirectory.cpp](../src/directory/getExecutableDirectory.cpp)

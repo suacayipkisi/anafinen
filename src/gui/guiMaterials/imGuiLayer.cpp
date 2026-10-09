@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "imGuiLayer.hpp"
+#include "theme.hpp"
 
 #include <directory/getExecutableDirectory.hpp>
 #include <io/core/pathUtf8.hpp> // ImGui opens files from UTF-8 names
@@ -29,55 +30,29 @@ namespace anaf::GUI {
     ImGuiStyle& style = ImGui::GetStyle();
 
     style.WindowRounding    = 0.0f;
-    style.ChildRounding     = 0.0f;
+    style.ChildRounding     = 3.0f;
     style.FrameRounding     = 3.0f;
-    style.PopupRounding     = 3.0f;
+    style.PopupRounding     = 4.0f;
     style.ScrollbarRounding = 3.0f;
     style.GrabRounding      = 3.0f;
     style.TabRounding       = 3.0f;
 
     style.WindowBorderSize  = 0.0f;
+    style.ChildBorderSize   = 1.0f;
     style.FrameBorderSize   = 0.0f;
     style.PopupBorderSize   = 1.0f;
+    style.TabBarBorderSize  = 1.0f;
+    style.TabBarOverlineSize = 2.0f;
 
     style.WindowPadding     = ImVec2(8.0f, 8.0f);
     style.FramePadding      = ImVec2(6.0f, 4.0f);
+    style.CellPadding       = ImVec2(6.0f, 3.0f);
     style.ItemSpacing       = ImVec2(8.0f, 6.0f);
     style.ItemInnerSpacing  = ImVec2(6.0f, 4.0f);
-    style.ScrollbarSize     = 8.0f;
+    style.ScrollbarSize     = 10.0f;
 
-    ImVec4* colors = style.Colors;
-    colors[ImGuiCol_WindowBg]             = ImVec4(0.10f, 0.105f, 0.11f, 1.00f);
-    colors[ImGuiCol_ChildBg]              = ImVec4(0.14f, 0.15f, 0.17f, 1.00f);
-    colors[ImGuiCol_PopupBg]              = ImVec4(0.13f, 0.14f, 0.16f, 0.98f);
-    colors[ImGuiCol_Border]               = ImVec4(0.22f, 0.24f, 0.28f, 0.60f);
-
-    colors[ImGuiCol_TitleBg]              = ImVec4(0.10f, 0.105f, 0.11f, 1.0f);
-    colors[ImGuiCol_TitleBgActive]        = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
-    colors[ImGuiCol_TitleBgCollapsed]     = ImVec4(0.10f, 0.105f, 0.11f, 1.0f);
-    colors[ImGuiCol_Header]               = ImVec4(0.20f, 0.205f, 0.21f, 1.0f);
-    colors[ImGuiCol_HeaderHovered]        = ImVec4(0.30f, 0.305f, 0.31f, 1.0f);
-    colors[ImGuiCol_HeaderActive]         = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
-
-    colors[ImGuiCol_Button]               = ImVec4(0.20f, 0.205f, 0.21f, 1.0f);
-    colors[ImGuiCol_ButtonHovered]        = ImVec4(0.30f, 0.305f, 0.31f, 1.0f);
-    colors[ImGuiCol_ButtonActive]         = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
-
-    colors[ImGuiCol_FrameBg]              = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
-    colors[ImGuiCol_FrameBgHovered]       = ImVec4(0.22f, 0.225f, 0.23f, 1.0f);
-    colors[ImGuiCol_FrameBgActive]        = ImVec4(0.12f, 0.1205f, 0.121f, 1.0f);
-    colors[ImGuiCol_CheckMark]            = ImVec4(0.35f, 0.68f, 1.00f, 1.00f);
-    colors[ImGuiCol_SliderGrab]           = ImVec4(0.30f, 0.58f, 0.90f, 1.00f);
-    colors[ImGuiCol_SliderGrabActive]     = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
-
-    colors[ImGuiCol_Tab]                  = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
-    colors[ImGuiCol_TabHovered]           = ImVec4(0.38f, 0.3805f, 0.381f, 1.0f);
-    colors[ImGuiCol_TabActive]            = ImVec4(0.28f, 0.2805f, 0.281f, 1.0f);
-    colors[ImGuiCol_TabUnfocused]         = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
-    colors[ImGuiCol_TabUnfocusedActive]   = ImVec4(0.20f, 0.205f, 0.21f, 1.0f);
-
-    colors[ImGuiCol_Text]                 = ImVec4(0.92f, 0.93f, 0.95f, 1.00f);
-    colors[ImGuiCol_TextDisabled]         = ImVec4(0.50f, 0.53f, 0.58f, 1.00f);
+    // Colors come from the active palette (Settings > Theme switches it at run time).
+    THEME::applyTheme(THEME::currentTheme());
   }
 
   void ImGuiLayer::init(GLFWwindow* window) {

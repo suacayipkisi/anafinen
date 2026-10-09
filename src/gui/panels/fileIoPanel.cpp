@@ -17,6 +17,8 @@
 
 #include "fileIoPanel.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <io/core/pathUtf8.hpp>
@@ -458,7 +460,7 @@ namespace anaf::GUI {
       if (m_importTask) progressRow(m_importTask);
       if (m_exportTask) progressRow(m_exportTask);
       if (showNotice) {
-        const ImVec4 color = m_noticeIsError ? ImVec4(1.0f, 0.45f, 0.45f, 1.0f) : ImVec4(0.55f, 0.95f, 0.6f, 1.0f);
+        const ImVec4 color = m_noticeIsError ? THEME::theme().bad : THEME::theme().good;
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28.0f);
         ImGui::TextColored(color, "%s", m_notice.c_str());
         ImGui::PopTextWrapPos();

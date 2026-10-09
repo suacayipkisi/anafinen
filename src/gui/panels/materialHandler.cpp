@@ -17,6 +17,8 @@
 
 #include "materialHandler.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include <bridge/generalStatus.hpp>
 #include <log/anaf_info.hpp>
 
@@ -72,7 +74,7 @@ namespace anaf::GUI {
 
     if (!m_status.empty()) {
       ImGui::Spacing();
-      const ImVec4 color = m_statusIsError ? ImVec4(1.0f, 0.45f, 0.4f, 1.0f) : ImVec4(0.5f, 0.85f, 0.5f, 1.0f);
+      const ImVec4 color = m_statusIsError ? THEME::theme().bad : THEME::theme().good;
       ImGui::PushTextWrapPos(0.0f);
       ImGui::TextColored(color, "%s", m_status.c_str());
       ImGui::PopTextWrapPos();

@@ -21,6 +21,7 @@
 #include <beam/beamSection/sectionStress.hpp>
 #include <beam/beamSection/sectionTriangulation.hpp>
 #include <bridge/generalStatus.hpp>
+#include <guiMaterials/theme.hpp>
 #include <objectCalcs/common/supportBasis.hpp>
 
 #include "imgui.h"
@@ -64,11 +65,12 @@ namespace anaf::GUI {
     constexpr float kSimpleSectionPixels = 2.0f; // at least this: box / cylinder; below: a line
     constexpr int kSectionSegmentsPerQuarter = 4;
 
-    const glm::vec4 kBeamColor(0.62f, 0.70f, 0.80f, 1.0f);
-    const glm::vec4 kNoStressColor(0.55f, 0.55f, 0.55f, 1.0f);
     const glm::vec4 kSelectedColor(1.0f, 0.7f, 0.2f, 1.0f);
     const glm::vec4 kSupportColor(1.0f, 0.3f, 0.3f, 1.0f);
     const glm::vec4 kHingeColor(0.96f, 0.96f, 0.98f, 1.0f);
+
+    glm::vec4 toGlm(const ImVec4& color) { return glm::vec4(color.x, color.y, color.z, color.w); }
+    glm::vec3 toGlm3(const ImVec4& color) { return glm::vec3(color.x, color.y, color.z); }
 
     glm::vec3 toVec(const std::array<double, 3>& v) {
       return glm::vec3(static_cast<float>(v[0]), static_cast<float>(v[1]), static_cast<float>(v[2]));
@@ -580,7 +582,7 @@ namespace anaf::GUI {
         const double mean = 0.5 * (magnitude(mesh.trussNodes[element.node1].getDisplacement()) + magnitude(mesh.trussNodes[element.node2].getDisplacement()));
         return jet(mean / maxDisp);
       }
-      return glm::vec4(0.4f, 0.6f, 0.85f, 1.0f);
+      return toGlm(THEME::theme().member);
     };
 
     std::vector<glm::vec3> nodeLookup(maxNodeId + 1, glm::vec3(0.0f));
@@ -866,7 +868,7 @@ namespace anaf::GUI {
       }
       for (std::uint32_t id = 0; id < mesh.nodes.size(); ++id) {
         const auto& node = mesh.nodes[id];
-        glm::vec4 color = m_cachedMaxDisp > 0.0 ? jet(magnitude(node.getDisplacement()) / m_cachedMaxDisp) : glm::vec4(0.85f, 0.87f, 0.9f, 1.0f);
+        glm::vec4 color = m_cachedMaxDisp > 0.0 ? jet(magnitude(node.getDisplacement()) / m_cachedMaxDisp) : toGlm(THEME::theme().sceneLabel);
         if (node.isSupported()) color = kSupportColor;
         const bool selected = id == m_selectedNode;
         if (selected) color = kSelectedColor;
@@ -989,6 +991,8 @@ namespace anaf::GUI {
     const float focal = std::max(m_viewportSize.y, 1.0f) / (2.0f * std::tan(kFovY * 0.5f));
     const auto coloring = m_display->coloring;
     const double maxStress = m_cachedMaxStress, maxDisp = m_cachedMaxDisp;
+    const glm::vec4 memberColor = toGlm(THEME::theme().member);
+    const glm::vec4 noResultColor = toGlm(THEME::theme().memberNoResult);
 
     for (std::size_t e = 0; e < m_beamElements.size(); ++e) {
       const auto& draw = m_beamElements[e];
@@ -997,11 +1001,11 @@ namespace anaf::GUI {
       const auto color = [&](const std::size_t i) -> glm::vec4 {
         if (selected) return kSelectedColor;
         if (coloring == ElementColoring::Stress) {
-          if (draw.stress.empty() || maxStress <= 0.0) return draw.stress.empty() && !draw.displacement.empty() ? kNoStressColor : kBeamColor;
+          if (draw.stress.empty() || maxStress <= 0.0) return draw.stress.empty() && !draw.displacement.empty() ? noResultColor : memberColor;
           return jet(draw.stress[i] / maxStress);
         }
         if (coloring == ElementColoring::Displacement && !draw.displacement.empty() && maxDisp > 0.0) return jet(draw.displacement[i] / maxDisp);
-        return kBeamColor;
+        return memberColor;
       };
       const int entity = -static_cast<int>(e) - 2;
       const std::size_t last = draw.stations.size() - 1;
@@ -1064,6 +1068,11 @@ namespace anaf::GUI {
       m_display->resetCameraRequested = false;
       resetCamera();
     }
+    // A theme switch rebuilds the buffers, which bake the member colors in.
+    if (m_themeRevision != THEME::themeRevision()) {
+      m_themeRevision = THEME::themeRevision();
+      truss_1d_gui_prop.m_meshNeedsUpdate = true;
+    }
     // A selection made in a panel (or by picking) redraws the highlight.
     {
       std::lock_guard<std::mutex> lock(bridge.dataMutex);
@@ -1097,7 +1106,9 @@ namespace anaf::GUI {
     glEnable(GL_DEPTH_TEST);
 
     // Scene color, entity-ID buffer (-1 = nothing picked) and depth.
-    m_fbo_->clear(0.08f, 0.09f, 0.11f, 1.0f, -1);
+    const THEME::ThemePalette& palette = THEME::theme();
+    m_fbo_->clear(palette.sceneBottom.x, palette.sceneBottom.y, palette.sceneBottom.z, 1.0f, -1);
+    m_renderer_->renderBackground(toGlm3(palette.sceneTop), toGlm3(palette.sceneBottom));
 
     const glm::mat4 mvp = getViewProjectionMatrix();
     // Level of detail follows the camera: only the instance lists are rebuilt.
@@ -1121,6 +1132,7 @@ namespace anaf::GUI {
       grid.up = orbitUp() * tanHalfFov;
       grid.right = glm::cross(grid.forward, orbitUp()) * (tanHalfFov * aspect);
       grid.fadeDistance = std::max(m_cameraDistance * 40.0f, m_sceneRadius * 6.0f);
+      grid.color = toGlm3(palette.grid);
       m_renderer_->renderGrid(grid);
     }
     m_beamRenderer_->render(mvp, -orbitDirection());
@@ -1142,7 +1154,7 @@ namespace anaf::GUI {
         const glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
         const float screenX = (ndc.x * 0.5f + 0.5f) * fbWidth + 8.0f;
         const float screenY = (-ndc.y * 0.5f + 0.5f) * fbHeight - 8.0f;
-        m_renderer_->addText(glm::vec2(screenX, screenY), std::to_string(id), glm::vec4(0.9f, 0.9f, 0.9f, 1.0f), fbWidth, fbHeight);
+        m_renderer_->addText(glm::vec2(screenX, screenY), std::to_string(id), toGlm(palette.sceneLabel), fbWidth, fbHeight);
       }
     }
     m_renderer_->uploadTextBuffer();
@@ -1153,39 +1165,63 @@ namespace anaf::GUI {
 
   void ViewportPanel::renderOverlay2D(const ImVec2& origin, const ImVec2& size) {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const THEME::ThemePalette& palette = THEME::theme();
+    const ImU32 cardFill = THEME::toU32(palette.overlayBg);
+    const ImU32 cardBorder = THEME::toU32(palette.overlayBorder);
+    const ImU32 textColor = THEME::toU32(palette.overlayText);
+    const ImU32 textDimColor = THEME::toU32(palette.overlayTextDim);
+    constexpr float cardRounding = 5.0f;
 
     // View orientation gizmo (top-right corner): 3 axes crossing at a point, rotating in sync with the camera.
     {
       constexpr float margin = 16.0f;
       constexpr float topOffset = 48.0f; // sits below the FPS monitor box
       constexpr float gizmoRadius = 40.0f;
-      constexpr float gizmoBoxSize = gizmoRadius * 2.0f + 16.0f;
+      constexpr float gizmoBoxSize = gizmoRadius * 2.0f + 24.0f;
+      constexpr float tipRadius = 8.5f;
 
       const ImVec2 gizmoCenter(
         origin.x + size.x - gizmoBoxSize * 0.5f - margin,
         origin.y + topOffset + gizmoBoxSize * 0.5f
       );
 
-      drawList->AddCircleFilled(gizmoCenter, gizmoBoxSize * 0.5f, IM_COL32(20, 22, 27, 150));
+      drawList->AddCircleFilled(gizmoCenter, gizmoBoxSize * 0.5f, cardFill);
+      drawList->AddCircle(gizmoCenter, gizmoBoxSize * 0.5f, cardBorder, 0, 1.0f);
 
       // Rotation-only camera basis; same lookAt formula as getViewProjectionMatrix, so pitch/yaw stay in sync.
       const glm::mat3 camRot(glm::lookAt(orbitDirection(), glm::vec3(0.0f), orbitUp()));
 
-      struct AxisLine { glm::vec3 dir; ImU32 color; const char* label; };
-      const AxisLine axes[3] = {
-        {glm::vec3(1.0f, 0.0f, 0.0f), IM_COL32(255, 110, 110, 255), "X"},
-        {glm::vec3(0.0f, 1.0f, 0.0f), IM_COL32(110, 255, 140, 255), "Y"},
-        {glm::vec3(0.0f, 0.0f, 1.0f), IM_COL32(110, 160, 255, 255), "Z"},
-      };
-
-      for (const auto& axis : axes) {
-        const glm::vec3 viewDir = camRot * axis.dir;
-        const ImVec2 tip(gizmoCenter.x + viewDir.x * gizmoRadius, gizmoCenter.y - viewDir.y * gizmoRadius);
-        const ImVec2 tail(gizmoCenter.x - viewDir.x * gizmoRadius, gizmoCenter.y + viewDir.y * gizmoRadius);
-        drawList->AddLine(tail, tip, axis.color, 2.0f);
-        drawList->AddCircleFilled(tip, 3.5f, axis.color);
-        drawList->AddText(ImVec2(tip.x + 6.0f, tip.y - 7.0f), axis.color, axis.label);
+      // Axis colors are semantic (X red, Y green, Z blue), the same in every theme.
+      struct AxisEnd { glm::vec3 viewDir; ImU32 color; const char* label; bool positive; };
+      std::array<AxisEnd, 6> ends{};
+      const std::array<std::pair<ImU32, const char*>, 3> axisStyle{{
+        {IM_COL32(236, 88, 88, 255), "X"}, {IM_COL32(112, 204, 92, 255), "Y"}, {IM_COL32(84, 140, 240, 255), "Z"}}};
+      for (std::size_t i = 0; i < 3; ++i) {
+        glm::vec3 dir(0.0f);
+        dir[static_cast<glm::length_t>(i)] = 1.0f;
+        const glm::vec3 viewDir = camRot * dir;
+        ends[2 * i] = {viewDir, axisStyle[i].first, axisStyle[i].second, true};
+        ends[2 * i + 1] = {-viewDir, axisStyle[i].first, axisStyle[i].second, false};
       }
+      // Back to front (view z points out of the screen), so the axes facing the eye are drawn last.
+      std::ranges::sort(ends, {}, [](const AxisEnd& end) { return end.viewDir.z; });
+
+      for (const auto& end : ends) {
+        const ImVec2 tip(gizmoCenter.x + end.viewDir.x * gizmoRadius, gizmoCenter.y - end.viewDir.y * gizmoRadius);
+        if (end.positive) {
+          drawList->AddLine(gizmoCenter, tip, end.color, 2.5f);
+          drawList->AddCircleFilled(tip, tipRadius, end.color);
+          const ImVec2 labelSize = ImGui::CalcTextSize(end.label);
+          drawList->AddText(ImVec2(tip.x - labelSize.x * 0.5f, tip.y - labelSize.y * 0.5f), IM_COL32(16, 18, 22, 255), end.label);
+        } else {
+          // Negative ends: hollow, dimmed markers, so the view can be read from either side.
+          const ImU32 dim = (end.color & 0x00FFFFFFu) | (140u << IM_COL32_A_SHIFT);
+          drawList->AddLine(gizmoCenter, tip, dim, 1.5f);
+          drawList->AddCircleFilled(tip, tipRadius * 0.6f, cardFill);
+          drawList->AddCircle(tip, tipRadius * 0.6f, dim, 0, 1.5f);
+        }
+      }
+      drawList->AddCircleFilled(gizmoCenter, 2.5f, textDimColor);
     }
 
     // Node ID labels are rendered directly in the OpenGL scene pass (see renderSceneOpenGL), not here.
@@ -1200,9 +1236,12 @@ namespace anaf::GUI {
 
       const ImVec2 textSize = ImGui::CalcTextSize(fpsBuffer);
       const ImVec2 textPos(origin.x + size.x - textSize.x - 16.0f, origin.y + 16.0f);
+      const ImVec2 boxMin(textPos.x - 6.0f, textPos.y - 4.0f);
+      const ImVec2 boxMax(textPos.x + textSize.x + 6.0f, textPos.y + textSize.y + 4.0f);
 
-      drawList->AddRectFilled(ImVec2(textPos.x - 6.0f, textPos.y - 4.0f), ImVec2(textPos.x + textSize.x + 6.0f, textPos.y + textSize.y + 4.0f), IM_COL32(15, 17, 22, 220), 4.0f);
-      drawList->AddText(textPos, (fps < 30.0f) ? IM_COL32(255, 90, 90, 255) : IM_COL32(100, 255, 120, 255), fpsBuffer);
+      drawList->AddRectFilled(boxMin, boxMax, cardFill, cardRounding);
+      drawList->AddRect(boxMin, boxMax, cardBorder, cardRounding);
+      drawList->AddText(textPos, THEME::toU32(fps < 30.0f ? palette.bad : palette.good), fpsBuffer);
     }
 
     // Empty workspace: where to start (the Welcome panel may have been closed).
@@ -1217,68 +1256,100 @@ namespace anaf::GUI {
       float y = origin.y + (size.y - lineHeight * static_cast<float>(std::size(lines))) * 0.5f;
       for (std::size_t i = 0; i < std::size(lines); ++i) {
         const float width = ImGui::CalcTextSize(lines[i]).x;
-        const ImU32 color = i == 0 ? IM_COL32(200, 200, 205, 220) : IM_COL32(140, 142, 150, 200);
-        drawList->AddText(ImVec2(origin.x + (size.x - width) * 0.5f, y), color, lines[i]);
+        drawList->AddText(ImVec2(origin.x + (size.x - width) * 0.5f, y), i == 0 ? textColor : textDimColor, lines[i]);
         y += lineHeight * (i == 0 ? 1.5f : 1.0f);
       }
     }
 
-    // Colorbars
+    // Result legends, stacked upwards from the bottom-left corner.
     if (hasModel()) {
+      // Compact cards in a smaller font than the UI (18 px), still readable at a glance.
+      constexpr float fontSize = 13.0f;
       constexpr float barWidth = 10.0f;
-      constexpr float barHeight = 180.0f;
-      constexpr int colorSteps = 30;
+      constexpr float barHeight = 120.0f;
+      constexpr int colorSteps = 48;
+      constexpr int tickCount = 6; // labels at 0, 1/5, ..., 1 of the bar
+      constexpr float padding = 6.0f;
+      constexpr float tickLength = 3.0f;
+      ImGui::PushFont(nullptr, fontSize);
 
       auto getJetColor = [](float t) -> ImU32 {
-        float r = std::clamp(1.5f - std::abs(4.0f * t - 3.0f), 0.0f, 1.0f);
-        float g = std::clamp(1.5f - std::abs(4.0f * t - 2.0f), 0.0f, 1.0f);
-        float b = std::clamp(1.5f - std::abs(4.0f * t - 1.0f), 0.0f, 1.0f);
-        return IM_COL32(static_cast<int>(r * 255.0f), static_cast<int>(g * 255.0f), static_cast<int>(b * 255.0f), 255);
+        const glm::vec4 color = jet(static_cast<double>(t));
+        return IM_COL32(static_cast<int>(color.r * 255.0f), static_cast<int>(color.g * 255.0f), static_cast<int>(color.b * 255.0f), 255);
       };
 
-      // Legend box, jet gradient (max at the top) and max / mid / 0 labels; top is the bar's top edge.
-      auto drawColorbar = [&](const float startX, const float top, const char* title, const double maxValue) {
-        drawList->AddRectFilled(
-          ImVec2(startX - 8.0f, top - 24.0f),
-          ImVec2(startX + barWidth + 80.0f, top + barHeight + 14.0f),
-          IM_COL32(15, 17, 22, 220),
-          4.0f
-        );
-        drawList->AddText(ImVec2(startX, top - 20.0f), IM_COL32(230, 230, 230, 255), title);
+      // Card with title and unit, jet gradient (max at the top), ticks and their values. The
+      // values follow the scene's color mapping: sqrtScale = the color position is sqrt(value / max)
+      // (truss stresses), so the label at bar position t reads max * t^2. Returns the card height.
+      auto drawLegend = [&](const float left, const float bottom, const char* title, const char* unit, const double maxValue,
+                            const bool sqrtScale) -> float {
+        const float lineHeight = ImGui::GetTextLineHeight();
 
+        std::array<std::array<char, 32>, tickCount> labels{};
+        float labelWidth = 0.0f;
+        for (int i = 0; i < tickCount; ++i) {
+          const double t = static_cast<double>(i) / static_cast<double>(tickCount - 1);
+          std::snprintf(labels[static_cast<std::size_t>(i)].data(), labels[0].size(), "%.3e", maxValue * (sqrtScale ? t * t : t));
+          labelWidth = std::max(labelWidth, ImGui::CalcTextSize(labels[static_cast<std::size_t>(i)].data()).x);
+        }
+
+        const float headerHeight = lineHeight * (sqrtScale ? 2.0f : 1.0f) + 4.0f;
+        const float contentWidth = std::max({barWidth + tickLength + 4.0f + labelWidth, ImGui::CalcTextSize(title).x + 5.0f +
+                                             ImGui::CalcTextSize(unit).x, sqrtScale ? ImGui::CalcTextSize("sqrt color scale").x : 0.0f});
+        const float cardHeight = padding + headerHeight + barHeight + lineHeight * 0.5f + padding;
+        const ImVec2 cardMin(left, bottom - cardHeight);
+        const ImVec2 cardMax(left + padding * 2.0f + contentWidth, bottom);
+
+        drawList->AddRectFilled(cardMin, cardMax, cardFill, cardRounding);
+        drawList->AddRect(cardMin, cardMax, cardBorder, cardRounding);
+        // Accent strip along the top edge marks the card as the active result.
+        drawList->AddRectFilled(cardMin, ImVec2(cardMax.x, cardMin.y + 2.0f), THEME::toU32(palette.accent), cardRounding,
+                                ImDrawFlags_RoundCornersTop);
+
+        const float x = cardMin.x + padding;
+        float y = cardMin.y + padding;
+        drawList->AddText(ImVec2(x, y), textColor, title);
+        drawList->AddText(ImVec2(x + ImGui::CalcTextSize(title).x + 5.0f, y), textDimColor, unit);
+        if (sqrtScale) drawList->AddText(ImVec2(x, y + lineHeight), textDimColor, "sqrt color scale");
+
+        const float top = y + headerHeight + lineHeight * 0.25f;
         const float stepHeight = barHeight / static_cast<float>(colorSteps);
         for (int i = 0; i < colorSteps; ++i) {
           const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
           const float tBottom = 1.0f - static_cast<float>(i + 1) / static_cast<float>(colorSteps);
           drawList->AddRectFilledMultiColor(
-            ImVec2(startX, top + static_cast<float>(i) * stepHeight),
-            ImVec2(startX + barWidth, top + static_cast<float>(i + 1) * stepHeight),
+            ImVec2(x, top + static_cast<float>(i) * stepHeight),
+            ImVec2(x + barWidth, top + static_cast<float>(i + 1) * stepHeight),
             getJetColor(tTop), getJetColor(tTop), getJetColor(tBottom), getJetColor(tBottom)
           );
         }
-        drawList->AddRect(ImVec2(startX, top), ImVec2(startX + barWidth, top + barHeight), IM_COL32(200, 200, 200, 180));
+        drawList->AddRect(ImVec2(x - 1.0f, top - 1.0f), ImVec2(x + barWidth + 1.0f, top + barHeight + 1.0f), cardBorder);
 
-        char txtMax[32], txtMid[32], txtMin[32];
-        std::snprintf(txtMax, sizeof(txtMax), "%.2e", maxValue);
-        std::snprintf(txtMid, sizeof(txtMid), "%.2e", maxValue * 0.5);
-        std::snprintf(txtMin, sizeof(txtMin), "%.2e", 0.0);
-
-        drawList->AddText(ImVec2(startX + barWidth + 6.0f, top - 2.0f), IM_COL32(230, 230, 230, 255), txtMax);
-        drawList->AddText(ImVec2(startX + barWidth + 6.0f, top + barHeight * 0.5f - 6.0f), IM_COL32(200, 200, 200, 255), txtMid);
-        drawList->AddText(ImVec2(startX + barWidth + 6.0f, top + barHeight - 10.0f), IM_COL32(230, 230, 230, 255), txtMin);
+        for (int i = 0; i < tickCount; ++i) {
+          const float t = static_cast<float>(i) / static_cast<float>(tickCount - 1);
+          const float tickY = top + barHeight * (1.0f - t);
+          // Thin band line across the bar, then the tick and the value to the right.
+          if (i > 0 && i < tickCount - 1) drawList->AddLine(ImVec2(x, tickY), ImVec2(x + barWidth, tickY), IM_COL32(0, 0, 0, 90));
+          drawList->AddLine(ImVec2(x + barWidth + 1.0f, tickY), ImVec2(x + barWidth + 1.0f + tickLength, tickY), textDimColor);
+          const bool extreme = i == 0 || i == tickCount - 1;
+          drawList->AddText(ImVec2(x + barWidth + tickLength + 4.0f, tickY - lineHeight * 0.5f), extreme ? textColor : textDimColor,
+                            labels[static_cast<std::size_t>(i)].data());
+        }
+        return cardHeight;
       };
 
-      const float startX = origin.x + 20.0f;
-      const float startY = origin.y + size.y - barHeight - 25.0f;
-      float nextTop = startY;
+      const float left = origin.x + 12.0f;
+      float bottom = origin.y + size.y - 12.0f;
       using enum ElementColoring;
-      if (m_display->coloring == Stress) {
-        drawColorbar(startX, nextTop, m_currentBeamMesh ? "von Mises (MPa)" : "|Stress| (MPa)", m_cachedMaxStress / 1.0e6);
-        nextTop -= 220.0f;
-      }
       if (m_display->coloring == Displacement || m_display->showNodes()) {
-        drawColorbar(startX, nextTop, "Disp (mm)", m_cachedMaxDisp * 1000.0);
+        bottom -= drawLegend(left, bottom, "Displacement", "[mm]", m_cachedMaxDisp * 1000.0, false) + 6.0f;
       }
+      if (m_display->coloring == Stress) {
+        // Truss colors use sqrt(|stress| / max) (buildTrussScene), beams are linear in von Mises.
+        const bool beam = m_currentBeamMesh != nullptr;
+        drawLegend(left, bottom, beam ? "von Mises" : "|Axial stress|", "[MPa]", m_cachedMaxStress / 1.0e6, !beam);
+      }
+      ImGui::PopFont();
     }
   }
 

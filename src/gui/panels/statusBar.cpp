@@ -17,6 +17,8 @@
 
 #include "statusBar.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include <bridge/generalStatus.hpp>
 #include <log/anaf_info.hpp>
 #include <platform/systemInfo.hpp>
@@ -89,7 +91,7 @@ namespace anaf::GUI {
     ImGui::Separator();
 
     // Left: worker state, then the hardware summary right next to it.
-    const ImVec4 accent = (solving || previewing) ? ImVec4(0.95f, 0.75f, 0.25f, 1.0f) : ImVec4(0.45f, 0.85f, 0.55f, 1.0f);
+    const ImVec4 accent = (solving || previewing) ? THEME::theme().warn : THEME::theme().good;
     char state[32];
     if (solving) std::snprintf(state, sizeof(state), "SOLVING %.0f%%", static_cast<double>(bridge.m_progress.load() * 100.0f));
     else if (previewing) std::snprintf(state, sizeof(state), "PREVIEW");

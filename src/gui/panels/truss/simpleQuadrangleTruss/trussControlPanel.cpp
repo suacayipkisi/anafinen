@@ -114,7 +114,7 @@ namespace anaf::GUI {
       ImGui::TextDisabled("No preview yet: Generate Preview in the Grid tab.");
     } else if (mesh->hasResults) {
       const bool valid = bridge.m_isValid.load();
-      ImGui::TextColored(valid ? LAYOUT::kGood : LAYOUT::kWarn, "%s", valid ? "Solved, energy check passed" : "Results shown (energy check not passed)");
+      ImGui::TextColored(valid ? THEME::theme().good : THEME::theme().warn, "%s", valid ? "Solved, energy check passed" : "Results shown (energy check not passed)");
     } else {
       ImGui::TextDisabled("No results yet: run the solver below.");
     }

@@ -17,6 +17,8 @@
 
 #include "trussModelEditor.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
@@ -196,12 +198,12 @@ namespace anaf::GUI {
       ImGui::Separator();
       if (mesh->hasResults) {
         const bool valid = bridge.m_isValid.load();
-        ImGui::TextColored(valid ? LAYOUT::kGood : LAYOUT::kWarn, "%s", valid ? "Solved, energy check passed" : "Results shown (energy check not passed)");
+        ImGui::TextColored(valid ? THEME::theme().good : THEME::theme().warn, "%s", valid ? "Solved, energy check passed" : "Results shown (energy check not passed)");
       } else {
         ImGui::TextDisabled("No results yet: run the solver below.");
       }
     }
-    if (!m_status.empty()) LAYOUT::wrappedColored(m_statusIsError ? LAYOUT::kBad : LAYOUT::kNote, m_status);
+    if (!m_status.empty()) LAYOUT::wrappedColored(m_statusIsError ? THEME::theme().bad : THEME::theme().note, m_status);
     LAYOUT::endCard();
   }
 
@@ -535,7 +537,7 @@ namespace anaf::GUI {
         ImGui::TextDisabled("%s (%.3f, %.3f, %.3f)", what, v[0], v[1], v[2]);
       };
       if (!inclinedError.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.4f, 1.0f), "%s", inclinedError.c_str());
+        ImGui::TextColored(THEME::theme().bad, "%s", inclinedError.c_str());
       } else if (allowed.empty()) {
         ImGui::TextDisabled("Node is held in every direction (pin).");
       } else if (allowed.size() == 1) {

@@ -71,7 +71,7 @@ namespace anaf::GUI {
       if (m_loadKind == BRIDGE::LoadKind::constant) {
         ImGui::TextWrapped("Static solve under nodal loads%s.", truss ? " and self weight" : ", distributed loads and self weight");
       } else {
-        ImGui::TextColored(LAYOUT::kWarn, "Not available in this version.");
+        ImGui::TextColored(THEME::theme().warn, "Not available in this version.");
         ImGui::TextWrapped("Natural frequencies and mode shapes (modal analysis) come next. The inputs can be set, "
                            "but there is no dynamic solver yet, so nothing can be run.");
       }

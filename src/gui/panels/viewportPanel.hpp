@@ -71,6 +71,7 @@ namespace anaf::GUI{
     double m_deformScale{1.0}; // bridge.deformScale, read together with the snapshot
     double m_cachedMaxStress{0.0};
     double m_cachedMaxDisp{0.0};
+    std::uint32_t m_themeRevision{0}; // THEME::themeRevision() the buffers were built with
     std::uint32_t m_selectedNode{kNone};    // bridge selections, compared every frame so a
     std::uint32_t m_selectedElement{kNone}; // selection made in a panel redraws the highlight
     std::vector<std::pair<std::uint32_t, glm::vec3>> m_nodeLabels; // id, drawn position

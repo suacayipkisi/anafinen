@@ -41,6 +41,7 @@ namespace anaf::GUI {
     std::vector<PanelMenuEntry> m_panelMenu_;
 
     void renderPanelsMenu();
+    void renderSettingsMenu(); // Settings > Theme
 
   public:
     std::function<void()> on_select_truss; // Analyze > Truss (1D Element)

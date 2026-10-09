@@ -18,6 +18,8 @@
 #include "mainDockSpaceHost.hpp"
 #include "viewportToolbar.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include "imgui.h"
 #include "imgui_internal.h" // DockBuilder API
 
@@ -34,6 +36,17 @@ namespace anaf::GUI {
       if (!available && entry.unavailableHint && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("%s", entry.unavailableHint);
       }
+    }
+    ImGui::EndMenu();
+  }
+
+  void MainDockSpaceHost::renderSettingsMenu() {
+    if (!ImGui::BeginMenu("Settings")) return;
+    if (ImGui::BeginMenu("Theme")) {
+      for (const THEME::ThemeId id : THEME::kAllThemes) {
+        if (ImGui::MenuItem(THEME::palette(id).name, nullptr, THEME::currentTheme() == id)) THEME::applyTheme(id);
+      }
+      ImGui::EndMenu();
     }
     ImGui::EndMenu();
   }
@@ -82,6 +95,7 @@ namespace anaf::GUI {
       }
 
       renderPanelsMenu();
+      renderSettingsMenu();
 
       if (ImGui::BeginMenu("Help")) {
         if (ImGui::MenuItem("Welcome...")) {

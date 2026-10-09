@@ -17,6 +17,8 @@
 
 #include "logTerminal.hpp"
 
+#include <guiMaterials/theme.hpp>
+
 #include <log/anaf_info.hpp>
 #include <guiMaterials/imGuiLayer.hpp>
 
@@ -96,13 +98,14 @@ namespace anaf::GUI {
 
         ImGui::PushID(static_cast<int>(i));
 
-        ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+        const THEME::ThemePalette& palette = THEME::theme();
+        ImVec4 color = palette.text;
         switch (log.level) {
-          case anaf::LOG::Level::INFO: color = ImVec4(0.4f, 0.7f, 1.0f, 1.0f); break;
-          case anaf::LOG::Level::WARN: color = ImVec4(1.0f, 0.8f, 0.2f, 1.0f); break;
-          case anaf::LOG::Level::ERR: color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); break;
-          case anaf::LOG::Level::SUCCESS: color = ImVec4(0.3f, 1.0f, 0.3f, 1.0f); break;
-          case anaf::LOG::Level::CORE: color = ImVec4(0.0f, 0.9f, 0.9f, 1.0f); break;
+          case anaf::LOG::Level::INFO: color = palette.info; break;
+          case anaf::LOG::Level::WARN: color = palette.warn; break;
+          case anaf::LOG::Level::ERR: color = palette.bad; break;
+          case anaf::LOG::Level::SUCCESS: color = palette.good; break;
+          case anaf::LOG::Level::CORE: color = palette.core; break;
         }
         ImGui::PushStyleColor(ImGuiCol_Text, color);
         ImGui::TextUnformatted(log.text.c_str());
@@ -169,7 +172,7 @@ namespace anaf::GUI {
     if (s_copiedFeedbackTimer > 0.0f) {
       s_copiedFeedbackTimer -= ImGui::GetIO().DeltaTime;
       ImGui::SameLine();
-      ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Copied!");
+      ImGui::TextColored(THEME::theme().good, "Copied!");
     }
 
     if (m_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
