@@ -583,7 +583,7 @@ namespace anaf::GUI {
         const double mean = 0.5 * (magnitude(mesh.trussNodes[element.node1].getDisplacement()) + magnitude(mesh.trussNodes[element.node2].getDisplacement()));
         return jet(mean / maxDisp);
       }
-      return toGlm(THEME::theme().member);
+      return toGlm(THEME::trussMemberColor(THEME::theme()));
     };
 
     std::vector<glm::vec3> nodeLookup(maxNodeId + 1, glm::vec3(0.0f));

@@ -36,15 +36,28 @@ namespace anaf::GUI::THEME {
     MidnightViolet, // deep navy surfaces, violet accent
     EmeraldSlate,   // slate surfaces, emerald accent
     StudioLight,    // light grey surfaces, blue accent, light viewport
+    Old,            // the look before themes existed (v0.2.0): grey surfaces, blue marks, flat dark viewport
   };
 
-  inline constexpr std::array<E_ThemeId, 6> allThemes{E_ThemeId::SteelCyan,      E_ThemeId::GraphiteOrange, E_ThemeId::ClassicFem,
-                                                     E_ThemeId::MidnightViolet, E_ThemeId::EmeraldSlate,   E_ThemeId::StudioLight};
+  inline constexpr std::array<E_ThemeId, 7> allThemes{
+    E_ThemeId::SteelCyan,
+    E_ThemeId::GraphiteOrange,
+    E_ThemeId::ClassicFem,
+
+    E_ThemeId::MidnightViolet,
+    E_ThemeId::EmeraldSlate,
+    E_ThemeId::StudioLight,
+
+    E_ThemeId::Old
+  };
 
   struct ThemePalette {
     const char* key{""};  // stable id in userSettings.json
     const char* name{""}; // shown in Settings > Theme
     bool light{false}; // ImGui's light defaults under the palette instead of the dark ones
+    // The ImGui colors of v0.2.0 verbatim (theme Old) instead of the ones derived from the palette below;
+    // the palette still drives everything outside the ImGui style (status colors, viewport, overlays).
+    bool legacyStyle{false};
 
     // Surfaces (in the dark themes from darkest to lightest).
     ImVec4 base;    // menu bar, title bars, inactive tabs
@@ -77,6 +90,7 @@ namespace anaf::GUI::THEME {
     ImVec4 sceneLabel;
     ImVec4 member;
     ImVec4 memberNoResult; // member without the requested result (e.g. stress on an unsolved model)
+    ImVec4 trussMember{0.0f, 0.0f, 0.0f, 0.0f}; // truss bars when they differ from member; alpha 0 = member
 
     // Viewport overlays: cards behind the gizmo, legends and counters.
     ImVec4 overlayBg;
@@ -97,6 +111,9 @@ namespace anaf::GUI::THEME {
 
   // Bumped by every applyTheme(), so the viewport can rebuild buffers that bake palette colors in.
   std::uint32_t themeRevision();
+
+  // Color of a truss bar without results.
+  inline const ImVec4& trussMemberColor(const ThemePalette& p) { return p.trussMember.w > 0.0f ? p.trussMember : p.member; }
 
   inline ImU32 toU32(const ImVec4& color) { return ImGui::ColorConvertFloat4ToU32(color); }
   inline ImU32 toU32(const ImVec4& color, const float alpha) {

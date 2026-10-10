@@ -241,11 +241,90 @@ namespace anaf::GUI::THEME {
       .overlayTextDim = rgb(0x5E6875),
     };
 
+    // The colors in use before the themes (v0.2.0, commit 8c4242b): ImGuiLayer's hard-coded style,
+    // the panels' status colors, a flat dark viewport and the old overlay cards. ImGui colors come
+    // from applyLegacyStyleColors(), not from the surfaces below.
+    constexpr ThemePalette oldTheme{
+      .key = "old",
+      .name = "Old Theme (v0.2)",
+      .legacyStyle = true,
+      .base = ImVec4(0.10f, 0.105f, 0.11f, 1.0f),
+      .panel = ImVec4(0.10f, 0.105f, 0.11f, 1.0f),
+      .raised = ImVec4(0.14f, 0.15f, 0.17f, 1.0f),
+      .input = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f),
+      .header = ImVec4(0.20f, 0.205f, 0.21f, 1.0f),
+      .border = ImVec4(0.22f, 0.24f, 0.28f, 0.60f),
+      .text = ImVec4(0.92f, 0.93f, 0.95f, 1.0f),
+      .textDim = ImVec4(0.50f, 0.53f, 0.58f, 1.0f),
+      .accent = ImVec4(0.35f, 0.68f, 1.0f, 1.0f),
+      .primary = ImVec4(0.16f, 0.36f, 0.62f, 1.0f),
+      .primaryHovered = ImVec4(0.22f, 0.45f, 0.75f, 1.0f),
+      .primaryActive = ImVec4(0.13f, 0.30f, 0.52f, 1.0f),
+      .good = ImVec4(0.55f, 0.95f, 0.6f, 1.0f),
+      .warn = ImVec4(1.0f, 0.75f, 0.35f, 1.0f),
+      .bad = ImVec4(1.0f, 0.45f, 0.45f, 1.0f),
+      .info = ImVec4(0.4f, 0.7f, 1.0f, 1.0f),
+      .core = ImVec4(0.0f, 0.9f, 0.9f, 1.0f),
+      .note = ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+      .sceneTop = ImVec4(0.08f, 0.09f, 0.11f, 1.0f), // no gradient: the old clear color
+      .sceneBottom = ImVec4(0.08f, 0.09f, 0.11f, 1.0f),
+      .grid = ImVec4(0.62f, 0.70f, 0.78f, 1.0f),
+      .sceneLabel = ImVec4(0.9f, 0.9f, 0.9f, 1.0f),
+      .member = ImVec4(0.62f, 0.70f, 0.80f, 1.0f),
+      .memberNoResult = ImVec4(0.55f, 0.55f, 0.55f, 1.0f),
+      .trussMember = ImVec4(0.4f, 0.6f, 0.85f, 1.0f),
+      .overlayBg = rgb(0x0F1116, 0.86f),
+      .overlayBorder = ImVec4(0.22f, 0.24f, 0.28f, 0.60f),
+      .overlayText = rgb(0xE6E6E6),
+      .overlayTextDim = rgb(0x8C8E96),
+    };
+
     E_ThemeId g_current = E_ThemeId::SteelCyan;
     std::uint32_t g_revision = 0;
 
+    // ImGuiLayer's colors before the themes, set verbatim over ImGui's dark defaults.
+    void applyLegacyStyleColors(ImGuiStyle& style) {
+      ImGui::StyleColorsDark(&style);
+      ImVec4* c = style.Colors;
+      c[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.105f, 0.11f, 1.00f);
+      c[ImGuiCol_ChildBg] = ImVec4(0.14f, 0.15f, 0.17f, 1.00f);
+      c[ImGuiCol_PopupBg] = ImVec4(0.13f, 0.14f, 0.16f, 0.98f);
+      c[ImGuiCol_Border] = ImVec4(0.22f, 0.24f, 0.28f, 0.60f);
+
+      c[ImGuiCol_TitleBg] = ImVec4(0.10f, 0.105f, 0.11f, 1.0f);
+      c[ImGuiCol_TitleBgActive] = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
+      c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.10f, 0.105f, 0.11f, 1.0f);
+      c[ImGuiCol_Header] = ImVec4(0.20f, 0.205f, 0.21f, 1.0f);
+      c[ImGuiCol_HeaderHovered] = ImVec4(0.30f, 0.305f, 0.31f, 1.0f);
+      c[ImGuiCol_HeaderActive] = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
+
+      c[ImGuiCol_Button] = ImVec4(0.20f, 0.205f, 0.21f, 1.0f);
+      c[ImGuiCol_ButtonHovered] = ImVec4(0.30f, 0.305f, 0.31f, 1.0f);
+      c[ImGuiCol_ButtonActive] = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
+
+      c[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
+      c[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.225f, 0.23f, 1.0f);
+      c[ImGuiCol_FrameBgActive] = ImVec4(0.12f, 0.1205f, 0.121f, 1.0f);
+      c[ImGuiCol_CheckMark] = ImVec4(0.35f, 0.68f, 1.00f, 1.00f);
+      c[ImGuiCol_SliderGrab] = ImVec4(0.30f, 0.58f, 0.90f, 1.00f);
+      c[ImGuiCol_SliderGrabActive] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
+
+      c[ImGuiCol_Tab] = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
+      c[ImGuiCol_TabHovered] = ImVec4(0.38f, 0.3805f, 0.381f, 1.0f);
+      c[ImGuiCol_TabSelected] = ImVec4(0.28f, 0.2805f, 0.281f, 1.0f);
+      c[ImGuiCol_TabDimmed] = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
+      c[ImGuiCol_TabDimmedSelected] = ImVec4(0.20f, 0.205f, 0.21f, 1.0f);
+
+      c[ImGuiCol_Text] = ImVec4(0.92f, 0.93f, 0.95f, 1.00f);
+      c[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.53f, 0.58f, 1.00f);
+    }
+
     void applyStyleColors(const ThemePalette& p) {
       ImGuiStyle& style = ImGui::GetStyle();
+      if (p.legacyStyle) {
+        applyLegacyStyleColors(style);
+        return;
+      }
       // Every color not set below keeps ImGui's default of the same brightness.
       if (p.light) ImGui::StyleColorsLight(&style);
       else ImGui::StyleColorsDark(&style);
@@ -338,6 +417,7 @@ namespace anaf::GUI::THEME {
       case E_ThemeId::MidnightViolet: return midnightViolet;
       case E_ThemeId::EmeraldSlate: return emeraldSlate;
       case E_ThemeId::StudioLight: return studioLight;
+      case E_ThemeId::Old: return oldTheme;
       case E_ThemeId::SteelCyan: break;
     }
     return steelCyan;
