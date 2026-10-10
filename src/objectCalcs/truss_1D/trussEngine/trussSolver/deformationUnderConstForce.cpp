@@ -26,11 +26,43 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <omp.h>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace FEM::TRUSS {
+
+  namespace {
+    // The mechanism of a singular solve in words: the node and direction moving the most in its
+    // mode, and how many nodes move with it.
+    std::string mechanismMessage(
+      const FEM::SOLVER::Result& result,
+      const std::vector<std::int32_t>& nodeDofSlots,
+      const std::span<const Node> nodes
+    ) {
+      constexpr const char* advice = "check the supports";
+      if (result.mechanismDof < 0) return std::format("the structure is a mechanism ({}): {}", result.message, advice);
+      std::vector<Eigen::Vector3d> motion(nodes.size(), Eigen::Vector3d::Zero());
+      std::size_t worstNode = 0;
+      for (std::size_t node = 0; node < nodes.size(); ++node) {
+        const auto& directions = nodes[node].getAllowedMotionDirections();
+        for (std::size_t k = 0; k < directions.size(); ++k) {
+          const auto reduced = nodeDofSlots[3 * node + k];
+          if (reduced == result.mechanismDof) worstNode = node;
+          motion[node] += result.mechanismMode[reduced] * Eigen::Vector3d(directions[k][0], directions[k][1], directions[k][2]);
+        }
+      }
+      const Eigen::Vector3d direction = motion[worstNode].normalized();
+      const double reference = motion[worstNode].norm();
+      const auto moving = std::ranges::count_if(motion, [&](const Eigen::Vector3d& m) { return m.norm() > 1e-6 * reference; });
+      return std::format(
+        "the structure is a mechanism: node {} can move freely along ({:.3g}, {:.3g}, {:.3g}) without straining any element{}; {}",
+        worstNode, direction[0], direction[1], direction[2],
+        moving > 1 ? std::format(" ({} more {} with it)", moving - 1, moving == 2 ? "node" : "nodes") : std::string{}, advice);
+    }
+  } // namespace end
 
   void Truss_1D_Container::assembleStiffness(
     const std::vector<TrussElement_1D>& elements,
@@ -103,7 +135,7 @@ namespace FEM::TRUSS {
     }
   }
 
-  bool Truss_1D_Container::calculateDisplacements(const std::stop_token stopToken) {
+  std::expected<void, std::string> Truss_1D_Container::calculateDisplacements(const std::stop_token stopToken) {
     #pragma omp parallel
     {
       #pragma omp single
@@ -237,7 +269,8 @@ namespace FEM::TRUSS {
       );
       m_resultDisplacements.assign(nodeCount, {0.0, 0.0, 0.0});
       for (auto& node : m_allNodes) node.setDisplacements({0.0, 0.0, 0.0});
-      return false;
+      if (solverResult.singular) return std::unexpected(mechanismMessage(solverResult, nodeDofSlots, m_allNodes));
+      return std::unexpected("the stiffness solve failed (is the structure a mechanism? check the supports)");
     }
 
     #pragma omp parallel for schedule(static)
@@ -251,7 +284,7 @@ namespace FEM::TRUSS {
       m_resultDisplacements[node] = displacement;
       m_allNodes[node].setDisplacements(displacement);
     }
-    return true;
+    return {};
   }
 
   void Truss_1D_Container::calculateElementForcesAndStress(

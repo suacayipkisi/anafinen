@@ -183,9 +183,9 @@ namespace FEM::TRUSS {
     report(0.50f);
     container.considerWeight(model->elements, materials);
     report(0.55f);
-    if (!container.calculateDisplacements(st)) {
+    if (auto displaced = container.calculateDisplacements(st); !displaced) {
       if (st.stop_requested()) return cancelled();
-      return std::unexpected("the stiffness solve failed (is the structure a mechanism? check the supports)");
+      return std::unexpected(displaced.error());
     }
     report(0.85f);
     container.calculateElementForcesAndStress(materials);

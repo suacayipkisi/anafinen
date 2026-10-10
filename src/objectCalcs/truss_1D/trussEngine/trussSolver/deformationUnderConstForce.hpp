@@ -25,8 +25,10 @@
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 #include <array>
+#include <expected>
 #include <span>
 #include <stop_token>
+#include <string>
 #include <vector>
 
 namespace FEM::TRUSS {
@@ -66,8 +68,9 @@ namespace FEM::TRUSS {
       std::span<const anaf::MATERIAL::Material> allMaterials
     );
 
-    // False when the solve failed or was stopped; the displacements are then zero.
-    bool calculateDisplacements(std::stop_token stopToken = {});
+    // An error (a mechanism names a node and its free direction) when the solve failed or was
+    // stopped; the displacements are then zero.
+    std::expected<void, std::string> calculateDisplacements(std::stop_token stopToken = {});
     void calculateElementForcesAndStress(
       const std::span<const anaf::MATERIAL::Material> allMaterials, 
       const Eigen::Vector3d gravityVector = {0.0, -9.80665, 0.0}

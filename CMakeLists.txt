@@ -80,6 +80,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp
     src/solvers/direct/solver_cholmod.cpp
     src/solvers/direct/solver_simplicial.cpp
+    src/solvers/direct/mechanism.cpp
     src/solvers/iterative/solver_iterative.cpp
     src/solvers/solver_referee.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver.cpp

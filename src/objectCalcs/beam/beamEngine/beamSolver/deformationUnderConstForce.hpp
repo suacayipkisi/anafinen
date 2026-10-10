@@ -151,8 +151,9 @@ namespace FEM::BEAM {
     std::expected<void, std::string> buildNodeDofs();
     inline std::size_t getHeldFreeDirections() const {return m_heldFreeDirections;}
 
-    // False when the solve failed or was stopped; displacements and rotations are then zero.
-    bool calculateDisplacements(std::stop_token stopToken = {});
+    // An error (a mechanism names a node and its free direction) when the solve failed or was
+    // stopped; displacements and rotations are then zero.
+    std::expected<void, std::string> calculateDisplacements(std::stop_token stopToken = {});
     void calculateSectionForces();
     void runValidator();
 

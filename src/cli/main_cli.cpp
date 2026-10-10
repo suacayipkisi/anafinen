@@ -17,7 +17,11 @@
 
 #include "bridge/generalStatus.hpp"
 #include "directory/getExecutableDirectory.hpp"
+
+#ifdef _WIN32
 #include "io/core/pathUtf8.hpp"
+#endif
+
 #include "log/anaf_info.hpp"
 #include <omp.h>
 
@@ -35,6 +39,7 @@
 #include <windows.h>
 #include <shellapi.h>
 
+// force to use external GPU if exist, not iGPU
 extern "C" {
   __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
   __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
@@ -70,10 +75,10 @@ int main(int argc, char** argv) {
   const std::vector<std::string> args = commandLineArguments(argc, argv);
   const bool quiet = std::ranges::any_of(args, [](const std::string& arg) { return arg == "--quiet" || arg == "-q"; });
 
-  // The log file is always written; --quiet keeps the log lines off the terminal.
+  // --quiet keeps the log lines off the terminal, normally it's always written
   anaf::LOG::setConsoleOutput(!quiet);
 
-  if (!anaf::LOG::init("anafinen_run.log")) {
+  if (!anaf::LOG::init(anaf::LOG::getLogFileLoc())) {
     anaf::LOG::error("Failed to open log file!");
     return 1;
   }

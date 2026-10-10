@@ -110,6 +110,48 @@ namespace FEM::BEAM {
       return eigen.eigenvalues().minCoeff() > 1e-10 * eigen.eigenvalues().maxCoeff();
     }
 
+    // The mechanism of a singular solve in words: the node and direction moving the most in its
+    // mode, and how many nodes move with it.
+    std::string mechanismMessage(
+      const FEM::SOLVER::Result& result,
+      const std::vector<std::int32_t>& nodeDofSlots,
+      const std::vector<Eigen::Matrix<double, 6, 6>>& bases
+    ) {
+      constexpr const char* advice = "check the supports and the end releases";
+      if (result.mechanismDof < 0) return std::format("the structure is a mechanism ({}): {}", result.message, advice);
+      const auto& mode = result.mechanismMode;
+      // The mode as global 6-vectors per node.
+      const std::size_t nodeCount = bases.size();
+      std::vector<Eigen::Matrix<double, 6, 1>> motion(nodeCount, Eigen::Matrix<double, 6, 1>::Zero());
+      std::size_t worstNode = 0, worstSlot = 0;
+      for (std::size_t node = 0; node < nodeCount; ++node) {
+        Eigen::Matrix<double, 6, 1> q = Eigen::Matrix<double, 6, 1>::Zero();
+        for (std::size_t slot = 0; slot < dofsPerNode; ++slot) {
+          const auto reduced = nodeDofSlots[dofsPerNode * node + slot];
+          if (reduced < 0) continue;
+          q[static_cast<Eigen::Index>(slot)] = mode[reduced];
+          if (reduced == result.mechanismDof) {
+            worstNode = node;
+            worstSlot = slot;
+          }
+        }
+        motion[node] = bases[node] * q;
+      }
+      const Eigen::Index group = worstSlot < 3 ? 0 : 3;
+      const Eigen::Vector3d direction = motion[worstNode].segment<3>(group).normalized();
+      // Nodes whose motion of the same kind is not negligible next to the worst node's.
+      const double reference = motion[worstNode].segment<3>(group).norm();
+      const auto moving = std::ranges::count_if(motion, [&](const Eigen::Matrix<double, 6, 1>& m) {
+        return m.segment<3>(group).norm() > 1e-6 * reference;
+      });
+      return std::format(
+        "the structure is a mechanism: node {} can {} ({:.3g}, {:.3g}, {:.3g}) without straining any element"
+        "{}; {}", worstNode, group == 0 ? "move freely along" : "rotate freely about",
+        direction[0], direction[1], direction[2],
+        moving > 1 ? std::format(" ({} more {} with it)", moving - 1, moving == 2 ? "node" : "nodes") : std::string{},
+        advice);
+    }
+
     Eigen::Matrix<double, 12, 1> elementDisplacements(const Node& start, const Node& end) {
       Eigen::Matrix<double, 12, 1> u;
       for (Eigen::Index axis = 0; axis < 3; ++axis) {
@@ -448,7 +490,7 @@ namespace FEM::BEAM {
     return {};
   }
 
-  bool Beam_3D_Container::calculateDisplacements(const std::stop_token stopToken) {
+  std::expected<void, std::string> Beam_3D_Container::calculateDisplacements(const std::stop_token stopToken) {
     const auto nodeCount = static_cast<std::uint32_t>(m_nodes.size());
     if (m_nodeDofs.size() != nodeCount) (void)buildNodeDofs();
 
@@ -537,7 +579,8 @@ namespace FEM::BEAM {
         node.setDisplacement({0.0, 0.0, 0.0});
         node.setRotation({0.0, 0.0, 0.0});
       }
-      return false;
+      if (solverResult.singular) return std::unexpected(mechanismMessage(solverResult, nodeDofSlots, bases));
+      return std::unexpected("the stiffness solve failed (is the structure a mechanism? check the supports)");
     }
 
     #pragma omp parallel for schedule(static)
@@ -551,7 +594,7 @@ namespace FEM::BEAM {
       m_nodes[node].setDisplacement({u[0], u[1], u[2]});
       m_nodes[node].setRotation({u[3], u[4], u[5]});
     }
-    return true;
+    return {};
   }
 
   void Beam_3D_Container::calculateSectionForces() {

@@ -218,9 +218,9 @@ namespace FEM::BEAM {
     container.applyLoads(solved->nodalLoads, solved->distributedLoads, solved->gravity, materials);
     if (auto dofs = container.buildNodeDofs(); !dofs) return std::unexpected(dofs.error());
     report(0.50f);
-    if (!container.calculateDisplacements(st)) {
+    if (auto displaced = container.calculateDisplacements(st); !displaced) {
       if (st.stop_requested()) return cancelled();
-      return std::unexpected("the stiffness solve failed (is the structure a mechanism? check the supports)");
+      return std::unexpected(displaced.error());
     }
     report(0.85f);
     container.calculateSectionForces();

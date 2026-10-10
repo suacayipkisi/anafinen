@@ -17,6 +17,7 @@
 
 #include <solvers/solverPortfolio.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <Eigen/SparseCholesky>
 
@@ -32,12 +33,29 @@ namespace FEM::SOLVER {
     Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper> solver;
     solver.compute(upperMatrix);
     if (solver.info() != Eigen::Success) {
+      // The numerical failure of LDL^T is an exactly zero pivot.
+      result.singular = solver.info() == Eigen::NumericalIssue;
+      if (result.singular) result.smallestPivotRatio = 0.0;
       result.message = "Eigen SimplicialLDLT factorization failed";
     }
     else {
-      displacement = solver.solve(force);
-      result.converged = solver.info() == Eigen::Success && displacement.allFinite();
-      if (!result.converged) result.message = "Eigen SimplicialLDLT solve failed";
+      // LDL^T accepts any nonzero pivot: a mechanism whose pivot is rounding noise instead of
+      // an exact zero would be solved, with an arbitrary amount of the mechanism mode.
+      const Eigen::VectorXd diagonal = upperMatrix.diagonal();
+      const auto& toOriginal = solver.permutationPinv().indices(); // pivot k belongs to DOF toOriginal[k]
+      const Eigen::VectorXd& pivots = solver.vectorD();
+      for (Eigen::Index k = 0; k < pivots.size(); ++k) {
+        result.smallestPivotRatio = std::min(result.smallestPivotRatio, pivots[k] / diagonal[toOriginal[k]]);
+      }
+      result.singular = !(result.smallestPivotRatio > singularPivotRatio);
+      if (result.singular) {
+        result.message = "Eigen SimplicialLDLT found a rounding level pivot";
+      }
+      else {
+        displacement = solver.solve(force);
+        result.converged = solver.info() == Eigen::Success && displacement.allFinite();
+        if (!result.converged) result.message = "Eigen SimplicialLDLT solve failed";
+      }
     }
     result.available = true;
     result.elapsedSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();

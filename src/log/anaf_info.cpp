@@ -35,6 +35,10 @@ namespace {
 
 namespace anaf::LOG {
 
+  std::string getLogFileLoc() {
+    return "anafinen_run.log";
+  }
+
   void write(Level level, std::string_view formattedMessage) {
     std::string_view tag;
     std::string_view tagColor;

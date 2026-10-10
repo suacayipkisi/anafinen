@@ -36,7 +36,7 @@ extern "C" {
 
 int main() {
   anaf::LOG::setCallback(anaf::GUI::anafUILogSink);
-  if (!anaf::LOG::init("anafinen_run.log")) {
+  if (!anaf::LOG::init(anaf::LOG::getLogFileLoc())) {
     anaf::LOG::error("Failed to open log file!");
     return 1;
   }

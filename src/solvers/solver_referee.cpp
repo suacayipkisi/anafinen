@@ -21,9 +21,11 @@
 
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <limits>
 #include <omp.h>
 #include <string>
+#include <utility>
 
 namespace FEM::SOLVER {
 
@@ -52,6 +54,19 @@ namespace FEM::SOLVER {
     [[maybe_unused]] bool accepted(const Result& result) noexcept { // only called with CHOLMOD
       return result.available && result.converged && std::isfinite(result.relativeResidual)
         && result.relativeResidual <= 1e-7;
+    }
+
+    // Adds the mechanism mode to a singular result; false when no mechanism is found (the
+    // singular verdict then rests on that one solver).
+    bool attachMechanism(const Eigen::SparseMatrix<double>& upperMatrix, Result& result) {
+      auto mechanism = findMechanism(upperMatrix);
+      if (!mechanism) return false;
+      result.mechanismMode = std::move(mechanism->mode);
+      result.mechanismDof = mechanism->dof;
+      result.converged = false;
+      result.message = std::format("the stiffness is singular (a mechanism): {} (smallest pivot / diagonal {:.2e})",
+                                   result.message, mechanism->pivotRatio);
+      return true;
     }
 
     void logHardware(const Eigen::Index dofs, const Eigen::Index nonZeros) {
@@ -83,6 +98,7 @@ namespace FEM::SOLVER {
 
     constexpr Eigen::Index directLimit = 400'000;
     Result result;
+    displacement.setZero(dofs); // a failed solve leaves zeros, not uninitialized values
 
     // Every DOF is restrained: nothing to solve. Debian 13's CHOLMOD rejects an empty matrix
     // ("invalid xtype or dtype" in cholmod_analyze) and the factorization then crashes.
@@ -101,15 +117,19 @@ namespace FEM::SOLVER {
       anaf::LOG::info("Solver referee selected CHOLMOD: {} DOFs <= {}", dofs, directLimit);
       result = solveCholmod(upperMatrix, force, displacement);
       result.relativeResidual = relativeResidual(upperMatrix, force, displacement);
-      if (!accepted(result)) {
-        anaf::LOG::warn("CHOLMOD was rejected; trying Eigen SimplicialLDLT");
+      // A singular stiffness is the model's fault, not CHOLMOD's: SimplicialLDLT would accept
+      // the rounding level pivot of the mechanism and return an arbitrary amount of its mode.
+      if (!accepted(result) && !(result.singular && attachMechanism(upperMatrix, result))) {
+        anaf::LOG::warn("CHOLMOD was rejected ({}); trying Eigen SimplicialLDLT", result.message);
         result = solveSimplicialLDLT(upperMatrix, force, displacement);
         result.relativeResidual = relativeResidual(upperMatrix, force, displacement);
+        if (result.singular) attachMechanism(upperMatrix, result);
       }
     #else
       anaf::LOG::info("Solver referee selected Eigen SimplicialLDLT: {} DOFs <= {}", dofs, directLimit);
       result = solveSimplicialLDLT(upperMatrix, force, displacement);
       result.relativeResidual = relativeResidual(upperMatrix, force, displacement);
+      if (result.singular) attachMechanism(upperMatrix, result);
     #endif
     }
     else {
@@ -122,9 +142,9 @@ namespace FEM::SOLVER {
     }
 
     anaf::LOG::info(
-      "Solver referee result: {}, available {}, converged {}, residual {:.3e}, iterations {}, elapsed {:.3f} seconds{}{}",
+      "Solver referee result: {}, available {}, converged {}, residual {:.3e}, smallest pivot / diagonal {:.3e}, iterations {}, elapsed {:.3f} seconds{}{}",
       toString(result.type), result.available, result.converged,
-      result.relativeResidual, result.iterations, result.elapsedSeconds,
+      result.relativeResidual, result.smallestPivotRatio, result.iterations, result.elapsedSeconds,
       result.message.empty() ? "" : ", reason: ", result.message
     );
     return result;

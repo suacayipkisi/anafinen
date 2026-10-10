@@ -27,6 +27,8 @@
 
 namespace anaf::LOG {
 
+  std::string getLogFileLoc();
+
   enum class Level {
     INFO,
     WARN,
