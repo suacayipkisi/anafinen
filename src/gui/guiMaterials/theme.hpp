@@ -55,8 +55,8 @@ namespace anaf::GUI::THEME {
     const char* key{""};  // stable id in userSettings.json
     const char* name{""}; // shown in Settings > Theme
     bool light{false}; // ImGui's light defaults under the palette instead of the dark ones
-    // The ImGui colors of v0.2.0 verbatim (theme Old) instead of the ones derived from the palette below;
-    // the palette still drives everything outside the ImGui style (status colors, viewport, overlays).
+    // Dark themes take the ImGui colors of v0.2.0 (applyLegacyStyleColors) with the accent on the marks;
+    // legacyStyle (theme Old) keeps them without the accent. The light theme derives them from the palette.
     bool legacyStyle{false};
 
     // Surfaces (in the dark themes from darkest to lightest).
@@ -83,7 +83,8 @@ namespace anaf::GUI::THEME {
     ImVec4 core;
     ImVec4 note;
 
-    // Viewport scene: vertical background gradient, ground grid, node labels, unsolved members.
+    // Viewport scene: background (top -> bottom gradient; every preset is flat, top = bottom), ground grid,
+    // node labels, unsolved members.
     ImVec4 sceneTop;
     ImVec4 sceneBottom;
     ImVec4 grid;
@@ -111,6 +112,11 @@ namespace anaf::GUI::THEME {
 
   // Bumped by every applyTheme(), so the viewport can rebuild buffers that bake palette colors in.
   std::uint32_t themeRevision();
+
+  // Linear blend, t = 0 gives a, t = 1 gives b (alpha from a).
+  constexpr ImVec4 mix(const ImVec4& a, const ImVec4& b, const float t) {
+    return ImVec4(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t, a.w);
+  }
 
   // Color of a truss bar without results.
   inline const ImVec4& trussMemberColor(const ThemePalette& p) { return p.trussMember.w > 0.0f ? p.trussMember : p.member; }

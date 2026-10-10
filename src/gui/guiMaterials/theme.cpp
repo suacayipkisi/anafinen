@@ -29,184 +29,83 @@ namespace anaf::GUI::THEME {
 
     constexpr ImVec4 withAlpha(const ImVec4& color, const float alpha) { return ImVec4(color.x, color.y, color.z, alpha); }
 
-    // Linear blend, t = 0 gives a, t = 1 gives b (alpha from a).
-    constexpr ImVec4 mix(const ImVec4& a, const ImVec4& b, const float t) {
-      return ImVec4(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t, a.w);
+    // Every dark theme is built on the look before the themes (v0.2.0, commit 8c4242b): neutral
+    // grey surfaces with few levels, colors only in the results. A theme changes the accent (marks,
+    // run buttons) and the flat viewport background; status colors only where they would read as
+    // the accent.
+    constexpr ThemePalette darkTheme(const char* key, const char* name, const ImVec4 accent, const ImVec4 primary,
+                                     const ImVec4 primaryHovered, const ImVec4 primaryActive, const ImVec4 scene) {
+      return ThemePalette{
+        .key = key,
+        .name = name,
+        .base = ImVec4(0.10f, 0.105f, 0.11f, 1.0f),
+        .panel = ImVec4(0.10f, 0.105f, 0.11f, 1.0f),
+        .raised = ImVec4(0.14f, 0.15f, 0.17f, 1.0f),
+        .input = ImVec4(0.19f, 0.195f, 0.20f, 1.0f),
+        .header = ImVec4(0.20f, 0.205f, 0.21f, 1.0f),
+        .border = ImVec4(0.22f, 0.24f, 0.28f, 0.60f),
+        .text = ImVec4(0.92f, 0.93f, 0.95f, 1.0f),
+        .textDim = ImVec4(0.50f, 0.53f, 0.58f, 1.0f),
+        .accent = accent,
+        .primary = primary,
+        .primaryHovered = primaryHovered,
+        .primaryActive = primaryActive,
+        .good = ImVec4(0.55f, 0.95f, 0.6f, 1.0f),
+        .warn = ImVec4(1.0f, 0.75f, 0.35f, 1.0f),
+        .bad = ImVec4(1.0f, 0.45f, 0.45f, 1.0f),
+        .info = ImVec4(0.4f, 0.7f, 1.0f, 1.0f),
+        .core = ImVec4(0.0f, 0.9f, 0.9f, 1.0f),
+        .note = ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+        .sceneTop = scene,
+        .sceneBottom = scene,
+        .grid = ImVec4(0.62f, 0.70f, 0.78f, 1.0f),
+        .sceneLabel = ImVec4(0.9f, 0.9f, 0.9f, 1.0f),
+        .member = ImVec4(0.62f, 0.70f, 0.80f, 1.0f),
+        .memberNoResult = ImVec4(0.55f, 0.55f, 0.55f, 1.0f),
+        .overlayBg = rgb(0x0F1116, 0.86f),
+        .overlayBorder = ImVec4(0.22f, 0.24f, 0.28f, 0.60f),
+        .overlayText = rgb(0xE6E6E6),
+        .overlayTextDim = rgb(0x8C8E96),
+      };
     }
 
-    // Status colors shared by the dark themes; tuned to stay readable on every panel background.
-    constexpr ImVec4 statusGood = rgb(0x5FD38D);
-    constexpr ImVec4 statusWarn = rgb(0xF2B84B);
-    constexpr ImVec4 statusBad = rgb(0xF2665F);
-    constexpr ImVec4 statusInfo = rgb(0x6AAEF5);
-    constexpr ImVec4 statusCore = rgb(0x3FD6D0);
+    constexpr ThemePalette steelCyan = darkTheme("steel_cyan", "Steel Blue / Cyan", rgb(0x2EA8D6), rgb(0x1C7BA2), rgb(0x2690BB),
+                                                 rgb(0x166685), ImVec4(0.12f, 0.14f, 0.17f, 1.0f));
 
-    constexpr ThemePalette steelCyan{
-      .key = "steel_cyan",
-      .name = "Steel Blue / Cyan",
-      .base = rgb(0x111418),
-      .panel = rgb(0x171B21),
-      .raised = rgb(0x1D222A),
-      .input = rgb(0x242A34),
-      .header = rgb(0x253041),
-      .border = rgb(0x2F3742),
-      .text = rgb(0xE3E8EF),
-      .textDim = rgb(0x8A94A3),
-      .accent = rgb(0x2EA8D6),
-      .primary = rgb(0x1C7BA2),
-      .primaryHovered = rgb(0x2690BB),
-      .primaryActive = rgb(0x166685),
-      .good = statusGood,
-      .warn = statusWarn,
-      .bad = statusBad,
-      .info = statusInfo,
-      .core = statusCore,
-      .note = rgb(0xA9B2BF),
-      .sceneTop = rgb(0x2A3340),
-      .sceneBottom = rgb(0x0E1115),
-      .grid = rgb(0x8FA6BD),
-      .sceneLabel = rgb(0xE6EDF5),
-      .member = rgb(0xA7B9CD),
-      .memberNoResult = rgb(0x6B7380),
-      .overlayBg = rgb(0x12161B, 0.86f),
-      .overlayBorder = rgb(0x3A4553, 0.90f),
-      .overlayText = rgb(0xE3E8EF),
-      .overlayTextDim = rgb(0x8A94A3),
-    };
+    constexpr ThemePalette graphiteOrange = [] {
+      ThemePalette p = darkTheme("graphite_orange", "Graphite / Orange", rgb(0xE8863A), rgb(0xB15E22), rgb(0xC86E2E),
+                                 rgb(0x944D1B), ImVec4(0.14f, 0.14f, 0.15f, 1.0f));
+      p.warn = rgb(0xF5CF5A); // yellower than the shared warn, so it does not read as the accent
+      return p;
+    }();
 
-    constexpr ThemePalette graphiteOrange{
-      .key = "graphite_orange",
-      .name = "Graphite / Orange",
-      .base = rgb(0x141416),
-      .panel = rgb(0x1B1B1E),
-      .raised = rgb(0x222226),
-      .input = rgb(0x2A2A2F),
-      .header = rgb(0x33302D),
-      .border = rgb(0x38383E),
-      .text = rgb(0xE8E6E3),
-      .textDim = rgb(0x8F8D8A),
-      .accent = rgb(0xE8863A),
-      .primary = rgb(0xB15E22),
-      .primaryHovered = rgb(0xC86E2E),
-      .primaryActive = rgb(0x944D1B),
-      .good = statusGood,
-      .warn = rgb(0xF5CF5A), // yellower than the shared warn, so it does not read as the accent
-      .bad = statusBad,
-      .info = statusInfo,
-      .core = statusCore,
-      .note = rgb(0xAEABA6),
-      .sceneTop = rgb(0x3A3C42),
-      .sceneBottom = rgb(0x131416),
-      .grid = rgb(0xA3A3AA),
-      .sceneLabel = rgb(0xEDEBE8),
-      .member = rgb(0xB9BCC2),
-      .memberNoResult = rgb(0x6E6E73),
-      .overlayBg = rgb(0x151517, 0.86f),
-      .overlayBorder = rgb(0x45444A, 0.90f),
-      .overlayText = rgb(0xE8E6E3),
-      .overlayTextDim = rgb(0x8F8D8A),
-    };
+    // Grey viewport like the classic pre / post processors; the dark blue result colors stay readable on it.
+    constexpr ThemePalette classicFem = darkTheme("classic_fem", "Classic FEM", rgb(0x4C95FF), rgb(0x2A68C8), rgb(0x3779DC),
+                                                  rgb(0x2257A8), rgb(0x4B5058));
 
-    constexpr ThemePalette classicFem{
-      .key = "classic_fem",
-      .name = "Classic FEM",
-      .base = rgb(0x16191E),
-      .panel = rgb(0x1E2126),
-      .raised = rgb(0x24282F),
-      .input = rgb(0x2A2F37),
-      .header = rgb(0x263752),
-      .border = rgb(0x363C47),
-      .text = rgb(0xE4E8EE),
-      .textDim = rgb(0x8B93A0),
-      .accent = rgb(0x4C95FF),
-      .primary = rgb(0x2A68C8),
-      .primaryHovered = rgb(0x3779DC),
-      .primaryActive = rgb(0x2257A8),
-      .good = statusGood,
-      .warn = statusWarn,
-      .bad = statusBad,
-      .info = rgb(0x7DB8FF),
-      .core = statusCore,
-      .note = rgb(0xA7AFBB),
-      .sceneTop = rgb(0x5A7CA8),
-      .sceneBottom = rgb(0x0D1828),
-      .grid = rgb(0xD5E2F2),
-      .sceneLabel = rgb(0xFFFFFF),
-      .member = rgb(0xD3D8DE),
-      .memberNoResult = rgb(0x7D848E),
-      .overlayBg = rgb(0x0E1622, 0.80f),
-      .overlayBorder = rgb(0x6F8AAE, 0.85f),
-      .overlayText = rgb(0xF0F4F9),
-      .overlayTextDim = rgb(0xA4B2C4),
-    };
+    constexpr ThemePalette midnightViolet = darkTheme("midnight_violet", "Midnight / Violet", rgb(0x9A86FF), rgb(0x6650D8),
+                                                      rgb(0x765FEA), rgb(0x5641B8), ImVec4(0.13f, 0.13f, 0.18f, 1.0f));
 
-    constexpr ThemePalette midnightViolet{
-      .key = "midnight_violet",
-      .name = "Midnight / Violet",
-      .base = rgb(0x0F1020),
-      .panel = rgb(0x151729),
-      .raised = rgb(0x1B1E33),
-      .input = rgb(0x23263F),
-      .header = rgb(0x2A2850),
-      .border = rgb(0x30334D),
-      .text = rgb(0xE4E4F2),
-      .textDim = rgb(0x8C8EAA),
-      .accent = rgb(0x9A86FF),
-      .primary = rgb(0x6650D8),
-      .primaryHovered = rgb(0x765FEA),
-      .primaryActive = rgb(0x5641B8),
-      .good = statusGood,
-      .warn = statusWarn,
-      .bad = statusBad,
-      .info = rgb(0x8FA8FF),
-      .core = statusCore,
-      .note = rgb(0xA9AAC4),
-      .sceneTop = rgb(0x2B2C4A),
-      .sceneBottom = rgb(0x0B0C17),
-      .grid = rgb(0x9C9CCB),
-      .sceneLabel = rgb(0xEDEBFF),
-      .member = rgb(0xB4B6D6),
-      .memberNoResult = rgb(0x6C6E8A),
-      .overlayBg = rgb(0x111226, 0.86f),
-      .overlayBorder = rgb(0x45476E, 0.90f),
-      .overlayText = rgb(0xE4E4F2),
-      .overlayTextDim = rgb(0x8C8EAA),
-    };
+    constexpr ThemePalette emeraldSlate = [] {
+      ThemePalette p = darkTheme("slate_emerald", "Slate / Emerald", rgb(0x2FC48D), rgb(0x1C8A62), rgb(0x239E71),
+                                 rgb(0x167351), ImVec4(0.12f, 0.15f, 0.14f, 1.0f));
+      p.good = rgb(0x9BE36A); // lime, so success does not read as the accent
+      return p;
+    }();
 
-    constexpr ThemePalette emeraldSlate{
-      .key = "slate_emerald",
-      .name = "Slate / Emerald",
-      .base = rgb(0x111615),
-      .panel = rgb(0x171D1C),
-      .raised = rgb(0x1D2524),
-      .input = rgb(0x242E2C),
-      .header = rgb(0x20382F),
-      .border = rgb(0x2F3B39),
-      .text = rgb(0xE2EAE7),
-      .textDim = rgb(0x879592),
-      .accent = rgb(0x2FC48D),
-      .primary = rgb(0x1C8A62),
-      .primaryHovered = rgb(0x239E71),
-      .primaryActive = rgb(0x167351),
-      .good = rgb(0x9BE36A), // lime, so success does not read as the accent
-      .warn = statusWarn,
-      .bad = statusBad,
-      .info = statusInfo,
-      .core = statusCore,
-      .note = rgb(0xA6B3B0),
-      .sceneTop = rgb(0x2B3735),
-      .sceneBottom = rgb(0x0D1110),
-      .grid = rgb(0x93ABA5),
-      .sceneLabel = rgb(0xE8F2EF),
-      .member = rgb(0xAFC0BC),
-      .memberNoResult = rgb(0x6B7875),
-      .overlayBg = rgb(0x111716, 0.86f),
-      .overlayBorder = rgb(0x3A4A47, 0.90f),
-      .overlayText = rgb(0xE2EAE7),
-      .overlayTextDim = rgb(0x879592),
-    };
+    // The look before the themes: ImGui colors from applyLegacyStyleColors() (v0.2.0 with lifted
+    // frames), blue truss bars; the viewport is lighter than v0.2.0's 0.08 / 0.09 / 0.11 so dark blue
+    // members stay visible.
+    constexpr ThemePalette oldTheme = [] {
+      ThemePalette p = darkTheme("old", "Old Theme (v0.2)", ImVec4(0.35f, 0.68f, 1.0f, 1.0f), ImVec4(0.16f, 0.36f, 0.62f, 1.0f),
+                                 ImVec4(0.22f, 0.45f, 0.75f, 1.0f), ImVec4(0.13f, 0.30f, 0.52f, 1.0f),
+                                 ImVec4(0.13f, 0.14f, 0.16f, 1.0f));
+      p.legacyStyle = true;
+      p.trussMember = ImVec4(0.4f, 0.6f, 0.85f, 1.0f);
+      return p;
+    }();
 
-    // Light theme: dark text, deeper status colors (readable on white), light viewport gradient.
+    // Light theme: dark text, deeper status colors (readable on white), flat light viewport.
     constexpr ThemePalette studioLight{
       .key = "studio_light",
       .name = "Studio Light",
@@ -215,7 +114,7 @@ namespace anaf::GUI::THEME {
       .panel = rgb(0xEBEDF0),
       .raised = rgb(0xF5F6F8),
       .input = rgb(0xDCE1E7),
-      .header = rgb(0xD2DCE9),
+      .header = rgb(0xD9DEE5),
       .border = rgb(0xB9C1CC),
       .text = rgb(0x1D232B),
       .textDim = rgb(0x66707D),
@@ -229,8 +128,8 @@ namespace anaf::GUI::THEME {
       .info = rgb(0x1F6FD1),
       .core = rgb(0x0B827E),
       .note = rgb(0x55606C),
-      .sceneTop = rgb(0xF4F6F9),
-      .sceneBottom = rgb(0xB4BECB),
+      .sceneTop = rgb(0xE6E9EE),
+      .sceneBottom = rgb(0xE6E9EE),
       .grid = rgb(0x4A5563),
       .sceneLabel = rgb(0x1B2129),
       .member = rgb(0x56677C),
@@ -241,48 +140,10 @@ namespace anaf::GUI::THEME {
       .overlayTextDim = rgb(0x5E6875),
     };
 
-    // The colors in use before the themes (v0.2.0, commit 8c4242b): ImGuiLayer's hard-coded style,
-    // the panels' status colors, a flat dark viewport and the old overlay cards. ImGui colors come
-    // from applyLegacyStyleColors(), not from the surfaces below.
-    constexpr ThemePalette oldTheme{
-      .key = "old",
-      .name = "Old Theme (v0.2)",
-      .legacyStyle = true,
-      .base = ImVec4(0.10f, 0.105f, 0.11f, 1.0f),
-      .panel = ImVec4(0.10f, 0.105f, 0.11f, 1.0f),
-      .raised = ImVec4(0.14f, 0.15f, 0.17f, 1.0f),
-      .input = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f),
-      .header = ImVec4(0.20f, 0.205f, 0.21f, 1.0f),
-      .border = ImVec4(0.22f, 0.24f, 0.28f, 0.60f),
-      .text = ImVec4(0.92f, 0.93f, 0.95f, 1.0f),
-      .textDim = ImVec4(0.50f, 0.53f, 0.58f, 1.0f),
-      .accent = ImVec4(0.35f, 0.68f, 1.0f, 1.0f),
-      .primary = ImVec4(0.16f, 0.36f, 0.62f, 1.0f),
-      .primaryHovered = ImVec4(0.22f, 0.45f, 0.75f, 1.0f),
-      .primaryActive = ImVec4(0.13f, 0.30f, 0.52f, 1.0f),
-      .good = ImVec4(0.55f, 0.95f, 0.6f, 1.0f),
-      .warn = ImVec4(1.0f, 0.75f, 0.35f, 1.0f),
-      .bad = ImVec4(1.0f, 0.45f, 0.45f, 1.0f),
-      .info = ImVec4(0.4f, 0.7f, 1.0f, 1.0f),
-      .core = ImVec4(0.0f, 0.9f, 0.9f, 1.0f),
-      .note = ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-      .sceneTop = ImVec4(0.08f, 0.09f, 0.11f, 1.0f), // no gradient: the old clear color
-      .sceneBottom = ImVec4(0.08f, 0.09f, 0.11f, 1.0f),
-      .grid = ImVec4(0.62f, 0.70f, 0.78f, 1.0f),
-      .sceneLabel = ImVec4(0.9f, 0.9f, 0.9f, 1.0f),
-      .member = ImVec4(0.62f, 0.70f, 0.80f, 1.0f),
-      .memberNoResult = ImVec4(0.55f, 0.55f, 0.55f, 1.0f),
-      .trussMember = ImVec4(0.4f, 0.6f, 0.85f, 1.0f),
-      .overlayBg = rgb(0x0F1116, 0.86f),
-      .overlayBorder = ImVec4(0.22f, 0.24f, 0.28f, 0.60f),
-      .overlayText = rgb(0xE6E6E6),
-      .overlayTextDim = rgb(0x8C8E96),
-    };
-
     E_ThemeId g_current = E_ThemeId::SteelCyan;
     std::uint32_t g_revision = 0;
 
-    // ImGuiLayer's colors before the themes, set verbatim over ImGui's dark defaults.
+    // ImGuiLayer's colors before the themes, set over ImGui's dark defaults (frames lifted, see below).
     void applyLegacyStyleColors(ImGuiStyle& style) {
       ImGui::StyleColorsDark(&style);
       ImVec4* c = style.Colors;
@@ -302,9 +163,11 @@ namespace anaf::GUI::THEME {
       c[ImGuiCol_ButtonHovered] = ImVec4(0.30f, 0.305f, 0.31f, 1.0f);
       c[ImGuiCol_ButtonActive] = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
 
-      c[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.1505f, 0.151f, 1.0f);
-      c[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.225f, 0.23f, 1.0f);
-      c[ImGuiCol_FrameBgActive] = ImVec4(0.12f, 0.1205f, 0.121f, 1.0f);
+      // Frames are lighter than in v0.2.0 (0.15), which matched the child cards (0.14) of the
+      // current editor layout and hid inputs and check boxes there.
+      c[ImGuiCol_FrameBg] = ImVec4(0.19f, 0.195f, 0.20f, 1.0f);
+      c[ImGuiCol_FrameBgHovered] = ImVec4(0.25f, 0.255f, 0.26f, 1.0f);
+      c[ImGuiCol_FrameBgActive] = ImVec4(0.16f, 0.1605f, 0.161f, 1.0f);
       c[ImGuiCol_CheckMark] = ImVec4(0.35f, 0.68f, 1.00f, 1.00f);
       c[ImGuiCol_SliderGrab] = ImVec4(0.30f, 0.58f, 0.90f, 1.00f);
       c[ImGuiCol_SliderGrabActive] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
@@ -319,13 +182,37 @@ namespace anaf::GUI::THEME {
       c[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.53f, 0.58f, 1.00f);
     }
 
+    // Dark themes: the accent replaces ImGui's default blue on marks only (check marks, sliders, tab
+    // overlines, selection, separators and grips while dragged); surfaces and hovers stay grey.
+    void applyAccentMarks(ImGuiStyle& style, const ImVec4& accent) {
+      ImVec4* c = style.Colors;
+      c[ImGuiCol_CheckMark] = accent;
+      c[ImGuiCol_SliderGrab] = mix(accent, ImVec4(0.0f, 0.0f, 0.0f, 1.0f), 0.12f);
+      c[ImGuiCol_SliderGrabActive] = mix(accent, ImVec4(1.0f, 1.0f, 1.0f, 1.0f), 0.20f);
+      c[ImGuiCol_TextSelectedBg] = withAlpha(accent, 0.35f);
+      c[ImGuiCol_TextLink] = accent;
+      c[ImGuiCol_TabSelectedOverline] = accent;
+      c[ImGuiCol_TabDimmedSelectedOverline] = withAlpha(accent, 0.40f);
+      c[ImGuiCol_SeparatorHovered] = withAlpha(accent, 0.70f);
+      c[ImGuiCol_SeparatorActive] = accent;
+      c[ImGuiCol_ResizeGrip] = withAlpha(accent, 0.15f);
+      c[ImGuiCol_ResizeGripHovered] = withAlpha(accent, 0.60f);
+      c[ImGuiCol_ResizeGripActive] = accent;
+      c[ImGuiCol_DockingPreview] = withAlpha(accent, 0.40f);
+      c[ImGuiCol_DragDropTarget] = accent;
+      c[ImGuiCol_NavCursor] = accent;
+      c[ImGuiCol_PlotLines] = accent;
+      c[ImGuiCol_PlotHistogram] = accent;
+    }
+
     void applyStyleColors(const ThemePalette& p) {
       ImGuiStyle& style = ImGui::GetStyle();
-      if (p.legacyStyle) {
+      if (!p.light) {
         applyLegacyStyleColors(style);
+        if (!p.legacyStyle) applyAccentMarks(style, p.accent);
         return;
       }
-      // Every color not set below keeps ImGui's default of the same brightness.
+      // Light theme: every color not set below keeps ImGui's light default of the same brightness.
       if (p.light) ImGui::StyleColorsLight(&style);
       else ImGui::StyleColorsDark(&style);
       ImVec4* c = style.Colors;

@@ -19,6 +19,8 @@
 
 #include "imgui.h"
 
+#include <guiMaterials/theme.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -30,14 +32,21 @@ namespace anaf::GUI {
   namespace {
     constexpr float padding = 6.0f;
 
-    // Hover and press keep the button's color, so only a toggle that is on stands out.
+    // Hover and press keep the button's color, so only a toggle that is on stands out: a light
+    // accent tint and an accent line along its bottom edge.
     bool stateButton(const char* label, const bool on) {
-      const ImVec4 color = ImGui::GetStyleColorVec4(on ? ImGuiCol_ButtonActive : ImGuiCol_Button);
+      const THEME::ThemePalette& palette = THEME::theme();
+      const ImVec4 color = on ? THEME::mix(palette.input, palette.accent, 0.20f) : ImGui::GetStyleColorVec4(ImGuiCol_Button);
       ImGui::PushStyleColor(ImGuiCol_Button, color);
       ImGui::PushStyleColor(ImGuiCol_ButtonHovered, color);
       ImGui::PushStyleColor(ImGuiCol_ButtonActive, color);
       const bool pressed = ImGui::Button(label);
       ImGui::PopStyleColor(3);
+      if (on) {
+        const ImVec2 min = ImGui::GetItemRectMin();
+        const ImVec2 max = ImGui::GetItemRectMax();
+        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(min.x, max.y - 2.0f), max, THEME::toU32(palette.accent));
+      }
       return pressed;
     }
     // Button that shows "label: current" and opens a list of choices; true when one was picked.
