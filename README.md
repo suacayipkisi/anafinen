@@ -10,6 +10,12 @@
 
 *A built-in large structure (a complete 38 m narrow-body airliner airframe on its landing gear: 961 nodes, 2910 beam elements, aluminium 2024-T3 / 7075-T6 and a steel gear) solved with 3D beam elements: real cross-sections colored by von Mises stress, the bending moment diagram and end forces of the selected element, and the solver log with the energy check.*
 
+## Video Tutorial
+
+[![ANAFINEN GUI tutorial on YouTube](https://img.youtube.com/vi/JjmFkoa7xvk/maxresdefault.jpg)](https://youtu.be/JjmFkoa7xvk)
+
+*A 3.5-minute walkthrough of the GUI (English subtitles): build a steel portal frame node by node, add supports and loads, solve, read the stress colors and the beam diagrams, pin the beam ends, and solve the built-in football stadium (3312 elements). Recorded on the current development build (v0.3.0).*
+
 ## Features
 
 - **3D truss solver**: static displacement, axial force and stress under nodal loads and self weight; inclined supports.
