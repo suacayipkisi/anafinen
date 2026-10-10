@@ -41,14 +41,14 @@
 
 namespace FEM::BEAM {
 
-  inline constexpr std::size_t kMaxSectionNameLength = 120; // bytes (UTF-8)
-  inline constexpr const char* kSectionCatalogAsset = "bridge/sectionCatalog.json"; // for anaf::DIRECTORY::findAssetPath
+  inline constexpr std::size_t maxSectionNameLength = 120; // bytes (UTF-8)
+  inline constexpr const char* sectionCatalogAsset = "bridge/sectionCatalog.json"; // for anaf::DIRECTORY::findAssetPath
 
   // Section names identify a section in the library and in saved mesh files; comparison
   // ignores ASCII case ("ipe 300" == "IPE 300").
   bool sameSectionName(std::string_view a, std::string_view b);
 
-  // Name rules (non-empty, at most kMaxSectionNameLength bytes, no quotes or control
+  // Name rules (non-empty, at most maxSectionNameLength bytes, no quotes or control
   // characters) and validateShape().
   std::expected<void, std::string> validateSection(const BeamSection& section);
 

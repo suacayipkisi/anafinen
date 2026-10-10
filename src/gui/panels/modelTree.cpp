@@ -43,7 +43,7 @@ namespace anaf::GUI {
     }
   } // namespace end
 
-  void ModelTree::renderMeshTree(anaf::BRIDGE::Gui_Calc_Bridge& bridge) {
+  void ModelTree::renderMeshTree(anaf::BRIDGE::GuiCalcBridge& bridge) {
     // Snapshots are immutable: copying the pointer under the lock is enough (no deep copy per frame).
     std::shared_ptr<const BRIDGE::MeshData> meshData;
     {
@@ -144,7 +144,7 @@ namespace anaf::GUI {
     }
   }
 
-  void ModelTree::renderBeamTree(anaf::BRIDGE::Gui_Calc_Bridge& bridge) {
+  void ModelTree::renderBeamTree(anaf::BRIDGE::GuiCalcBridge& bridge) {
     std::shared_ptr<const BRIDGE::BeamMeshData> mesh;
     {
       std::lock_guard lock(bridge.dataMutex);
@@ -201,7 +201,7 @@ namespace anaf::GUI {
         clippedRows(mesh->distributedLoads.size(), [&](const std::size_t row) {
           const auto& load = mesh->distributedLoads[row];
           ImGui::Text("Element %u: q=(%.3g, %.3g, %.3g) N/m %s", load.element, load.value[0], load.value[1], load.value[2],
-                      load.frame == FEM::BEAM::LoadFrame::Local ? "local" : "global");
+                      load.frame == FEM::BEAM::E_LoadFrame::Local ? "local" : "global");
         });
         ImGui::EndChild();
       }
@@ -250,15 +250,15 @@ namespace anaf::GUI {
     ImGui::Begin("Model Tree", &isOpen);
 
     // Read every frame, so the tree follows a type change (and its reset) immediately.
-    const anaf::BRIDGE::ObjectType latestType = bridge.m_objectType.load();
-    std::string rootLabel = latestType == anaf::BRIDGE::ObjectType::no_type
+    const anaf::BRIDGE::E_ObjectType latestType = bridge.objectType.load();
+    std::string rootLabel = latestType == anaf::BRIDGE::E_ObjectType::NoType
       ? std::string("Root Assembly")
       : std::string(anaf::BRIDGE::getObjectTypeName(latestType));
     rootLabel += "###ModelTreeRoot"; // same ImGui ID (open state) for every type
 
     if (ImGui::TreeNode(rootLabel.c_str())) {
-      if (latestType == anaf::BRIDGE::ObjectType::beam_frame) renderBeamTree(bridge);
-      else if (latestType != anaf::BRIDGE::ObjectType::no_type) renderMeshTree(bridge);
+      if (latestType == anaf::BRIDGE::E_ObjectType::BeamFrame) renderBeamTree(bridge);
+      else if (latestType != anaf::BRIDGE::E_ObjectType::NoType) renderMeshTree(bridge);
       ImGui::TreePop();
     }
     ImGui::End();

@@ -41,16 +41,16 @@ int main() {
     return 1;
   }
   anaf::LOG::core("Initializing ANAFINEN Workspace (C++23)...");
-  anaf::LOG::core("{}", anaf::GUI::kCopyrightNotice);
-  anaf::LOG::core("{}", anaf::GUI::kShortLegalNotice);
+  anaf::LOG::core("{}", anaf::GUI::copyrightNotice);
+  anaf::LOG::core("{}", anaf::GUI::shortLegalNotice);
 
   // After the log init, so a missing or broken material file is reported.
-  anaf::BRIDGE::Gui_Calc_Bridge& GUI_CALC_BRIDGE = anaf::BRIDGE::buildBridge();
-  GUI_CALC_BRIDGE.setStaticInfo();
+  anaf::BRIDGE::GuiCalcBridge& guiCalcBridge = anaf::BRIDGE::buildBridge();
+  guiCalcBridge.setStaticInfo();
   // Outside assets/ on purpose: materials added while testing a build never reach a package.
-  GUI_CALC_BRIDGE.loadUserMaterials(anaf::DIRECTORY::getUserConfigDirectory() / "userMaterials.json");
-  GUI_CALC_BRIDGE.loadSectionCatalog();
-  GUI_CALC_BRIDGE.loadUserSections(anaf::DIRECTORY::getUserConfigDirectory() / "userSections.json");
+  guiCalcBridge.loadUserMaterials(anaf::DIRECTORY::getUserConfigDirectory() / "userMaterials.json");
+  guiCalcBridge.loadSectionCatalog();
+  guiCalcBridge.loadUserSections(anaf::DIRECTORY::getUserConfigDirectory() / "userSections.json");
 
   anaf::GUI::TRUSS_WORKER::configureOpenMPForWorker();
   anaf::LOG::info("OpenMP thread limit set to {} of {} available threads", omp_get_max_threads(), omp_get_num_procs());

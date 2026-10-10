@@ -38,7 +38,7 @@ namespace anaf::IO {
     return dimension;
   }
 
-  ElementBlock& MeshModel::blockFor(const ElementType type) {
+  ElementBlock& MeshModel::blockFor(const E_ElementType type) {
     for (auto& block : blocks) {
       if (block.type == type) return block;
     }
@@ -67,21 +67,21 @@ namespace anaf::IO {
     return map;
   }
 
-  Field* MeshModel::findField(const std::string& name, const FieldLocation location) {
+  Field* MeshModel::findField(const std::string& name, const E_FieldLocation location) {
     for (auto& field : fields) {
       if (field.name == name && field.location == location) return &field;
     }
     return nullptr;
   }
 
-  const Field* MeshModel::findField(const std::string& name, const FieldLocation location) const {
+  const Field* MeshModel::findField(const std::string& name, const E_FieldLocation location) const {
     for (const auto& field : fields) {
       if (field.name == name && field.location == location) return &field;
     }
     return nullptr;
   }
 
-  const EntitySet* MeshModel::findSet(const std::string& name, const SetKind kind) const {
+  const EntitySet* MeshModel::findSet(const std::string& name, const E_SetKind kind) const {
     for (const auto& set : sets) {
       if (set.name == name && set.kind == kind) return &set;
     }
@@ -130,18 +130,18 @@ namespace anaf::IO {
     return nullptr;
   }
 
-  std::string_view stepKindName(const StepKind kind) noexcept {
+  std::string_view stepKindName(const E_StepKind kind) noexcept {
     switch (kind) {
-      case StepKind::Time: return "Time";
-      case StepKind::Frequency: return "Frequency";
-      case StepKind::Mode: return "Mode";
-      case StepKind::LoadCase: return "LoadCase";
+      case E_StepKind::Time: return "Time";
+      case E_StepKind::Frequency: return "Frequency";
+      case E_StepKind::Mode: return "Mode";
+      case E_StepKind::LoadCase: return "LoadCase";
     }
     return "Time";
   }
 
-  std::optional<StepKind> stepKindFromName(const std::string_view name) noexcept {
-    for (const auto kind : {StepKind::Time, StepKind::Frequency, StepKind::Mode, StepKind::LoadCase}) {
+  std::optional<E_StepKind> stepKindFromName(const std::string_view name) noexcept {
+    for (const auto kind : {E_StepKind::Time, E_StepKind::Frequency, E_StepKind::Mode, E_StepKind::LoadCase}) {
       if (stepKindName(kind) == name) return kind;
     }
     return std::nullopt;
@@ -168,13 +168,13 @@ namespace anaf::IO {
       }
     }
     for (const auto& set : sets) {
-      const std::size_t limit = set.kind == SetKind::Node ? nodeTotal : elementTotal;
+      const std::size_t limit = set.kind == E_SetKind::Node ? nodeTotal : elementTotal;
       if (std::ranges::any_of(set.members, [&](std::uint32_t m) { return m >= limit; })) {
         problems.push_back(std::format("set '{}': member index out of range", set.name));
       }
     }
     for (const auto& field : fields) {
-      const std::size_t entities = field.location == FieldLocation::Node ? nodeTotal : elementTotal;
+      const std::size_t entities = field.location == E_FieldLocation::Node ? nodeTotal : elementTotal;
       if (field.components < 1) problems.push_back(std::format("field '{}': invalid component count", field.name));
       if (field.times.size() != field.steps.size()) problems.push_back(std::format("field '{}': times/steps mismatch", field.name));
       if (!field.stepLabels.empty() && field.stepLabels.size() != field.steps.size()) {
@@ -196,7 +196,7 @@ namespace anaf::IO {
     if (!beamOrientation.empty() && beamOrientation.size() != elementTotal) {
       problems.push_back(std::format("beam orientation: {} vectors for {} elements", beamOrientation.size(), elementTotal));
     }
-    const auto formulation = elementAttributes.find(Attribute::ElementFormulation);
+    const auto formulation = elementAttributes.find(Attribute::elementFormulation);
     const bool checkFormulation = formulation != elementAttributes.end() && formulation->second.size() == elementTotal;
     const bool checkOrientation = beamOrientation.size() == elementTotal;
     std::size_t global = 0;

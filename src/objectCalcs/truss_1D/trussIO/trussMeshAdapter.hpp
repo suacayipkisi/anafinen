@@ -37,7 +37,7 @@ namespace FEM::TRUSS::ADAPTER {
   // so a file stays correct when the material list changes (new built-ins, user materials
   // added or removed, another machine). The MaterialID attribute (index into the list at
   // export time) is still written for viewers such as ParaView and for older anafinen.
-  inline constexpr std::string_view kMaterialSetPrefix = "Material:";
+  inline constexpr std::string_view materialSetPrefix = "Material:";
 
   // Snapshot -> model (for export). Supports come from the nodes (Node::isSupported());
   // results are included when the snapshot carries them (MeshData::hasResults). materials:

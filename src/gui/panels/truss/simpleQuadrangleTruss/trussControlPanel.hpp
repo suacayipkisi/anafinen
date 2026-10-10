@@ -47,22 +47,22 @@ namespace anaf::GUI {
     std::map<std::uint32_t, std::array<bool, 3>> m_supports;
     std::array<bool, 3> m_fixed{false, false, false};
     std::uint32_t m_lastFixNode{std::numeric_limits<std::uint32_t>::max()};
-    DynamicAnalysisInputs m_dynamic; // shown for LoadKind::dynamic
+    DynamicAnalysisInputs m_dynamic; // shown for LoadKind::Dynamic
 
-    void renderSummary(BRIDGE::Gui_Calc_Bridge& bridge);
-    void renderGridTab(BRIDGE::Gui_Calc_Bridge& bridge);
+    void renderSummary(BRIDGE::GuiCalcBridge& bridge);
+    void renderGridTab(BRIDGE::GuiCalcBridge& bridge);
     // Builds the grid with the current inputs on the worker and publishes it.
-    void startPreview(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t materialIndex);
+    void startPreview(BRIDGE::GuiCalcBridge& bridge, std::uint32_t materialIndex);
     // dynamic: supports only (the loads stay in the inputs).
-    void renderLoadsTab(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t currentSelectedNode, bool dynamic);
+    void renderLoadsTab(BRIDGE::GuiCalcBridge& bridge, std::uint32_t currentSelectedNode, bool dynamic);
     // Deformation scale and the run button (constant load kind).
-    void renderSolve(BRIDGE::Gui_Calc_Bridge& bridge);
+    void renderSolve(BRIDGE::GuiCalcBridge& bridge);
   public:
     ~TrussControlPanel() override = default;
     std::function<void()> onOpenMaterialHandler;
 
     // Back to the default inputs (loads, supports, grid). The model itself lives in
-    // the bridge and is cleared with Gui_Calc_Bridge::resetModel().
+    // the bridge and is cleared with GuiCalcBridge::resetModel().
     void resetState();
     void onImGuiRender() override;
   };

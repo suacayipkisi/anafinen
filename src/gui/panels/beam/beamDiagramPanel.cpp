@@ -38,7 +38,7 @@ namespace anaf::GUI {
       const char* label;
       const char* unit;
     };
-    constexpr std::array<Quantity, 9> kQuantities{{
+    constexpr std::array<Quantity, 9> quantities{{
       {"Axial force N", "kN"}, {"Shear force Vy", "kN"}, {"Shear force Vz", "kN"}, {"Torque T", "kN m"},
       {"Bending moment My", "kN m"}, {"Bending moment Mz", "kN m"}, {"Displacement (local u, v, w)", "mm"},
       {"Normal stress (max / min)", "MPa"}, {"von Mises stress", "MPa"},
@@ -48,14 +48,14 @@ namespace anaf::GUI {
   void BeamDiagramPanel::dockUnderModelTree() {
     ImGuiWindow* tree = ImGui::FindWindowByName("Model Tree");
     if (!tree || !tree->DockNode) return; // try again next frame
-    ImGuiWindow* self = ImGui::FindWindowByName(kWindowName);
+    ImGuiWindow* self = ImGui::FindWindowByName(windowName);
     if (self && self->DockNode) {
       m_dockPending = false; // already docked somewhere: keep the user's layout
       return;
     }
     ImGuiID top = tree->DockNode->ID;
     const ImGuiID bottom = ImGui::DockBuilderSplitNode(top, ImGuiDir_Down, 0.5f, nullptr, &top);
-    ImGui::DockBuilderDockWindow(kWindowName, bottom);
+    ImGui::DockBuilderDockWindow(windowName, bottom);
     ImGui::DockBuilderFinish(ImGui::DockNodeGetRootNode(tree->DockNode)->ID);
     m_dockPending = false;
   }
@@ -80,7 +80,7 @@ namespace anaf::GUI {
     try {
       const auto properties = FEM::BEAM::elementSectionProperties(mesh->elements, sections, materials);
       const auto loads = FEM::BEAM::elementLocalLoads(mesh->nodes, mesh->elements, properties, mesh->distributedLoads, mesh->gravity, materials);
-      m_states = FEM::BEAM::sampleElement(*mesh, element, kSamples, loads[element], materials, sections);
+      m_states = FEM::BEAM::sampleElement(*mesh, element, sampleCount, loads[element], materials, sections);
       const auto& shape = sections[mesh->elements[element].sectionID].getShape();
       for (const auto& state : m_states) m_stresses.push_back(FEM::BEAM::sectionStress(shape, state.forces));
       m_sectionName = sections[mesh->elements[element].sectionID].getName();
@@ -93,7 +93,7 @@ namespace anaf::GUI {
   }
 
   void BeamDiagramPanel::renderPlot() {
-    const auto& quantity = kQuantities[static_cast<std::size_t>(m_quantity)];
+    const auto& quantity = quantities[static_cast<std::size_t>(m_quantity)];
     std::vector<double> x;
     x.reserve(m_states.size());
     for (const auto& state : m_states) x.push_back(state.position);
@@ -147,7 +147,7 @@ namespace anaf::GUI {
     const auto& element = m_mesh->elements[m_element];
     const auto& s = element.sectionForces;
     ImGui::TextWrapped("Element %u: nodes %u - %u, %s, %s", m_element, element.node1, element.node2, m_sectionName.c_str(),
-                element.formulation == FEM::BEAM::Formulation::Timoshenko ? "Timoshenko" : "Euler-Bernoulli");
+                element.formulation == FEM::BEAM::E_Formulation::Timoshenko ? "Timoshenko" : "Euler-Bernoulli");
     // One row per force component, so the table fits a narrow dock column.
     if (ImGui::BeginTable("BeamEndForces", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchSame)) {
       ImGui::TableSetupColumn("End forces");
@@ -185,14 +185,14 @@ namespace anaf::GUI {
 
     auto& bridge = BRIDGE::buildBridge();
     std::shared_ptr<const BRIDGE::BeamMeshData> mesh;
-    std::uint32_t selected = kNone;
+    std::uint32_t selected = noSelection;
     {
       std::lock_guard lock(bridge.dataMutex);
       mesh = bridge.activeBeamMesh;
       selected = bridge.selectedElementId;
     }
 
-    ImGui::Begin(kWindowName, &isOpen);
+    ImGui::Begin(windowName, &isOpen);
     if (!mesh || mesh->elements.empty()) {
       ImGui::TextDisabled("No beam model.");
       ImGui::End();
@@ -228,9 +228,9 @@ namespace anaf::GUI {
     }
 
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::BeginCombo("##diagram_quantity", kQuantities[static_cast<std::size_t>(m_quantity)].label)) {
-      for (int q = 0; q < static_cast<int>(kQuantities.size()); ++q) {
-        if (ImGui::Selectable(kQuantities[static_cast<std::size_t>(q)].label, q == m_quantity)) m_quantity = q;
+    if (ImGui::BeginCombo("##diagram_quantity", quantities[static_cast<std::size_t>(m_quantity)].label)) {
+      for (int q = 0; q < static_cast<int>(quantities.size()); ++q) {
+        if (ImGui::Selectable(quantities[static_cast<std::size_t>(q)].label, q == m_quantity)) m_quantity = q;
       }
       ImGui::EndCombo();
     }

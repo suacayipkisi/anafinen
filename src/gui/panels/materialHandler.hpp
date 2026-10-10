@@ -29,7 +29,7 @@ namespace anaf::GUI {
   private:
     // Form values in the units shown in the panel (GPa, MPa, kg/m^3, %).
     struct Draft {
-      std::array<char, 128> name{}; // UTF-8 from ImGui; kMaxMaterialNameLength is 120 bytes
+      std::array<char, 128> name{}; // UTF-8 from ImGui; maxMaterialNameLength is 120 bytes
       double elasticityModulusGPa{};
       double shearModulusGPa{};
       double bulkModulusGPa{};

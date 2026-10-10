@@ -25,7 +25,7 @@
 
 namespace anaf::IO {
 
-  enum class FileFormat {
+  enum class E_FileFormat {
     Auto,       // detect from extension, then from file content
     Msh,        // Gmsh MSH 1.0 / 2.x / 4.x
     VtkLegacy,  // legacy VTK 2.0 ... 5.1
@@ -36,17 +36,17 @@ namespace anaf::IO {
     Brep        // OpenCASCADE BREP (read only)
   };
 
-  enum class Encoding { Ascii, Binary };
+  enum class E_Encoding { Ascii, Binary };
 
-  enum class MshVersion { V2_2, V4_1 };
+  enum class E_MshVersion { V2_2, V4_1 };
 
-  enum class VtkLegacyVersion {
+  enum class E_VtkLegacyVersion {
     V4_2, // classic CELLS layout, readable by every VTK / ParaView version
     V5_1  // OFFSETS / CONNECTIVITY layout (VTK >= 9)
   };
 
   struct ReadOptions {
-    FileFormat format{FileFormat::Auto};
+    E_FileFormat format{E_FileFormat::Auto};
     // CAD formats (STEP / IGES / BREP) are meshed on import.
     int cadMeshDimension{1};       // 1 = curves only (trusses/frames), 2 = surfaces, 3 = volumes
     double cadMeshSize{0.0};       // target element size in model units; <= 0 = one element per curve
@@ -56,10 +56,10 @@ namespace anaf::IO {
   };
 
   struct WriteOptions {
-    FileFormat format{FileFormat::Auto};
-    Encoding encoding{Encoding::Ascii};
-    MshVersion mshVersion{MshVersion::V4_1};
-    VtkLegacyVersion vtkVersion{VtkLegacyVersion::V5_1};
+    E_FileFormat format{E_FileFormat::Auto};
+    E_Encoding encoding{E_Encoding::Ascii};
+    E_MshVersion mshVersion{E_MshVersion::V4_1};
+    E_VtkLegacyVersion vtkVersion{E_VtkLegacyVersion::V5_1};
     bool compress{false};          // VTU: zlib-compress binary arrays
     int timeStep{-1};              // single-step formats (VTK, VTU): time step to write, -1 = last (.pvd writes all)
     bool writeSidecar{true};       // CAD formats: write `<file>.anafFields` with non-geometric data
@@ -67,8 +67,8 @@ namespace anaf::IO {
   };
 
   struct IoError {
-    enum class Code { Cancelled, FileNotFound, UnsupportedFormat, ParseError, WriteError, InvalidModel, BackendError };
-    Code code{Code::ParseError};
+    enum class E_Code { Cancelled, FileNotFound, UnsupportedFormat, ParseError, WriteError, InvalidModel, BackendError };
+    E_Code code{E_Code::ParseError};
     std::string message;
   };
 
@@ -90,13 +90,13 @@ namespace anaf::IO {
   };
 
   struct FormatDescriptor {
-    FileFormat format;
+    E_FileFormat format;
     std::string_view name;
     std::vector<std::string_view> extensions; // lower case, with leading dot
     bool canRead;
     bool canWrite;
   };
 
-  std::string_view formatName(FileFormat format) noexcept;
+  std::string_view formatName(E_FileFormat format) noexcept;
 
 } // namespace anaf::IO end

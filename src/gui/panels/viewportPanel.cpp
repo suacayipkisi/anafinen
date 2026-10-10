@@ -50,25 +50,25 @@
 namespace anaf::GUI {
 
   ViewportPanel::ViewportPanel(std::shared_ptr<Framebuffer> fbo, std::shared_ptr<ViewportDisplayOptions> display) :
-    m_fbo_(std::move(fbo)),
-    m_renderer_(std::make_unique<ViewportRenderer>()),
-    m_beamRenderer_(std::make_unique<BeamSceneRenderer>()),
+    m_fbo(std::move(fbo)),
+    m_renderer(std::make_unique<ViewportRenderer>()),
+    m_beamRenderer(std::make_unique<BeamSceneRenderer>()),
     m_display(std::move(display))
   {}
 
   namespace {
-    constexpr float kFovY = std::numbers::pi_v<float> / 4.0f; // 45 deg
-    constexpr float kMinCameraDistance = 1e-3f;
+    constexpr float fovY = std::numbers::pi_v<float> / 4.0f; // 45 deg
+    constexpr float minCameraDistance = 1e-3f;
     // Level of detail only for large beam models: below this count every element keeps its real
     // section at any distance.
-    constexpr std::size_t kLodElementThreshold = 4000;
-    constexpr float kFullSectionPixels = 10.0f;  // section at least this tall on screen: real shape
-    constexpr float kSimpleSectionPixels = 2.0f; // at least this: box / cylinder; below: a line
-    constexpr int kSectionSegmentsPerQuarter = 4;
+    constexpr std::size_t lodElementThreshold = 4000;
+    constexpr float fullSectionPixels = 10.0f;  // section at least this tall on screen: real shape
+    constexpr float simpleSectionPixels = 2.0f; // at least this: box / cylinder; below: a line
+    constexpr int sectionSegmentsPerQuarter = 4;
 
-    const glm::vec4 kSelectedColor(1.0f, 0.7f, 0.2f, 1.0f);
-    const glm::vec4 kSupportColor(1.0f, 0.3f, 0.3f, 1.0f);
-    const glm::vec4 kHingeColor(0.96f, 0.96f, 0.98f, 1.0f);
+    const glm::vec4 selectedNodeColor(1.0f, 0.7f, 0.2f, 1.0f);
+    const glm::vec4 supportNodeColor(1.0f, 0.3f, 0.3f, 1.0f);
+    const glm::vec4 hingeColor(0.96f, 0.96f, 0.98f, 1.0f);
 
     glm::vec4 toGlm(const ImVec4& color) { return glm::vec4(color.x, color.y, color.z, color.w); }
     glm::vec3 toGlm3(const ImVec4& color) { return glm::vec3(color.x, color.y, color.z); }
@@ -354,7 +354,7 @@ namespace anaf::GUI {
     // Largest |y| and |z| of the outline.
     std::array<double, 2> outlineExtent(const FEM::BEAM::SectionShape& shape) {
       std::array<double, 2> extent{0.0, 0.0};
-      for (const auto& loop : FEM::BEAM::sectionOutline(shape, kSectionSegmentsPerQuarter)) {
+      for (const auto& loop : FEM::BEAM::sectionOutline(shape, sectionSegmentsPerQuarter)) {
         for (const auto& p : loop) {
           extent[0] = std::max(extent[0], std::abs(p[0]));
           extent[1] = std::max(extent[1], std::abs(p[1]));
@@ -470,17 +470,17 @@ namespace anaf::GUI {
   void ViewportPanel::handleCameraInput() {
     ImGuiIO& io = ImGui::GetIO();
 
-    if (m_viewportHovered_ && ImGui::IsKeyPressed(ImGuiKey_R)) {
+    if (m_viewportHovered && ImGui::IsKeyPressed(ImGuiKey_R)) {
       resetCamera();
     }
 
-    if (m_viewportHovered_ && io.MouseWheel != 0.0f) {
+    if (m_viewportHovered && io.MouseWheel != 0.0f) {
       // Only a numeric guard: zooming out stops when the model is far below a pixel.
       const float maxDistance = std::max(2000.0f, m_sceneRadius * 50.0f);
-      m_cameraDistance = std::clamp(m_cameraDistance * (1.0f - io.MouseWheel * 0.15f), kMinCameraDistance, maxDistance);
+      m_cameraDistance = std::clamp(m_cameraDistance * (1.0f - io.MouseWheel * 0.15f), minCameraDistance, maxDistance);
     }
 
-    if (m_viewportHovered_ && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) {
+    if (m_viewportHovered && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) {
       m_draggingView = true;
     }
 
@@ -516,33 +516,33 @@ namespace anaf::GUI {
     const float aspect = (m_viewportSize.y > 0.0f) ? (m_viewportSize.x / m_viewportSize.y) : 16.0f / 9.0f;
     const float farClip = farPlane();
     const float nearClip = std::max(m_cameraDistance * 0.005f, farClip * 1e-6f);
-    const glm::mat4 projection = glm::perspective(kFovY, aspect, nearClip, farClip);
+    const glm::mat4 projection = glm::perspective(fovY, aspect, nearClip, farClip);
 
     return projection * view;
   }
 
   void ViewportPanel::buildSceneBatches() {
-    m_renderer_->clearBuffers();
-    m_beamRenderer_->clearSpheres();
+    m_renderer->clearBuffers();
+    m_beamRenderer->clearSpheres();
     m_nodeLabels.clear();
 
     // Coordinate axes X, Y, Z (only with the axes toggle on), extended far past the camera's far clip plane so they appear infinite (EntityID = -1)
     // farPlane() stays below ~100 scene radii at the widest zoom, so 200 radii look infinite.
     if (m_display->showAxes) {
       const float axisReach = std::max(8000.0f, m_sceneRadius * 200.0f);
-      m_renderer_->addLine(glm::vec3(-axisReach, 0.0f, 0.0f), glm::vec3(axisReach, 0.0f, 0.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f), -1);
-      m_renderer_->addLine(glm::vec3(0.0f, -axisReach, 0.0f), glm::vec3(0.0f, axisReach, 0.0f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f), -1);
-      m_renderer_->addLine(glm::vec3(0.0f, 0.0f, -axisReach), glm::vec3(0.0f, 0.0f, axisReach), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
+      m_renderer->addLine(glm::vec3(-axisReach, 0.0f, 0.0f), glm::vec3(axisReach, 0.0f, 0.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f), -1);
+      m_renderer->addLine(glm::vec3(0.0f, -axisReach, 0.0f), glm::vec3(0.0f, axisReach, 0.0f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f), -1);
+      m_renderer->addLine(glm::vec3(0.0f, 0.0f, -axisReach), glm::vec3(0.0f, 0.0f, axisReach), glm::vec4(0.2f, 0.4f, 1.0f, 1.0f), -1);
     }
 
     if (m_currentBeamMesh) {
       buildBeamScene();
     } else {
-      m_beamRenderer_->clearInstances();
+      m_beamRenderer->clearInstances();
       buildTrussScene();
     }
-    m_renderer_->uploadCurrentBuffer();
-    m_beamRenderer_->upload();
+    m_renderer->uploadCurrentBuffer();
+    m_beamRenderer->upload();
   }
 
   void ViewportPanel::buildTrussScene() {
@@ -555,7 +555,7 @@ namespace anaf::GUI {
     const auto& mesh = *m_currentMesh;
     const std::uint32_t selectedId = m_selectedNode;
 
-    m_renderer_->reserve(3 + mesh.trussElements.size() + mesh.appliedForces.size() * 3, mesh.trussNodes.size());
+    m_renderer->reserve(3 + mesh.trussElements.size() + mesh.appliedForces.size() * 3, mesh.trussNodes.size());
 
     double maxStress = 0.0;
     for (const auto& element : mesh.trussElements) {
@@ -576,10 +576,10 @@ namespace anaf::GUI {
     // Without coloring (or results) the elements keep the color of an unsolved model.
     const auto coloring = m_display->coloring;
     const auto elementColor = [&](const BRIDGE::RenderElement& element) -> glm::vec4 {
-      if (coloring == ElementColoring::Stress && maxStress > 1e-9) {
+      if (coloring == E_ElementColoring::Stress && maxStress > 1e-9) {
         return jet(std::sqrt(std::clamp(std::abs(static_cast<double>(element.stress)) / maxStress, 0.0, 1.0)));
       }
-      if (coloring == ElementColoring::Displacement && maxDisp > 0.0) {
+      if (coloring == E_ElementColoring::Displacement && maxDisp > 0.0) {
         const double mean = 0.5 * (magnitude(mesh.trussNodes[element.node1].getDisplacement()) + magnitude(mesh.trussNodes[element.node2].getDisplacement()));
         return jet(mean / maxDisp);
       }
@@ -600,7 +600,7 @@ namespace anaf::GUI {
     // Truss Elements (Lines)
     for (const auto& element : mesh.trussElements) {
       if (element.node1 <= maxNodeId && element.node2 <= maxNodeId) {
-        m_renderer_->addLine(nodeLookup[element.node1], nodeLookup[element.node2], elementColor(element), -1);
+        m_renderer->addLine(nodeLookup[element.node1], nodeLookup[element.node2], elementColor(element), -1);
       }
     }
 
@@ -623,16 +623,16 @@ namespace anaf::GUI {
         float pSize = 12.0f;
 
         if (id == selectedId) {
-          pColor = kSelectedColor;
+          pColor = selectedNodeColor;
           pSize = 18.0f;
         } else if (node.isSupported()) {
-          pColor = kSupportColor;
+          pColor = supportNodeColor;
         }
 
-        if (m_display->nodeStyle == NodeStyle::Sphere) {
-          m_beamRenderer_->addSphere(pos, sphereRadius * (id == selectedId ? 1.4f : 1.0f), pColor, static_cast<int>(id));
+        if (m_display->nodeStyle == E_NodeStyle::Sphere) {
+          m_beamRenderer->addSphere(pos, sphereRadius * (id == selectedId ? 1.4f : 1.0f), pColor, static_cast<int>(id));
         } else {
-          m_renderer_->addPoint(pos, pColor, static_cast<int>(id), pSize);
+          m_renderer->addPoint(pos, pColor, static_cast<int>(id), pSize);
         }
         m_nodeLabels.emplace_back(id, pos);
       }
@@ -644,12 +644,12 @@ namespace anaf::GUI {
     const float symbol = std::max(m_sceneRadius * 0.04f, 1e-3f);
     for (const auto& node : mesh.trussNodes) {
       const glm::vec3& pos = nodeLookup[node.getNodeID()];
-      if (m_display->supportStyle == SupportStyle::Symbols) {
-        addSupportSymbol(*m_renderer_, *m_beamRenderer_, pos, node.getAllowedMotionDirections(), nullptr, glm::vec3(0.0f), symbol);
-      } else if (m_display->supportStyle == SupportStyle::Dof) {
-        if (node.isSupported()) addDofRestraints(*m_renderer_, pos, node.getAllowedMotionDirections(), nullptr, symbol);
+      if (m_display->supportStyle == E_SupportStyle::Symbols) {
+        addSupportSymbol(*m_renderer, *m_beamRenderer, pos, node.getAllowedMotionDirections(), nullptr, glm::vec3(0.0f), symbol);
+      } else if (m_display->supportStyle == E_SupportStyle::Dof) {
+        if (node.isSupported()) addDofRestraints(*m_renderer, pos, node.getAllowedMotionDirections(), nullptr, symbol);
       } else if (node.hasInclinedSupport()) {
-        addInclinedSupport(*m_renderer_, pos, node.getAllowedMotionDirections(), symbol);
+        addInclinedSupport(*m_renderer, pos, node.getAllowedMotionDirections(), symbol);
       }
     }
 
@@ -663,12 +663,12 @@ namespace anaf::GUI {
       const auto forceVec = force.getForce();
       if (magnitude(forceVec) < 1e-6) continue;
       const glm::vec3 basePos = nodeLookup[targetId];
-      addArrow(*m_renderer_, basePos, basePos + glm::normalize(toVec(forceVec)) * 3.0f, forceArrowColor, forceGlowColor, 0.1f, 0.05f);
+      addArrow(*m_renderer, basePos, basePos + glm::normalize(toVec(forceVec)) * 3.0f, forceArrowColor, forceGlowColor, 0.1f, 0.05f);
     }
   }
 
   void ViewportPanel::buildBeamStations() {
-    m_beamRenderer_->clearMeshes();
+    m_beamRenderer->clearMeshes();
     m_beamElements.clear();
     m_lineMesh = -1;
     m_stationsMesh = m_currentBeamMesh;
@@ -686,10 +686,10 @@ namespace anaf::GUI {
       materials = bridge.allMaterials;
       sections = bridge.allSections;
     }
-    m_lodActive = mesh.elements.size() > kLodElementThreshold;
+    m_lodActive = mesh.elements.size() > lodElementThreshold;
 
     const std::array<MeshVertex, 2> line{MeshVertex{glm::vec3(0.0f), glm::vec3(0.0f)}, MeshVertex{glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f)}};
-    m_lineMesh = m_beamRenderer_->addMesh(line, GL_LINES);
+    m_lineMesh = m_beamRenderer->addMesh(line, GL_LINES);
 
     // One full and one simple mesh per section in use.
     std::vector<int> fullOf(sections.size(), -1), simpleOf(sections.size(), -1), pinOf(sections.size(), -1), collarOf(sections.size(), -1);
@@ -699,16 +699,16 @@ namespace anaf::GUI {
       if (id >= sections.size() || fullOf[id] >= 0) continue;
       const auto shape = drawnShape(sections[id].getShape());
       if (!FEM::BEAM::validateShape(shape)) continue;
-      fullOf[id] = m_beamRenderer_->addMesh(extrudeSection(shape, kSectionSegmentsPerQuarter), GL_TRIANGLES);
+      fullOf[id] = m_beamRenderer->addMesh(extrudeSection(shape, sectionSegmentsPerQuarter), GL_TRIANGLES);
       const auto extent = outlineExtent(shape);
       const bool round = std::holds_alternative<FEM::BEAM::CircleSection>(shape) || std::holds_alternative<FEM::BEAM::PipeSection>(shape);
       const FEM::BEAM::SectionShape simple = round ? FEM::BEAM::SectionShape{FEM::BEAM::CircleSection{2.0 * std::max(extent[0], extent[1])}}
                                                    : FEM::BEAM::SectionShape{FEM::BEAM::RectangleSection{2.0 * extent[0], 2.0 * extent[1]}};
-      simpleOf[id] = m_beamRenderer_->addMesh(extrudeSection(simple, 2), GL_TRIANGLES);
+      simpleOf[id] = m_beamRenderer->addMesh(extrudeSection(simple, 2), GL_TRIANGLES);
       halfOf[id] = static_cast<float>(std::max(extent[0], extent[1]));
       const double half = halfOf[id];
-      pinOf[id] = m_beamRenderer_->addMesh(extrudeSection(FEM::BEAM::CircleSection{0.4 * half}, 3), GL_TRIANGLES);
-      collarOf[id] = m_beamRenderer_->addMesh(extrudeSection(FEM::BEAM::PipeSection{2.5 * half, 0.2 * half}, 4), GL_TRIANGLES);
+      pinOf[id] = m_beamRenderer->addMesh(extrudeSection(FEM::BEAM::CircleSection{0.4 * half}, 3), GL_TRIANGLES);
+      collarOf[id] = m_beamRenderer->addMesh(extrudeSection(FEM::BEAM::PipeSection{2.5 * half, 0.2 * half}, 4), GL_TRIANGLES);
     }
 
     // The exact displacement field along each element (beamDiagrams), when there are results.
@@ -870,13 +870,13 @@ namespace anaf::GUI {
       for (std::uint32_t id = 0; id < mesh.nodes.size(); ++id) {
         const auto& node = mesh.nodes[id];
         glm::vec4 color = m_cachedMaxDisp > 0.0 ? jet(magnitude(node.getDisplacement()) / m_cachedMaxDisp) : toGlm(THEME::theme().sceneLabel);
-        if (node.isSupported()) color = kSupportColor;
+        if (node.isSupported()) color = supportNodeColor;
         const bool selected = id == m_selectedNode;
-        if (selected) color = kSelectedColor;
-        if (m_display->nodeStyle == NodeStyle::Sphere) {
-          m_beamRenderer_->addSphere(position[id], std::max(radius[id], 1e-4f) * (selected ? 1.25f : 1.0f), color, static_cast<int>(id));
+        if (selected) color = selectedNodeColor;
+        if (m_display->nodeStyle == E_NodeStyle::Sphere) {
+          m_beamRenderer->addSphere(position[id], std::max(radius[id], 1e-4f) * (selected ? 1.25f : 1.0f), color, static_cast<int>(id));
         } else {
-          m_renderer_->addPoint(position[id], color, static_cast<int>(id), selected ? 18.0f : 12.0f, lift[id]);
+          m_renderer->addPoint(position[id], color, static_cast<int>(id), selected ? 18.0f : 12.0f, lift[id]);
         }
         m_nodeLabels.emplace_back(id, position[id]);
       }
@@ -887,7 +887,7 @@ namespace anaf::GUI {
     for (std::size_t e = 0; e < m_beamElements.size(); ++e) {
       const auto& draw = m_beamElements[e];
       if (draw.releases == 0 || draw.stations.size() < 2) continue;
-      const glm::vec4 color = e == m_selectedElement ? kSelectedColor : kHingeColor;
+      const glm::vec4 color = e == m_selectedElement ? selectedNodeColor : hingeColor;
       const glm::vec4 glow(color.r, color.g, color.b, 0.35f);
       for (int end = 0; end < 2; ++end) {
         const auto bits = FEM::BEAM::RELEASE::ofEnd(draw.releases, end);
@@ -897,14 +897,14 @@ namespace anaf::GUI {
                                         {FEM::BEAM::RELEASE::shearZ, at.axisZ}}) {
           if ((bits & bit) == 0) continue;
           const float head = 0.35f * draw.halfSize;
-          addArrow(*m_renderer_, at.center, at.center + axis * reach, color, glow, head, 0.4f * head);
-          addArrow(*m_renderer_, at.center, at.center - axis * reach, color, glow, head, 0.4f * head);
+          addArrow(*m_renderer, at.center, at.center + axis * reach, color, glow, head, 0.4f * head);
+          addArrow(*m_renderer, at.center, at.center - axis * reach, color, glow, head, 0.4f * head);
         }
       }
     }
 
     const float symbol = std::max(m_sceneRadius * 0.04f, 1e-3f);
-    if (m_display->supportStyle != SupportStyle::Off) {
+    if (m_display->supportStyle != E_SupportStyle::Off) {
       // At least three times the largest section half size at the node, so the symbol shows
       // around the members.
       std::vector<float> halfSize(mesh.nodes.size(), 0.0f);
@@ -923,17 +923,17 @@ namespace anaf::GUI {
         const auto& node = mesh.nodes[id];
         if (!node.isSupported()) continue;
         const float size = std::max(symbol, 3.0f * halfSize[id]);
-        if (m_display->supportStyle == SupportStyle::Dof) {
-          addDofRestraints(*m_renderer_, position[id], node.getAllowedMotionDirections(), &node.getAllowedRotationAxes(), size);
+        if (m_display->supportStyle == E_SupportStyle::Dof) {
+          addDofRestraints(*m_renderer, position[id], node.getAllowedMotionDirections(), &node.getAllowedRotationAxes(), size);
         } else {
-          addSupportSymbol(*m_renderer_, *m_beamRenderer_, position[id], node.getAllowedMotionDirections(), &node.getAllowedRotationAxes(),
+          addSupportSymbol(*m_renderer, *m_beamRenderer, position[id], node.getAllowedMotionDirections(), &node.getAllowedRotationAxes(),
                            memberDirection[id], size);
         }
       }
     } else {
       for (std::uint32_t id = 0; id < mesh.nodes.size(); ++id) {
         const auto& motion = mesh.nodes[id].getAllowedMotionDirections();
-        if (!alongGlobalAxes(motion)) addInclinedSupport(*m_renderer_, position[id], motion, symbol);
+        if (!alongGlobalAxes(motion)) addInclinedSupport(*m_renderer, position[id], motion, symbol);
       }
     }
 
@@ -946,13 +946,13 @@ namespace anaf::GUI {
         if (load.node >= position.size()) continue;
         const glm::vec3 base = position[load.node];
         if (magnitude(load.force) > 1e-9) {
-          addArrow(*m_renderer_, base, base + glm::normalize(toVec(load.force)) * arrow, forceColor, forceGlow, arrow * 0.12f, arrow * 0.05f);
+          addArrow(*m_renderer, base, base + glm::normalize(toVec(load.force)) * arrow, forceColor, forceGlow, arrow * 0.12f, arrow * 0.05f);
         }
         if (magnitude(load.moment) > 1e-9) { // moment vector: double head
           const glm::vec3 dir = glm::normalize(toVec(load.moment));
           const glm::vec3 tip = base + dir * arrow;
-          addArrow(*m_renderer_, base, tip, momentColor, momentGlow, arrow * 0.12f, arrow * 0.05f);
-          addArrow(*m_renderer_, base, tip - dir * (arrow * 0.12f), momentColor, momentGlow, arrow * 0.12f, arrow * 0.05f);
+          addArrow(*m_renderer, base, tip, momentColor, momentGlow, arrow * 0.12f, arrow * 0.05f);
+          addArrow(*m_renderer, base, tip - dir * (arrow * 0.12f), momentColor, momentGlow, arrow * 0.12f, arrow * 0.05f);
         }
       }
       // Uniform loads: arrows pointing at the element, tails joined.
@@ -961,7 +961,7 @@ namespace anaf::GUI {
         if (load.element >= m_beamElements.size() || m_beamElements[load.element].stations.size() < 2) continue;
         const auto& draw = m_beamElements[load.element];
         glm::vec3 direction = toVec(load.value);
-        if (load.frame == FEM::BEAM::LoadFrame::Local) {
+        if (load.frame == FEM::BEAM::E_LoadFrame::Local) {
           const glm::vec3 axisX = glm::normalize(draw.stations.back() - draw.stations.front());
           direction = axisX * direction.x + draw.axisY * direction.y + draw.axisZ * direction.z;
         }
@@ -974,8 +974,8 @@ namespace anaf::GUI {
           const auto stationIndex = static_cast<std::size_t>(std::lround(t * static_cast<float>(draw.stations.size() - 1)));
           const glm::vec3 at = draw.stations[stationIndex];
           const glm::vec3 tail = at - direction * small;
-          addArrow(*m_renderer_, tail, at, lineLoadColor, lineLoadGlow, small * 0.2f, small * 0.08f);
-          if (k > 0) m_renderer_->addLine(previousTail, tail, lineLoadColor, -1);
+          addArrow(*m_renderer, tail, at, lineLoadColor, lineLoadGlow, small * 0.2f, small * 0.08f);
+          if (k > 0) m_renderer->addLine(previousTail, tail, lineLoadColor, -1);
           previousTail = tail;
         }
       }
@@ -985,11 +985,11 @@ namespace anaf::GUI {
   }
 
   void ViewportPanel::pushBeamInstances(const glm::mat4& mvp) {
-    m_beamRenderer_->clearInstances();
+    m_beamRenderer->clearInstances();
     m_lodMatrix = mvp;
     m_lodViewport = m_viewportSize;
     const glm::vec3 eye = m_target + orbitDirection() * m_cameraDistance;
-    const float focal = std::max(m_viewportSize.y, 1.0f) / (2.0f * std::tan(kFovY * 0.5f));
+    const float focal = std::max(m_viewportSize.y, 1.0f) / (2.0f * std::tan(fovY * 0.5f));
     const auto coloring = m_display->coloring;
     const double maxStress = m_cachedMaxStress, maxDisp = m_cachedMaxDisp;
     const glm::vec4 memberColor = toGlm(THEME::theme().member);
@@ -1000,39 +1000,39 @@ namespace anaf::GUI {
       if (draw.stations.size() < 2 || draw.fullMesh < 0) continue;
       const bool selected = e == m_selectedElement;
       const auto color = [&](const std::size_t i) -> glm::vec4 {
-        if (selected) return kSelectedColor;
-        if (coloring == ElementColoring::Stress) {
+        if (selected) return selectedNodeColor;
+        if (coloring == E_ElementColoring::Stress) {
           if (draw.stress.empty() || maxStress <= 0.0) return draw.stress.empty() && !draw.displacement.empty() ? noResultColor : memberColor;
           return jet(draw.stress[i] / maxStress);
         }
-        if (coloring == ElementColoring::Displacement && !draw.displacement.empty() && maxDisp > 0.0) return jet(draw.displacement[i] / maxDisp);
+        if (coloring == E_ElementColoring::Displacement && !draw.displacement.empty() && maxDisp > 0.0) return jet(draw.displacement[i] / maxDisp);
         return memberColor;
       };
       const int entity = -static_cast<int>(e) - 2;
       const std::size_t last = draw.stations.size() - 1;
 
-      enum class Tier { Full, Simple, Line } tier = Tier::Full;
+      enum class E_Tier { Full, Simple, Line } tier = E_Tier::Full;
       if (m_lodActive && !selected) {
         const float distance = std::max(glm::length(0.5f * (draw.stations.front() + draw.stations.back()) - eye), 1e-6f);
         const float pixels = 2.0f * draw.halfSize * focal / distance;
-        tier = pixels >= kFullSectionPixels ? Tier::Full : (pixels >= kSimpleSectionPixels ? Tier::Simple : Tier::Line);
+        tier = pixels >= fullSectionPixels ? E_Tier::Full : (pixels >= simpleSectionPixels ? E_Tier::Simple : E_Tier::Line);
       }
-      if (tier == Tier::Full) {
+      if (tier == E_Tier::Full) {
         for (std::size_t i = 0; i < last; ++i) {
-          m_beamRenderer_->addInstance(draw.fullMesh, {draw.stations[i], draw.stations[i + 1], draw.frameY[i], draw.frameZ[i], draw.frameY[i + 1],
+          m_beamRenderer->addInstance(draw.fullMesh, {draw.stations[i], draw.stations[i + 1], draw.frameY[i], draw.frameZ[i], draw.frameY[i + 1],
                                                        draw.frameZ[i + 1], color(i), color(i + 1), entity});
         }
       } else {
-        const int meshIndex = tier == Tier::Simple ? draw.simpleMesh : m_lineMesh;
-        m_beamRenderer_->addInstance(meshIndex, {draw.stations.front(), draw.stations.back(), draw.frameY.front(), draw.frameZ.front(),
+        const int meshIndex = tier == E_Tier::Simple ? draw.simpleMesh : m_lineMesh;
+        m_beamRenderer->addInstance(meshIndex, {draw.stations.front(), draw.stations.back(), draw.frameY.front(), draw.frameZ.front(),
                                                  draw.frameY.back(), draw.frameZ.back(), color(0), color(last), entity});
       }
 
       // End releases of a rotation: a pin through the end along each released bending axis
       // (local y / z; both = crossed pins, a universal joint), a collar around the member when
       // the twist is released. Lit like the members, light grey, and they pick the element.
-      if (draw.releases == 0 || tier == Tier::Line || draw.pinMesh < 0) continue;
-      const glm::vec4 pinColor = selected ? kSelectedColor : kHingeColor;
+      if (draw.releases == 0 || tier == E_Tier::Line || draw.pinMesh < 0) continue;
+      const glm::vec4 pinColor = selected ? selectedNodeColor : hingeColor;
       for (int end = 0; end < 2; ++end) {
         const auto bits = FEM::BEAM::RELEASE::ofEnd(draw.releases, end);
         if ((bits & (FEM::BEAM::RELEASE::torsion | FEM::BEAM::RELEASE::hinge)) == 0) continue;
@@ -1041,21 +1041,21 @@ namespace anaf::GUI {
         for (const auto& [bit, axis] : {std::pair{FEM::BEAM::RELEASE::momentY, at.axisY}, {FEM::BEAM::RELEASE::momentZ, at.axisZ}}) {
           if ((bits & bit) == 0) continue;
           const glm::vec3 side = glm::normalize(glm::cross(axis, at.axisX));
-          m_beamRenderer_->addInstance(draw.pinMesh, {at.center - axis * pin, at.center + axis * pin, at.axisX, side, at.axisX, side,
+          m_beamRenderer->addInstance(draw.pinMesh, {at.center - axis * pin, at.center + axis * pin, at.axisX, side, at.axisX, side,
                                                       pinColor, pinColor, entity});
         }
         if ((bits & FEM::BEAM::RELEASE::torsion) != 0) {
           const float band = 0.12f * draw.halfSize;
-          m_beamRenderer_->addInstance(draw.collarMesh, {at.center - at.axisX * band, at.center + at.axisX * band, at.axisY, at.axisZ,
+          m_beamRenderer->addInstance(draw.collarMesh, {at.center - at.axisX * band, at.center + at.axisX * band, at.axisY, at.axisZ,
                                                          at.axisY, at.axisZ, pinColor, pinColor, entity});
         }
       }
     }
-    m_beamRenderer_->upload();
+    m_beamRenderer->upload();
   }
 
   void ViewportPanel::renderSceneOpenGL() {
-    if (!m_fbo_) return;
+    if (!m_fbo) return;
 
     auto& bridge = BRIDGE::buildBridge();
     const uint64_t currentVersion = bridge.dataVersion.load(std::memory_order_acquire);
@@ -1063,7 +1063,7 @@ namespace anaf::GUI {
     // Toolbar requests from the previous ImGui frame.
     if (m_display->changed) {
       m_display->changed = false;
-      truss_1d_gui_prop.m_meshNeedsUpdate = true;
+      m_truss1dGuiProp.meshNeedsUpdate = true;
     }
     if (m_display->resetCameraRequested) {
       m_display->resetCameraRequested = false;
@@ -1072,7 +1072,7 @@ namespace anaf::GUI {
     // A theme switch rebuilds the buffers, which bake the member colors in.
     if (m_themeRevision != THEME::themeRevision()) {
       m_themeRevision = THEME::themeRevision();
-      truss_1d_gui_prop.m_meshNeedsUpdate = true;
+      m_truss1dGuiProp.meshNeedsUpdate = true;
     }
     // A selection made in a panel (or by picking) redraws the highlight.
     {
@@ -1080,11 +1080,11 @@ namespace anaf::GUI {
       if (bridge.selectedNodeId != m_selectedNode || bridge.selectedElementId != m_selectedElement) {
         m_selectedNode = bridge.selectedNodeId;
         m_selectedElement = bridge.selectedElementId;
-        truss_1d_gui_prop.m_meshNeedsUpdate = true;
+        m_truss1dGuiProp.meshNeedsUpdate = true;
       }
     }
 
-    if (truss_1d_gui_prop.m_meshNeedsUpdate || currentVersion != truss_1d_gui_prop.m_lastRenderedVersion) {
+    if (m_truss1dGuiProp.meshNeedsUpdate || currentVersion != m_truss1dGuiProp.lastRenderedVersion) {
       {
         std::lock_guard<std::mutex> lock(bridge.dataMutex);
         m_currentMesh = bridge.activeMesh;
@@ -1092,24 +1092,24 @@ namespace anaf::GUI {
       }
       m_deformScale = bridge.deformScale.load();
 
-      truss_1d_gui_prop.m_meshNeedsUpdate = false;
-      truss_1d_gui_prop.m_lastRenderedVersion = currentVersion;
-      if (m_fitRequested_ && hasModel()) {
+      m_truss1dGuiProp.meshNeedsUpdate = false;
+      m_truss1dGuiProp.lastRenderedVersion = currentVersion;
+      if (m_fitRequested && hasModel()) {
         resetCamera();
-        m_fitRequested_ = false;
+        m_fitRequested = false;
       } else {
         updateSceneBounds();
       }
       buildSceneBatches();
     }
 
-    m_fbo_->bind();
+    m_fbo->bind();
     glEnable(GL_DEPTH_TEST);
 
     // Scene color, entity-ID buffer (-1 = nothing picked) and depth.
     const THEME::ThemePalette& palette = THEME::theme();
-    m_fbo_->clear(palette.sceneBottom.x, palette.sceneBottom.y, palette.sceneBottom.z, 1.0f, -1);
-    m_renderer_->renderBackground(toGlm3(palette.sceneTop), toGlm3(palette.sceneBottom));
+    m_fbo->clear(palette.sceneBottom.x, palette.sceneBottom.y, palette.sceneBottom.z, 1.0f, -1);
+    m_renderer->renderBackground(toGlm3(palette.sceneTop), toGlm3(palette.sceneBottom));
 
     const glm::mat4 mvp = getViewProjectionMatrix();
     // Level of detail follows the camera: only the instance lists are rebuilt.
@@ -1127,27 +1127,27 @@ namespace anaf::GUI {
       const double originZ = std::floor(static_cast<double>(eye.z) / major) * major;
       grid.origin = glm::vec2(static_cast<float>(originX), static_cast<float>(originZ));
       grid.eyeLocal = glm::vec3(static_cast<float>(eye.x - originX), eye.y, static_cast<float>(eye.z - originZ));
-      const float tanHalfFov = std::tan(kFovY * 0.5f);
+      const float tanHalfFov = std::tan(fovY * 0.5f);
       const float aspect = (m_viewportSize.y > 0.0f) ? (m_viewportSize.x / m_viewportSize.y) : 16.0f / 9.0f;
       grid.forward = -orbitDirection();
       grid.up = orbitUp() * tanHalfFov;
       grid.right = glm::cross(grid.forward, orbitUp()) * (tanHalfFov * aspect);
       grid.fadeDistance = std::max(m_cameraDistance * 40.0f, m_sceneRadius * 6.0f);
       grid.color = toGlm3(palette.grid);
-      m_renderer_->renderGrid(grid);
+      m_renderer->renderGrid(grid);
     }
-    m_beamRenderer_->render(mvp, -orbitDirection());
+    m_beamRenderer->render(mvp, -orbitDirection());
     {
       const glm::vec3 eye = m_target + orbitDirection() * m_cameraDistance;
-      const float fbHeight = static_cast<float>(std::max(m_fbo_->getHeight(), 1u));
-      m_renderer_->render(mvp, eye, 2.0f * std::tan(kFovY * 0.5f) / fbHeight);
+      const float fbHeight = static_cast<float>(std::max(m_fbo->getHeight(), 1u));
+      m_renderer->render(mvp, eye, 2.0f * std::tan(fovY * 0.5f) / fbHeight);
     }
 
     // Node number labels, rendered as OpenGL glyph quads (ImGui font atlas) instead of an ImGui 2D overlay.
-    m_renderer_->clearTextBuffer();
+    m_renderer->clearTextBuffer();
     if (m_display->showNodes()) {
-      const float fbWidth = static_cast<float>(m_fbo_->getWidth());
-      const float fbHeight = static_cast<float>(m_fbo_->getHeight());
+      const float fbWidth = static_cast<float>(m_fbo->getWidth());
+      const float fbHeight = static_cast<float>(m_fbo->getHeight());
       for (const auto& [id, worldPos] : m_nodeLabels) {
         if (m_cameraDistance >= 15.0f && id != m_selectedNode) continue;
         const glm::vec4 clipPos = mvp * glm::vec4(worldPos, 1.0f);
@@ -1155,13 +1155,13 @@ namespace anaf::GUI {
         const glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
         const float screenX = (ndc.x * 0.5f + 0.5f) * fbWidth + 8.0f;
         const float screenY = (-ndc.y * 0.5f + 0.5f) * fbHeight - 8.0f;
-        m_renderer_->addText(glm::vec2(screenX, screenY), std::to_string(id), toGlm(palette.sceneLabel), fbWidth, fbHeight);
+        m_renderer->addText(glm::vec2(screenX, screenY), std::to_string(id), toGlm(palette.sceneLabel), fbWidth, fbHeight);
       }
     }
-    m_renderer_->uploadTextBuffer();
-    m_renderer_->renderText();
+    m_renderer->uploadTextBuffer();
+    m_renderer->renderText();
 
-    m_fbo_->unbind();
+    m_fbo->unbind();
   }
 
   void ViewportPanel::renderOverlay2D(const ImVec2& origin, const ImVec2& size) {
@@ -1301,7 +1301,7 @@ namespace anaf::GUI {
       };
 
       std::vector<Legend> legends;
-      using enum ElementColoring;
+      using enum E_ElementColoring;
       if (m_display->coloring == Displacement || m_display->showNodes()) {
         legends.push_back({"displacement", &SETTINGS::settings().displacementLegend, "Displacement", "[mm]", m_cachedMaxDisp * 1000.0, false});
       }
@@ -1449,30 +1449,30 @@ namespace anaf::GUI {
     if (availSize.x > 0.0f && availSize.y > 0.0f) {
       const auto w = static_cast<std::uint32_t>(availSize.x);
       const auto h = static_cast<std::uint32_t>(availSize.y);
-      if (m_fbo_->getWidth() != w || m_fbo_->getHeight() != h) {
-        m_fbo_->resize(w, h);
+      if (m_fbo->getWidth() != w || m_fbo->getHeight() != h) {
+        m_fbo->resize(w, h);
       }
     }
 
-    const ImTextureID texId = static_cast<ImTextureID>(static_cast<uintptr_t>(m_fbo_->getTextureID()));
+    const ImTextureID texId = static_cast<ImTextureID>(static_cast<uintptr_t>(m_fbo->getTextureID()));
     ImGui::Image(texId, availSize, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
 
-    m_viewportHovered_ = ImGui::IsItemHovered();
+    m_viewportHovered = ImGui::IsItemHovered();
     // The legends (last frame's rectangles) take the mouse: no picking or camera input through them.
-    if (m_viewportHovered_) {
+    if (m_viewportHovered) {
       const ImVec2 mouse = ImGui::GetMousePos();
       for (const auto& [rectMin, rectMax] : m_legendRects) {
-        if (mouse.x >= rectMin.x && mouse.x <= rectMax.x && mouse.y >= rectMin.y && mouse.y <= rectMax.y) m_viewportHovered_ = false;
+        if (mouse.x >= rectMin.x && mouse.x <= rectMax.x && mouse.y >= rectMin.y && mouse.y <= rectMax.y) m_viewportHovered = false;
       }
     }
 
     // GPU Pixel Picking Interaction
-    if (m_viewportHovered_ && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    if (m_viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
       const ImVec2 mousePos = ImGui::GetMousePos();
       const int mouseX = static_cast<int>(mousePos.x - origin.x);
       const int mouseY = static_cast<int>(m_viewportSize.y - (mousePos.y - origin.y)); // Invert Y for OpenGL
 
-      const int pickedID = m_fbo_->readEntityID(mouseX, mouseY);
+      const int pickedID = m_fbo->readEntityID(mouseX, mouseY);
 
       // Entity IDs: nodes >= 0, beam elements -(index + 2), nothing -1.
       auto& bridge = BRIDGE::buildBridge();
@@ -1482,10 +1482,10 @@ namespace anaf::GUI {
       } else if (pickedID <= -2) {
         bridge.selectedElementId = static_cast<std::uint32_t>(-(pickedID + 2));
       } else {
-        bridge.selectedNodeId = kNone;
-        bridge.selectedElementId = kNone;
+        bridge.selectedNodeId = noSelection;
+        bridge.selectedElementId = noSelection;
       }
-      truss_1d_gui_prop.m_meshNeedsUpdate = true;
+      m_truss1dGuiProp.meshNeedsUpdate = true;
     }
 
     handleCameraInput();

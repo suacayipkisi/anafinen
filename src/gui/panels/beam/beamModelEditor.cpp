@@ -51,17 +51,17 @@ namespace anaf::GUI {
   namespace {
 
     using BRIDGE::BeamMeshData;
-    using BRIDGE::Gui_Calc_Bridge;
+    using BRIDGE::GuiCalcBridge;
     using FEM::BEAM::BeamElement;
-    using FEM::BEAM::Formulation;
-    using FEM::BEAM::LoadFrame;
+    using FEM::BEAM::E_Formulation;
+    using FEM::BEAM::E_LoadFrame;
 
-    constexpr std::array<const char*, 2> kFormulations{"Euler-Bernoulli", "Timoshenko"};
-    constexpr std::array<const char*, 2> kFrames{"Global axes", "Local axes"};
-    constexpr std::array<double, 3> kGravity{0.0, -9.80665, 0.0};
+    constexpr std::array<const char*, 2> formulations{"Euler-Bernoulli", "Timoshenko"};
+    constexpr std::array<const char*, 2> loadFrames{"Global axes", "Local axes"};
+    constexpr std::array<double, 3> standardGravity{0.0, -9.80665, 0.0};
 
-    const char* formulationShort(const Formulation formulation) {
-      return formulation == Formulation::Timoshenko ? "TI" : "EB";
+    const char* formulationShort(const E_Formulation formulation) {
+      return formulation == E_Formulation::Timoshenko ? "TI" : "EB";
     }
 
     // "", "  hinge A", "  hinge B" or "  hinge A B" for the element list.
@@ -76,20 +76,20 @@ namespace anaf::GUI {
     // Runs edit on a copy of the active beam snapshot (an empty one if there is none) under
     // dataMutex and publishes the copy. edit returns false to publish nothing.
     template <typename Edit>
-    bool editModel(Gui_Calc_Bridge& bridge, Edit&& edit) {
+    bool editModel(GuiCalcBridge& bridge, Edit&& edit) {
       {
         std::lock_guard lock(bridge.dataMutex);
         auto mesh = bridge.activeBeamMesh ? std::make_shared<BeamMeshData>(*bridge.activeBeamMesh) : std::make_shared<BeamMeshData>();
         if (!edit(*mesh)) return false;
         FEM::BEAM::dropResults(*mesh);
         bridge.activeBeamMesh = std::move(mesh);
-        bridge.m_isValid = false;
+        bridge.isValid = false;
       }
       bridge.dataVersion.fetch_add(1, std::memory_order_release);
       return true;
     }
 
-    std::shared_ptr<const BeamMeshData> currentMesh(Gui_Calc_Bridge& bridge) {
+    std::shared_ptr<const BeamMeshData> currentMesh(GuiCalcBridge& bridge) {
       std::lock_guard lock(bridge.dataMutex);
       return bridge.activeBeamMesh;
     }
@@ -106,17 +106,17 @@ namespace anaf::GUI {
       return std::ranges::all_of(basis, [](const std::array<double, 3>& v) { return std::ranges::count(v, 0.0) == 2; });
     }
 
-    void setSelectedNode(Gui_Calc_Bridge& bridge, const std::uint32_t node) {
+    void setSelectedNode(GuiCalcBridge& bridge, const std::uint32_t node) {
       std::lock_guard lock(bridge.dataMutex);
       bridge.selectedNodeId = node;
     }
 
-    void setSelectedElement(Gui_Calc_Bridge& bridge, const std::uint32_t element) {
+    void setSelectedElement(GuiCalcBridge& bridge, const std::uint32_t element) {
       std::lock_guard lock(bridge.dataMutex);
       bridge.selectedElementId = element;
     }
 
-    std::uint32_t findSectionByName(const Gui_Calc_Bridge& bridge, const char* name) {
+    std::uint32_t findSectionByName(const GuiCalcBridge& bridge, const char* name) {
       for (std::uint32_t i = 0; i < bridge.allSections.size(); ++i) {
         if (FEM::BEAM::sameSectionName(bridge.allSections[i].getName(), name)) return i;
       }
@@ -166,7 +166,7 @@ namespace anaf::GUI {
     m_rotation = SupportInput{};
     m_force = {0.0, 0.0, 0.0};
     m_moment = {0.0, 0.0, 0.0};
-    m_loadedNode = kNone;
+    m_loadedNode = noSelection;
     m_elementNodeA = 0;
     m_elementNodeB = 1;
     m_formulation = 0;
@@ -174,7 +174,7 @@ namespace anaf::GUI {
     m_releases = 0;
     m_distributed = {0.0, 0.0, 0.0};
     m_distributedFrame = 0;
-    m_loadedElement = kNone;
+    m_loadedElement = noSelection;
     m_status.clear();
     m_statusIsError = false;
   }
@@ -192,7 +192,7 @@ namespace anaf::GUI {
       m_force = {0.0, 0.0, 0.0};
       m_moment = {0.0, 0.0, 0.0};
       std::lock_guard lock(bridge.dataMutex);
-      if (node != kNone && bridge.activeBeamMesh && node < bridge.activeBeamMesh->nodes.size()) {
+      if (node != noSelection && bridge.activeBeamMesh && node < bridge.activeBeamMesh->nodes.size()) {
         const auto& selected = bridge.activeBeamMesh->nodes[node];
         m_nodePosition = selected.getLocation();
         m_motion.load(selected.getAllowedMotionDirections());
@@ -209,7 +209,7 @@ namespace anaf::GUI {
     if (element != m_loadedElement) {
       m_loadedElement = element;
       std::lock_guard lock(bridge.dataMutex);
-      if (element != kNone && bridge.activeBeamMesh && element < bridge.activeBeamMesh->elements.size()) {
+      if (element != noSelection && bridge.activeBeamMesh && element < bridge.activeBeamMesh->elements.size()) {
         const auto& selected = bridge.activeBeamMesh->elements[element];
         m_elementNodeA = selected.node1;
         m_elementNodeB = selected.node2;
@@ -243,7 +243,7 @@ namespace anaf::GUI {
       if (mesh->hasResults) {
         double maxDisplacement = 0.0, maxVonMises = 0.0;
         std::size_t exceeded = 0, withoutStress = 0;
-        std::uint32_t worst = kNone;
+        std::uint32_t worst = noSelection;
         for (const auto& node : mesh->nodes) {
           const auto& d = node.getDisplacement();
           maxDisplacement = std::max(maxDisplacement, std::hypot(d[0], d[1], d[2]));
@@ -260,12 +260,12 @@ namespace anaf::GUI {
             worst = e;
           }
         }
-        const bool valid = bridge.m_isValid.load();
+        const bool valid = bridge.isValid.load();
         ImGui::TextColored(valid ? THEME::theme().good : THEME::theme().warn, "%s", valid ? "Solved, energy check passed" : "Results shown (from a file, or energy check not passed)");
         ImGui::TextDisabled("Max displacement");
         ImGui::SameLine();
         ImGui::Text("%.4g mm", maxDisplacement * 1e3);
-        if (worst != kNone) {
+        if (worst != noSelection) {
           ImGui::TextDisabled("Max von Mises");
           ImGui::SameLine();
           ImGui::Text("%.4g MPa (element %u)", maxVonMises / 1e6, worst);
@@ -302,9 +302,9 @@ namespace anaf::GUI {
     LAYOUT::field("Selected");
     if (ImGui::InputScalar("##beam_selected_node_id", ImGuiDataType_U32, &typed, nullptr, nullptr, nullptr, ImGuiInputTextFlags_EnterReturnsTrue)) {
       const auto mesh = currentMesh(bridge);
-      setSelectedNode(bridge, mesh && typed < mesh->nodes.size() ? typed : kNone);
+      setSelectedNode(bridge, mesh && typed < mesh->nodes.size() ? typed : noSelection);
     }
-    if (node == kNone) {
+    if (node == noSelection) {
       ImGui::TextDisabled("Click a node in the viewport or type its id.");
       return;
     }
@@ -326,9 +326,9 @@ namespace anaf::GUI {
             FEM::BEAM::deleteNode(mesh, node);
             return true;
           })) {
-        setSelectedNode(bridge, kNone);
-        setSelectedElement(bridge, kNone);
-        m_loadedNode = kNone;
+        setSelectedNode(bridge, noSelection);
+        setSelectedElement(bridge, noSelection);
+        m_loadedNode = noSelection;
         setStatus(std::format("Node {} deleted with its elements; later node ids moved down by one", node), false);
       }
     }
@@ -340,7 +340,7 @@ namespace anaf::GUI {
                                  ImGuiTreeNodeFlags_DefaultOpen)) {
       return;
     }
-    if (node == kNone) {
+    if (node == noSelection) {
       ImGui::TextDisabled("Click a node in the viewport (or type its id in the Model tab).");
       return;
     }
@@ -497,7 +497,7 @@ namespace anaf::GUI {
     ImGui::SameLine();
     if (ImGui::Button("Sections...##beam", ImVec2(-FLT_MIN, 0.0f)) && onOpenSectionHandler) onOpenSectionHandler();
     LAYOUT::field("Formulation");
-    ImGui::Combo("##beam_element_formulation", &m_formulation, kFormulations.data(), static_cast<int>(kFormulations.size()));
+    ImGui::Combo("##beam_element_formulation", &m_formulation, formulations.data(), static_cast<int>(formulations.size()));
     LAYOUT::field("Orientation v");
     ImGui::InputScalarN("##beam_orientation", ImGuiDataType_Double, m_orientation.data(), 3, nullptr, nullptr, "%.3g");
     ImGui::SetItemTooltip("Vector in the local x-y plane (global axes). 0 0 0 = automatic: local y as close to +Y as\n"
@@ -526,7 +526,7 @@ namespace anaf::GUI {
       }
       element.materialID = *material;
       element.sectionID = *section;
-      element.formulation = static_cast<Formulation>(m_formulation);
+      element.formulation = static_cast<E_Formulation>(m_formulation);
       element.orientation = m_orientation;
       element.endReleases = static_cast<std::uint16_t>(m_releases & FEM::BEAM::RELEASE::allMask);
       return {};
@@ -588,7 +588,7 @@ namespace anaf::GUI {
           ImGui::PushID(row);
           if (element.stress.isStressExceeded) ImGui::PushStyleColor(ImGuiCol_Text, THEME::theme().bad);
           if (ImGui::Selectable(label.c_str(), selected == index)) {
-            bridge.selectedElementId = selected == index ? kNone : index; // dataMutex held
+            bridge.selectedElementId = selected == index ? noSelection : index; // dataMutex held
           }
           if (element.stress.isStressExceeded) ImGui::PopStyleColor();
           ImGui::PopID();
@@ -597,7 +597,7 @@ namespace anaf::GUI {
     }
     ImGui::EndChild();
 
-    ImGui::BeginDisabled(selected == kNone);
+    ImGui::BeginDisabled(selected == noSelection);
     if (ImGui::Button("Apply to Selected##beam", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
       std::string error = "no element selected";
       const bool ok = editModel(bridge, [&](BeamMeshData& edited) {
@@ -616,7 +616,7 @@ namespace anaf::GUI {
             FEM::BEAM::removeElements(edited, [&](const BeamElement&) { return index++ == selected; });
             return true;
           })) {
-        setSelectedElement(bridge, kNone);
+        setSelectedElement(bridge, noSelection);
         setStatus(std::format("Element {} deleted", selected), false);
       }
     }
@@ -633,10 +633,10 @@ namespace anaf::GUI {
                           "Release only one side of a joint: when every element end at a node is free about\n"
                           "an axis, the node rotation there is undefined (held at zero; a moment on it is a\n"
                           "mechanism). N or T released at both ends of an element is a mechanism too.");
-    constexpr std::array<const char*, 6> kForces{"N", "Vy", "Vz", "T", "My", "Mz"};
+    constexpr std::array<const char*, 6> sectionForceNames{"N", "Vy", "Vz", "T", "My", "Mz"};
     if (ImGui::BeginTable("##beam_releases", 7, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV)) {
       ImGui::TableSetupColumn("End");
-      for (const char* force : kForces) ImGui::TableSetupColumn(force);
+      for (const char* force : sectionForceNames) ImGui::TableSetupColumn(force);
       ImGui::TableHeadersRow();
       for (int end = 0; end < 2; ++end) {
         ImGui::TableNextRow();
@@ -670,12 +670,12 @@ namespace anaf::GUI {
     bool selfWeight = !mesh || mesh->gravity != std::array<double, 3>{};
     if (ImGui::Checkbox("Self weight (density x area x g, -Y)##beam", &selfWeight)) {
       editModel(bridge, [&](BeamMeshData& edited) {
-        edited.gravity = selfWeight ? kGravity : std::array<double, 3>{};
+        edited.gravity = selfWeight ? standardGravity : std::array<double, 3>{};
         return true;
       });
     }
 
-    if (element == kNone || !mesh || element >= mesh->elements.size()) {
+    if (element == noSelection || !mesh || element >= mesh->elements.size()) {
       ImGui::TextDisabled("Click an element in the viewport (or the Model tab list) for uniform loads.");
       return;
     }
@@ -685,20 +685,20 @@ namespace anaf::GUI {
       if (load.element != element) continue;
       ++onElement;
       ImGui::BulletText("q = (%.4g, %.4g, %.4g) N/m, %s", load.value[0], load.value[1], load.value[2],
-                        load.frame == LoadFrame::Local ? "local" : "global");
+                        load.frame == E_LoadFrame::Local ? "local" : "global");
     }
     if (onElement == 0) ImGui::TextDisabled("No uniform load on this element.");
 
     LAYOUT::field("q [N/m]");
     ImGui::InputScalarN("##beam_q", ImGuiDataType_Double, m_distributed.data(), 3, nullptr, nullptr, "%.4g");
     LAYOUT::field("Axes");
-    ImGui::Combo("##beam_q_frame", &m_distributedFrame, kFrames.data(), static_cast<int>(kFrames.size()));
+    ImGui::Combo("##beam_q_frame", &m_distributedFrame, loadFrames.data(), static_cast<int>(loadFrames.size()));
     if (ImGui::Button("Add Load##beam_q", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
       if (m_distributed == std::array<double, 3>{}) {
         setStatus("Enter a non-zero load", true);
       } else if (editModel(bridge, [&](BeamMeshData& edited) {
                    if (element >= edited.elements.size()) return false;
-                   edited.distributedLoads.push_back({element, m_distributed, static_cast<LoadFrame>(m_distributedFrame)});
+                   edited.distributedLoads.push_back({element, m_distributed, static_cast<E_LoadFrame>(m_distributedFrame)});
                    return true;
                  })) {
         setStatus(std::format("Uniform load added to element {}", element), false);
@@ -723,14 +723,14 @@ namespace anaf::GUI {
     ImGui::TextWrapped("Sets the formulation, or material and section, on every element; single elements can be "
                        "changed afterwards.");
     LAYOUT::field("Formulation");
-    ImGui::Combo("##beam_whole_formulation", &m_wholeFormulation, kFormulations.data(), static_cast<int>(kFormulations.size()));
+    ImGui::Combo("##beam_whole_formulation", &m_wholeFormulation, formulations.data(), static_cast<int>(formulations.size()));
     if (ImGui::Button("Apply Formulation to All##beam", ImVec2(-FLT_MIN, 0.0f))) {
       if (editModel(bridge, [&](BeamMeshData& mesh) {
             if (mesh.elements.empty()) return false;
-            FEM::BEAM::setFormulationForAll(mesh, static_cast<Formulation>(m_wholeFormulation));
+            FEM::BEAM::setFormulationForAll(mesh, static_cast<E_Formulation>(m_wholeFormulation));
             return true;
           })) {
-        setStatus(std::format("{} set on every element", kFormulations[static_cast<std::size_t>(m_wholeFormulation)]), false);
+        setStatus(std::format("{} set on every element", formulations[static_cast<std::size_t>(m_wholeFormulation)]), false);
       }
     }
     ImGui::Spacing();
@@ -771,7 +771,7 @@ namespace anaf::GUI {
     // A 3D portal frame: two HEB 200 columns, an IPE 300 beam with a uniform load, a lateral
     // and an out-of-plane load, clamped bases, self weight on.
     auto& bridge = BRIDGE::buildBridge();
-    bridge.resetModel(BRIDGE::ObjectType::beam_frame);
+    bridge.resetModel(BRIDGE::E_ObjectType::BeamFrame);
     resetState();
     editModel(bridge, [&](BeamMeshData& mesh) {
       mesh.nodes = {FEM::BEAM::Node{0, 0.0, 0.0, 0.0}, FEM::BEAM::Node{1, 0.0, 4.0, 0.0}, FEM::BEAM::Node{2, 6.0, 4.0, 0.0},
@@ -788,7 +788,7 @@ namespace anaf::GUI {
         return e;
       };
       mesh.elements = {element(0, 1, column), element(1, 2, girder), element(3, 2, column)};
-      mesh.distributedLoads = {{1, {0.0, -10e3, 0.0}, LoadFrame::Global}};
+      mesh.distributedLoads = {{1, {0.0, -10e3, 0.0}, E_LoadFrame::Global}};
       mesh.nodalLoads = {{1, {5e3, 0.0, 0.0}, {}}, {2, {0.0, 0.0, 2e3}, {}}};
       return true;
     });
@@ -798,13 +798,13 @@ namespace anaf::GUI {
   void BeamModelEditor::readLibrary() {
     m_libraryRead = true;
     m_library.clear();
-    m_libraryDir = anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::BEAM::LIBRARY::kLibrarySubdir));
+    m_libraryDir = anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::BEAM::LIBRARY::librarySubdir));
     if (m_libraryDir.empty()) {
-      m_libraryError = std::format("assets/{} not found", FEM::BEAM::LIBRARY::kLibrarySubdir);
+      m_libraryError = std::format("assets/{} not found", FEM::BEAM::LIBRARY::librarySubdir);
       anaf::LOG::warn("Built-in beam library: {}", m_libraryError);
       return;
     }
-    auto index = FEM::BEAM::LIBRARY::loadIndex(m_libraryDir / std::filesystem::path(FEM::BEAM::LIBRARY::kIndexFile));
+    auto index = FEM::BEAM::LIBRARY::loadIndex(m_libraryDir / std::filesystem::path(FEM::BEAM::LIBRARY::indexFileName));
     if (!index) {
       m_libraryError = index.error();
       anaf::LOG::warn("Built-in beam library: {}", m_libraryError);
@@ -894,8 +894,8 @@ namespace anaf::GUI {
     }
     ImGui::SetItemTooltip("Draw the largest nodal displacement as 5 %% of the model size");
     ImGui::EndDisabled();
-    if (bridge.m_isRunning.load()) {
-      ImGui::ProgressBar(bridge.m_progress.load(), ImVec2(-FLT_MIN, 0.0f));
+    if (bridge.isRunning.load()) {
+      ImGui::ProgressBar(bridge.progress.load(), ImVec2(-FLT_MIN, 0.0f));
       ImGui::BeginDisabled();
       LAYOUT::primaryButton("Calculating...##beam");
       ImGui::EndDisabled();
@@ -911,11 +911,11 @@ namespace anaf::GUI {
 
   void BeamModelEditor::renderModelButtons() {
     auto& bridge = BRIDGE::buildBridge();
-    ImGui::BeginDisabled(bridge.m_isRunning.load());
+    ImGui::BeginDisabled(bridge.isRunning.load());
     if (ImGui::Button("Load Example Frame##beam", ImVec2(LAYOUT::splitWidth(2), 0.0f))) loadExample();
     ImGui::SameLine();
     if (ImGui::Button("Clear Model##beam", ImVec2(-FLT_MIN, 0.0f))) {
-      bridge.resetModel(BRIDGE::ObjectType::beam_frame);
+      bridge.resetModel(BRIDGE::E_ObjectType::BeamFrame);
       resetState();
     }
     ImGui::EndDisabled();
@@ -925,7 +925,7 @@ namespace anaf::GUI {
     if (!isOpen) return;
     auto& bridge = BRIDGE::buildBridge();
 
-    std::uint32_t node = kNone, element = kNone;
+    std::uint32_t node = noSelection, element = noSelection;
     {
       std::lock_guard lock(bridge.dataMutex);
       const auto& mesh = bridge.activeBeamMesh;
@@ -934,9 +934,9 @@ namespace anaf::GUI {
     }
     syncSelection(node, element);
 
-    const auto loadKind = bridge.m_loadKind.load();
-    const bool dynamic = loadKind == BRIDGE::LoadKind::dynamic;
-    const bool running = bridge.m_isRunning.load();
+    const auto loadKind = bridge.loadKind.load();
+    const bool dynamic = loadKind == BRIDGE::E_LoadKind::Dynamic;
+    const bool running = bridge.isRunning.load();
     // Footer rows: deformation scale (+ progress bar) and the model buttons; one run button.
     const float footer = dynamic ? LAYOUT::footerHeight(1, 1) : LAYOUT::footerHeight(running ? 3 : 2, 1);
 

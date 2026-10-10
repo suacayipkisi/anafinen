@@ -67,22 +67,22 @@ namespace anaf::GUI {
       std::vector<png_byte> pixels; // RGBA8
     };
 
-    std::optional<DecodedIcon> loadIconPng(std::string_view file_name) {
-      const std::filesystem::path icon_path =
-        anaf::DIRECTORY::findAssetPath(std::filesystem::path("icons") / file_name);
-      if (icon_path.empty()) {
+    std::optional<DecodedIcon> loadIconPng(std::string_view fileName) {
+      const std::filesystem::path iconPath =
+        anaf::DIRECTORY::findAssetPath(std::filesystem::path("icons") / fileName);
+      if (iconPath.empty()) {
         return std::nullopt;
       }
 
       // Read through std::ifstream: libpng's *_from_file uses fopen(), which cannot open
       // non-ASCII paths on Windows (e.g. a ZIP extracted under "C:\Users\Şule").
-      std::ifstream file(icon_path, std::ios::binary);
+      std::ifstream file(iconPath, std::ios::binary);
       const std::vector<char> encoded{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 
       png_image image{};
       image.version = PNG_IMAGE_VERSION;
       if (encoded.empty() || !png_image_begin_read_from_memory(&image, encoded.data(), encoded.size())) {
-        anaf::LOG::warn("[GUI] Failed to read application icon {}.", file_name);
+        anaf::LOG::warn("[GUI] Failed to read application icon {}.", fileName);
         return std::nullopt;
       }
       image.format = PNG_FORMAT_RGBA;
@@ -90,7 +90,7 @@ namespace anaf::GUI {
                        std::vector<png_byte>(PNG_IMAGE_SIZE(image))};
       if (!png_image_finish_read(&image, nullptr, icon.pixels.data(), 0, nullptr)) {
         png_image_free(&image);
-        anaf::LOG::warn("[GUI] Failed to decode application icon {}.", file_name);
+        anaf::LOG::warn("[GUI] Failed to decode application icon {}.", fileName);
         return std::nullopt;
       }
       png_image_free(&image);
@@ -101,8 +101,8 @@ namespace anaf::GUI {
     // title bar / taskbar instead of shrinking the 128 px image (which closes the A's counter).
     void setWindowIcon(GLFWwindow* window) {
       std::vector<DecodedIcon> icons;
-      for (const std::string_view file_name : {"anafinen.png", "anafinen-32.png"}) {
-        if (auto icon = loadIconPng(file_name)) {
+      for (const std::string_view fileName : {"anafinen.png", "anafinen-32.png"}) {
+        if (auto icon = loadIconPng(fileName)) {
           icons.push_back(std::move(*icon));
         }
       }
@@ -111,12 +111,12 @@ namespace anaf::GUI {
         return;
       }
 
-      std::vector<GLFWimage> glfw_icons;
-      glfw_icons.reserve(icons.size());
+      std::vector<GLFWimage> glfwIcons;
+      glfwIcons.reserve(icons.size());
       for (DecodedIcon& icon : icons) {
-        glfw_icons.push_back(GLFWimage{icon.width, icon.height, icon.pixels.data()});
+        glfwIcons.push_back(GLFWimage{icon.width, icon.height, icon.pixels.data()});
       }
-      glfwSetWindowIcon(window, static_cast<int>(glfw_icons.size()), glfw_icons.data());
+      glfwSetWindowIcon(window, static_cast<int>(glfwIcons.size()), glfwIcons.data());
     }
 
     // Which window system GLFW picked. On Linux it can differ from the session: under a
@@ -165,35 +165,35 @@ namespace anaf::GUI {
     }
 
     void bindAnalysisFlow(UIPanels panels) {
-      panels.dock->on_select_truss = [panels] { panels.selector->open(StructureFamily::truss); };
-      panels.dock->on_select_beam = [panels] { panels.selector->open(StructureFamily::beam); };
+      panels.dock->onSelectTruss = [panels] { panels.selector->open(E_StructureFamily::Truss); };
+      panels.dock->onSelectBeam = [panels] { panels.selector->open(E_StructureFamily::Beam); };
 
       // Only a change of type resets: selecting the current type again just reopens its panel.
       // The load kind only changes what the editors show, so it never resets the model.
-      panels.selector->onTrussSelected = [panels](TrussTypes type, anaf::BRIDGE::LoadKind loadKind) {
-        const auto objectType = type == simpleQuadranglePrism
-          ? anaf::BRIDGE::ObjectType::truss_SQPT
-          : anaf::BRIDGE::ObjectType::truss_imported_or_entered;
+      panels.selector->onTrussSelected = [panels](E_TrussTypes type, anaf::BRIDGE::E_LoadKind loadKind) {
+        const auto objectType = type == SimpleQuadranglePrism
+          ? anaf::BRIDGE::E_ObjectType::TrussSqpt
+          : anaf::BRIDGE::E_ObjectType::TrussImportedOrEntered;
         auto& bridge = anaf::BRIDGE::buildBridge();
-        bridge.m_loadKind = loadKind;
-        if (bridge.m_objectType.load() != objectType) {
+        bridge.loadKind = loadKind;
+        if (bridge.objectType.load() != objectType) {
           panels.fileIo->cancelImport();
           bridge.resetModel(objectType);
           panels.control->resetState();
           panels.editor->resetState();
         }
-        panels.control->isOpen = (type == simpleQuadranglePrism);
-        panels.editor->isOpen = (type == nodeEntered);
+        panels.control->isOpen = (type == SimpleQuadranglePrism);
+        panels.editor->isOpen = (type == NodeEntered);
         panels.tree->isOpen = true;
         closeBeamPanels(panels);
       };
 
-      panels.selector->onBeamSelected = [panels](anaf::BRIDGE::LoadKind loadKind) {
+      panels.selector->onBeamSelected = [panels](anaf::BRIDGE::E_LoadKind loadKind) {
         auto& bridge = anaf::BRIDGE::buildBridge();
-        bridge.m_loadKind = loadKind;
-        if (bridge.m_objectType.load() != anaf::BRIDGE::ObjectType::beam_frame) {
+        bridge.loadKind = loadKind;
+        if (bridge.objectType.load() != anaf::BRIDGE::E_ObjectType::BeamFrame) {
           panels.fileIo->cancelImport();
-          bridge.resetModel(anaf::BRIDGE::ObjectType::beam_frame);
+          bridge.resetModel(anaf::BRIDGE::E_ObjectType::BeamFrame);
           panels.control->resetState();
           panels.editor->resetState();
           panels.beamEditor->resetState();
@@ -203,7 +203,7 @@ namespace anaf::GUI {
         panels.beamEditor->isOpen = true;
         panels.tree->isOpen = true;
         // Static section force diagrams; reopened from the Panels menu if wanted.
-        panels.diagrams->isOpen = loadKind == anaf::BRIDGE::LoadKind::constant;
+        panels.diagrams->isOpen = loadKind == anaf::BRIDGE::E_LoadKind::Constant;
       };
       panels.beamEditor->onOpenMaterialHandler = [panels] { panels.matWindow->isOpen = true; };
       panels.beamEditor->onOpenSectionHandler = [panels] { panels.sections->isOpen = true; };
@@ -219,15 +219,15 @@ namespace anaf::GUI {
       panels.editor->onLoadBuiltin = [panels](const std::filesystem::path& path) { panels.fileIo->importFile(path); };
 
       // Panels menu: only the panels the active analysis uses can be reopened.
-      const auto activeType = [] { return anaf::BRIDGE::buildBridge().m_objectType.load(); };
+      const auto activeType = [] { return anaf::BRIDGE::buildBridge().objectType.load(); };
       panels.dock->addPanelMenuEntry({"3D Simulation Viewport", panels.viewport, {}, nullptr});
       panels.dock->addPanelMenuEntry({"Truss(1D) Analysis Set", panels.control,
-        [activeType] { return activeType() == anaf::BRIDGE::ObjectType::truss_SQPT; },
+        [activeType] { return activeType() == anaf::BRIDGE::E_ObjectType::TrussSqpt; },
         "Only for the Simple Quadrangle truss (Analyze > Truss (1D Element))"});
       panels.dock->addPanelMenuEntry({"Truss(1D) Model Editor", panels.editor,
-        [activeType] { return activeType() == anaf::BRIDGE::ObjectType::truss_imported_or_entered; },
+        [activeType] { return activeType() == anaf::BRIDGE::E_ObjectType::TrussImportedOrEntered; },
         "Only for an imported / self-built truss (Analyze > Truss (1D Element))"});
-      const auto beamActive = [activeType] { return activeType() == anaf::BRIDGE::ObjectType::beam_frame; };
+      const auto beamActive = [activeType] { return activeType() == anaf::BRIDGE::E_ObjectType::BeamFrame; };
       panels.dock->addPanelMenuEntry({"Beam(3D) Frame Editor", panels.beamEditor, beamActive,
         "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))"});
       panels.dock->addPanelMenuEntry({"Beam Diagrams", panels.diagrams, beamActive,
@@ -235,25 +235,25 @@ namespace anaf::GUI {
       panels.dock->addPanelMenuEntry({"Section Handler", panels.sections, beamActive,
         "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))"});
       panels.dock->addPanelMenuEntry({"Material Handler", panels.matWindow,
-        [activeType] { return activeType() != anaf::BRIDGE::ObjectType::no_type; },
+        [activeType] { return activeType() != anaf::BRIDGE::E_ObjectType::NoType; },
         "Select an analysis first (Analyze menu)"});
       panels.dock->addPanelMenuEntry({"Model Tree", panels.tree,
-        [activeType] { return activeType() != anaf::BRIDGE::ObjectType::no_type; },
+        [activeType] { return activeType() != anaf::BRIDGE::E_ObjectType::NoType; },
         "Select an analysis first (Analyze menu)"});
       panels.dock->addPanelMenuEntry({"Console", panels.console, {}, nullptr});
 
-      panels.dock->on_show_about = [panels] { panels.about->isOpen = true; };
-      panels.dock->on_show_welcome = [panels] { panels.welcome->open(); };
-      panels.welcome->onNewBeam = [panels] { panels.selector->open(StructureFamily::beam); };
-      panels.welcome->onNewTruss = [panels] { panels.selector->open(StructureFamily::truss); };
+      panels.dock->onShowAbout = [panels] { panels.about->isOpen = true; };
+      panels.dock->onShowWelcome = [panels] { panels.welcome->open(); };
+      panels.welcome->onNewBeam = [panels] { panels.selector->open(E_StructureFamily::Beam); };
+      panels.welcome->onNewTruss = [panels] { panels.selector->open(E_StructureFamily::Truss); };
       panels.welcome->onImport = [panels] { panels.fileIo->requestImport(); };
       // The example is solved for the static loads, so the editors must show those.
       panels.welcome->onOpenExample = [panels](const std::filesystem::path& path) {
-        anaf::BRIDGE::buildBridge().m_loadKind = anaf::BRIDGE::LoadKind::constant;
+        anaf::BRIDGE::buildBridge().loadKind = anaf::BRIDGE::E_LoadKind::Constant;
         panels.fileIo->importFile(path);
       };
-      panels.dock->on_import_mesh = [panels] { panels.fileIo->requestImport(); };
-      panels.dock->on_export_results = [panels] { panels.fileIo->requestExport(); };
+      panels.dock->onImportMesh = [panels] { panels.fileIo->requestImport(); };
+      panels.dock->onExportResults = [panels] { panels.fileIo->requestExport(); };
       panels.fileIo->onImportedBeam = [panels] {
         panels.control->resetState();
         panels.editor->resetState();
@@ -265,7 +265,7 @@ namespace anaf::GUI {
         panels.diagrams->isOpen = true;
         panels.viewport->requestFit();
       };
-      // The import itself reset the bridge to truss_imported_or_entered (FileIoPanel::pollTasks).
+      // The import itself reset the bridge to TrussImportedOrEntered (FileIoPanel::pollTasks).
       panels.fileIo->onImported = [panels] {
         panels.control->resetState();
         panels.editor->resetState();

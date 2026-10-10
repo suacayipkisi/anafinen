@@ -38,23 +38,23 @@ namespace anaf::GUI {
   namespace {
 
     // DSA vertex layout helpers: every VAO here reads from a single vertex buffer at binding 0.
-    constexpr GLuint kVertexBinding = 0;
+    constexpr GLuint vertexBinding = 0;
 
     void setFloatAttrib(GLuint vao, GLuint location, GLint components, std::size_t offset) {
       glEnableVertexArrayAttrib(vao, location);
       glVertexArrayAttribFormat(vao, location, components, GL_FLOAT, GL_FALSE, static_cast<GLuint>(offset));
-      glVertexArrayAttribBinding(vao, location, kVertexBinding);
+      glVertexArrayAttribBinding(vao, location, vertexBinding);
     }
 
     void setIntAttrib(GLuint vao, GLuint location, std::size_t offset) {
       glEnableVertexArrayAttrib(vao, location);
       glVertexArrayAttribIFormat(vao, location, 1, GL_INT, static_cast<GLuint>(offset));
-      glVertexArrayAttribBinding(vao, location, kVertexBinding);
+      glVertexArrayAttribBinding(vao, location, vertexBinding);
     }
 
     // Layout shared by line and glow-line batches: position, color, entity ID.
     void setupVertex3DLayout(const GlVertexArray& vao, const GlBuffer& vbo) {
-      glVertexArrayVertexBuffer(vao.get(), kVertexBinding, vbo.get(), 0, sizeof(Vertex3D));
+      glVertexArrayVertexBuffer(vao.get(), vertexBinding, vbo.get(), 0, sizeof(Vertex3D));
       setFloatAttrib(vao.get(), 0, 3, offsetof(Vertex3D, position));
       setFloatAttrib(vao.get(), 1, 4, offsetof(Vertex3D, color));
       setIntAttrib(vao.get(), 2, offsetof(Vertex3D, entityID));
@@ -297,7 +297,7 @@ namespace anaf::GUI {
     m_gridVbo = createBuffer();
     glNamedBufferStorage(m_gridVbo.get(), sizeof(gridVertices), gridVertices, 0);
     m_gridVao = createVertexArray();
-    glVertexArrayVertexBuffer(m_gridVao.get(), kVertexBinding, m_gridVbo.get(), 0, sizeof(glm::vec3));
+    glVertexArrayVertexBuffer(m_gridVao.get(), vertexBinding, m_gridVbo.get(), 0, sizeof(glm::vec3));
     setFloatAttrib(m_gridVao.get(), 0, 3, 0);
 
     // Line Buffers
@@ -318,7 +318,7 @@ namespace anaf::GUI {
     // Point Buffers
     m_pointVbo = createBuffer();
     m_pointVao = createVertexArray();
-    glVertexArrayVertexBuffer(m_pointVao.get(), kVertexBinding, m_pointVbo.get(), 0, sizeof(Point3D));
+    glVertexArrayVertexBuffer(m_pointVao.get(), vertexBinding, m_pointVbo.get(), 0, sizeof(Point3D));
     setFloatAttrib(m_pointVao.get(), 0, 3, offsetof(Point3D, position));
     setFloatAttrib(m_pointVao.get(), 1, 4, offsetof(Point3D, color));
     setIntAttrib(m_pointVao.get(), 2, offsetof(Point3D, entityID));
@@ -328,7 +328,7 @@ namespace anaf::GUI {
     // Text (glyph quad) Buffers
     m_textVbo = createBuffer();
     m_textVao = createVertexArray();
-    glVertexArrayVertexBuffer(m_textVao.get(), kVertexBinding, m_textVbo.get(), 0, sizeof(TextVertex));
+    glVertexArrayVertexBuffer(m_textVao.get(), vertexBinding, m_textVbo.get(), 0, sizeof(TextVertex));
     setFloatAttrib(m_textVao.get(), 0, 2, offsetof(TextVertex, position));
     setFloatAttrib(m_textVao.get(), 1, 2, offsetof(TextVertex, uv));
     setFloatAttrib(m_textVao.get(), 2, 4, offsetof(TextVertex, color));

@@ -82,7 +82,7 @@ namespace anaf::IO::ARRAY {
     const CompressedView<Value> view{
       .rows = static_cast<std::uint64_t>(source->rows()),
       .cols = static_cast<std::uint64_t>(source->cols()),
-      .layout = Matrix::IsRowMajor ? SparseLayout::Csr : SparseLayout::Csc,
+      .layout = Matrix::IsRowMajor ? E_SparseLayout::Csr : E_SparseLayout::Csc,
       .values = std::span<const Value>(source->valuePtr(), nonZeros),
       .indices = indices,
       .pointers = pointers,
@@ -98,7 +98,7 @@ namespace anaf::IO::ARRAY {
     struct IsEigenSparse<Eigen::SparseMatrix<Value, Options, StorageIndex>> : std::true_type {};
 
     inline ArrayError eigenShapeError(const std::string_view path, const std::string& message) {
-      return {ArrayError::Code::ShapeMismatch, std::format("'{}': {}", path, message)};
+      return {ArrayError::E_Code::ShapeMismatch, std::format("'{}': {}", path, message)};
     }
 
     template <class Type>
@@ -180,7 +180,7 @@ namespace anaf::IO::ARRAY {
         result.setFromTriplets(triplets.begin(), triplets.end());
         return result;
       };
-      if (stored->layout == SparseLayout::Csr) return build.template operator()<Eigen::RowMajor>();
+      if (stored->layout == E_SparseLayout::Csr) return build.template operator()<Eigen::RowMajor>();
       return build.template operator()<Eigen::ColMajor>();
     }
 

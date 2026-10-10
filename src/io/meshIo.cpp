@@ -30,45 +30,45 @@ namespace anaf::IO {
 
     const std::array<FormatDescriptor, 7>& formatTable() {
       static const std::array<FormatDescriptor, 7> table{{
-        {FileFormat::Msh, "Gmsh MSH", {".msh"}, true, true},
-        {FileFormat::Vtu, "VTK XML Unstructured Grid", {".vtu"}, true, true},
-        {FileFormat::Pvd, "ParaView Collection", {".pvd"}, true, true},
-        {FileFormat::VtkLegacy, "VTK Legacy", {".vtk"}, true, true},
-        {FileFormat::Step, "STEP", {".step", ".stp"}, true, true},
-        {FileFormat::Iges, "IGES", {".iges", ".igs"}, true, false},
-        {FileFormat::Brep, "OpenCASCADE BREP", {".brep", ".brp"}, true, false},
+        {E_FileFormat::Msh, "Gmsh MSH", {".msh"}, true, true},
+        {E_FileFormat::Vtu, "VTK XML Unstructured Grid", {".vtu"}, true, true},
+        {E_FileFormat::Pvd, "ParaView Collection", {".pvd"}, true, true},
+        {E_FileFormat::VtkLegacy, "VTK Legacy", {".vtk"}, true, true},
+        {E_FileFormat::Step, "STEP", {".step", ".stp"}, true, true},
+        {E_FileFormat::Iges, "IGES", {".iges", ".igs"}, true, false},
+        {E_FileFormat::Brep, "OpenCASCADE BREP", {".brep", ".brp"}, true, false},
       }};
       return table;
     }
 
-    FileFormat sniff(const std::filesystem::path& path) {
+    E_FileFormat sniff(const std::filesystem::path& path) {
       std::ifstream file(path, std::ios::binary);
-      if (!file) return FileFormat::Auto;
+      if (!file) return E_FileFormat::Auto;
       std::string head(512, '\0');
       file.read(head.data(), static_cast<std::streamsize>(head.size()));
       head.resize(static_cast<std::size_t>(file.gcount()));
-      if (head.find("$MeshFormat") != std::string::npos) return FileFormat::Msh;
-      if (head.find("# vtk DataFile") != std::string::npos) return FileFormat::VtkLegacy;
-      if (head.find("type=\"Collection\"") != std::string::npos) return FileFormat::Pvd;
-      if (head.find("<VTKFile") != std::string::npos) return FileFormat::Vtu;
-      if (head.find("ISO-10303-21") != std::string::npos) return FileFormat::Step;
-      return FileFormat::Auto;
+      if (head.find("$MeshFormat") != std::string::npos) return E_FileFormat::Msh;
+      if (head.find("# vtk DataFile") != std::string::npos) return E_FileFormat::VtkLegacy;
+      if (head.find("type=\"Collection\"") != std::string::npos) return E_FileFormat::Pvd;
+      if (head.find("<VTKFile") != std::string::npos) return E_FileFormat::Vtu;
+      if (head.find("ISO-10303-21") != std::string::npos) return E_FileFormat::Step;
+      return E_FileFormat::Auto;
     }
 
-    IoError toError(const std::exception& error, const IoError::Code code) {
+    IoError toError(const std::exception& error, const IoError::E_Code code) {
       return IoError{code, error.what()};
     }
 
     template <typename Fn>
-    auto guarded(Fn&& fn, const IoError::Code failureCode) -> std::expected<decltype(fn()), IoError> {
+    auto guarded(Fn&& fn, const IoError::E_Code failureCode) -> std::expected<decltype(fn()), IoError> {
       try {
         return fn();
       } catch (const detail::CancelledFailure& error) {
-        return std::unexpected(toError(error, IoError::Code::Cancelled));
+        return std::unexpected(toError(error, IoError::E_Code::Cancelled));
       } catch (const detail::ParseFailure& error) {
-        return std::unexpected(toError(error, IoError::Code::ParseError));
+        return std::unexpected(toError(error, IoError::E_Code::ParseError));
       } catch (const std::invalid_argument& error) {
-        return std::unexpected(toError(error, IoError::Code::InvalidModel));
+        return std::unexpected(toError(error, IoError::E_Code::InvalidModel));
       } catch (const std::exception& error) {
         return std::unexpected(toError(error, failureCode));
       }
@@ -76,7 +76,7 @@ namespace anaf::IO {
 
   } // namespace end
 
-  std::string_view formatName(const FileFormat format) noexcept {
+  std::string_view formatName(const E_FileFormat format) noexcept {
     for (const auto& row : formatTable()) {
       if (row.format == format) return row.name;
     }
@@ -87,7 +87,7 @@ namespace anaf::IO {
     return formatTable();
   }
 
-  FileFormat detectFormat(const std::filesystem::path& path) {
+  E_FileFormat detectFormat(const std::filesystem::path& path) {
     const std::string extension = detail::toLower(pathToUtf8(path.extension()));
     for (const auto& row : formatTable()) {
       for (const auto ext : row.extensions) {
@@ -99,35 +99,35 @@ namespace anaf::IO {
 
   std::expected<MeshModel, IoError> readMesh(const std::filesystem::path& path, const ReadOptions& options, const IoContext& context) {
     if (!std::filesystem::exists(path)) {
-      return std::unexpected(IoError{IoError::Code::FileNotFound, "file not found: " + pathToUtf8(path)});
+      return std::unexpected(IoError{IoError::E_Code::FileNotFound, "file not found: " + pathToUtf8(path)});
     }
-    FileFormat format = options.format == FileFormat::Auto ? detectFormat(path) : options.format;
-    if (format == FileFormat::Auto) {
-      return std::unexpected(IoError{IoError::Code::UnsupportedFormat, "cannot determine the format of " + pathToUtf8(path)});
+    E_FileFormat format = options.format == E_FileFormat::Auto ? detectFormat(path) : options.format;
+    if (format == E_FileFormat::Auto) {
+      return std::unexpected(IoError{IoError::E_Code::UnsupportedFormat, "cannot determine the format of " + pathToUtf8(path)});
     }
     return guarded([&]() -> MeshModel {
       MeshModel model;
       switch (format) {
-        case FileFormat::Msh: model = formats::readMsh(path, options, context); break;
-        case FileFormat::VtkLegacy: model = formats::readVtkLegacy(path, options, context); break;
-        case FileFormat::Vtu: model = formats::readVtu(path, options, context); break;
-        case FileFormat::Pvd: model = formats::readPvd(path, options, context); break;
-        case FileFormat::Step:
-        case FileFormat::Iges:
-        case FileFormat::Brep: model = formats::readCad(path, options, context); break;
-        case FileFormat::Auto: break;
+        case E_FileFormat::Msh: model = formats::readMsh(path, options, context); break;
+        case E_FileFormat::VtkLegacy: model = formats::readVtkLegacy(path, options, context); break;
+        case E_FileFormat::Vtu: model = formats::readVtu(path, options, context); break;
+        case E_FileFormat::Pvd: model = formats::readPvd(path, options, context); break;
+        case E_FileFormat::Step:
+        case E_FileFormat::Iges:
+        case E_FileFormat::Brep: model = formats::readCad(path, options, context); break;
+        case E_FileFormat::Auto: break;
       }
       if (const auto problems = model.validate(); !problems.empty()) {
         throw detail::ParseFailure("file produced an inconsistent model: " + problems.front());
       }
       return model;
-    }, IoError::Code::BackendError);
+    }, IoError::E_Code::BackendError);
   }
 
   std::expected<WriteReport, IoError> writeMesh(const std::filesystem::path& path, const MeshModel& model,
                                                 const WriteOptions& options, const IoContext& context) {
-    FileFormat format = options.format;
-    if (format == FileFormat::Auto) {
+    E_FileFormat format = options.format;
+    if (format == E_FileFormat::Auto) {
       const std::string extension = detail::toLower(pathToUtf8(path.extension()));
       for (const auto& row : formatTable()) {
         for (const auto ext : row.extensions) {
@@ -135,22 +135,22 @@ namespace anaf::IO {
         }
       }
     }
-    if (format == FileFormat::Auto) {
-      return std::unexpected(IoError{IoError::Code::UnsupportedFormat, "cannot determine the output format from " + pathToUtf8(path)});
+    if (format == E_FileFormat::Auto) {
+      return std::unexpected(IoError{IoError::E_Code::UnsupportedFormat, "cannot determine the output format from " + pathToUtf8(path)});
     }
     return guarded([&]() -> WriteReport {
       switch (format) {
-        case FileFormat::Msh: return formats::writeMsh(path, model, options, context);
-        case FileFormat::VtkLegacy: return formats::writeVtkLegacy(path, model, options, context);
-        case FileFormat::Vtu: return formats::writeVtu(path, model, options, context);
-        case FileFormat::Pvd: return formats::writePvd(path, model, options, context);
-        case FileFormat::Step: return formats::writeStep(path, model, options, context);
-        case FileFormat::Iges:
-        case FileFormat::Brep:
-        case FileFormat::Auto: break;
+        case E_FileFormat::Msh: return formats::writeMsh(path, model, options, context);
+        case E_FileFormat::VtkLegacy: return formats::writeVtkLegacy(path, model, options, context);
+        case E_FileFormat::Vtu: return formats::writeVtu(path, model, options, context);
+        case E_FileFormat::Pvd: return formats::writePvd(path, model, options, context);
+        case E_FileFormat::Step: return formats::writeStep(path, model, options, context);
+        case E_FileFormat::Iges:
+        case E_FileFormat::Brep:
+        case E_FileFormat::Auto: break;
       }
       throw std::runtime_error(std::string(formatName(format)) + " cannot be written");
-    }, IoError::Code::WriteError);
+    }, IoError::E_Code::WriteError);
   }
 
 } // namespace anaf::IO end

@@ -24,19 +24,19 @@
 
 namespace anaf::GUI {
 
-  enum class NodeStyle : std::uint8_t {
+  enum class E_NodeStyle : std::uint8_t {
     Off,    // no nodes (no node picking, no labels)
     Square, // screen-space squares of constant pixel size
     Sphere  // 3D spheres, thicker than the elements at the node
   };
 
-  enum class SupportStyle : std::uint8_t {
+  enum class E_SupportStyle : std::uint8_t {
     Off,     // inclined supports only (their plane or line)
     Symbols, // textbook symbols by support type: pin, roller, slider, clamp, hinge axles
     Dof      // CAD style: a cone per restrained translation, a double cone per restrained rotation
   };
 
-  enum class ElementColoring : std::uint8_t {
+  enum class E_ElementColoring : std::uint8_t {
     Off,         // one color for every element
     Stress,      // truss: |axial stress|; beam: von Mises along the element
     Displacement // displacement magnitude (beam: along the element)
@@ -46,12 +46,12 @@ namespace anaf::GUI {
   struct ViewportDisplayOptions {
     bool showGrid{false};   // procedural x-z ground grid
     bool showAxes{false};   // 3D X / Y / Z axis lines (the corner gizmo is always drawn)
-    NodeStyle nodeStyle{NodeStyle::Square};             // nodes, labels, picking, displacement colorbar
+    E_NodeStyle nodeStyle{E_NodeStyle::Square};             // nodes, labels, picking, displacement colorbar
     bool showForces{true};  // applied force and moment arrows, distributed loads
-    SupportStyle supportStyle{SupportStyle::Off};
-    ElementColoring coloring{ElementColoring::Stress};  // element colors and their colorbar
+    E_SupportStyle supportStyle{E_SupportStyle::Off};
+    E_ElementColoring coloring{E_ElementColoring::Stress};  // element colors and their colorbar
 
-    bool showNodes() const { return nodeStyle != NodeStyle::Off; }
+    bool showNodes() const { return nodeStyle != E_NodeStyle::Off; }
 
     bool changed{false};              // set on every toggle; the viewport rebuilds its batches and clears it
     bool resetCameraRequested{false}; // the viewport fits the camera and clears it
@@ -60,7 +60,7 @@ namespace anaf::GUI {
   // Own window, docked by MainDockSpaceHost as a fixed-height strip above the viewport.
   class ViewportToolbar : public IPanel {
   public:
-    static constexpr const char* kWindowName = "Viewport Toolbar";
+    static constexpr const char* windowName = "Viewport Toolbar";
     // Height of the docked strip: one button row plus the window padding.
     static float windowHeight();
 

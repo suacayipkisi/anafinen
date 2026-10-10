@@ -32,7 +32,7 @@
 namespace anaf::PLATFORM {
 
   namespace {
-    constexpr auto kSampleInterval = std::chrono::milliseconds(500);
+    constexpr auto sampleInterval = std::chrono::milliseconds(500);
 
     float percent(const double part, const double whole) {
       return whole > 0.0 ? static_cast<float>(std::clamp(100.0 * part / whole, 0.0, 100.0)) : 0.0f;
@@ -56,7 +56,7 @@ namespace anaf::PLATFORM {
 
   const ResourceMonitor::Usage& ResourceMonitor::sample() {
     const auto now = std::chrono::steady_clock::now();
-    if (m_lastSample.time_since_epoch().count() != 0 && now - m_lastSample < kSampleInterval) return m_usage;
+    if (m_lastSample.time_since_epoch().count() != 0 && now - m_lastSample < sampleInterval) return m_usage;
     m_lastSample = now;
 
 #if defined(__linux__)

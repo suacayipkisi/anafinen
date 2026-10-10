@@ -41,8 +41,8 @@
 namespace FEM::BEAM::LIBRARY {
 
   // Relative to the assets folder (anaf::DIRECTORY::findAssetPath).
-  inline constexpr std::string_view kLibrarySubdir = "objects/beam/beam3D";
-  inline constexpr std::string_view kIndexFile = "index.json";
+  inline constexpr std::string_view librarySubdir = "objects/beam/beam3D";
+  inline constexpr std::string_view indexFileName = "index.json";
 
   struct Entry {
     std::string id;          // file name without ".msh": [a-z0-9_]+

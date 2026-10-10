@@ -104,13 +104,13 @@ namespace anaf::IO {
       submit([task, job = std::move(job)](const std::stop_token stop) {
         const IoContext context = task->context(stop);
         if (context.cancelled()) {
-          task->finish(std::unexpected(IoError{IoError::Code::Cancelled, "cancelled before start"}));
+          task->finish(std::unexpected(IoError{IoError::E_Code::Cancelled, "cancelled before start"}));
           return;
         }
         try {
           task->finish(job(context));
         } catch (const std::exception& error) {
-          task->finish(std::unexpected(IoError{IoError::Code::BackendError, error.what()}));
+          task->finish(std::unexpected(IoError{IoError::E_Code::BackendError, error.what()}));
         }
       });
       return task;

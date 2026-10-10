@@ -22,15 +22,15 @@
 namespace anaf::IO::detail {
 
   namespace {
-    constexpr std::string_view kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    constexpr std::string_view alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
     constexpr std::array<int, 256> makeDecodeTable() {
       std::array<int, 256> table{};
       for (auto& entry : table) entry = -1;
-      for (int i = 0; i < 64; ++i) table[static_cast<unsigned char>(kAlphabet[i])] = i;
+      for (int i = 0; i < 64; ++i) table[static_cast<unsigned char>(alphabet[i])] = i;
       return table;
     }
-    constexpr auto kDecode = makeDecodeTable();
+    constexpr auto decodeTable = makeDecodeTable();
 
     // Decodes one group of up to 4 sextets (padding already stripped) into `out`.
     void flushGroup(const std::array<int, 4>& group, const int filled, std::string& out) {
@@ -53,18 +53,18 @@ namespace anaf::IO::detail {
     for (; i + 2 < bytes.size(); i += 3) {
       const unsigned value = (static_cast<unsigned char>(bytes[i]) << 16) | (static_cast<unsigned char>(bytes[i + 1]) << 8)
         | static_cast<unsigned char>(bytes[i + 2]);
-      out.push_back(kAlphabet[(value >> 18) & 63]);
-      out.push_back(kAlphabet[(value >> 12) & 63]);
-      out.push_back(kAlphabet[(value >> 6) & 63]);
-      out.push_back(kAlphabet[value & 63]);
+      out.push_back(alphabet[(value >> 18) & 63]);
+      out.push_back(alphabet[(value >> 12) & 63]);
+      out.push_back(alphabet[(value >> 6) & 63]);
+      out.push_back(alphabet[value & 63]);
     }
     const std::size_t rest = bytes.size() - i;
     if (rest > 0) {
       unsigned value = static_cast<unsigned char>(bytes[i]) << 16;
       if (rest == 2) value |= static_cast<unsigned char>(bytes[i + 1]) << 8;
-      out.push_back(kAlphabet[(value >> 18) & 63]);
-      out.push_back(kAlphabet[(value >> 12) & 63]);
-      out.push_back(rest == 2 ? kAlphabet[(value >> 6) & 63] : '=');
+      out.push_back(alphabet[(value >> 18) & 63]);
+      out.push_back(alphabet[(value >> 12) & 63]);
+      out.push_back(rest == 2 ? alphabet[(value >> 6) & 63] : '=');
       out.push_back('=');
     }
     return out;
@@ -84,7 +84,7 @@ namespace anaf::IO::detail {
         filled = 0;
         continue;
       }
-      const int sextet = kDecode[static_cast<unsigned char>(c)];
+      const int sextet = decodeTable[static_cast<unsigned char>(c)];
       if (sextet < 0) throw ParseFailure("invalid character in base64 data");
       group[filled++] = sextet;
       if (filled == 4) {

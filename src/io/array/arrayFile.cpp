@@ -33,7 +33,7 @@ namespace anaf::IO::ARRAY {
   namespace {
 
     using detail::H5Handle;
-    using Code = ArrayError::Code;
+    using Code = ArrayError::E_Code;
 
     static_assert(std::is_same_v<hid_t, std::int64_t>, "ArrayFile stores hid_t as std::int64_t (HDF5 >= 1.10)");
 
@@ -46,8 +46,8 @@ namespace anaf::IO::ARRAY {
     // Automatic error printing is switched off on each lock, because thread-safe builds keep
     // that setting per thread; errors are returned through ArrayError instead.
     std::unique_lock<std::mutex> lockHdf5() {
-      static std::mutex mutex;
-      std::unique_lock lock(mutex);
+      static std::mutex s_mutex;
+      std::unique_lock lock(s_mutex);
       H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
       return lock;
     }
@@ -125,22 +125,22 @@ namespace anaf::IO::ARRAY {
     }
 
     // In-memory (native) type of a scalar; files use the same type, as h5py does.
-    H5Handle memoryType(const ScalarType type) {
+    H5Handle memoryType(const E_ScalarType type) {
       switch (type) {
-        case ScalarType::Float32: return detail::h5Type(H5Tcopy(H5T_NATIVE_FLOAT));
-        case ScalarType::Float64: return detail::h5Type(H5Tcopy(H5T_NATIVE_DOUBLE));
-        case ScalarType::Int32: return detail::h5Type(H5Tcopy(H5T_NATIVE_INT32));
-        case ScalarType::Int64: return detail::h5Type(H5Tcopy(H5T_NATIVE_INT64));
-        case ScalarType::UInt64: return detail::h5Type(H5Tcopy(H5T_NATIVE_UINT64));
-        case ScalarType::Complex64: return complexType(H5T_NATIVE_FLOAT, sizeof(float));
-        case ScalarType::Complex128: return complexType(H5T_NATIVE_DOUBLE, sizeof(double));
+        case E_ScalarType::Float32: return detail::h5Type(H5Tcopy(H5T_NATIVE_FLOAT));
+        case E_ScalarType::Float64: return detail::h5Type(H5Tcopy(H5T_NATIVE_DOUBLE));
+        case E_ScalarType::Int32: return detail::h5Type(H5Tcopy(H5T_NATIVE_INT32));
+        case E_ScalarType::Int64: return detail::h5Type(H5Tcopy(H5T_NATIVE_INT64));
+        case E_ScalarType::UInt64: return detail::h5Type(H5Tcopy(H5T_NATIVE_UINT64));
+        case E_ScalarType::Complex64: return complexType(H5T_NATIVE_FLOAT, sizeof(float));
+        case E_ScalarType::Complex128: return complexType(H5T_NATIVE_DOUBLE, sizeof(double));
       }
       return {};
     }
 
-    std::optional<ScalarType> classifyComplex(const hid_t type) {
+    std::optional<E_ScalarType> classifyComplex(const hid_t type) {
       if (H5Tget_nmembers(type) != 2) return std::nullopt;
-      std::optional<ScalarType> result;
+      std::optional<E_ScalarType> result;
       const std::size_t size = H5Tget_size(type);
       bool namesMatch = true;
       for (unsigned member = 0; member < 2; ++member) {
@@ -150,22 +150,22 @@ namespace anaf::IO::ARRAY {
         if (H5Tget_member_class(type, member) != H5T_FLOAT) namesMatch = false;
       }
       if (!namesMatch) return std::nullopt;
-      if (size == 2 * sizeof(float)) result = ScalarType::Complex64;
-      if (size == 2 * sizeof(double)) result = ScalarType::Complex128;
+      if (size == 2 * sizeof(float)) result = E_ScalarType::Complex64;
+      if (size == 2 * sizeof(double)) result = E_ScalarType::Complex128;
       return result;
     }
 
-    std::optional<ScalarType> classify(const hid_t type) {
+    std::optional<E_ScalarType> classify(const hid_t type) {
       const std::size_t size = H5Tget_size(type);
       switch (H5Tget_class(type)) {
         case H5T_FLOAT:
-          if (size == 4) return ScalarType::Float32;
-          if (size == 8) return ScalarType::Float64;
+          if (size == 4) return E_ScalarType::Float32;
+          if (size == 8) return E_ScalarType::Float64;
           return std::nullopt;
         case H5T_INTEGER: {
           const bool isSigned = H5Tget_sign(type) == H5T_SGN_2;
-          if (size == 4 && isSigned) return ScalarType::Int32;
-          if (size == 8) return isSigned ? ScalarType::Int64 : ScalarType::UInt64;
+          if (size == 4 && isSigned) return E_ScalarType::Int32;
+          if (size == 8) return isSigned ? E_ScalarType::Int64 : E_ScalarType::UInt64;
           return std::nullopt;
         }
         case H5T_COMPOUND: return classifyComplex(type);
@@ -200,7 +200,7 @@ namespace anaf::IO::ARRAY {
       return chunk;
     }
 
-    Result<void> writeDataset(const hid_t location, const std::string& name, const ScalarType type, const void* values,
+    Result<void> writeDataset(const hid_t location, const std::string& name, const E_ScalarType type, const void* values,
                               const std::span<const std::uint64_t> shape, const WriteOptions& options) {
       const std::vector<hsize_t> dims(shape.begin(), shape.end());
       const std::uint64_t count = elementCount(shape).value_or(0);
@@ -349,12 +349,12 @@ namespace anaf::IO::ARRAY {
       return std::vector<std::uint64_t>(dims.begin(), dims.end());
     }
 
-    std::optional<ScalarType> datasetScalar(const hid_t dataset) {
+    std::optional<E_ScalarType> datasetScalar(const hid_t dataset) {
       H5Handle type = detail::h5Type(H5Dget_type(dataset));
       return type ? classify(type.get()) : std::nullopt;
     }
 
-    Result<void> checkReadable(const std::optional<ScalarType> stored, const ScalarType requested, const std::string& path) {
+    Result<void> checkReadable(const std::optional<E_ScalarType> stored, const E_ScalarType requested, const std::string& path) {
       if (!stored) return std::unexpected(makeError(Code::TypeMismatch, "'" + path + "' has an unsupported element type"));
       if (!canReadAs(*stored, requested)) {
         return std::unexpected(makeError(Code::TypeMismatch, std::format("'{}' holds {}, cannot read it as {}", path,
@@ -377,11 +377,11 @@ namespace anaf::IO::ARRAY {
       return {};
     }
 
-    std::optional<std::string> validateCompressed(const std::uint64_t rows, const std::uint64_t cols, const SparseLayout layout,
+    std::optional<std::string> validateCompressed(const std::uint64_t rows, const std::uint64_t cols, const E_SparseLayout layout,
                                                   const std::uint64_t nonZeros, const std::span<const std::int64_t> indices,
                                                   const std::span<const std::int64_t> pointers) {
-      const std::uint64_t outer = layout == SparseLayout::Csc ? cols : rows;
-      const std::uint64_t inner = layout == SparseLayout::Csc ? rows : cols;
+      const std::uint64_t outer = layout == E_SparseLayout::Csc ? cols : rows;
+      const std::uint64_t inner = layout == E_SparseLayout::Csc ? rows : cols;
       if (pointers.size() != outer + 1) return std::format("pointer array has {} entries, expected {}", pointers.size(), outer + 1);
       if (indices.size() != nonZeros) return std::format("index array has {} entries, expected {}", indices.size(), nonZeros);
       if (pointers.front() != 0) return std::format("first pointer is {}, expected 0", pointers.front());
@@ -401,24 +401,24 @@ namespace anaf::IO::ARRAY {
 
   } // namespace end
 
-  std::string_view scalarTypeName(const ScalarType type) noexcept {
+  std::string_view scalarTypeName(const E_ScalarType type) noexcept {
     switch (type) {
-      case ScalarType::Float32: return "float32";
-      case ScalarType::Float64: return "float64";
-      case ScalarType::Int32: return "int32";
-      case ScalarType::Int64: return "int64";
-      case ScalarType::UInt64: return "uint64";
-      case ScalarType::Complex64: return "complex64";
-      case ScalarType::Complex128: return "complex128";
+      case E_ScalarType::Float32: return "float32";
+      case E_ScalarType::Float64: return "float64";
+      case E_ScalarType::Int32: return "int32";
+      case E_ScalarType::Int64: return "int64";
+      case E_ScalarType::UInt64: return "uint64";
+      case E_ScalarType::Complex64: return "complex64";
+      case E_ScalarType::Complex128: return "complex128";
     }
     return "unknown";
   }
 
-  bool canReadAs(const ScalarType stored, const ScalarType requested) noexcept {
+  bool canReadAs(const E_ScalarType stored, const E_ScalarType requested) noexcept {
     if (stored == requested) return true;
-    return (stored == ScalarType::Float32 && requested == ScalarType::Float64) ||
-           (stored == ScalarType::Int32 && requested == ScalarType::Int64) ||
-           (stored == ScalarType::Complex64 && requested == ScalarType::Complex128);
+    return (stored == E_ScalarType::Float32 && requested == E_ScalarType::Float64) ||
+           (stored == E_ScalarType::Int32 && requested == E_ScalarType::Int64) ||
+           (stored == E_ScalarType::Complex64 && requested == E_ScalarType::Complex128);
   }
 
   // ---------------------------------------------------------------- lifetime
@@ -457,7 +457,7 @@ namespace anaf::IO::ARRAY {
     return ArrayFile(file, path, true);
   }
 
-  Result<ArrayFile> ArrayFile::open(const std::filesystem::path& path, const Access access) {
+  Result<ArrayFile> ArrayFile::open(const std::filesystem::path& path, const E_Access access) {
     const std::string name = pathToUtf8(path);
     std::error_code error;
     if (!std::filesystem::is_regular_file(path, error)) {
@@ -468,7 +468,7 @@ namespace anaf::IO::ARRAY {
       H5Eclear2(H5E_DEFAULT);
       return std::unexpected(makeError(Code::InvalidFile, "'" + name + "' is not an HDF5 file"));
     }
-    const bool writable = access == Access::ReadWrite;
+    const bool writable = access == E_Access::ReadWrite;
     const hid_t file = H5Fopen(name.c_str(), writable ? H5F_ACC_RDWR : H5F_ACC_RDONLY, H5P_DEFAULT);
     if (file < 0) return std::unexpected(backendError("cannot open '" + name + "'"));
     return ArrayFile(file, path, writable);
@@ -515,7 +515,7 @@ namespace anaf::IO::ARRAY {
 
     ArrayInfo result;
     if (H5Iget_type(object->get()) == H5I_DATASET) {
-      result.kind = ObjectKind::Dense;
+      result.kind = E_ObjectKind::Dense;
       result.scalar = datasetScalar(object->get());
       auto shape = datasetShape(object->get());
       if (!shape) return std::unexpected(std::move(shape.error()));
@@ -523,13 +523,13 @@ namespace anaf::IO::ARRAY {
       return result;
     }
 
-    result.kind = ObjectKind::Group;
+    result.kind = E_ObjectKind::Group;
     auto encoding = readAttributeFrom(object->get(), sparseEncodingKey);
     const auto* type = encoding ? std::get_if<std::string>(&*encoding) : nullptr;
     if (!type || (*type != "csc_matrix" && *type != "csr_matrix")) return result;
 
-    result.kind = ObjectKind::Sparse;
-    result.layout = *type == "csc_matrix" ? SparseLayout::Csc : SparseLayout::Csr;
+    result.kind = E_ObjectKind::Sparse;
+    result.layout = *type == "csc_matrix" ? E_SparseLayout::Csc : E_SparseLayout::Csr;
     auto shape = readAttributeFrom(object->get(), sparseShapeKey);
     const auto* dims = shape ? std::get_if<std::vector<std::int64_t>>(&*shape) : nullptr;
     if (!dims || dims->size() != 2 || (*dims)[0] < 0 || (*dims)[1] < 0) {
@@ -603,7 +603,7 @@ namespace anaf::IO::ARRAY {
 
   // ---------------------------------------------------------------- dense
 
-  Result<void> ArrayFile::writeDenseRaw(const std::string_view path, const ScalarType type, const void* values,
+  Result<void> ArrayFile::writeDenseRaw(const std::string_view path, const E_ScalarType type, const void* values,
                                         const std::uint64_t count, const std::span<const std::uint64_t> shape,
                                         const WriteOptions& options) {
     auto lock = lockHdf5();
@@ -618,7 +618,7 @@ namespace anaf::IO::ARRAY {
     return writeDataset(m_file, *name, type, values, shape, options);
   }
 
-  Result<std::vector<std::uint64_t>> ArrayFile::denseShape(const std::string_view path, const ScalarType requested) const {
+  Result<std::vector<std::uint64_t>> ArrayFile::denseShape(const std::string_view path, const E_ScalarType requested) const {
     auto lock = lockHdf5();
     const auto name = checkCall(m_file, m_writable, path, false, false);
     if (!name) return std::unexpected(name.error());
@@ -631,7 +631,7 @@ namespace anaf::IO::ARRAY {
     return datasetShape(object->get());
   }
 
-  Result<void> ArrayFile::readDenseRaw(const std::string_view path, const ScalarType requested, void* values,
+  Result<void> ArrayFile::readDenseRaw(const std::string_view path, const E_ScalarType requested, void* values,
                                        const std::uint64_t count) const {
     auto lock = lockHdf5();
     const auto name = checkCall(m_file, m_writable, path, false, false);
@@ -644,8 +644,8 @@ namespace anaf::IO::ARRAY {
 
   // ---------------------------------------------------------------- sparse
 
-  Result<void> ArrayFile::writeSparseRaw(const std::string_view path, const ScalarType type, const std::uint64_t rows,
-                                         const std::uint64_t cols, const SparseLayout layout, const void* values,
+  Result<void> ArrayFile::writeSparseRaw(const std::string_view path, const E_ScalarType type, const std::uint64_t rows,
+                                         const std::uint64_t cols, const E_SparseLayout layout, const void* values,
                                          const std::uint64_t count, const std::span<const std::int64_t> indices,
                                          const std::span<const std::int64_t> pointers, const WriteOptions& options) {
     auto lock = lockHdf5();
@@ -667,17 +667,17 @@ namespace anaf::IO::ARRAY {
     const std::uint64_t nonZeroShape[] = {count};
     const std::uint64_t pointerShape[] = {pointers.size()};
     if (auto written = writeDataset(group.get(), "data", type, values, nonZeroShape, options); !written) return written;
-    if (auto written = writeDataset(group.get(), "indices", ScalarType::Int64, indices.data(), nonZeroShape, options); !written) return written;
-    if (auto written = writeDataset(group.get(), "indptr", ScalarType::Int64, pointers.data(), pointerShape, options); !written) return written;
+    if (auto written = writeDataset(group.get(), "indices", E_ScalarType::Int64, indices.data(), nonZeroShape, options); !written) return written;
+    if (auto written = writeDataset(group.get(), "indptr", E_ScalarType::Int64, pointers.data(), pointerShape, options); !written) return written;
 
-    const std::string encoding = layout == SparseLayout::Csc ? "csc_matrix" : "csr_matrix";
+    const std::string encoding = layout == E_SparseLayout::Csc ? "csc_matrix" : "csr_matrix";
     const std::vector<std::int64_t> shape = {static_cast<std::int64_t>(rows), static_cast<std::int64_t>(cols)};
     if (auto written = writeAttributeTo(group.get(), sparseEncodingKey, encoding); !written) return written;
     if (auto written = writeAttributeTo(group.get(), sparseVersionKey, std::string(sparseVersion)); !written) return written;
     return writeAttributeTo(group.get(), sparseShapeKey, shape);
   }
 
-  Result<void> ArrayFile::readSparseRaw(const std::string_view path, const ScalarType requested, const ArrayInfo& found,
+  Result<void> ArrayFile::readSparseRaw(const std::string_view path, const E_ScalarType requested, const ArrayInfo& found,
                                         void* values, std::vector<std::int64_t>& indices, std::vector<std::int64_t>& pointers) const {
     auto lock = lockHdf5();
     const auto name = checkCall(m_file, m_writable, path, false, false);
@@ -708,7 +708,7 @@ namespace anaf::IO::ARRAY {
       return {};
     };
 
-    const std::uint64_t outer = found.layout == SparseLayout::Csc ? found.shape[1] : found.shape[0];
+    const std::uint64_t outer = found.layout == E_SparseLayout::Csc ? found.shape[1] : found.shape[0];
     indices.resize(found.nonZeros);
     pointers.resize(outer + 1);
     H5Handle memType = memoryType(requested);

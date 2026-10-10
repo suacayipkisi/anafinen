@@ -28,7 +28,7 @@ namespace anaf::GUI {
   // Material picker over bridge.allMaterials, shared by the truss panels. materialID is the
   // stable Material ID; it falls back to the first material when the selected one was
   // removed in the Material Handler.
-  inline void materialCombo(BRIDGE::Gui_Calc_Bridge& bridge, const char* label, std::uint32_t& materialID) {
+  inline void materialCombo(BRIDGE::GuiCalcBridge& bridge, const char* label, std::uint32_t& materialID) {
     std::lock_guard lock(bridge.dataMutex);
     if (bridge.allMaterials.empty()) {
       ImGui::TextDisabled("No materials available");

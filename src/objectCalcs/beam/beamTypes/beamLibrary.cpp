@@ -41,30 +41,30 @@ namespace FEM::BEAM::LIBRARY {
   namespace {
 
     using P = std::array<double, 3>;
-    constexpr double kPi = std::numbers::pi;
-    constexpr double kG = 9.80665;
-    constexpr double kKN = 1e3;
+    constexpr double pi = std::numbers::pi;
+    constexpr double gravityAcceleration = 9.80665;
+    constexpr double knToN = 1e3;
 
     // Built-in material names (assets/bridge/materialProperties.json).
-    constexpr std::string_view kSteel4130 = "Structural Steel (AISI 4130)";
-    constexpr std::string_view kAl6061 = "Aluminum 6061-T6";
-    constexpr std::string_view kS235 = "Structural Steel S235 (EN 10025)";
-    constexpr std::string_view kS355 = "Structural Steel S355 (EN 10025)";
-    constexpr std::string_view kAl2024 = "Aluminum 2024-T3";
-    constexpr std::string_view kAl7075 = "Aluminum 7075-T6";
-    constexpr std::string_view kTi64 = "Titanium Ti-6Al-4V (Grade 5, annealed)";
-    constexpr std::string_view kDouglasFir = "Douglas Fir (along the grain)";
+    constexpr std::string_view steel4130 = "Structural Steel (AISI 4130)";
+    constexpr std::string_view al6061 = "Aluminum 6061-T6";
+    constexpr std::string_view s235 = "Structural Steel S235 (EN 10025)";
+    constexpr std::string_view s355 = "Structural Steel S355 (EN 10025)";
+    constexpr std::string_view al2024 = "Aluminum 2024-T3";
+    constexpr std::string_view al7075 = "Aluminum 7075-T6";
+    constexpr std::string_view ti64 = "Titanium Ti-6Al-4V (Grade 5, annealed)";
+    constexpr std::string_view douglasFir = "Douglas Fir (along the grain)";
 
-    constexpr Formulation kEB = Formulation::EulerBernoulli;
-    constexpr Formulation kTI = Formulation::Timoshenko;
+    constexpr E_Formulation eulerBernoulli = E_Formulation::EulerBernoulli;
+    constexpr E_Formulation timoshenko = E_Formulation::Timoshenko;
 
     // End releases: a pin about the local z axis (in-plane hinge of a member whose local y is
     // up), a bending hinge (My + Mz) and a member pinned at both ends.
-    constexpr std::uint16_t kPinZAtA = RELEASE::momentZ;
-    constexpr std::uint16_t kPinZAtB = RELEASE::atNode2(RELEASE::momentZ);
-    constexpr std::uint16_t kPinnedBothEnds = RELEASE::hinge | RELEASE::atNode2(RELEASE::hinge);
+    constexpr std::uint16_t pinZAtA = RELEASE::momentZ;
+    constexpr std::uint16_t pinZAtB = RELEASE::atNode2(RELEASE::momentZ);
+    constexpr std::uint16_t pinnedBothEnds = RELEASE::hinge | RELEASE::atNode2(RELEASE::hinge);
     // A pin-ended strut that may also spin about its own axis (rod end): torsion freed at one end.
-    constexpr std::uint16_t kStrut = kPinnedBothEnds | RELEASE::atNode2(RELEASE::torsion);
+    constexpr std::uint16_t strutReleases = pinnedBothEnds | RELEASE::atNode2(RELEASE::torsion);
 
     // A model being built: nodes, elements by section / material name, supports, loads.
     class Draft {
@@ -79,7 +79,7 @@ namespace FEM::BEAM::LIBRARY {
       }
 
       std::uint32_t beam(const std::uint32_t a, const std::uint32_t b, const std::string_view section, const std::string_view material,
-                         const P orientation = {}, const Formulation formulation = kEB) {
+                         const P orientation = {}, const E_Formulation formulation = eulerBernoulli) {
         BeamElement element;
         element.node1 = a;
         element.node2 = b;
@@ -93,7 +93,7 @@ namespace FEM::BEAM::LIBRARY {
 
       // Elements through consecutive nodes; returns their indices.
       std::vector<std::uint32_t> chain(const std::vector<std::uint32_t>& nodes, const std::string_view section, const std::string_view material,
-                                       const P orientation = {}, const Formulation formulation = kEB) {
+                                       const P orientation = {}, const E_Formulation formulation = eulerBernoulli) {
         std::vector<std::uint32_t> elements;
         for (std::size_t i = 0; i + 1 < nodes.size(); ++i) elements.push_back(beam(nodes[i], nodes[i + 1], section, material, orientation, formulation));
         return elements;
@@ -113,10 +113,10 @@ namespace FEM::BEAM::LIBRARY {
       }
       void pin(const std::uint32_t n) { support(n, {true, true, true}, {false, false, false}); }
       void load(const std::uint32_t n, const P force, const P moment = {}) { mesh.nodalLoads.push_back({n, force, moment}); }
-      void line(const std::uint32_t element, const P value, const LoadFrame frame = LoadFrame::Global) {
+      void line(const std::uint32_t element, const P value, const E_LoadFrame frame = E_LoadFrame::Global) {
         mesh.distributedLoads.push_back({element, value, frame});
       }
-      void line(const std::vector<std::uint32_t>& elements, const P value, const LoadFrame frame = LoadFrame::Global) {
+      void line(const std::vector<std::uint32_t>& elements, const P value, const E_LoadFrame frame = E_LoadFrame::Global) {
         for (const auto e : elements) line(e, value, frame);
       }
 
@@ -209,14 +209,14 @@ namespace FEM::BEAM::LIBRARY {
         const std::array<std::uint32_t, 5> n{d.node(0, 0, z), d.node(0, eaves, z), d.node(span / 2, ridge, z), d.node(span, eaves, z), d.node(span, 0, z)};
         d.clamp(n[0]);
         d.clamp(n[4]);
-        d.line(d.beam(n[0], n[1], "HEB 300", kS355, {1, 0, 0}), {3.6 * kKN * share, 0, 0}); // wind on the windward column
-        d.beam(n[4], n[3], "HEB 300", kS355, {1, 0, 0});
-        d.line(d.beam(n[1], n[2], "IPE 400", kS355), {0, -7.2 * kKN * share, 0});
-        d.line(d.beam(n[2], n[3], "IPE 400", kS355), {0, -7.2 * kKN * share, 0});
+        d.line(d.beam(n[0], n[1], "HEB 300", s355, {1, 0, 0}), {3.6 * knToN * share, 0, 0}); // wind on the windward column
+        d.beam(n[4], n[3], "HEB 300", s355, {1, 0, 0});
+        d.line(d.beam(n[1], n[2], "IPE 400", s355), {0, -7.2 * knToN * share, 0});
+        d.line(d.beam(n[2], n[3], "IPE 400", s355), {0, -7.2 * knToN * share, 0});
         frames.push_back(n);
       }
       for (std::size_t f = 0; f + 1 < frames.size(); ++f) {
-        for (const std::size_t k : {1u, 2u, 3u}) d.beam(frames[f][k], frames[f + 1][k], "IPE 200", kS355);
+        for (const std::size_t k : {1u, 2u, 3u}) d.beam(frames[f][k], frames[f + 1][k], "IPE 200", s355);
       }
       return make(std::move(d), "building_portal_frame", "Portal frame (pitched roof)", "Building",
                   "Span 15 m, eaves 6 m, ridge 7.5 m; 3 frames at 6 m tied at the eaves and the ridge (IPE 200). Columns HEB 300 clamped, "
@@ -225,9 +225,9 @@ namespace FEM::BEAM::LIBRARY {
 
     LibraryBeam twoStoreyFrame(const Lists& l) {
       Draft d(l.materials, l.sections);
-      auto g = buildGrid(d, steps(5.0, 2), steps(5.0, 2), {0.0, 3.5, 7.0}, "HEB 200", "IPE 300", "IPE 300", kS235);
-      d.line(g.beamsX, {0, -12 * kKN, 0});
-      d.line(g.beamsZ, {0, -6 * kKN, 0});
+      auto g = buildGrid(d, steps(5.0, 2), steps(5.0, 2), {0.0, 3.5, 7.0}, "HEB 200", "IPE 300", "IPE 300", s235);
+      d.line(g.beamsX, {0, -12 * knToN, 0});
+      d.line(g.beamsZ, {0, -6 * knToN, 0});
       return make(std::move(d), "building_two_storey", "Two-storey frame (2 x 2 bays)", "Building",
                   "Bays 5 x 5 m, storeys 3.5 m, rigid joints. Columns HEB 200 clamped, beams IPE 300 both ways. Floor 12 kN/m on the x beams, "
                   "6 kN/m on the z beams. S235, self weight.");
@@ -235,11 +235,11 @@ namespace FEM::BEAM::LIBRARY {
 
     LibraryBeam officeFrame(const Lists& l) {
       Draft d(l.materials, l.sections);
-      auto g = buildGrid(d, steps(6.0, 3), steps(7.5, 2), steps(3.6, 5), "HEB 340", "IPE 450", "IPE 400", kS355);
-      d.line(g.beamsX, {0, -24 * kKN, 0});
-      d.line(g.beamsZ, {0, -8 * kKN, 0});
+      auto g = buildGrid(d, steps(6.0, 3), steps(7.5, 2), steps(3.6, 5), "HEB 340", "IPE 450", "IPE 400", s355);
+      d.line(g.beamsX, {0, -24 * knToN, 0});
+      d.line(g.beamsZ, {0, -8 * knToN, 0});
       for (std::size_t k = 1; k < g.ys.size(); ++k) {
-        for (std::size_t i = 0; i < g.xs.size(); ++i) d.load(g.at(i, 0, k), {0, 0, 12 * kKN}); // wind on the z = 0 face
+        for (std::size_t i = 0; i < g.xs.size(); ++i) d.load(g.at(i, 0, k), {0, 0, 12 * knToN}); // wind on the z = 0 face
       }
       return make(std::move(d), "building_office_5_storey", "Office building frame (5 storeys)", "Building",
                   "3 bays of 6 m by 2 bays of 7.5 m, 5 storeys of 3.6 m, moment frame. Columns HEB 340 clamped, beams IPE 450 (x) and IPE 400 (z). "
@@ -248,16 +248,16 @@ namespace FEM::BEAM::LIBRARY {
 
     LibraryBeam bracedFrame(const Lists& l) {
       Draft d(l.materials, l.sections);
-      auto g = buildGrid(d, {0.0, 6.0}, {0.0, 6.0}, steps(4.0, 3), "HEA 240", "IPE 330", "IPE 330", kS355);
-      d.line(g.beamsX, {0, -15 * kKN, 0});
+      auto g = buildGrid(d, {0.0, 6.0}, {0.0, 6.0}, steps(4.0, 3), "HEA 240", "IPE 330", "IPE 330", s355);
+      d.line(g.beamsX, {0, -15 * knToN, 0});
       for (std::size_t j = 0; j < 2; ++j) {
         for (std::size_t k = 0; k < 3; ++k) {
-          d.beam(g.at(0, j, k), g.at(1, j, k + 1), "CHS 114.3x5", kS355);
-          d.beam(g.at(1, j, k), g.at(0, j, k + 1), "CHS 114.3x5", kS355);
+          d.beam(g.at(0, j, k), g.at(1, j, k + 1), "CHS 114.3x5", s355);
+          d.beam(g.at(1, j, k), g.at(0, j, k + 1), "CHS 114.3x5", s355);
         }
       }
       for (std::size_t k = 1; k < g.ys.size(); ++k) {
-        for (std::size_t j = 0; j < 2; ++j) d.load(g.at(0, j, k), {40 * kKN, 0, 0});
+        for (std::size_t j = 0; j < 2; ++j) d.load(g.at(0, j, k), {40 * knToN, 0, 0});
       }
       return make(std::move(d), "building_braced_frame", "X-braced frame (3 storeys)", "Building",
                   "One 6 x 6 m bay, 3 storeys of 4 m, X bracing (CHS 114.3x5) in both x frames. Columns HEA 240 clamped, beams IPE 330. "
@@ -271,13 +271,13 @@ namespace FEM::BEAM::LIBRARY {
         const double z = c * 6.0, share = (c == 0 || c == 3) ? 0.5 : 1.0;
         const auto base = d.node(0, 0, z), top = d.node(0, 4.5, z), tip = d.node(5.0, 4.5, z), back = d.node(-1.5, 4.5, z);
         d.clamp(base);
-        d.beam(base, top, "HEB 260", kS355, {1, 0, 0});
-        d.line(d.beam(top, tip, "IPE 360", kS355), {0, -6 * kKN * share, 0});
-        d.beam(back, top, "IPE 360", kS355);
-        d.beam(back, base, "CHS 114.3x5", kS355); // backstay
+        d.beam(base, top, "HEB 260", s355, {1, 0, 0});
+        d.line(d.beam(top, tip, "IPE 360", s355), {0, -6 * knToN * share, 0});
+        d.beam(back, top, "IPE 360", s355);
+        d.beam(back, base, "CHS 114.3x5", s355); // backstay
         tips.push_back(tip);
       }
-      for (std::size_t c = 0; c + 1 < tips.size(); ++c) d.beam(tips[c], tips[c + 1], "IPE 200", kS355);
+      for (std::size_t c = 0; c + 1 < tips.size(); ++c) d.beam(tips[c], tips[c + 1], "IPE 200", s355);
       return make(std::move(d), "building_cantilever_canopy", "Cantilever canopy", "Building",
                   "4 columns HEB 260 at 6 m, 4.5 m high, clamped; IPE 360 cantilevers 5 m with a 1.5 m back span and a CHS backstay to the "
                   "column base; IPE 200 edge beam. Snow 1 kN/m^2 (6 kN/m per inner cantilever). S355, self weight.");
@@ -297,19 +297,19 @@ namespace FEM::BEAM::LIBRARY {
         for (int i = 0; i <= nx; ++i) {
           const auto base = d.node(i * bay, 0, j * bay);
           d.clamp(base);
-          d.beam(base, top[static_cast<std::size_t>(2 * i)][static_cast<std::size_t>(j)], "HEB 160", kS235, {1, 0, 0});
+          d.beam(base, top[static_cast<std::size_t>(2 * i)][static_cast<std::size_t>(j)], "HEB 160", s235, {1, 0, 0});
         }
         for (int i = 0; i < 2 * nx; ++i) {
-          d.line(d.beam(top[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)], top[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j)], "IPE 240", kS235),
-                 {0, -4 * kKN, 0});
+          d.line(d.beam(top[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)], top[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j)], "IPE 240", s235),
+                 {0, -4 * knToN, 0});
         }
       }
       for (int i = 0; i <= 2 * nx; ++i) {
         const bool onColumn = i % 2 == 0;
         for (int j = 0; j < nz; ++j) {
           const auto e = d.beam(top[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)], top[static_cast<std::size_t>(i)][static_cast<std::size_t>(j + 1)],
-                                onColumn ? "IPE 240" : "IPE 160", kS235);
-          d.line(e, {0, -(onColumn ? 4.0 : 8.0) * kKN, 0});
+                                onColumn ? "IPE 240" : "IPE 160", s235);
+          d.line(e, {0, -(onColumn ? 4.0 : 8.0) * knToN, 0});
         }
       }
       return make(std::move(d), "building_mezzanine", "Mezzanine floor", "Building",
@@ -325,18 +325,18 @@ namespace FEM::BEAM::LIBRARY {
       std::array<std::vector<std::uint32_t>, 2> beams;
       for (int j = 0; j < 2; ++j) {
         for (int r = 0; r <= segments; ++r) beams[static_cast<std::size_t>(j)].push_back(d.node(r * 5.0 / segments, 2.7, j * 3.0));
-        d.chain(beams[static_cast<std::size_t>(j)], "Rect 300x120", kDouglasFir);
+        d.chain(beams[static_cast<std::size_t>(j)], "Rect 300x120", douglasFir);
         for (const int r : {0, 3, 6}) {
           const auto base = d.node(r * 5.0 / segments, 0, j * 3.0);
           d.clamp(base);
-          d.beam(base, beams[static_cast<std::size_t>(j)][static_cast<std::size_t>(r)], "Rect 200x100", kDouglasFir, {1, 0, 0});
+          d.beam(base, beams[static_cast<std::size_t>(j)][static_cast<std::size_t>(r)], "Rect 200x100", douglasFir, {1, 0, 0});
         }
       }
       for (int r = 0; r <= segments; ++r) {
         const double x = r * 5.0 / segments;
         const auto front = d.node(x, 2.7, -0.4), back = d.node(x, 2.7, 3.4);
-        const auto rafters = d.chain({front, beams[0][static_cast<std::size_t>(r)], beams[1][static_cast<std::size_t>(r)], back}, "Rect 140x60", kDouglasFir);
-        d.line(rafters, {0, -0.8 * kKN, 0});
+        const auto rafters = d.chain({front, beams[0][static_cast<std::size_t>(r)], beams[1][static_cast<std::size_t>(r)], back}, "Rect 140x60", douglasFir);
+        d.line(rafters, {0, -0.8 * knToN, 0});
       }
       return make(std::move(d), "building_timber_pergola", "Timber pergola", "Building",
                   "5 x 3 m, 2.7 m high. Posts 200x100 (clamped footings), beams 300x120 along x, 7 rafters 140x60 with 0.4 m overhangs. "
@@ -374,9 +374,9 @@ namespace FEM::BEAM::LIBRARY {
 
     LibraryBeam footbridge(const Lists& l) {
       Draft d(l.materials, l.sections);
-      const auto t = twinGirder(d, steps(2.0, 9), 2.5, "IPE 600", "IPE 200", {0, 9}, kS355);
-      d.line(t.girders[0], {0, -8 * kKN, 0});
-      d.line(t.girders[1], {0, -8 * kKN, 0});
+      const auto t = twinGirder(d, steps(2.0, 9), 2.5, "IPE 600", "IPE 200", {0, 9}, s355);
+      d.line(t.girders[0], {0, -8 * knToN, 0});
+      d.line(t.girders[1], {0, -8 * knToN, 0});
       return make(std::move(d), "bridge_footbridge_girder", "Footbridge (twin girder)", "Bridge",
                   "Span 18 m, width 2.5 m: two IPE 600 girders, IPE 200 cross beams every 2 m. Fork supports (torsion held), pin / rollers. "
                   "Crowd 5 kN/m^2 plus deck: 8 kN/m per girder. S355, self weight.");
@@ -384,9 +384,9 @@ namespace FEM::BEAM::LIBRARY {
 
     LibraryBeam continuousGirder(const Lists& l) {
       Draft d(l.materials, l.sections);
-      const auto t = twinGirder(d, steps(2.5, 20), 3.0, "HEB 500", "IPE 300", {0, 6, 14, 20}, kS355, 2);
-      d.line(t.girders[0], {0, -20 * kKN, 0});
-      d.line(t.girders[1], {0, -20 * kKN, 0});
+      const auto t = twinGirder(d, steps(2.5, 20), 3.0, "HEB 500", "IPE 300", {0, 6, 14, 20}, s355, 2);
+      d.line(t.girders[0], {0, -20 * knToN, 0});
+      d.line(t.girders[1], {0, -20 * knToN, 0});
       return make(std::move(d), "bridge_continuous_girder", "Continuous girder bridge (3 spans)", "Bridge",
                   "Spans 15 + 20 + 15 m, two HEB 500 girders 3 m apart, IPE 300 cross beams every 5 m and at the piers. Fork supports at the "
                   "abutments and piers. Lane load 20 kN/m per girder. S355, self weight.");
@@ -402,13 +402,13 @@ namespace FEM::BEAM::LIBRARY {
           bottom[g].push_back(d.node(i * panel, 0, static_cast<double>(g) * width));
           top[g].push_back(d.node(i * panel, depth, static_cast<double>(g) * width));
         }
-        d.line(d.chain(bottom[g], "HEB 280", kS355), {0, -8 * kKN, 0});
-        d.chain(top[g], "HEB 280", kS355);
-        for (int i = 0; i <= panels; ++i) d.beam(bottom[g][static_cast<std::size_t>(i)], top[g][static_cast<std::size_t>(i)], "HEB 240", kS355, {1, 0, 0});
+        d.line(d.chain(bottom[g], "HEB 280", s355), {0, -8 * knToN, 0});
+        d.chain(top[g], "HEB 280", s355);
+        for (int i = 0; i <= panels; ++i) d.beam(bottom[g][static_cast<std::size_t>(i)], top[g][static_cast<std::size_t>(i)], "HEB 240", s355, {1, 0, 0});
       }
       for (int i = 0; i <= panels; ++i) {
-        d.beam(bottom[0][static_cast<std::size_t>(i)], bottom[1][static_cast<std::size_t>(i)], "IPE 270", kS355);
-        d.beam(top[0][static_cast<std::size_t>(i)], top[1][static_cast<std::size_t>(i)], "IPE 200", kS355);
+        d.beam(bottom[0][static_cast<std::size_t>(i)], bottom[1][static_cast<std::size_t>(i)], "IPE 270", s355);
+        d.beam(top[0][static_cast<std::size_t>(i)], top[1][static_cast<std::size_t>(i)], "IPE 200", s355);
       }
       d.support(bottom[0][0], {true, true, true}, {false, false, false});
       d.support(bottom[1][0], {false, true, true}, {false, false, false});
@@ -426,18 +426,18 @@ namespace FEM::BEAM::LIBRARY {
       std::array<std::vector<std::uint32_t>, 2> deck, arch;
       for (std::size_t g = 0; g < 2; ++g) {
         for (int i = 0; i <= segments; ++i) deck[g].push_back(d.node(i * span / segments, 0, static_cast<double>(g) * width));
-        d.line(d.chain(deck[g], "HEB 400", kS355), {0, -8 * kKN, 0});
+        d.line(d.chain(deck[g], "HEB 400", s355), {0, -8 * knToN, 0});
         arch[g].push_back(deck[g].front());
         for (int i = 1; i < segments; ++i) {
           const double x = i * span / segments, s = 2.0 * x / span - 1.0;
           arch[g].push_back(d.node(x, rise * (1.0 - s * s), static_cast<double>(g) * width));
         }
         arch[g].push_back(deck[g].back());
-        d.chain(arch[g], "CHS 323.9x12.5", kS355);
-        for (int i = 1; i < segments; ++i) d.beam(deck[g][static_cast<std::size_t>(i)], arch[g][static_cast<std::size_t>(i)], "Bar D40", kS355);
+        d.chain(arch[g], "CHS 323.9x12.5", s355);
+        for (int i = 1; i < segments; ++i) d.beam(deck[g][static_cast<std::size_t>(i)], arch[g][static_cast<std::size_t>(i)], "Bar D40", s355);
       }
-      for (int i = 0; i <= segments; ++i) d.beam(deck[0][static_cast<std::size_t>(i)], deck[1][static_cast<std::size_t>(i)], "IPE 240", kS355);
-      for (int i = 3; i <= segments - 3; ++i) d.beam(arch[0][static_cast<std::size_t>(i)], arch[1][static_cast<std::size_t>(i)], "CHS 168.3x8", kS355);
+      for (int i = 0; i <= segments; ++i) d.beam(deck[0][static_cast<std::size_t>(i)], deck[1][static_cast<std::size_t>(i)], "IPE 240", s355);
+      for (int i = 3; i <= segments - 3; ++i) d.beam(arch[0][static_cast<std::size_t>(i)], arch[1][static_cast<std::size_t>(i)], "CHS 168.3x8", s355);
       d.support(deck[0][0], {true, true, true}, {true, false, false});
       d.support(deck[1][0], {false, true, false}, {true, false, false});
       d.support(deck[0][segments], {false, true, true}, {true, false, false});
@@ -453,15 +453,15 @@ namespace FEM::BEAM::LIBRARY {
       std::vector<std::vector<std::uint32_t>> nodes(girders);
       for (int g = 0; g < girders; ++g) {
         for (int i = 0; i <= segments; ++i) nodes[static_cast<std::size_t>(g)].push_back(d.node(i * 2.0, 0, g * 2.0));
-        d.line(d.chain(nodes[static_cast<std::size_t>(g)], "HEB 600", kS355), {0, -10 * kKN, 0});
+        d.line(d.chain(nodes[static_cast<std::size_t>(g)], "HEB 600", s355), {0, -10 * knToN, 0});
         d.support(nodes[static_cast<std::size_t>(g)].front(), {g == 0, true, g == 0}, {true, false, false});
         d.support(nodes[static_cast<std::size_t>(g)].back(), {false, true, g == 0}, {true, false, false});
       }
       for (int i = 0; i <= segments; ++i) {
-        for (int g = 0; g + 1 < girders; ++g) d.beam(nodes[static_cast<std::size_t>(g)][static_cast<std::size_t>(i)], nodes[static_cast<std::size_t>(g + 1)][static_cast<std::size_t>(i)], "IPE 400", kS355);
+        for (int g = 0; g + 1 < girders; ++g) d.beam(nodes[static_cast<std::size_t>(g)][static_cast<std::size_t>(i)], nodes[static_cast<std::size_t>(g + 1)][static_cast<std::size_t>(i)], "IPE 400", s355);
       }
       for (const int i : {3, 4}) {
-        for (const int g : {1, 2}) d.load(nodes[static_cast<std::size_t>(g)][static_cast<std::size_t>(i)], {0, -50 * kKN, 0});
+        for (const int g : {1, 2}) d.load(nodes[static_cast<std::size_t>(g)][static_cast<std::size_t>(i)], {0, -50 * knToN, 0});
       }
       return make(std::move(d), "bridge_grillage_deck", "Grillage road deck", "Bridge",
                   "Span 14 m: four HEB 600 girders 2 m apart, IPE 400 cross girders every 2 m. Fork supports. Surfacing 10 kN/m per girder "
@@ -480,16 +480,16 @@ namespace FEM::BEAM::LIBRARY {
         for (int side = 0; side < 2; ++side) {
           const auto base = d.node(x, 0, side * 6.0), mid = d.node(x, 4, side * 6.0), top = d.node(x, 8, side * 6.0);
           d.clamp(base);
-          d.chain({base, mid, top}, "HEB 260", kS355, {1, 0, 0});
+          d.chain({base, mid, top}, "HEB 260", s355, {1, 0, 0});
           t[static_cast<std::size_t>(2 * side)] = mid;
           t[static_cast<std::size_t>(2 * side + 1)] = top;
         }
-        d.line(d.beam(t[0], t[2], "IPE 300", kS355), {0, -15 * kKN, 0});
-        d.line(d.beam(t[1], t[3], "IPE 300", kS355), {0, -12 * kKN, 0});
+        d.line(d.beam(t[0], t[2], "IPE 300", s355), {0, -15 * knToN, 0});
+        d.line(d.beam(t[1], t[3], "IPE 300", s355), {0, -12 * knToN, 0});
         tiers.push_back(t);
       }
       for (int f = 0; f + 1 < frames; ++f) {
-        for (std::size_t k = 0; k < 4; ++k) d.beam(tiers[static_cast<std::size_t>(f)][k], tiers[static_cast<std::size_t>(f + 1)][k], "IPE 200", kS355);
+        for (std::size_t k = 0; k < 4; ++k) d.beam(tiers[static_cast<std::size_t>(f)][k], tiers[static_cast<std::size_t>(f + 1)][k], "IPE 200", s355);
       }
       return make(std::move(d), "industrial_pipe_rack", "Pipe rack (2 tiers)", "Industrial",
                   "5 frames at 6 m, width 6 m, tiers at 4 and 8 m. Columns HEB 260 clamped, tier beams IPE 300, longitudinal ties IPE 200. "
@@ -502,17 +502,17 @@ namespace FEM::BEAM::LIBRARY {
       std::array<std::vector<std::uint32_t>, 2> girders;
       for (std::size_t g = 0; g < 2; ++g) {
         for (int i = 0; i <= segments; ++i) girders[g].push_back(d.node(i * 1.5, 9.0, static_cast<double>(g) * 2.5));
-        d.chain(girders[g], "HEB 600", kS355, {}, kTI);
+        d.chain(girders[g], "HEB 600", s355, {}, timoshenko);
         for (const auto end : {girders[g].front(), girders[g].back()}) {
           const auto& p = d.mesh.nodes[end].getLocation();
           const auto foot = d.node(p[0], 0, p[2]);
           d.clamp(foot);
-          d.beam(foot, end, "CHS 323.9x12.5", kS355);
+          d.beam(foot, end, "CHS 323.9x12.5", s355);
         }
-        d.load(girders[g][4], {0, -60 * kKN, 0});
+        d.load(girders[g][4], {0, -60 * knToN, 0});
       }
-      d.beam(girders[0].front(), girders[1].front(), "IPE 360", kS355);
-      d.beam(girders[0].back(), girders[1].back(), "IPE 360", kS355);
+      d.beam(girders[0].front(), girders[1].front(), "IPE 360", s355);
+      d.beam(girders[0].back(), girders[1].back(), "IPE 360", s355);
       return make(std::move(d), "industrial_gantry_crane", "Gantry crane", "Industrial",
                   "Span 12 m, height 9 m: two HEB 600 girders 2.5 m apart (Timoshenko) on four CHS 323.9x12.5 legs (clamped on the rails), "
                   "IPE 360 end ties. Trolley at mid-span: 60 kN per girder. S355, self weight.");
@@ -527,18 +527,18 @@ namespace FEM::BEAM::LIBRARY {
         for (std::size_t side = 0; side < 2; ++side) {
           for (int k = 0; k <= levels; ++k) uprights[static_cast<std::size_t>(f)][side].push_back(d.node(f * bay, k * level, static_cast<double>(side) * depth));
           d.clamp(uprights[static_cast<std::size_t>(f)][side].front());
-          d.chain(uprights[static_cast<std::size_t>(f)][side], "RHS 100x50x5", kS355, {0, 0, 1});
+          d.chain(uprights[static_cast<std::size_t>(f)][side], "RHS 100x50x5", s355, {0, 0, 1});
         }
         for (int k = 0; k <= levels; ++k) {
-          if (k > 0) d.beam(uprights[static_cast<std::size_t>(f)][0][static_cast<std::size_t>(k)], uprights[static_cast<std::size_t>(f)][1][static_cast<std::size_t>(k)], "Box 40x40x2", kS355);
-          if (k < levels) d.beam(uprights[static_cast<std::size_t>(f)][k % 2][static_cast<std::size_t>(k)], uprights[static_cast<std::size_t>(f)][(k + 1) % 2][static_cast<std::size_t>(k + 1)], "Box 40x40x2", kS355);
+          if (k > 0) d.beam(uprights[static_cast<std::size_t>(f)][0][static_cast<std::size_t>(k)], uprights[static_cast<std::size_t>(f)][1][static_cast<std::size_t>(k)], "Box 40x40x2", s355);
+          if (k < levels) d.beam(uprights[static_cast<std::size_t>(f)][k % 2][static_cast<std::size_t>(k)], uprights[static_cast<std::size_t>(f)][(k + 1) % 2][static_cast<std::size_t>(k + 1)], "Box 40x40x2", s355);
         }
       }
       for (int f = 0; f < bays; ++f) {
         for (int k = 1; k <= levels; ++k) {
           for (std::size_t side = 0; side < 2; ++side) {
-            d.line(d.beam(uprights[static_cast<std::size_t>(f)][side][static_cast<std::size_t>(k)], uprights[static_cast<std::size_t>(f + 1)][side][static_cast<std::size_t>(k)], "Box 120x60x4", kS355),
-                   {0, -3.6 * kKN, 0});
+            d.line(d.beam(uprights[static_cast<std::size_t>(f)][side][static_cast<std::size_t>(k)], uprights[static_cast<std::size_t>(f + 1)][side][static_cast<std::size_t>(k)], "Box 120x60x4", s355),
+                   {0, -3.6 * knToN, 0});
           }
         }
       }
@@ -553,9 +553,9 @@ namespace FEM::BEAM::LIBRARY {
       d.clamp(left);
       d.clamp(right);
       const auto girder = line(d, {0, 7, 0}, {18, 7, 0}, 9);
-      d.beam(left, girder.front(), "CHS 323.9x12.5", kS355);
-      d.beam(right, girder.back(), "CHS 323.9x12.5", kS355);
-      d.line(d.chain(girder, "RHS 300x200x12.5", kS355), {0, -3 * kKN, 2 * kKN});
+      d.beam(left, girder.front(), "CHS 323.9x12.5", s355);
+      d.beam(right, girder.back(), "CHS 323.9x12.5", s355);
+      d.line(d.chain(girder, "RHS 300x200x12.5", s355), {0, -3 * knToN, 2 * knToN});
       return make(std::move(d), "industrial_sign_gantry", "Highway sign gantry", "Industrial",
                   "Span 18 m, clearance 7 m: CHS 323.9x12.5 columns clamped on foundations, RHS 300x200x12.5 girder. Sign weight 3 kN/m and "
                   "wind on the sign 2 kN/m (z). S355, self weight.");
@@ -569,19 +569,19 @@ namespace FEM::BEAM::LIBRARY {
       for (std::size_t c = 0; c < 4; ++c) {
         for (int k = 0; k <= lifts; ++k) standards[c].push_back(d.node(corners[c][0], k * 2.0, corners[c][1]));
         d.clamp(standards[c].front());
-        d.chain(standards[c], "CHS 48.3x3.2", kS235);
+        d.chain(standards[c], "CHS 48.3x3.2", s235);
       }
       for (int k = 1; k <= lifts; ++k) {
-        for (std::size_t c = 0; c < 4; ++c) d.beam(standards[c][static_cast<std::size_t>(k)], standards[(c + 1) % 4][static_cast<std::size_t>(k)], "CHS 48.3x3.2", kS235);
+        for (std::size_t c = 0; c < 4; ++c) d.beam(standards[c][static_cast<std::size_t>(k)], standards[(c + 1) % 4][static_cast<std::size_t>(k)], "CHS 48.3x3.2", s235);
       }
       for (int k = 0; k < lifts; ++k) {
         const std::size_t lower = static_cast<std::size_t>(k), upper = lower + 1;
-        d.beam(standards[0][k % 2 ? upper : lower], standards[1][k % 2 ? lower : upper], "CHS 48.3x3.2", kS235);
-        d.beam(standards[3][k % 2 ? upper : lower], standards[2][k % 2 ? lower : upper], "CHS 48.3x3.2", kS235);
-        d.beam(standards[1][lower], standards[2][upper], "CHS 48.3x3.2", kS235);
-        d.beam(standards[0][upper], standards[3][lower], "CHS 48.3x3.2", kS235);
+        d.beam(standards[0][k % 2 ? upper : lower], standards[1][k % 2 ? lower : upper], "CHS 48.3x3.2", s235);
+        d.beam(standards[3][k % 2 ? upper : lower], standards[2][k % 2 ? lower : upper], "CHS 48.3x3.2", s235);
+        d.beam(standards[1][lower], standards[2][upper], "CHS 48.3x3.2", s235);
+        d.beam(standards[0][upper], standards[3][lower], "CHS 48.3x3.2", s235);
       }
-      for (std::size_t c = 0; c < 4; ++c) d.load(standards[c].back(), {0, -1.5 * kKN, 0});
+      for (std::size_t c = 0; c < 4; ++c) d.load(standards[c].back(), {0, -1.5 * knToN, 0});
       return make(std::move(d), "industrial_scaffold_tower", "Scaffold tower", "Industrial",
                   "2.5 x 1.3 m, 4 lifts of 2 m: standards, ledgers and face diagonals in CHS 48.3x3.2, base plates clamped. Working platform "
                   "2 kN/m^2 (1.5 kN per standard at the top). S235, self weight.");
@@ -590,13 +590,13 @@ namespace FEM::BEAM::LIBRARY {
     LibraryBeam craneRunway(const Lists& l) {
       Draft d(l.materials, l.sections);
       const auto girder = line(d, {0, 7, 0}, {24, 7, 0}, 16);
-      d.chain(girder, "HEB 450", kS355);
+      d.chain(girder, "HEB 450", s355);
       for (int c = 0; c <= 4; ++c) {
         const auto foot = d.node(c * 6.0, 0, 0);
         d.clamp(foot);
-        d.beam(foot, girder[static_cast<std::size_t>(c * 4)], "HEB 300", kS355, {1, 0, 0});
+        d.beam(foot, girder[static_cast<std::size_t>(c * 4)], "HEB 300", s355, {1, 0, 0});
       }
-      for (const std::size_t wheel : {7u, 9u}) d.load(girder[wheel], {0, -120 * kKN, 12 * kKN});
+      for (const std::size_t wheel : {7u, 9u}) d.load(girder[wheel], {0, -120 * knToN, 12 * knToN});
       return make(std::move(d), "industrial_crane_runway", "Crane runway girder", "Industrial",
                   "Continuous HEB 450 runway girder over 4 spans of 6 m on HEB 300 columns (7 m, clamped). Two crane wheels 3 m apart: "
                   "120 kN vertical and 12 kN lateral (10 %) each. S355, self weight.");
@@ -609,9 +609,9 @@ namespace FEM::BEAM::LIBRARY {
       const auto nodes = line(d, {0, 0, 0}, {0, 90, 0}, 9);
       d.clamp(nodes.front());
       for (std::size_t i = 0; i + 1 < nodes.size(); ++i) {
-        d.beam(nodes[i], nodes[i + 1], i < 3 ? "Tube 4200x30" : (i < 6 ? "Tube 3500x26" : "Tube 2500x22"), kS355);
+        d.beam(nodes[i], nodes[i + 1], i < 3 ? "Tube 4200x30" : (i < 6 ? "Tube 3500x26" : "Tube 2500x22"), s355);
       }
-      d.load(nodes.back(), {400 * kKN, -2943 * kKN, 0}, {0, 0, 2943 * kKN * 4.0});
+      d.load(nodes.back(), {400 * knToN, -2943 * knToN, 0}, {0, 0, 2943 * knToN * 4.0});
       return make(std::move(d), "tower_wind_turbine", "Wind turbine tower", "Energy & Tower",
                   "90 m tubular tower in three cans: 4200x30 (0-30 m), 3500x26 (30-60 m), 2500x22 (60-90 m), clamped on the foundation. "
                   "Rotor and nacelle 300 t (2943 kN) with 4 m overhang (11.8 MNm) and 400 kN rotor thrust at the top. S355, self weight.");
@@ -622,13 +622,13 @@ namespace FEM::BEAM::LIBRARY {
       const auto pole = line(d, {0, 0, 0}, {0, 36, 0}, 6);
       d.clamp(pole.front());
       for (std::size_t i = 0; i + 1 < pole.size(); ++i) {
-        d.line(d.beam(pole[i], pole[i + 1], i < 3 ? "Tube 1000x16" : "Tube 600x12", kS355), {1.5 * kKN, 0, 0});
+        d.line(d.beam(pole[i], pole[i + 1], i < 3 ? "Tube 1000x16" : "Tube 600x12", s355), {1.5 * knToN, 0, 0});
       }
       for (int a = 0; a < 3; ++a) {
-        const double angle = 2.0 * kPi * a / 3.0;
+        const double angle = 2.0 * pi * a / 3.0;
         const auto tip = d.node(1.5 * std::cos(angle), 36, 1.5 * std::sin(angle));
-        d.beam(pole.back(), tip, "Box 120x60x4", kS355);
-        d.load(tip, {3 * kKN, -0.6 * kKN, 0});
+        d.beam(pole.back(), tip, "Box 120x60x4", s355);
+        d.load(tip, {3 * knToN, -0.6 * knToN, 0});
       }
       return make(std::move(d), "tower_telecom_monopole", "Telecom monopole", "Energy & Tower",
                   "36 m monopole: Tube 1000x16 (0-18 m), Tube 600x12 (18-36 m), clamped; three 1.5 m antenna arms (Box 120x60x4). "
@@ -638,14 +638,14 @@ namespace FEM::BEAM::LIBRARY {
     LibraryBeam solarTracker(const Lists& l) {
       Draft d(l.materials, l.sections);
       const auto tube = line(d, {0, 1.5, 0}, {30, 1.5, 0}, 15); // a node every 2 m
-      d.line(d.chain(tube, "CHS 139.7x6.3", kS355), {0, -0.6 * kKN, 0});
+      d.line(d.chain(tube, "CHS 139.7x6.3", s355), {0, -0.6 * knToN, 0});
       for (int p = 0; p <= 5; ++p) {
         const auto foot = d.node(p * 6.0, 0, 0);
         d.clamp(foot);
-        d.beam(foot, tube[static_cast<std::size_t>(p * 3)], "IPE 200", kS355, {1, 0, 0});
+        d.beam(foot, tube[static_cast<std::size_t>(p * 3)], "IPE 200", s355, {1, 0, 0});
       }
       for (std::size_t i = 1; i + 1 < tube.size(); ++i) {
-        if (i % 3 != 0) d.load(tube[i], {0, 1.2 * kKN * 2.0, 0}, {1.5 * kKN, 0, 0});
+        if (i % 3 != 0) d.load(tube[i], {0, 1.2 * knToN * 2.0, 0}, {1.5 * knToN, 0, 0});
       }
       return make(std::move(d), "energy_solar_tracker", "Single-axis solar tracker", "Energy & Tower",
                   "30 m torque tube CHS 139.7x6.3 at 1.5 m on six IPE 200 posts every 6 m (clamped, rigid bearings). Panels 0.6 kN/m; wind "
@@ -664,24 +664,24 @@ namespace FEM::BEAM::LIBRARY {
           legs[c].push_back(d.node(sign[c][0] * half, height * k / levels, sign[c][1] * half));
         }
         d.clamp(legs[c].front());
-        d.chain(legs[c], "Tube 1000x16", kS355);
+        d.chain(legs[c], "Tube 1000x16", s355);
       }
       for (int k = 1; k <= levels; ++k) {
         for (std::size_t c = 0; c < 4; ++c) {
           const auto a = legs[c][static_cast<std::size_t>(k)], b = legs[(c + 1) % 4][static_cast<std::size_t>(k)];
-          if (k == levels) d.line(d.beam(a, b, "HEB 600", kS355), {0, -50 * kKN, 0});
-          else d.beam(a, b, "Tube 600x12", kS355);
+          if (k == levels) d.line(d.beam(a, b, "HEB 600", s355), {0, -50 * knToN, 0});
+          else d.beam(a, b, "Tube 600x12", s355);
         }
       }
       for (int k = 0; k < levels; ++k) {
         for (std::size_t c = 0; c < 4; ++c) {
           const auto nk = static_cast<std::size_t>(k);
-          d.beam(legs[c][nk], legs[(c + 1) % 4][nk + 1], "Tube 600x12", kS355);
-          d.beam(legs[(c + 1) % 4][nk], legs[c][nk + 1], "Tube 600x12", kS355);
+          d.beam(legs[c][nk], legs[(c + 1) % 4][nk + 1], "Tube 600x12", s355);
+          d.beam(legs[(c + 1) % 4][nk], legs[c][nk + 1], "Tube 600x12", s355);
         }
       }
       for (int k = 1; k < levels; ++k) {
-        for (const std::size_t c : {0u, 3u}) d.load(legs[c][static_cast<std::size_t>(k)], {150 * kKN, 0, 0});
+        for (const std::size_t c : {0u, 3u}) d.load(legs[c][static_cast<std::size_t>(k)], {150 * knToN, 0, 0});
       }
       return make(std::move(d), "offshore_jacket", "Offshore jacket (4 legs)", "Energy & Tower",
                   "40 m four-legged jacket, battered from 20 x 20 m at the mudline to 12 x 12 m: legs Tube 1000x16 (piled, clamped), "
@@ -697,24 +697,24 @@ namespace FEM::BEAM::LIBRARY {
       std::array<std::vector<std::uint32_t>, 2> rails;
       for (std::size_t s = 0; s < 2; ++s) {
         for (int i = 0; i <= segments; ++i) rails[s].push_back(d.node(i * 0.75, 0.8, static_cast<double>(s) * 1.5));
-        d.chain(rails[s], "RHS 150x100x8", kS355, {}, kTI);
+        d.chain(rails[s], "RHS 150x100x8", s355, {}, timoshenko);
       }
       std::vector<std::uint32_t> mids;
       for (int i = 0; i <= segments; ++i) {
         const auto mid = d.node(i * 0.75, 0.8, 0.75);
-        d.chain({rails[0][static_cast<std::size_t>(i)], mid, rails[1][static_cast<std::size_t>(i)]}, "RHS 120x60x6.3", kS355, {}, kTI);
+        d.chain({rails[0][static_cast<std::size_t>(i)], mid, rails[1][static_cast<std::size_t>(i)]}, "RHS 120x60x6.3", s355, {}, timoshenko);
         mids.push_back(mid);
       }
       for (std::size_t s = 0; s < 2; ++s) {
         for (const int i : {0, 2, 4}) {
           const auto foot = d.node(i * 0.75, 0, static_cast<double>(s) * 1.5);
           d.clamp(foot);
-          d.beam(foot, rails[s][static_cast<std::size_t>(i)], "SHS 100x100x6.3", kS355, {1, 0, 0}, kTI);
+          d.beam(foot, rails[s][static_cast<std::size_t>(i)], "SHS 100x100x6.3", s355, {1, 0, 0}, timoshenko);
         }
       }
-      d.load(mids[2], {0, -15 * kKN, 0}, {0, 3 * kKN, 0});
-      d.load(mids[1], {0, -5 * kKN, 0});
-      d.load(mids[3], {0, -5 * kKN, 0});
+      d.load(mids[2], {0, -15 * knToN, 0}, {0, 3 * knToN, 0});
+      d.load(mids[1], {0, -5 * knToN, 0});
+      d.load(mids[3], {0, -5 * knToN, 0});
       return make(std::move(d), "machine_welded_frame", "Welded machine base frame", "Machine & Vehicle",
                   "3 x 1.5 m base at 0.8 m: rails RHS 150x100x8, cross members RHS 120x60x6.3, six SHS 100x100x6.3 legs (clamped). Motor "
                   "15 kN with 3 kNm reaction torque at the centre, 5 kN gearbox and pump. Timoshenko elements (short, deep members). S355.");
@@ -726,11 +726,11 @@ namespace FEM::BEAM::LIBRARY {
       std::array<std::vector<std::uint32_t>, 2> rails;
       for (std::size_t s = 0; s < 2; ++s) {
         for (int i = 0; i <= segments; ++i) rails[s].push_back(d.node(i * 0.7, 0.9, -0.45 + static_cast<double>(s) * 0.9));
-        const auto elements = d.chain(rails[s], "RHS 200x100x10", kS355);
-        for (std::size_t e = 3; e < elements.size(); ++e) d.line(elements[e], {0, -8 * kKN, 0});
-        d.load(rails[s][2], {0, -6 * kKN, 0});
+        const auto elements = d.chain(rails[s], "RHS 200x100x10", s355);
+        for (std::size_t e = 3; e < elements.size(); ++e) d.line(elements[e], {0, -8 * knToN, 0});
+        d.load(rails[s][2], {0, -6 * knToN, 0});
       }
-      for (const int i : {0, 2, 4, 6, 8, 10}) d.beam(rails[0][static_cast<std::size_t>(i)], rails[1][static_cast<std::size_t>(i)], "Box 120x60x4", kS355);
+      for (const int i : {0, 2, 4, 6, 8, 10}) d.beam(rails[0][static_cast<std::size_t>(i)], rails[1][static_cast<std::size_t>(i)], "Box 120x60x4", s355);
       d.support(rails[0][1], {true, true, true}, {false, false, false});
       d.support(rails[1][1], {false, true, false}, {false, false, false});
       d.support(rails[0][8], {false, true, true}, {false, false, false});
@@ -744,19 +744,19 @@ namespace FEM::BEAM::LIBRARY {
       Draft d(l.materials, l.sections);
       const auto bb = d.node(0.41, 0.27, 0), seat = d.node(0.33, 0.80, 0), headTop = d.node(0.98, 0.86, 0), headBottom = d.node(1.02, 0.71, 0);
       const auto dropL = d.node(0.0, 0.34, -0.065), dropR = d.node(0.0, 0.34, 0.065);
-      d.beam(seat, headTop, "Tube 25.4x0.89", kSteel4130);
-      d.beam(bb, headBottom, "Tube 31.75x1.24", kSteel4130);
-      d.beam(bb, seat, "Tube 25.4x1.24", kSteel4130);
-      d.beam(headBottom, headTop, "Tube 38.1x1.24", kSteel4130);
+      d.beam(seat, headTop, "Tube 25.4x0.89", steel4130);
+      d.beam(bb, headBottom, "Tube 31.75x1.24", steel4130);
+      d.beam(bb, seat, "Tube 25.4x1.24", steel4130);
+      d.beam(headBottom, headTop, "Tube 38.1x1.24", steel4130);
       for (const auto drop : {dropL, dropR}) {
-        d.beam(seat, drop, "Tube 19.05x0.89", kSteel4130);
-        d.beam(bb, drop, "Tube 22.2x0.89", kSteel4130);
+        d.beam(seat, drop, "Tube 19.05x0.89", steel4130);
+        d.beam(bb, drop, "Tube 22.2x0.89", steel4130);
       }
       d.pin(dropL);
       d.support(dropR, {false, true, true}, {false, false, false});
       d.support(headBottom, {false, true, true}, {false, false, false});
-      d.load(seat, {0, -0.8 * kKN, 0});
-      d.load(bb, {0, -1.2 * kKN, 0.15 * kKN});
+      d.load(seat, {0, -0.8 * knToN, 0});
+      d.load(bb, {0, -1.2 * knToN, 0.15 * knToN});
       return make(std::move(d), "vehicle_bicycle_frame", "Bicycle frame (diamond)", "Machine & Vehicle",
                   "Diamond road frame in 4130 chromoly tubing: top tube 25.4x0.89, down tube 31.75x1.24, seat tube 25.4x1.24, head tube "
                   "38.1x1.24, seat stays 19.05x0.89, chain stays 22.2x0.89. Axle at the dropouts, fork at the head tube. Rider 0.8 kN on the "
@@ -778,17 +778,17 @@ namespace FEM::BEAM::LIBRARY {
         d.clamp(mainFoot[s]);
         d.clamp(frontFoot[s]);
         d.clamp(rearFoot[s]);
-        d.chain({mainFoot[s], mainKnee[s], mainTop[s]}, "Tube 50.8x1.65", kSteel4130);
-        d.chain({frontFoot[s], frontKnee[s], frontTop[s]}, "Tube 44.45x1.65", kSteel4130);
-        d.beam(frontTop[s], mainTop[s], "Tube 44.45x1.65", kSteel4130);
-        d.beam(frontKnee[s], mainKnee[s], "Tube 44.45x1.65", kSteel4130); // door bar
-        d.beam(mainTop[s], rearFoot[s], "Tube 44.45x1.65", kSteel4130);   // rear stay
+        d.chain({mainFoot[s], mainKnee[s], mainTop[s]}, "Tube 50.8x1.65", steel4130);
+        d.chain({frontFoot[s], frontKnee[s], frontTop[s]}, "Tube 44.45x1.65", steel4130);
+        d.beam(frontTop[s], mainTop[s], "Tube 44.45x1.65", steel4130);
+        d.beam(frontKnee[s], mainKnee[s], "Tube 44.45x1.65", steel4130); // door bar
+        d.beam(mainTop[s], rearFoot[s], "Tube 44.45x1.65", steel4130);   // rear stay
       }
-      d.beam(mainTop[0], mainTop[1], "Tube 50.8x1.65", kSteel4130);
-      d.beam(frontTop[0], frontTop[1], "Tube 44.45x1.65", kSteel4130);
-      d.beam(mainTop[0], mainKnee[1], "Tube 44.45x1.65", kSteel4130); // main hoop diagonal
-      d.beam(frontTop[0], mainTop[1], "Tube 44.45x1.65", kSteel4130); // roof diagonal
-      for (const auto top : mainTop) d.load(top, {0, -37 * kKN, 0});
+      d.beam(mainTop[0], mainTop[1], "Tube 50.8x1.65", steel4130);
+      d.beam(frontTop[0], frontTop[1], "Tube 44.45x1.65", steel4130);
+      d.beam(mainTop[0], mainKnee[1], "Tube 44.45x1.65", steel4130); // main hoop diagonal
+      d.beam(frontTop[0], mainTop[1], "Tube 44.45x1.65", steel4130); // roof diagonal
+      for (const auto top : mainTop) d.load(top, {0, -37 * knToN, 0});
       return make(std::move(d), "vehicle_roll_cage", "Motorsport roll cage", "Machine & Vehicle",
                   "Six-point cage in 4130 tubing: main hoop 50.8x1.65, front hoops, roof bars, door bars, rear stays and diagonals 44.45x1.65, "
                   "welded to floor plates (clamped). Static roof load after the FIA main hoop test: 74 kN "
@@ -798,14 +798,14 @@ namespace FEM::BEAM::LIBRARY {
     LibraryBeam cncGantry(const Lists& l) {
       Draft d(l.materials, l.sections);
       const auto beam = line(d, {0, 0.6, 0}, {2.0, 0.6, 0}, 8);
-      d.chain(beam, "Box 200x100x6", kAl6061, {}, kTI);
+      d.chain(beam, "Box 200x100x6", al6061, {}, timoshenko);
       for (const auto end : {beam.front(), beam.back()}) {
         const auto& p = d.mesh.nodes[end].getLocation();
         const auto foot = d.node(p[0], 0, p[2]);
         d.clamp(foot);
-        d.beam(foot, end, "Box 120x60x4", kAl6061, {0, 0, 1}, kTI);
+        d.beam(foot, end, "Box 120x60x4", al6061, {0, 0, 1}, timoshenko);
       }
-      d.load(beam[4], {0, -2 * kKN, 0.5 * kKN}, {0.3 * kKN, 0, 0});
+      d.load(beam[4], {0, -2 * knToN, 0.5 * knToN}, {0.3 * knToN, 0, 0});
       return make(std::move(d), "machine_cnc_gantry", "CNC router gantry", "Machine & Vehicle",
                   "2 m aluminium gantry beam Box 200x100x6 on two 0.6 m uprights Box 120x60x4 (clamped to the bed), Timoshenko. Spindle "
                   "carriage 2 kN at mid-span with 0.5 kN cutting force and 0.3 kNm torque. Aluminium 6061-T6, self weight.");
@@ -813,15 +813,15 @@ namespace FEM::BEAM::LIBRARY {
 
     LibraryBeam robotArm(const Lists& l) {
       Draft d(l.materials, l.sections);
-      const double ex = 1.0 * std::cos(kPi / 6), ey = 0.6 + 1.0 * std::sin(kPi / 6);       // elbow
-      const double wx = ex + 0.8 * std::cos(-kPi / 9), wy = ey + 0.8 * std::sin(-kPi / 9); // wrist
+      const double ex = 1.0 * std::cos(pi / 6), ey = 0.6 + 1.0 * std::sin(pi / 6);       // elbow
+      const double wx = ex + 0.8 * std::cos(-pi / 9), wy = ey + 0.8 * std::sin(-pi / 9); // wrist
       const auto base = d.node(0, 0, 0), shoulder = d.node(0, 0.6, 0), elbow = d.node(ex, ey, 0), wrist = d.node(wx, wy, 0);
       const auto tool = d.node(wx + 0.3, wy, 0);
       d.clamp(base);
-      d.beam(base, shoulder, "Tube 101.6x2.11", kAl7075);
-      d.beam(shoulder, elbow, "Tube 101.6x2.11", kAl7075);
-      d.beam(elbow, wrist, "Tube 76.2x2.11", kAl7075);
-      d.beam(wrist, tool, "Tube 63.5x1.65", kAl7075);
+      d.beam(base, shoulder, "Tube 101.6x2.11", al7075);
+      d.beam(shoulder, elbow, "Tube 101.6x2.11", al7075);
+      d.beam(elbow, wrist, "Tube 76.2x2.11", al7075);
+      d.beam(wrist, tool, "Tube 63.5x1.65", al7075);
       d.load(elbow, {0, -150, 0});
       d.load(wrist, {0, -80, 0});
       d.load(tool, {0, -200, 50}, {0, 0, -20});
@@ -840,9 +840,9 @@ namespace FEM::BEAM::LIBRARY {
       for (std::size_t i = 0; i + 1 < spar.size(); ++i) {
         const auto section = i < 4 ? "Spar I 250x80x4x10" : (i < 8 ? "Spar I 180x70x3x8" : "Spar I 120x60x2.5x6");
         const double lift = i < 4 ? 5.5 : (i < 8 ? 4.5 : 2.8);
-        d.line(d.beam(spar[i], spar[i + 1], section, kAl7075, {}, kTI), {0, lift * kKN, 0});
+        d.line(d.beam(spar[i], spar[i + 1], section, al7075, {}, timoshenko), {0, lift * knToN, 0});
       }
-      d.load(spar[4], {0, -8 * kKN, 0});
+      d.load(spar[4], {0, -8 * knToN, 0});
       return make(std::move(d), "aero_wing_spar", "Wing main spar (tapered)", "Aerospace",
                   "6 m semi-span cantilever spar in three extruded I steps (Spar I 250, 180, 120 mm), root clamped to the centre box, "
                   "Timoshenko. Lift in steps that follow an elliptical spanwise distribution (5.5 / 4.5 / 2.8 kN/m), engine 8 kN at 2 m. "
@@ -852,9 +852,9 @@ namespace FEM::BEAM::LIBRARY {
     LibraryBeam strutBracedWing(const Lists& l) {
       Draft d(l.materials, l.sections);
       const auto spar = line(d, {0, 1.2, 0.6}, {0, 1.2, 5.6}, 10);
-      d.line(d.chain(spar, "Spar I 180x70x3x8", kAl2024), {0, 2.5 * kKN, 0});
+      d.line(d.chain(spar, "Spar I 180x70x3x8", al2024), {0, 2.5 * knToN, 0});
       const auto strutBase = d.node(0, 0, 0.6);
-      d.beam(strutBase, spar[5], "Tube 50.8x1.65", kSteel4130);
+      d.beam(strutBase, spar[5], "Tube 50.8x1.65", steel4130);
       d.support(spar.front(), {true, true, true}, {false, true, true}); // drag fitting: fore-aft and torsion held
       d.pin(strutBase);
       return make(std::move(d), "aero_strut_braced_wing", "Strut-braced high wing", "Aerospace",
@@ -867,14 +867,14 @@ namespace FEM::BEAM::LIBRARY {
       std::array<std::vector<std::uint32_t>, 2> skids;
       for (std::size_t s = 0; s < 2; ++s) {
         skids[s] = line(d, {-1.2, 0, s == 0 ? -1.1 : 1.1}, {1.3, 0, s == 0 ? -1.1 : 1.1}, 5);
-        d.chain(skids[s], "Tube 76.2x2.11", kAl6061);
+        d.chain(skids[s], "Tube 76.2x2.11", al6061);
       }
       for (const std::size_t station : {1u, 4u}) {
         const double x = d.mesh.nodes[skids[0][station]].getLocation()[0];
         const auto a = d.node(x, 0.45, -0.85), b = d.node(x, 0.6, -0.45), c = d.node(x, 0.6, 0.45), e = d.node(x, 0.45, 0.85);
-        d.chain({skids[0][station], a, b, c, e, skids[1][station]}, "CHS 114.3x5", kAl7075);
-        d.load(b, {0, -7.85 * kKN, 0});
-        d.load(c, {0, -7.85 * kKN, 0});
+        d.chain({skids[0][station], a, b, c, e, skids[1][station]}, "CHS 114.3x5", al7075);
+        d.load(b, {0, -7.85 * knToN, 0});
+        d.load(c, {0, -7.85 * knToN, 0});
       }
       // Ground contact under the cross tubes.
       d.support(skids[0][1], {true, true, true}, {false, false, false});
@@ -897,15 +897,15 @@ namespace FEM::BEAM::LIBRARY {
         lower[s + 2] = d.node(0.6, -0.8, z);
         d.clamp(upper[s]);
         d.clamp(upper[s + 2]);
-        d.beam(upper[s], lower[s], "Box 120x60x4", kTi64);
-        d.beam(upper[s], lower[s + 2], "Box 120x60x4", kTi64);
-        d.beam(upper[s + 2], lower[s + 2], "Box 120x60x4", kTi64);
-        d.beam(lower[s], lower[s + 2], "Box 120x60x4", kTi64);
+        d.beam(upper[s], lower[s], "Box 120x60x4", ti64);
+        d.beam(upper[s], lower[s + 2], "Box 120x60x4", ti64);
+        d.beam(upper[s + 2], lower[s + 2], "Box 120x60x4", ti64);
+        d.beam(lower[s], lower[s + 2], "Box 120x60x4", ti64);
       }
-      d.beam(lower[0], lower[1], "Box 120x60x4", kTi64);
-      d.beam(lower[2], lower[3], "Box 120x60x4", kTi64);
-      d.beam(lower[0], lower[3], "Box 120x60x4", kTi64);
-      for (const auto mount : lower) d.load(mount, {-30 * kKN, -9.4 * kKN, 0});
+      d.beam(lower[0], lower[1], "Box 120x60x4", ti64);
+      d.beam(lower[2], lower[3], "Box 120x60x4", ti64);
+      d.beam(lower[0], lower[3], "Box 120x60x4", ti64);
+      for (const auto mount : lower) d.load(mount, {-30 * knToN, -9.4 * knToN, 0});
       return make(std::move(d), "aero_engine_pylon", "Engine pylon frame", "Aerospace",
                   "Under-wing pylon as a welded titanium frame (Box 120x60x4, Ti-6Al-4V), clamped to the wing front and rear spar fittings, "
                   "engine mounts 0.8 m below. Engine 25 kN at 1.5 g (37.5 kN) and 120 kN take-off thrust over the four mounts.");
@@ -918,13 +918,13 @@ namespace FEM::BEAM::LIBRARY {
       for (std::size_t c = 0; c < 4; ++c) {
         for (std::size_t k = 0; k < 3; ++k) n[c][k] = d.node(corner[c][0], 0.7 * static_cast<double>(k), corner[c][1]);
         d.clamp(n[c][0]);
-        d.chain({n[c][0], n[c][1], n[c][2]}, "Box 80x40x3", kAl7075);
+        d.chain({n[c][0], n[c][1], n[c][2]}, "Box 80x40x3", al7075);
       }
       for (std::size_t k = 0; k < 3; ++k) {
-        for (std::size_t c = 0; c < 4; ++c) d.beam(n[c][k], n[(c + 1) % 4][k], "Box 60x40x3", kAl7075);
+        for (std::size_t c = 0; c < 4; ++c) d.beam(n[c][k], n[(c + 1) % 4][k], "Box 60x40x3", al7075);
       }
-      d.mesh.gravity = {2.0 * kG, -6.0 * kG, 0.0};
-      const auto inertial = [](const double mass) { return P{mass * 2.0 * kG, -mass * 6.0 * kG, 0.0}; };
+      d.mesh.gravity = {2.0 * gravityAcceleration, -6.0 * gravityAcceleration, 0.0};
+      const auto inertial = [](const double mass) { return P{mass * 2.0 * gravityAcceleration, -mass * 6.0 * gravityAcceleration, 0.0}; };
       for (std::size_t c = 0; c < 4; ++c) {
         d.load(n[c][1], inertial(40.0));
         d.load(n[c][2], inertial(15.0));
@@ -943,18 +943,18 @@ namespace FEM::BEAM::LIBRARY {
       for (std::size_t c = 0; c < 4; ++c) {
         for (int b = 0; b <= bays; ++b) longerons[c].push_back(d.node(b * 4.0, corner[c][0], corner[c][1]));
         d.clamp(longerons[c].front());
-        d.chain(longerons[c], "Tube 101.6x2.11", kAl2024);
+        d.chain(longerons[c], "Tube 101.6x2.11", al2024);
       }
       for (int b = 0; b <= bays; ++b) {
-        for (std::size_t c = 0; c < 4; ++c) d.beam(longerons[c][static_cast<std::size_t>(b)], longerons[(c + 1) % 4][static_cast<std::size_t>(b)], "Tube 63.5x1.65", kAl2024);
+        for (std::size_t c = 0; c < 4; ++c) d.beam(longerons[c][static_cast<std::size_t>(b)], longerons[(c + 1) % 4][static_cast<std::size_t>(b)], "Tube 63.5x1.65", al2024);
       }
       for (int b = 0; b < bays; ++b) {
         for (std::size_t c = 0; c < 4; ++c) {
-          d.beam(longerons[c][static_cast<std::size_t>(b)], longerons[(c + 1) % 4][static_cast<std::size_t>(b + 1)], "Tube 63.5x1.65", kAl2024);
+          d.beam(longerons[c][static_cast<std::size_t>(b)], longerons[(c + 1) % 4][static_cast<std::size_t>(b + 1)], "Tube 63.5x1.65", al2024);
         }
       }
       d.mesh.gravity = {0.0, 0.0, 0.0};
-      for (std::size_t c = 0; c < 4; ++c) d.load(longerons[c].back(), {0, 2 * kKN, 0}, {0.75 * kKN, 0, 0});
+      for (std::size_t c = 0; c < 4; ++c) d.load(longerons[c].back(), {0, 2 * knToN, 0}, {0.75 * knToN, 0, 0});
       return make(std::move(d), "space_station_truss", "Space station truss segment", "Aerospace",
                   "16 m integrated truss segment, 3 x 3 m section, 4 bays: longerons Tube 101.6x2.11, frames and face diagonals "
                   "Tube 63.5x1.65 (2024-T3), clamped to the module. In orbit (no gravity): solar array interface loads at the free end, "
@@ -975,18 +975,18 @@ namespace FEM::BEAM::LIBRARY {
         mid[c] = d.node(0.5 * (a[0] + b[0]), 1.2, 0.5 * (a[1] + b[1]));
       }
       for (std::size_t c = 0; c < 4; ++c) {
-        d.beam(top[c], top[(c + 1) % 4], "Box 200x100x6", kTi64);
-        d.beam(bottom[c], mid[c], "Box 200x100x6", kTi64);
-        d.beam(mid[c], bottom[(c + 1) % 4], "Box 200x100x6", kTi64);
-        d.beam(top[c], bottom[c], "Box 200x100x6", kTi64, {1, 0, 0});
+        d.beam(top[c], top[(c + 1) % 4], "Box 200x100x6", ti64);
+        d.beam(bottom[c], mid[c], "Box 200x100x6", ti64);
+        d.beam(mid[c], bottom[(c + 1) % 4], "Box 200x100x6", ti64);
+        d.beam(top[c], bottom[c], "Box 200x100x6", ti64, {1, 0, 0});
       }
       for (std::size_t c = 0; c < 4; ++c) {
         const auto pad = d.node(corner[c][0] * 1.75, 0, corner[c][1] * 1.75);
         d.pin(pad);
-        d.beam(top[c], pad, "Tube 101.6x2.11", kTi64);
-        d.beam(mid[c], pad, "Tube 63.5x1.65", kTi64);
-        d.beam(mid[(c + 3) % 4], pad, "Tube 63.5x1.65", kTi64);
-        d.load(top[c], {0, -12.2 * kKN, 0});
+        d.beam(top[c], pad, "Tube 101.6x2.11", ti64);
+        d.beam(mid[c], pad, "Tube 63.5x1.65", ti64);
+        d.beam(mid[(c + 3) % 4], pad, "Tube 63.5x1.65", ti64);
+        d.load(top[c], {0, -12.2 * knToN, 0});
       }
       d.mesh.gravity = {0.0, -3.0 * 1.62, 0.0};
       return make(std::move(d), "space_lunar_lander_legs", "Lunar lander legs", "Aerospace",
@@ -1001,15 +1001,15 @@ namespace FEM::BEAM::LIBRARY {
       const auto gimbal = d.node(0, 0, 0);
       std::vector<std::uint32_t> ring;
       for (int k = 0; k < count; ++k) {
-        const double angle = 2.0 * kPi * k / count;
+        const double angle = 2.0 * pi * k / count;
         ring.push_back(d.node(1.2 * std::cos(angle), 1.5, 1.2 * std::sin(angle)));
         d.clamp(ring.back());
       }
       for (int k = 0; k < count; ++k) {
-        d.beam(ring[static_cast<std::size_t>(k)], ring[static_cast<std::size_t>((k + 1) % count)], "Box 200x100x6", kTi64);
-        d.beam(gimbal, ring[static_cast<std::size_t>(k)], "Tube 101.6x2.11", kTi64);
+        d.beam(ring[static_cast<std::size_t>(k)], ring[static_cast<std::size_t>((k + 1) % count)], "Box 200x100x6", ti64);
+        d.beam(gimbal, ring[static_cast<std::size_t>(k)], "Tube 101.6x2.11", ti64);
       }
-      d.load(gimbal, {9 * kKN, 900 * kKN, 0});
+      d.load(gimbal, {9 * knToN, 900 * knToN, 0});
       return make(std::move(d), "space_rocket_thrust_frame", "Rocket engine thrust frame", "Aerospace",
                   "Eight struts Tube 101.6x2.11 from the engine gimbal to a 2.4 m thrust ring (Box 200x100x6), titanium Ti-6Al-4V, ring bolted "
                   "to the tank skirt (clamped). 900 kN engine thrust with 1 % side load from gimbal misalignment. Self weight.");
@@ -1020,10 +1020,10 @@ namespace FEM::BEAM::LIBRARY {
       const auto centre = d.node(0, 0, 0);
       d.clamp(centre);
       for (int a = 0; a < 4; ++a) {
-        const double angle = kPi / 4 + kPi / 2 * a;
+        const double angle = pi / 4 + pi / 2 * a;
         const auto mid = d.node(0.175 * std::cos(angle), 0, 0.175 * std::sin(angle));
         const auto tip = d.node(0.35 * std::cos(angle), 0, 0.35 * std::sin(angle));
-        d.chain({centre, mid, tip}, "Tube 25.4x1.24", kAl7075);
+        d.chain({centre, mid, tip}, "Tube 25.4x1.24", al7075);
         d.load(tip, {0, 30.0 - 2.5, 0}, {0, a % 2 == 0 ? 0.6 : -0.6, 0});
       }
       return make(std::move(d), "aero_quadcopter_frame", "Quadcopter frame", "Aerospace",
@@ -1038,19 +1038,19 @@ namespace FEM::BEAM::LIBRARY {
       std::vector<std::vector<std::uint32_t>> ring(frames);
       for (int f = 0; f < frames; ++f) {
         for (int k = 0; k < points; ++k) {
-          const double angle = 2.0 * kPi * k / points;
+          const double angle = 2.0 * pi * k / points;
           ring[static_cast<std::size_t>(f)].push_back(d.node(f * 0.5, radius * std::cos(angle), radius * std::sin(angle)));
         }
         for (int k = 0; k < points; ++k) {
-          const double angle = 2.0 * kPi * (k + 0.5) / points;
+          const double angle = 2.0 * pi * (k + 0.5) / points;
           d.beam(ring[static_cast<std::size_t>(f)][static_cast<std::size_t>(k)], ring[static_cast<std::size_t>(f)][static_cast<std::size_t>((k + 1) % points)],
-                 "Box 80x40x3", kAl2024, {0, std::cos(angle), std::sin(angle)}); // frame depth radial
+                 "Box 80x40x3", al2024, {0, std::cos(angle), std::sin(angle)}); // frame depth radial
         }
-        const auto floor = d.beam(ring[static_cast<std::size_t>(f)][5], ring[static_cast<std::size_t>(f)][11], "Box 60x40x3", kAl2024);
-        d.line(floor, {0, -3 * kKN, 0});
+        const auto floor = d.beam(ring[static_cast<std::size_t>(f)][5], ring[static_cast<std::size_t>(f)][11], "Box 60x40x3", al2024);
+        d.line(floor, {0, -3 * knToN, 0});
       }
       for (int f = 0; f + 1 < frames; ++f) {
-        for (int k = 0; k < points; ++k) d.beam(ring[static_cast<std::size_t>(f)][static_cast<std::size_t>(k)], ring[static_cast<std::size_t>(f + 1)][static_cast<std::size_t>(k)], "Tube 25.4x1.24", kAl2024);
+        for (int k = 0; k < points; ++k) d.beam(ring[static_cast<std::size_t>(f)][static_cast<std::size_t>(k)], ring[static_cast<std::size_t>(f + 1)][static_cast<std::size_t>(k)], "Tube 25.4x1.24", al2024);
       }
       d.clamp(ring.front()[8]);
       d.clamp(ring.back()[8]);
@@ -1064,9 +1064,9 @@ namespace FEM::BEAM::LIBRARY {
       const auto boom = line(d, {0, 0, 0}, {4.5, 0, 0}, 9);
       d.clamp(boom.front());
       for (std::size_t i = 0; i + 1 < boom.size(); ++i) {
-        d.beam(boom[i], boom[i + 1], i < 3 ? "CHS 139.7x6.3" : (i < 6 ? "CHS 114.3x5" : "Tube 101.6x2.11"), kAl2024);
+        d.beam(boom[i], boom[i + 1], i < 3 ? "CHS 139.7x6.3" : (i < 6 ? "CHS 114.3x5" : "Tube 101.6x2.11"), al2024);
       }
-      d.load(boom.back(), {0, -0.6 * kKN, 1.2 * kKN}, {0.4 * kKN, 0, 0});
+      d.load(boom.back(), {0, -0.6 * knToN, 1.2 * knToN}, {0.4 * knToN, 0, 0});
       return make(std::move(d), "aero_tail_boom", "Helicopter tail boom", "Aerospace",
                   "4.5 m tapered boom in three tubes (139.7x6.3, 114.3x5, 101.6x2.11, 2024-T3), clamped to the fuselage. Tail rotor thrust 1.2 kN "
                   "sideways, stabiliser download 0.6 kN and fin torque 0.4 kNm at the tip. Self weight.");
@@ -1076,7 +1076,7 @@ namespace FEM::BEAM::LIBRARY {
       Draft d(l.materials, l.sections);
       const auto boom = line(d, {0, 0, 0}, {10, 0, 0}, 10);
       d.clamp(boom.front());
-      d.chain(boom, "Tube 76.2x2.11", kAl6061);
+      d.chain(boom, "Tube 76.2x2.11", al6061);
       d.mesh.gravity = {0.0, 0.0, 0.0};
       d.load(boom.back(), {0, 40, 20});
       return make(std::move(d), "space_solar_array_boom", "Solar array boom", "Aerospace",
@@ -1097,21 +1097,21 @@ namespace FEM::BEAM::LIBRARY {
         const double z = f * spacing, share = (f == 0 || f == 3) ? 0.5 : 1.0;
         const std::array<std::uint32_t, 5> n{d.node(0, 0, z), d.node(0, eaves, z), d.node(span / 2, ridge, z), d.node(span, eaves, z), d.node(span, 0, z)};
         for (const auto base : {n[0], n[4]}) d.support(base, {true, true, true}, {true, true, false}); // pinned in the frame plane
-        d.line(d.beam(n[0], n[1], "HEB 400", kS355, {1, 0, 0}), {2.4 * kKN * share, 0, 0}); // wind on the windward column
-        d.beam(n[4], n[3], "HEB 400", kS355, {1, 0, 0});
-        const auto left = d.beam(n[1], n[2], "IPE 550", kS355);
-        d.line(d.beam(n[2], n[3], "IPE 550", kS355), {0, -7.2 * kKN * share, 0});
-        d.line(left, {0, -7.2 * kKN * share, 0});
-        d.release(left, kPinZAtB); // ridge hinge
+        d.line(d.beam(n[0], n[1], "HEB 400", s355, {1, 0, 0}), {2.4 * knToN * share, 0, 0}); // wind on the windward column
+        d.beam(n[4], n[3], "HEB 400", s355, {1, 0, 0});
+        const auto left = d.beam(n[1], n[2], "IPE 550", s355);
+        d.line(d.beam(n[2], n[3], "IPE 550", s355), {0, -7.2 * knToN * share, 0});
+        d.line(left, {0, -7.2 * knToN * share, 0});
+        d.release(left, pinZAtB); // ridge hinge
         frames.push_back(n);
       }
       for (std::size_t f = 0; f + 1 < frames.size(); ++f) {
-        for (const std::size_t k : {1u, 2u, 3u}) d.release(d.beam(frames[f][k], frames[f + 1][k], "IPE 220", kS355), kPinnedBothEnds);
+        for (const std::size_t k : {1u, 2u, 3u}) d.release(d.beam(frames[f][k], frames[f + 1][k], "IPE 220", s355), pinnedBothEnds);
       }
       for (const std::size_t f : {0u, 2u}) { // wall bracing in two bays of both side walls
         for (const std::size_t side : {0u, 4u}) {
           const std::size_t top = side == 0 ? 1 : 3;
-          d.release(d.beam(frames[f][side], frames[f + 1][top], "CHS 88.9x5", kS355), kPinnedBothEnds);
+          d.release(d.beam(frames[f][side], frames[f + 1][top], "CHS 88.9x5", s355), pinnedBothEnds);
         }
       }
       return make(std::move(d), "hinge_three_hinged_frame", "Three-hinged portal frame", "Hinges & Pins",
@@ -1127,15 +1127,15 @@ namespace FEM::BEAM::LIBRARY {
       for (std::size_t g = 0; g < 2; ++g) {
         const double z = static_cast<double>(g) * width;
         girders[g] = line(d, {0, 0, z}, {70, 0, z}, 35); // 2 m segments
-        const auto elements = d.chain(girders[g], "HEB 600", kS355);
-        d.line(elements, {0, -18 * kKN, 0});
-        d.release(elements[12], kPinZAtB); // hinges 6 m into the main span (x = 26 m and 44 m)
-        d.release(elements[22], kPinZAtA);
+        const auto elements = d.chain(girders[g], "HEB 600", s355);
+        d.line(elements, {0, -18 * knToN, 0});
+        d.release(elements[12], pinZAtB); // hinges 6 m into the main span (x = 26 m and 44 m)
+        d.release(elements[22], pinZAtA);
         for (const std::size_t at : {0u, 10u, 25u, 35u}) { // abutments and piers; x held at the first pier
           d.support(girders[g][at], {at == 10, true, true}, {true, false, false});
         }
       }
-      for (std::size_t i = 0; i < girders[0].size(); i += 5) d.beam(girders[0][i], girders[1][i], "IPE 400", kS355, {0, 1, 0});
+      for (std::size_t i = 0; i < girders[0].size(); i += 5) d.beam(girders[0][i], girders[1][i], "IPE 400", s355, {0, 1, 0});
       return make(std::move(d), "hinge_gerber_girder", "Gerber girder bridge", "Hinges & Pins",
                   "Cantilever-and-suspended-span bridge 20 + 30 + 20 m: two hinges 6 m into the main span (released about z) carry an 18 m "
                   "suspended span, so the girder is statically determinate in its plane. Twin HEB 600 girders 4 m apart, cross girders IPE 400 "
@@ -1144,22 +1144,22 @@ namespace FEM::BEAM::LIBRARY {
 
     LibraryBeam simpleConnectionFrame(const Lists& l) {
       Draft d(l.materials, l.sections);
-      auto g = buildGrid(d, steps(6.0, 2), steps(6.0, 2), steps(3.5, 3), "HEB 240", "IPE 360", "IPE 300", kS355);
+      auto g = buildGrid(d, steps(6.0, 2), steps(6.0, 2), steps(3.5, 3), "HEB 240", "IPE 360", "IPE 300", s355);
       for (std::size_t j = 0; j < g.zs.size(); ++j) {
         for (std::size_t i = 0; i < g.xs.size(); ++i) d.support(g.at(i, j, 0), {true, true, true}, {false, true, false}); // pinned base plates
       }
-      d.release(g.beamsX, kPinnedBothEnds); // simple (shear) connections
-      d.release(g.beamsZ, kPinnedBothEnds);
-      d.line(g.beamsX, {0, -20 * kKN, 0});
-      d.line(g.beamsZ, {0, -5 * kKN, 0});
+      d.release(g.beamsX, pinnedBothEnds); // simple (shear) connections
+      d.release(g.beamsZ, pinnedBothEnds);
+      d.line(g.beamsX, {0, -20 * knToN, 0});
+      d.line(g.beamsZ, {0, -5 * knToN, 0});
       for (std::size_t k = 0; k + 1 < g.ys.size(); ++k) { // X bracing in one bay of every face
         for (const std::size_t j : {std::size_t{0}, g.zs.size() - 1}) {
-          d.release(d.beam(g.at(0, j, k), g.at(1, j, k + 1), "CHS 114.3x5", kS355), kStrut);
-          d.release(d.beam(g.at(1, j, k), g.at(0, j, k + 1), "CHS 114.3x5", kS355), kStrut);
+          d.release(d.beam(g.at(0, j, k), g.at(1, j, k + 1), "CHS 114.3x5", s355), strutReleases);
+          d.release(d.beam(g.at(1, j, k), g.at(0, j, k + 1), "CHS 114.3x5", s355), strutReleases);
         }
         for (const std::size_t i : {std::size_t{0}, g.xs.size() - 1}) {
-          d.release(d.beam(g.at(i, 0, k), g.at(i, 1, k + 1), "CHS 114.3x5", kS355), kStrut);
-          d.release(d.beam(g.at(i, 1, k), g.at(i, 0, k + 1), "CHS 114.3x5", kS355), kStrut);
+          d.release(d.beam(g.at(i, 0, k), g.at(i, 1, k + 1), "CHS 114.3x5", s355), strutReleases);
+          d.release(d.beam(g.at(i, 1, k), g.at(i, 0, k + 1), "CHS 114.3x5", s355), strutReleases);
         }
       }
       // Plan bracing in every bay of every floor stands in for the floor diaphragm: pinned beams
@@ -1167,11 +1167,11 @@ namespace FEM::BEAM::LIBRARY {
       for (std::size_t k = 1; k < g.ys.size(); ++k) {
         for (std::size_t j = 0; j + 1 < g.zs.size(); ++j) {
           for (std::size_t i = 0; i + 1 < g.xs.size(); ++i) {
-            d.release(d.beam(g.at(i, j, k), g.at(i + 1, j + 1, k), "CHS 76.1x4", kS355), kStrut);
-            d.release(d.beam(g.at(i + 1, j, k), g.at(i, j + 1, k), "CHS 76.1x4", kS355), kStrut);
+            d.release(d.beam(g.at(i, j, k), g.at(i + 1, j + 1, k), "CHS 76.1x4", s355), strutReleases);
+            d.release(d.beam(g.at(i + 1, j, k), g.at(i, j + 1, k), "CHS 76.1x4", s355), strutReleases);
           }
         }
-        for (std::size_t j = 0; j < g.zs.size(); ++j) d.load(g.at(0, j, k), {15 * kKN, 0, 0}); // wind in x
+        for (std::size_t j = 0; j < g.zs.size(); ++j) d.load(g.at(0, j, k), {15 * knToN, 0, 0}); // wind in x
       }
       return make(std::move(d), "hinge_simple_connection_frame", "Braced frame with simple connections", "Hinges & Pins",
                   "2 x 2 bays of 6 m, 3 storeys of 3.5 m. Beams IPE 360 (x) / IPE 300 (z) pinned at both ends (shear connections), so they "
@@ -1189,25 +1189,25 @@ namespace FEM::BEAM::LIBRARY {
         const double z = static_cast<double>(t) * spacing;
         const auto bottom = line(d, {0, 0, z}, {span, 0, z}, panels);
         const auto top = line(d, {0, depth, z}, {span, depth, z}, panels);
-        d.chain(bottom, "SHS 120x120x8", kS355); // continuous chords
-        d.chain(top, "SHS 120x120x8", kS355);
+        d.chain(bottom, "SHS 120x120x8", s355); // continuous chords
+        d.chain(top, "SHS 120x120x8", s355);
         for (int p = 0; p <= panels; ++p) {
-          const auto post = d.beam(bottom[p], top[p], "SHS 80x80x6.3", kS355, {1, 0, 0});
-          if (p != 0 && p != panels) d.release(post, kPinnedBothEnds); // end posts rigid: portal action out of plane
+          const auto post = d.beam(bottom[p], top[p], "SHS 80x80x6.3", s355, {1, 0, 0});
+          if (p != 0 && p != panels) d.release(post, pinnedBothEnds); // end posts rigid: portal action out of plane
         }
         for (int p = 0; p < panels; ++p) { // Pratt diagonals, in tension under gravity
           const bool left = p < panels / 2;
-          d.release(d.beam(left ? top[p] : bottom[p], left ? bottom[p + 1] : top[p + 1], "CHS 88.9x5", kS355), kStrut);
+          d.release(d.beam(left ? top[p] : bottom[p], left ? bottom[p + 1] : top[p + 1], "CHS 88.9x5", s355), strutReleases);
         }
         d.support(bottom.front(), {true, true, true}, {true, true, false});
         d.support(bottom.back(), {false, true, true}, {true, true, false});
-        for (int p = 0; p <= panels; ++p) d.load(top[p], {0, (p == 0 || p == panels ? -6.0 : -12.0) * kKN, 0});
+        for (int p = 0; p <= panels; ++p) d.load(top[p], {0, (p == 0 || p == panels ? -6.0 : -12.0) * knToN, 0});
         tops[t] = top;
       }
-      for (int p = 0; p <= panels; ++p) d.release(d.beam(tops[0][p], tops[1][p], "IPE 160", kS355), kPinnedBothEnds); // purlins
+      for (int p = 0; p <= panels; ++p) d.release(d.beam(tops[0][p], tops[1][p], "IPE 160", s355), pinnedBothEnds); // purlins
       for (const int p : {0, panels - 1}) { // roof bracing in the end panels
-        d.release(d.beam(tops[0][p], tops[1][p + 1], "CHS 60.3x4", kS355), kStrut);
-        d.release(d.beam(tops[1][p], tops[0][p + 1], "CHS 60.3x4", kS355), kStrut);
+        d.release(d.beam(tops[0][p], tops[1][p + 1], "CHS 60.3x4", s355), strutReleases);
+        d.release(d.beam(tops[1][p], tops[0][p + 1], "CHS 60.3x4", s355), strutReleases);
       }
       return make(std::move(d), "hinge_pinned_web_truss", "Roof truss with pin-ended web", "Hinges & Pins",
                   "Two 24 m Pratt trusses 2.4 m deep, 6 m apart: continuous SHS 120x120x8 chords, posts SHS 80x80x6.3 and diagonals CHS 88.9x5 "
@@ -1217,16 +1217,16 @@ namespace FEM::BEAM::LIBRARY {
 
     LibraryBeam loaderCrane(const Lists& l) {
       Draft d(l.materials, l.sections);
-      const double angle = kPi / 12, reach = 4.0;
+      const double angle = pi / 12, reach = 4.0;
       const auto at = [&](const double s) { return P{s * std::cos(angle), 2.0 + s * std::sin(angle), 0.0}; };
       const auto base = d.node(0, 0, 0), lug = d.node(0, 0.8, 0), top = d.node(0, 2.0, 0);
       const auto ram = d.node(at(1.2)[0], at(1.2)[1], 0), mid = d.node(at(2.6)[0], at(2.6)[1], 0), tip = d.node(at(reach)[0], at(reach)[1], 0);
       d.clamp(base);
-      d.chain({base, lug, top}, "RHS 300x200x12.5", kS355, {1, 0, 0});
-      const auto boom = d.chain({top, ram, mid, tip}, "RHS 250x150x10", kS355);
-      d.release(boom.front(), kPinZAtA); // boom pivot at the column head
-      d.release(d.beam(lug, ram, "CHS 114.3x5", kS355), kStrut); // luffing cylinder, clevis pins at both ends
-      d.load(tip, {0, -10 * kKN, 0.5 * kKN});
+      d.chain({base, lug, top}, "RHS 300x200x12.5", s355, {1, 0, 0});
+      const auto boom = d.chain({top, ram, mid, tip}, "RHS 250x150x10", s355);
+      d.release(boom.front(), pinZAtA); // boom pivot at the column head
+      d.release(d.beam(lug, ram, "CHS 114.3x5", s355), strutReleases); // luffing cylinder, clevis pins at both ends
+      d.load(tip, {0, -10 * knToN, 0.5 * knToN});
       return make(std::move(d), "hinge_loader_crane", "Loader crane (pinned boom and cylinder)", "Hinges & Pins",
                   "2 m column RHS 300x200x12.5 clamped to the truck frame; 4 m boom RHS 250x150x10 at 15 deg, pinned to the column head "
                   "about z; luffing cylinder (CHS 114.3x5) pinned at both ends and free to spin, so it carries axial force only. 1 t at the "
@@ -1240,11 +1240,11 @@ namespace FEM::BEAM::LIBRARY {
       d.support(trunnion, {true, true, true}, {false, true, true}); // trunnion bearing: free about x (retraction)
       d.clamp(sideFitting);
       d.clamp(dragFitting);
-      d.chain({trunnion, knee, axle}, "CHS 168.3x8", kSteel4130, {1, 0, 0}, kTI);
-      d.beam(axle, wheel, "CHS 114.3x5", kSteel4130, {}, kTI);
-      d.release(d.beam(sideFitting, knee, "CHS 76.1x4", kSteel4130), kStrut); // side brace (locks the retraction)
-      d.release(d.beam(dragFitting, knee, "CHS 76.1x4", kSteel4130), kStrut); // drag brace
-      d.load(wheel, {-12 * kKN, 40 * kKN, -6 * kKN});
+      d.chain({trunnion, knee, axle}, "CHS 168.3x8", steel4130, {1, 0, 0}, timoshenko);
+      d.beam(axle, wheel, "CHS 114.3x5", steel4130, {}, timoshenko);
+      d.release(d.beam(sideFitting, knee, "CHS 76.1x4", steel4130), strutReleases); // side brace (locks the retraction)
+      d.release(d.beam(dragFitting, knee, "CHS 76.1x4", steel4130), strutReleases); // drag brace
+      d.load(wheel, {-12 * knToN, 40 * knToN, -6 * knToN});
       return make(std::move(d), "hinge_braced_landing_gear", "Main landing gear (pinned braces)", "Hinges & Pins",
                   "Cantilever main gear leg CHS 168.3x8 hung from a trunnion that is free about the fore-aft axis (retraction); a side brace "
                   "and a drag brace (CHS 76.1x4) pinned at both ends to the knee lock it. Landing load at the wheel: 40 kN up, 12 kN drag, "
@@ -1265,16 +1265,16 @@ namespace FEM::BEAM::LIBRARY {
       struct Frame { std::vector<std::uint32_t> stand, top, bottom; };
       std::vector<Frame> frame(frames);
       for (int f = 0; f < frames; ++f) {
-        const double angle = 2.0 * kPi * f / frames, c = std::cos(angle), sn = std::sin(angle);
+        const double angle = 2.0 * pi * f / frames, c = std::cos(angle), sn = std::sin(angle);
         const P radial{c, 0.0, sn};
         const auto at = [&](const double s, const double y) { return d.node((aIn + s) * c, y, (bIn + s) * sn); };
         auto& fr = frame[static_cast<std::size_t>(f)];
         for (const double s : standS) fr.stand.push_back(at(s, 2.0 + 0.6 * s));
-        d.line(d.chain(fr.stand, "HEA 600", kS355), {0, -35 * kKN, 0}); // raking beam: crowd 4 kN/m^2 + seating
+        d.line(d.chain(fr.stand, "HEA 600", s355), {0, -35 * knToN, 0}); // raking beam: crowd 4 kN/m^2 + seating
         for (std::size_t i = 0; i < 3; ++i) {
           const auto base = at(standS[i], 0.0);
           d.clamp(base);
-          d.beam(base, fr.stand[i], "HEB 400", kS355, radial);
+          d.beam(base, fr.stand[i], "HEB 400", s355, radial);
         }
         fr.top.push_back(at(36.0, topY(30.0)));
         for (const double s : roofS) {
@@ -1284,29 +1284,29 @@ namespace FEM::BEAM::LIBRARY {
         // Back column: ground, stand top, roof bottom chord, roof top chord.
         const auto back = at(30.0, 0.0);
         d.clamp(back);
-        d.chain({back, fr.stand.back(), fr.bottom.front(), fr.top[1]}, "HEB 600", kS355, radial);
+        d.chain({back, fr.stand.back(), fr.bottom.front(), fr.top[1]}, "HEB 600", s355, radial);
         // Rear tie holding the cantilever down.
         const auto anchor = at(36.0, 0.0);
         d.clamp(anchor);
-        d.beam(anchor, fr.top.front(), "CHS 323.9x12.5", kS355, radial);
-        d.beam(fr.top.front(), fr.bottom.front(), "CHS 323.9x12.5", kS355); // back panel strut: carries the tie-down force
+        d.beam(anchor, fr.top.front(), "CHS 323.9x12.5", s355, radial);
+        d.beam(fr.top.front(), fr.bottom.front(), "CHS 323.9x12.5", s355); // back panel strut: carries the tie-down force
         // Cantilever roof truss: tapered from 6 m at the back column to 1.5 m at the tip.
-        const auto topChord = d.chain(fr.top, "CHS 323.9x12.5", kS355);
-        d.line(std::vector<std::uint32_t>(topChord.begin() + 1, topChord.end()), {0, -6 * kKN, 0}); // cladding and snow
-        d.chain(fr.bottom, "CHS 273x10", kS355);
+        const auto topChord = d.chain(fr.top, "CHS 323.9x12.5", s355);
+        d.line(std::vector<std::uint32_t>(topChord.begin() + 1, topChord.end()), {0, -6 * knToN, 0}); // cladding and snow
+        d.chain(fr.bottom, "CHS 273x10", s355);
         for (std::size_t i = 1; i < fr.bottom.size(); ++i) {
-          d.beam(fr.bottom[i], fr.top[i + 1], "CHS 168.3x8", kS355, radial);
-          d.beam(fr.top[i], fr.bottom[i], "CHS 168.3x8", kS355);
+          d.beam(fr.bottom[i], fr.top[i + 1], "CHS 168.3x8", s355, radial);
+          d.beam(fr.top[i], fr.bottom[i], "CHS 168.3x8", s355);
         }
       }
       for (int f = 0; f < frames; ++f) {
         const auto& a = frame[static_cast<std::size_t>(f)];
         const auto& b = frame[static_cast<std::size_t>((f + 1) % frames)];
-        for (std::size_t i = 0; i < a.stand.size(); ++i) d.beam(a.stand[i], b.stand[i], "IPE 400", kS355);
-        for (std::size_t i = 0; i < a.top.size(); ++i) d.beam(a.top[i], b.top[i], i + 1 == a.top.size() ? "CHS 273x10" : "CHS 168.3x8", kS355);
-        for (std::size_t i = 0; i < a.bottom.size(); ++i) d.beam(a.bottom[i], b.bottom[i], i + 1 == a.bottom.size() ? "CHS 273x10" : "CHS 168.3x8", kS355);
+        for (std::size_t i = 0; i < a.stand.size(); ++i) d.beam(a.stand[i], b.stand[i], "IPE 400", s355);
+        for (std::size_t i = 0; i < a.top.size(); ++i) d.beam(a.top[i], b.top[i], i + 1 == a.top.size() ? "CHS 273x10" : "CHS 168.3x8", s355);
+        for (std::size_t i = 0; i < a.bottom.size(); ++i) d.beam(a.bottom[i], b.bottom[i], i + 1 == a.bottom.size() ? "CHS 273x10" : "CHS 168.3x8", s355);
         if (f % 4 == 0) { // roof plane bracing
-          for (std::size_t i = 1; i + 1 < a.top.size(); ++i) d.beam(a.top[i], b.top[i + 1], "CHS 114.3x5", kS355);
+          for (std::size_t i = 1; i + 1 < a.top.size(); ++i) d.beam(a.top[i], b.top[i + 1], "CHS 114.3x5", s355);
         }
       }
       return make(std::move(d), "large_stadium", "Football stadium (bowl and cantilever roof)", "Large Structures",
@@ -1337,27 +1337,27 @@ namespace FEM::BEAM::LIBRARY {
       for (int j = 0; j <= nz; ++j) {
         for (int i = 0; i < nx; ++i) {
           const double share = (j == 0 || j == nz) ? 0.5 : 1.0;
-          d.line(d.beam(at(floorGrid, i, j), at(floorGrid, i + 1, j), j % 2 == 0 ? "HEB 600" : "HEB 500", kS355), {0, -24 * kKN * share, 0});
+          d.line(d.beam(at(floorGrid, i, j), at(floorGrid, i + 1, j), j % 2 == 0 ? "HEB 600" : "HEB 500", s355), {0, -24 * knToN * share, 0});
         }
       }
       for (int i = 0; i <= nx; ++i) {
-        for (int j = 0; j < nz; ++j) d.beam(at(floorGrid, i, j), at(floorGrid, i, j + 1), i % 2 == 0 ? "HEB 600" : "HEB 500", kS355);
+        for (int j = 0; j < nz; ++j) d.beam(at(floorGrid, i, j), at(floorGrid, i, j + 1), i % 2 == 0 ? "HEB 600" : "HEB 500", s355);
       }
       // Roof: square-on-square-offset space frame, 3 m deep.
       for (int j = 0; j <= nz; ++j) {
-        for (int i = 0; i < nx; ++i) d.beam(at(bottom, i, j), at(bottom, i + 1, j), "CHS 139.7x6.3", kS355);
+        for (int i = 0; i < nx; ++i) d.beam(at(bottom, i, j), at(bottom, i + 1, j), "CHS 139.7x6.3", s355);
       }
       for (int i = 0; i <= nx; ++i) {
-        for (int j = 0; j < nz; ++j) d.beam(at(bottom, i, j), at(bottom, i, j + 1), "CHS 139.7x6.3", kS355);
+        for (int j = 0; j < nz; ++j) d.beam(at(bottom, i, j), at(bottom, i, j + 1), "CHS 139.7x6.3", s355);
       }
       for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < nz; ++j) {
-          if (i + 1 < nx) d.beam(at(top, i, j), at(top, i + 1, j), "CHS 139.7x6.3", kS355);
-          if (j + 1 < nz) d.beam(at(top, i, j), at(top, i, j + 1), "CHS 139.7x6.3", kS355);
+          if (i + 1 < nx) d.beam(at(top, i, j), at(top, i + 1, j), "CHS 139.7x6.3", s355);
+          if (j + 1 < nz) d.beam(at(top, i, j), at(top, i, j + 1), "CHS 139.7x6.3", s355);
           for (const auto& [di, dj] : {std::pair{0, 0}, std::pair{1, 0}, std::pair{0, 1}, std::pair{1, 1}}) {
-            d.beam(at(top, i, j), at(bottom, i + di, j + dj), "CHS 114.3x5", kS355);
+            d.beam(at(top, i, j), at(bottom, i + di, j + dj), "CHS 114.3x5", s355);
           }
-          d.load(at(top, i, j), {0, -54 * kKN, 0}); // roof 1.5 kN/m^2 over a 6 x 6 m module
+          d.load(at(top, i, j), {0, -54 * knToN, 0}); // roof 1.5 kN/m^2 over a 6 x 6 m module
         }
       }
       // Columns on the 12 m grid: HEB 400 below the floor, CHS 323.9x12.5 up to the roof.
@@ -1365,11 +1365,11 @@ namespace FEM::BEAM::LIBRARY {
         for (int j = 0; j <= nz; j += 2) {
           const auto base = d.node(module * i, 0.0, module * j);
           d.clamp(base);
-          d.beam(base, at(floorGrid, i, j), "HEB 400", kS355, {1, 0, 0});
-          d.beam(at(floorGrid, i, j), at(bottom, i, j), "CHS 323.9x12.5", kS355, {1, 0, 0});
+          d.beam(base, at(floorGrid, i, j), "HEB 400", s355, {1, 0, 0});
+          d.beam(at(floorGrid, i, j), at(bottom, i, j), "CHS 323.9x12.5", s355, {1, 0, 0});
         }
       }
-      for (int i = 0; i <= nx; ++i) d.load(at(bottom, i, 0), {0, 0, 12 * kKN}); // wind on the airside facade
+      for (int i = 0; i <= nx; ++i) d.load(at(bottom, i, 0), {0, 0, 12 * knToN}); // wind on the airside facade
       return make(std::move(d), "large_airport_terminal", "Airport terminal hall", "Large Structures",
                   "144 x 72 m hall on a 12 m column grid (91 columns: HEB 400 to the departures floor at 6 m, CHS 323.9x12.5 to the roof). "
                   "Floor grillage HEB 600 on the column lines, HEB 500 between, 4 kN/m^2. Roof: 3 m deep square-on-square-offset space "
@@ -1388,25 +1388,25 @@ namespace FEM::BEAM::LIBRARY {
         const double x = f, r = radius(x), yc = centre(x);
         auto& ring = rings.emplace_back();
         for (int k = 0; k < ringPoints; ++k) {
-          const double angle = 2.0 * kPi * k / ringPoints;
+          const double angle = 2.0 * pi * k / ringPoints;
           ring.push_back(d.node(x, yc + r * std::sin(angle), r * std::cos(angle)));
         }
         const bool wingFrame = f == 15 || f == 17;
         for (int k = 0; k < ringPoints; ++k) {
-          const double mid = 2.0 * kPi * (k + 0.5) / ringPoints;
+          const double mid = 2.0 * pi * (k + 0.5) / ringPoints;
           d.beam(ring[static_cast<std::size_t>(k)], ring[static_cast<std::size_t>((k + 1) % ringPoints)], wingFrame ? "Box 200x100x6" : "Box 80x40x3",
-                 kAl2024, {0, std::sin(mid), std::cos(mid)}); // frame depth radial
+                 al2024, {0, std::sin(mid), std::cos(mid)}); // frame depth radial
         }
-        const auto floor = d.beam(ring[11], ring[19], "Box 120x60x4", kAl2024);
-        if (x >= 6.0 && x <= 30.0) d.line(floor, {0, -1.6 * kKN, 0}); // passengers, seats and cargo: 6 kN per metre of cabin
+        const auto floor = d.beam(ring[11], ring[19], "Box 120x60x4", al2024);
+        if (x >= 6.0 && x <= 30.0) d.line(floor, {0, -1.6 * knToN, 0}); // passengers, seats and cargo: 6 kN per metre of cabin
       }
       for (std::size_t f = 0; f + 1 < rings.size(); ++f) {
         for (std::size_t k = 0; k < ringPoints; ++k) {
           const std::size_t next = (k + 1) % ringPoints;
-          d.beam(rings[f][k], rings[f + 1][k], "Box 60x40x3", kAl7075); // stringers
+          d.beam(rings[f][k], rings[f + 1][k], "Box 60x40x3", al7075); // stringers
           // Skin shear panels as one diagonal each, alternating.
-          if ((f + k) % 2 == 0) d.beam(rings[f][k], rings[f + 1][next], "Box 40x40x2", kAl2024);
-          else d.beam(rings[f][next], rings[f + 1][k], "Box 40x40x2", kAl2024);
+          if ((f + k) % 2 == 0) d.beam(rings[f][k], rings[f + 1][next], "Box 40x40x2", al2024);
+          else d.beam(rings[f][next], rings[f + 1][k], "Box 40x40x2", al2024);
         }
       }
       const auto nearestFuselageNode = [&](const std::uint32_t node) {
@@ -1440,27 +1440,27 @@ namespace FEM::BEAM::LIBRARY {
           const auto node = [&](const Eigen::Vector3d& v) { return d.node(v[0], v[1], v[2]); };
           box.push_back({node(front + half), node(front - half), node(rear + half), node(rear - half)});
           const auto& c = box.back();
-          d.beam(c[0], c[2], "Box 60x40x3", kAl2024, thick); // rib caps
-          d.beam(c[1], c[3], "Box 60x40x3", kAl2024, thick);
+          d.beam(c[0], c[2], "Box 60x40x3", al2024, thick); // rib caps
+          d.beam(c[1], c[3], "Box 60x40x3", al2024, thick);
           const char* web = i < heavy ? "Box 120x60x4" : "Box 80x40x3";
-          d.beam(c[0], c[1], web, kAl2024, {1, 0, 0}); // spar webs
-          d.beam(c[2], c[3], web, kAl2024, {1, 0, 0});
-          d.beam(c[0], c[3], "Box 40x40x2", kAl2024, thick); // rib web
+          d.beam(c[0], c[1], web, al2024, {1, 0, 0}); // spar webs
+          d.beam(c[2], c[3], web, al2024, {1, 0, 0});
+          d.beam(c[0], c[3], "Box 40x40x2", al2024, thick); // rib web
         }
         for (int i = 0; i < stations; ++i) {
           const auto& a = box[static_cast<std::size_t>(i)];
           const auto& b = box[static_cast<std::size_t>(i + 1)];
-          for (std::size_t corner = 0; corner < 4; ++corner) d.beam(a[corner], b[corner], capSection(i), kAl7075, thick);
+          for (std::size_t corner = 0; corner < 4; ++corner) d.beam(a[corner], b[corner], capSection(i), al7075, thick);
           const char* web = i < heavy ? "Box 120x60x4" : "Box 60x40x3";
-          d.beam(a[0], b[1], web, kAl2024, {1, 0, 0}); // spar webs
-          d.beam(a[2], b[3], web, kAl2024, {1, 0, 0});
-          d.beam(a[0], b[2], "Box 60x40x3", kAl2024, thick);     // skins
-          d.beam(a[1], b[3], "Box 60x40x3", kAl2024, thick);
+          d.beam(a[0], b[1], web, al2024, {1, 0, 0}); // spar webs
+          d.beam(a[2], b[3], web, al2024, {1, 0, 0});
+          d.beam(a[0], b[2], "Box 60x40x3", al2024, thick);     // skins
+          d.beam(a[1], b[3], "Box 60x40x3", al2024, thick);
         }
         return box;
       };
       const auto linkRoot = [&](const Corners& root) {
-        for (const auto corner : root) d.beam(corner, nearestFuselageNode(corner), "Box 200x100x6", kAl7075);
+        for (const auto corner : root) d.beam(corner, nearestFuselageNode(corner), "Box 200x100x6", al7075);
       };
 
       // Wings: 15.1 m semi-span, 25 deg sweep, taper 2.0 -> 1.0 m box chord, 0.8 -> 0.25 m depth, dihedral.
@@ -1478,22 +1478,22 @@ namespace FEM::BEAM::LIBRARY {
           [](const int i) { return i < 6 ? "Box 200x100x6" : (i < 11 ? "Box 120x60x4" : "Box 80x40x3"); }, 5);
         linkRoot(wings[side].front());
         for (std::size_t i = 0; i <= 10; ++i) { // fuel in the inner tanks: 3 kN per station on each lower spar cap
-          d.load(wings[side][i][1], {0, -3 * kKN, 0});
-          d.load(wings[side][i][3], {0, -3 * kKN, 0});
+          d.load(wings[side][i][1], {0, -3 * knToN, 0});
+          d.load(wings[side][i][3], {0, -3 * knToN, 0});
         }
         // Main gear under the rear spar at station 2, engine on a pylon at station 4.
         const auto gearTop = wings[side][2][3];
         const auto& g = d.mesh.nodes[gearTop].getLocation();
         const auto ground = d.node(g[0], 0.0, g[2]);
         d.clamp(ground);
-        d.beam(gearTop, ground, "CHS 168.3x8", kSteel4130, {1, 0, 0});
+        d.beam(gearTop, ground, "CHS 168.3x8", steel4130, {1, 0, 0});
         const auto& front = d.mesh.nodes[wings[side][4][1]].getLocation();
         const auto engine = d.node(front[0] - 2.2, front[1] - 1.1, front[2]);
-        d.beam(wings[side][4][1], engine, "CHS 114.3x5", kSteel4130);
-        d.beam(wings[side][4][3], engine, "CHS 114.3x5", kSteel4130);
-        d.load(engine, {0, -30 * kKN, 0}); // engine weight
+        d.beam(wings[side][4][1], engine, "CHS 114.3x5", steel4130);
+        d.beam(wings[side][4][3], engine, "CHS 114.3x5", steel4130);
+        d.load(engine, {0, -30 * knToN, 0}); // engine weight
       }
-      for (std::size_t corner = 0; corner < 4; ++corner) d.beam(wings[0][0][corner], wings[1][0][corner], "Box 200x100x6", kAl7075); // centre box
+      for (std::size_t corner = 0; corner < 4; ++corner) d.beam(wings[0][0][corner], wings[1][0][corner], "Box 200x100x6", al7075); // centre box
 
       // Horizontal tail (two halves) and fin.
       for (const double sign : {1.0, -1.0}) {
@@ -1512,7 +1512,7 @@ namespace FEM::BEAM::LIBRARY {
       const auto& n = d.mesh.nodes[noseTop].getLocation();
       const auto noseGround = d.node(n[0], 0.0, n[2]);
       d.clamp(noseGround);
-      d.beam(noseTop, noseGround, "CHS 114.3x5", kSteel4130, {1, 0, 0});
+      d.beam(noseTop, noseGround, "CHS 114.3x5", steel4130, {1, 0, 0});
       return make(std::move(d), "large_airliner_airframe", "Narrow-body airliner airframe", "Large Structures",
                   "Generic narrow-body with A320 / 737-class proportions, not a real aircraft's structure: the skin is represented by "
                   "diagonals, and only a 1 g ground case is applied (no pressurisation, no flight loads). Complete 38 m airframe on its landing gear: 37 fuselage frames (Box 80x40x3, heavy wing frames Box 200x100x6, 4 m "
@@ -1555,9 +1555,9 @@ namespace FEM::BEAM::LIBRARY {
       return std::unexpected(exception.what());
     }
     anaf::IO::WriteOptions options;
-    options.format = anaf::IO::FileFormat::Msh;
-    options.mshVersion = anaf::IO::MshVersion::V4_1;
-    options.encoding = anaf::IO::Encoding::Ascii;
+    options.format = anaf::IO::E_FileFormat::Msh;
+    options.mshVersion = anaf::IO::E_MshVersion::V4_1;
+    options.encoding = anaf::IO::E_Encoding::Ascii;
 
     std::vector<Entry> entries;
     for (const auto& beam : library) {
@@ -1573,7 +1573,7 @@ namespace FEM::BEAM::LIBRARY {
       }
       entries.push_back(beam.entry);
     }
-    const auto indexPath = dir / std::filesystem::path(kIndexFile);
+    const auto indexPath = dir / std::filesystem::path(indexFileName);
     std::ofstream index(indexPath, std::ios::binary | std::ios::trunc);
     index << indexJson(entries);
     if (!index) return std::unexpected(std::format("cannot write '{}'", anaf::IO::pathToUtf8(indexPath)));

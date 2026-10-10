@@ -23,8 +23,8 @@ namespace anaf::IO::detail {
 
   namespace {
     std::mutex& gmshMutex() {
-      static std::mutex mutex;
-      return mutex;
+      static std::mutex s_mutex;
+      return s_mutex;
     }
 
     // Finalizes Gmsh once at process exit if any session initialized it.
@@ -42,7 +42,7 @@ namespace anaf::IO::detail {
   } // namespace end
 
   GmshSession::GmshSession() : m_lock(gmshMutex()) {
-    static GmshFinalizer finalizer;
+    static GmshFinalizer s_finalizer;
     if (!gmsh::isInitialized()) {
       // readConfigFiles = false: the user's gmshrc / gmsh-options must not change our output.
       gmsh::initialize(0, nullptr, false, false);

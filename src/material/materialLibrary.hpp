@@ -29,7 +29,7 @@
 
 namespace anaf::MATERIAL {
 
-  inline constexpr std::size_t kMaxMaterialNameLength = 120; // bytes (UTF-8)
+  inline constexpr std::size_t maxMaterialNameLength = 120; // bytes (UTF-8)
 
   // Material names identify a material in the library and in saved mesh files; comparison
   // ignores ASCII case ("steel" == "Steel").
@@ -37,7 +37,7 @@ namespace anaf::MATERIAL {
 
   // Checks the physical limits of one material: positive moduli, strengths and density,
   // ultimate >= yield strength, -1 < Poisson's ratio < 0.5, ductility >= 0; and the name:
-  // non-empty, at most kMaxMaterialNameLength bytes, no quotes or control characters.
+  // non-empty, at most maxMaterialNameLength bytes, no quotes or control characters.
   std::expected<void, std::string> validateMaterial(const Material& material);
 
   // Reads the built-in material library (assets/bridge/materialProperties.json).

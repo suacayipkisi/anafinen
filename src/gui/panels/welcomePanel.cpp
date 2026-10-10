@@ -38,14 +38,14 @@ namespace anaf::GUI {
   namespace {
     // Built-in beam library model opened by "Open Example": small, rigid joints, every load type
     // (line loads, wind, self weight), so the solved diagrams and stress colors show at once.
-    constexpr std::string_view kExampleId = "building_portal_frame";
-    constexpr std::string_view kExampleName = "Portal frame (pitched roof)";
+    constexpr std::string_view exampleId = "building_portal_frame";
+    constexpr std::string_view exampleName = "Portal frame (pitched roof)";
 
     // Button on the left, wrapped explanation next to it, both centered on the taller of the two;
     // true when clicked.
     bool actionRow(const char* label, const char* text, const bool enabled = true) {
       ImGui::TableNextRow();
-      const float buttonHeight = LAYOUT::kRunButtonHeight;
+      const float buttonHeight = LAYOUT::runButtonHeight;
 
       ImGui::TableSetColumnIndex(1);
       const float rowTop = ImGui::GetCursorPosY();
@@ -69,8 +69,8 @@ namespace anaf::GUI {
     m_showOnStartup = SETTINGS::settings().showWelcomeOnStartup;
     isOpen = m_showOnStartup;
     m_examplePath = anaf::DIRECTORY::findAssetPath(
-      std::filesystem::path(FEM::BEAM::LIBRARY::kLibrarySubdir) / (std::string(kExampleId) + "_solved.msh"));
-    if (m_examplePath.empty()) anaf::LOG::warn("Welcome: example model '{}' not found in the assets", kExampleId);
+      std::filesystem::path(FEM::BEAM::LIBRARY::librarySubdir) / (std::string(exampleId) + "_solved.msh"));
+    if (m_examplePath.empty()) anaf::LOG::warn("Welcome: example model '{}' not found in the assets", exampleId);
   }
 
   void WelcomePanel::open() {
@@ -103,7 +103,7 @@ namespace anaf::GUI {
                        "Pick a starting point; every one of them is also in the menus above.");
     ImGui::Spacing();
 
-    const bool hasModel = anaf::BRIDGE::buildBridge().m_objectType.load() != anaf::BRIDGE::ObjectType::no_type;
+    const bool hasModel = anaf::BRIDGE::buildBridge().objectType.load() != anaf::BRIDGE::E_ObjectType::NoType;
     bool close = false;
     if (ImGui::BeginTable("##welcome_actions", 2, ImGuiTableFlags_SizingStretchProp)) {
       ImGui::TableSetupColumn("##button", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 11.0f);
@@ -112,7 +112,7 @@ namespace anaf::GUI {
       const std::string exampleText = m_examplePath.empty()
         ? std::string("The example model was not found in the installed assets.")
         : std::format("{}: solved, with stress colors and section force diagrams. "
-                      "Edit it in the Frame Editor and run it again.", kExampleName);
+                      "Edit it in the Frame Editor and run it again.", exampleName);
       if (actionRow("Open Example", exampleText.c_str(), !m_examplePath.empty()) && onOpenExample) {
         onOpenExample(m_examplePath);
         close = true;

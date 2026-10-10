@@ -26,7 +26,7 @@ namespace anaf::IO {
 
   // Finite element topologies understood by every reader/writer. The canonical local
   // node order inside anafinen is Gmsh's order; writers for other formats permute it.
-  enum class ElementType : std::uint8_t {
+  enum class E_ElementType : std::uint8_t {
     Point1,
     Line2,
     Line3,
@@ -48,7 +48,7 @@ namespace anaf::IO {
   };
 
   struct ElementTypeInfo {
-    ElementType type;
+    E_ElementType type;
     std::string_view name;
     int dimension;
     int nodeCount;
@@ -60,10 +60,10 @@ namespace anaf::IO {
     std::span<const std::uint8_t> edges;
   };
 
-  const ElementTypeInfo& elementInfo(ElementType type) noexcept;
+  const ElementTypeInfo& elementInfo(E_ElementType type) noexcept;
   std::span<const ElementTypeInfo> allElementTypes() noexcept;
 
-  std::optional<ElementType> elementTypeFromGmsh(int gmshType) noexcept;
-  std::optional<ElementType> elementTypeFromVtk(int vtkType) noexcept;
+  std::optional<E_ElementType> elementTypeFromGmsh(int gmshType) noexcept;
+  std::optional<E_ElementType> elementTypeFromVtk(int vtkType) noexcept;
 
 } // namespace anaf::IO end

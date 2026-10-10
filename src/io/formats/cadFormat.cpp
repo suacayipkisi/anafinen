@@ -58,9 +58,9 @@ namespace anaf::IO::formats {
     using detail::ParseFailure;
     using Point = std::array<double, 3>;
 
-    constexpr std::string_view kSidecarSuffix = ".anafFields";
-    constexpr std::string_view kSidecarMagic = "ANAFINEN_SIDECAR";
-    constexpr int kSidecarVersion = 3;
+    constexpr std::string_view sidecarSuffix = ".anafFields";
+    constexpr std::string_view sidecarMagic = "ANAFINEN_SIDECAR";
+    constexpr int sidecarVersion = 3;
 
     void checkCancel(const IoContext& context) {
       if (context.cancelled()) throw detail::CancelledFailure();
@@ -68,7 +68,7 @@ namespace anaf::IO::formats {
 
     std::filesystem::path sidecarPath(const std::filesystem::path& cadPath) {
       std::filesystem::path sidecar = cadPath;
-      sidecar += kSidecarSuffix;
+      sidecar += sidecarSuffix;
       return sidecar;
     }
 
@@ -162,7 +162,7 @@ namespace anaf::IO::formats {
     // ------------------------------------------------------------ sidecar write
 
     void writeSidecar(const std::filesystem::path& path, const MeshModel& model, const std::vector<std::size_t>& exportedElements) {
-      std::string out = std::format("{} {}\nUNIT {}\n", kSidecarMagic, kSidecarVersion, model.lengthUnit);
+      std::string out = std::format("{} {}\nUNIT {}\n", sidecarMagic, sidecarVersion, model.lengthUnit);
 
       out += std::format("NODES {}\n", model.nodes.size());
       for (const auto& node : model.nodes) {
@@ -189,7 +189,7 @@ namespace anaf::IO::formats {
       for (const auto& f : model.fields) fields.push_back(&f);
       for (const auto& f : encoded) fields.push_back(&f);
       for (const Field* field : fields) {
-        const bool onNodes = field->location == FieldLocation::Node;
+        const bool onNodes = field->location == E_FieldLocation::Node;
         out += std::format("FIELD {} {} {} {}\n", onNodes ? "N" : "E", field->components, field->steps.size(), field->name);
         out += std::format("KIND {} {}\n", stepKindName(field->stepKind), field->stepLabels.empty() ? 0 : 1);
         for (auto label : field->stepLabels) {
@@ -295,7 +295,7 @@ namespace anaf::IO::formats {
         if (keyword != "FIELD") throw ParseFailure("sidecar: FIELD expected, got '" + std::string(keyword) + "'");
         Field field;
         const bool onNodes = cursor.token() == "N";
-        field.location = onNodes ? FieldLocation::Node : FieldLocation::Element;
+        field.location = onNodes ? E_FieldLocation::Node : E_FieldLocation::Element;
         field.components = cursor.number<int>();
         const auto steps = cursor.number<std::size_t>();
         cursor.skipSpace();
@@ -374,14 +374,14 @@ namespace anaf::IO::formats {
           }
         }
       }
-      auto add = [&](const char* name, const FieldLocation location, const int components, std::vector<double> values) {
-        model.fields.push_back(Field{name, location, components, {0.0}, {std::move(values)}, StepKind::Time, {}});
+      auto add = [&](const char* name, const E_FieldLocation location, const int components, std::vector<double> values) {
+        model.fields.push_back(Field{name, location, components, {0.0}, {std::move(values)}, E_StepKind::Time, {}});
       };
-      if (anyNodes) add(FieldName::Displacement, FieldLocation::Node, 3, std::move(displacement));
+      if (anyNodes) add(FieldName::displacement, E_FieldLocation::Node, 3, std::move(displacement));
       if (anyElements) {
-        add(Attribute::MaterialId, FieldLocation::Element, 1, std::move(material));
-        add(Attribute::CrossSectionArea, FieldLocation::Element, 1, std::move(area));
-        add(FieldName::Stress, FieldLocation::Element, 1, std::move(stress));
+        add(Attribute::materialId, E_FieldLocation::Element, 1, std::move(material));
+        add(Attribute::crossSectionArea, E_FieldLocation::Element, 1, std::move(area));
+        add(FieldName::stress, E_FieldLocation::Element, 1, std::move(stress));
       }
     }
 
@@ -389,10 +389,10 @@ namespace anaf::IO::formats {
       const std::string content = detail::readWholeFile(path);
       Cursor cursor(content);
       const auto first = cursor.peekToken();
-      if (first == kSidecarMagic) {
+      if (first == sidecarMagic) {
         cursor.token();
         const int version = cursor.number<int>();
-        if (version > kSidecarVersion) throw ParseFailure(std::format("sidecar version {} is newer than supported ({})", version, kSidecarVersion));
+        if (version > sidecarVersion) throw ParseFailure(std::format("sidecar version {} is newer than supported ({})", version, sidecarVersion));
         readSidecarV2(cursor, model, version);
       } else {
         readSidecarV1(cursor, model);
@@ -482,7 +482,7 @@ namespace anaf::IO::formats {
       set.tag = key.tag;
       set.dimension = key.dim;
       if (key.dim == 0) {
-        set.kind = SetKind::Node;
+        set.kind = E_SetKind::Node;
         std::set<std::uint32_t> nodes;
         for (const auto& location : members) {
           const auto& block = model.blocks[location.block];
@@ -491,7 +491,7 @@ namespace anaf::IO::formats {
         }
         set.members.assign(nodes.begin(), nodes.end());
       } else {
-        set.kind = SetKind::Element;
+        set.kind = E_SetKind::Element;
         set.members.reserve(members.size());
         for (const auto& location : members) set.members.push_back(static_cast<std::uint32_t>(offsets[location.block] + location.local));
         std::ranges::sort(set.members);
@@ -610,10 +610,10 @@ namespace anaf::IO::formats {
       std::size_t global = 0;
       for (const auto& block : model.blocks) {
         const auto& info = elementInfo(block.type);
-        const bool isLine = block.type == ElementType::Line2 || block.type == ElementType::Line3;
+        const bool isLine = block.type == E_ElementType::Line2 || block.type == E_ElementType::Line3;
         for (std::size_t e = 0; e < block.size(); ++e, ++global) {
           if (!isLine) {
-            if (block.type != ElementType::Point1) ++skipped[std::string(info.name)];
+            if (block.type != E_ElementType::Point1) ++skipped[std::string(info.name)];
             continue;
           }
           const auto a = block.connectivity[e * info.nodeCount];
@@ -629,7 +629,7 @@ namespace anaf::IO::formats {
     for (const auto& [name, count] : skipped) {
       report.warnings.push_back(std::format("{} {} elements are not representable in STEP and were skipped", count, name));
     }
-    if (std::ranges::any_of(model.blocks, [](const ElementBlock& b) { return b.type == ElementType::Line3 && b.size() > 0; })) {
+    if (std::ranges::any_of(model.blocks, [](const ElementBlock& b) { return b.type == E_ElementType::Line3 && b.size() > 0; })) {
       report.warnings.push_back("Line3 elements were written as straight edges (mid nodes dropped)");
     }
 

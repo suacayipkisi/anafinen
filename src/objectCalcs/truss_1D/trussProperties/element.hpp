@@ -30,7 +30,7 @@
 namespace FEM::TRUSS {
 
   // 1D bar element in 3D space: two nodes, axial stiffness only.
-  class TrussElement_1D{
+  class TrussElement1D{
   private:
     std::uint32_t m_type{}; // material index into the material list
     double m_length{};
@@ -40,37 +40,37 @@ namespace FEM::TRUSS {
     std::array<double, 3> m_cosines{}; // double: float products put ~1e-7 relative error into K
     std::array<std::uint32_t, 2> m_nodes{};
   public:
-    TrussElement_1D() = default;
-    TrussElement_1D(
+    TrussElement1D() = default;
+    TrussElement1D(
       std::uint32_t type,
       double area,
-      const std::uint32_t node_1,
-      const std::uint32_t node_2,
+      const std::uint32_t node1,
+      const std::uint32_t node2,
       std::span<const Node> allNodes
     ):
       m_type(type),
       m_crossSectionArea(area),
-      m_nodes({node_1, node_2})
+      m_nodes({node1, node2})
     {
       if (area <= 0.0) {
         anaf::LOG::error("Invalid element: area must be positive (got {:.6g}), material {}, nodes [{}, {}]",
-            area, type, node_1, node_2);
+            area, type, node1, node2);
         throw std::invalid_argument("Element cross sectional area must be greater than 0");
       }
 
-      if (node_1 == node_2) {
-        anaf::LOG::error("Invalid element: node indices cannot be identical ({} == {})", node_1, node_2);
+      if (node1 == node2) {
+        anaf::LOG::error("Invalid element: node indices cannot be identical ({} == {})", node1, node2);
         throw std::invalid_argument("An element's nodes cannot be same");
       }
 
-      if (node_1 >= allNodes.size() || node_2 >= allNodes.size()) {
-        anaf::LOG::error("Node index out of range: n1={}, n2={}, total_nodes={}", node_1, node_2, allNodes.size());
+      if (node1 >= allNodes.size() || node2 >= allNodes.size()) {
+        anaf::LOG::error("Node index out of range: n1={}, n2={}, total_nodes={}", node1, node2, allNodes.size());
         throw std::out_of_range("Node index is outside the node span");
       }
 
-      const double dx = allNodes[node_2].getLocX() - allNodes[node_1].getLocX();
-      const double dy = allNodes[node_2].getLocY() - allNodes[node_1].getLocY();
-      const double dz = allNodes[node_2].getLocZ() - allNodes[node_1].getLocZ();
+      const double dx = allNodes[node2].getLocX() - allNodes[node1].getLocX();
+      const double dy = allNodes[node2].getLocY() - allNodes[node1].getLocY();
+      const double dz = allNodes[node2].getLocZ() - allNodes[node1].getLocZ();
       m_length = std::sqrt(dx * dx + dy * dy + dz * dz);
       if (m_length <= 0.0) {
         throw std::invalid_argument("Element length must be greater than zero");

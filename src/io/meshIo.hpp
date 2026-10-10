@@ -31,7 +31,7 @@
 namespace anaf::IO {
 
   // Extension first, then content sniffing. Returns FileFormat::Auto when unknown.
-  FileFormat detectFormat(const std::filesystem::path& path);
+  E_FileFormat detectFormat(const std::filesystem::path& path);
 
   // Formats in the order they should be offered to users (dialog filters, CLI help).
   std::span<const FormatDescriptor> supportedFormats();

@@ -27,12 +27,12 @@
 namespace anaf::GUI {
 
   namespace {
-    constexpr GLuint kMeshBinding = 0;
-    constexpr GLuint kInstanceBinding = 1;
+    constexpr GLuint meshBinding = 0;
+    constexpr GLuint instanceBinding = 1;
 
     // Shared fragment stage: a light at the eye plus ambient, two-sided (sections are seen from
     // inside at open ends), and the entity ID for picking.
-    const char* kLitFragment = R"(
+    constexpr const char* litFragment = R"(
       #version 460 core
       layout (location = 0) out vec4 FragColor;
       layout (location = 1) out int EntityID;
@@ -54,7 +54,7 @@ namespace anaf::GUI {
       }
     )";
 
-    const char* kBeamVertex = R"(
+    constexpr const char* beamVertex = R"(
       #version 460 core
       layout (location = 0) in vec3 aLocal;
       layout (location = 1) in vec3 aNormal;
@@ -87,7 +87,7 @@ namespace anaf::GUI {
       }
     )";
 
-    const char* kSphereVertex = R"(
+    constexpr const char* sphereVertex = R"(
       #version 460 core
       layout (location = 0) in vec3 aLocal; // unit sphere: position = normal
       layout (location = 2) in vec4 iCenterRadius;
@@ -139,8 +139,8 @@ namespace anaf::GUI {
   } // namespace end
 
   BeamSceneRenderer::BeamSceneRenderer() {
-    m_beamProgram = buildShaderProgram(kBeamVertex, kLitFragment, "beam");
-    m_sphereProgram = buildShaderProgram(kSphereVertex, kLitFragment, "sphere");
+    m_beamProgram = buildShaderProgram(beamVertex, litFragment, "beam");
+    m_sphereProgram = buildShaderProgram(sphereVertex, litFragment, "sphere");
     m_beamMvp = glGetUniformLocation(m_beamProgram.get(), "u_MVP");
     m_beamView = glGetUniformLocation(m_beamProgram.get(), "u_ViewDir");
     m_sphereMvp = glGetUniformLocation(m_sphereProgram.get(), "u_MVP");
@@ -153,12 +153,12 @@ namespace anaf::GUI {
     m_sphereInstances = createBuffer();
     m_sphereVao = createVertexArray();
     const GLuint vao = m_sphereVao.get();
-    glVertexArrayVertexBuffer(vao, kMeshBinding, m_sphereVertices.get(), 0, sizeof(glm::vec3));
-    floatAttrib(vao, 0, 3, 0, kMeshBinding);
-    glVertexArrayBindingDivisor(vao, kInstanceBinding, 1);
-    floatAttrib(vao, 2, 4, offsetof(SphereInstance, centerRadius), kInstanceBinding);
-    floatAttrib(vao, 3, 4, offsetof(SphereInstance, color), kInstanceBinding);
-    intAttrib(vao, 4, offsetof(SphereInstance, entityID), kInstanceBinding);
+    glVertexArrayVertexBuffer(vao, meshBinding, m_sphereVertices.get(), 0, sizeof(glm::vec3));
+    floatAttrib(vao, 0, 3, 0, meshBinding);
+    glVertexArrayBindingDivisor(vao, instanceBinding, 1);
+    floatAttrib(vao, 2, 4, offsetof(SphereInstance, centerRadius), instanceBinding);
+    floatAttrib(vao, 3, 4, offsetof(SphereInstance, color), instanceBinding);
+    intAttrib(vao, 4, offsetof(SphereInstance, entityID), instanceBinding);
   }
 
   int BeamSceneRenderer::addMesh(const std::span<const MeshVertex> vertices, const GLenum mode) {
@@ -172,19 +172,19 @@ namespace anaf::GUI {
     mesh.instances = createBuffer();
     mesh.vao = createVertexArray();
     const GLuint vao = mesh.vao.get();
-    glVertexArrayVertexBuffer(vao, kMeshBinding, mesh.vertices.get(), 0, sizeof(MeshVertex));
-    floatAttrib(vao, 0, 3, offsetof(MeshVertex, local), kMeshBinding);
-    floatAttrib(vao, 1, 3, offsetof(MeshVertex, normal), kMeshBinding);
-    glVertexArrayBindingDivisor(vao, kInstanceBinding, 1);
-    floatAttrib(vao, 2, 3, offsetof(BeamInstance, start), kInstanceBinding);
-    floatAttrib(vao, 3, 3, offsetof(BeamInstance, end), kInstanceBinding);
-    floatAttrib(vao, 4, 3, offsetof(BeamInstance, axisY0), kInstanceBinding);
-    floatAttrib(vao, 5, 3, offsetof(BeamInstance, axisZ0), kInstanceBinding);
-    floatAttrib(vao, 6, 3, offsetof(BeamInstance, axisY1), kInstanceBinding);
-    floatAttrib(vao, 7, 3, offsetof(BeamInstance, axisZ1), kInstanceBinding);
-    floatAttrib(vao, 8, 4, offsetof(BeamInstance, color0), kInstanceBinding);
-    floatAttrib(vao, 9, 4, offsetof(BeamInstance, color1), kInstanceBinding);
-    intAttrib(vao, 10, offsetof(BeamInstance, entityID), kInstanceBinding);
+    glVertexArrayVertexBuffer(vao, meshBinding, mesh.vertices.get(), 0, sizeof(MeshVertex));
+    floatAttrib(vao, 0, 3, offsetof(MeshVertex, local), meshBinding);
+    floatAttrib(vao, 1, 3, offsetof(MeshVertex, normal), meshBinding);
+    glVertexArrayBindingDivisor(vao, instanceBinding, 1);
+    floatAttrib(vao, 2, 3, offsetof(BeamInstance, start), instanceBinding);
+    floatAttrib(vao, 3, 3, offsetof(BeamInstance, end), instanceBinding);
+    floatAttrib(vao, 4, 3, offsetof(BeamInstance, axisY0), instanceBinding);
+    floatAttrib(vao, 5, 3, offsetof(BeamInstance, axisZ0), instanceBinding);
+    floatAttrib(vao, 6, 3, offsetof(BeamInstance, axisY1), instanceBinding);
+    floatAttrib(vao, 7, 3, offsetof(BeamInstance, axisZ1), instanceBinding);
+    floatAttrib(vao, 8, 4, offsetof(BeamInstance, color0), instanceBinding);
+    floatAttrib(vao, 9, 4, offsetof(BeamInstance, color1), instanceBinding);
+    intAttrib(vao, 10, offsetof(BeamInstance, entityID), instanceBinding);
     m_meshes.push_back(std::move(mesh));
     return static_cast<int>(m_meshes.size()) - 1;
   }
@@ -212,12 +212,12 @@ namespace anaf::GUI {
       // Re-specified every time (orphaning); the instance list changes with the camera when the
       // level of detail is active.
       glNamedBufferData(mesh.instances.get(), static_cast<GLsizeiptr>(mesh.pending.size() * sizeof(BeamInstance)), mesh.pending.data(), GL_DYNAMIC_DRAW);
-      glVertexArrayVertexBuffer(mesh.vao.get(), kInstanceBinding, mesh.instances.get(), 0, sizeof(BeamInstance));
+      glVertexArrayVertexBuffer(mesh.vao.get(), instanceBinding, mesh.instances.get(), 0, sizeof(BeamInstance));
     }
     m_sphereCount = static_cast<GLsizei>(m_pendingSpheres.size());
     if (!m_pendingSpheres.empty()) {
       glNamedBufferData(m_sphereInstances.get(), static_cast<GLsizeiptr>(m_pendingSpheres.size() * sizeof(SphereInstance)), m_pendingSpheres.data(), GL_DYNAMIC_DRAW);
-      glVertexArrayVertexBuffer(m_sphereVao.get(), kInstanceBinding, m_sphereInstances.get(), 0, sizeof(SphereInstance));
+      glVertexArrayVertexBuffer(m_sphereVao.get(), instanceBinding, m_sphereInstances.get(), 0, sizeof(SphereInstance));
     }
   }
 

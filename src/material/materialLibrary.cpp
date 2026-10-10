@@ -39,7 +39,7 @@ namespace anaf::MATERIAL {
       return it->get<double>();
     }
 
-    constexpr int kSchemaVersion = 1;
+    constexpr int currentSchemaVersion = 1;
 
     Material parseMaterial(const json& entry, const bool isBuiltin) {
       if (!entry.is_object()) throw std::runtime_error("entry is not an object");
@@ -118,7 +118,7 @@ namespace anaf::MATERIAL {
 
     const std::string_view name = material.getMaterialType();
     if (name.empty()) return std::unexpected("name is empty");
-    if (name.size() > kMaxMaterialNameLength) return std::unexpected(std::format("name is longer than {} bytes", kMaxMaterialNameLength));
+    if (name.size() > maxMaterialNameLength) return std::unexpected(std::format("name is longer than {} bytes", maxMaterialNameLength));
     // Names are written into mesh files (MSH physical names are double-quoted, VTK / sidecar are line based).
     const auto forbidden = [](const unsigned char c) { return c < 0x20 || c == 0x7f || c == '"'; };
     if (std::ranges::any_of(name, forbidden)) return std::unexpected("name must not contain quotes or control characters");
@@ -170,7 +170,7 @@ namespace anaf::MATERIAL {
         {"ductility", material.getDuctility()}
       });
     }
-    const json root = {{"schemaVersion", kSchemaVersion}, {"materials", std::move(list)}};
+    const json root = {{"schemaVersion", currentSchemaVersion}, {"materials", std::move(list)}};
     std::string text;
     try {
       text = root.dump(2);

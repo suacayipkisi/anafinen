@@ -30,9 +30,9 @@
 
 namespace anaf::GUI::BEAM_WORKER {
 
-  void startSolve(BRIDGE::Gui_Calc_Bridge& bridge, std::shared_ptr<const BRIDGE::BeamMeshData> mesh) {
+  void startSolve(BRIDGE::GuiCalcBridge& bridge, std::shared_ptr<const BRIDGE::BeamMeshData> mesh) {
     if (!mesh) return;
-    bridge.joinWorker(); // a worker that is still finishing clears m_isRunning on exit
+    bridge.joinWorker(); // a worker that is still finishing clears isRunning on exit
     std::vector<MATERIAL::Material> materials;
     std::vector<FEM::BEAM::BeamSection> sections;
     std::uint64_t generation = 0;
@@ -42,8 +42,8 @@ namespace anaf::GUI::BEAM_WORKER {
       sections = bridge.allSections;
       generation = bridge.modelGeneration.load();
     }
-    bridge.m_isRunning = true;
-    bridge.m_progress = 0.0f;
+    bridge.isRunning = true;
+    bridge.progress = 0.0f;
 
     bridge.workerThread = std::jthread(
       [&bridge, mesh = std::move(mesh), materials = std::move(materials), sections = std::move(sections), generation]
@@ -51,7 +51,7 @@ namespace anaf::GUI::BEAM_WORKER {
         try {
           TRUSS_WORKER::configureOpenMPForWorker();
           auto solved = FEM::BEAM::solveStatic(*mesh, materials, sections, st, [&bridge](const float fraction) {
-            bridge.m_progress = fraction;
+            bridge.progress = fraction;
           });
           if (!solved) {
             if (!st.stop_requested()) anaf::LOG::error("Beam solver failed: {}", solved.error());
@@ -61,8 +61,8 @@ namespace anaf::GUI::BEAM_WORKER {
               std::lock_guard lock(bridge.dataMutex);
               if (bridge.modelGeneration.load() == generation) { // not reset while solving
                 bridge.activeBeamMesh = std::move(solved->mesh);
-                bridge.m_isValid = solved->energyCheckPassed;
-                bridge.m_energyDiff = solved->energyDiff;
+                bridge.isValid = solved->energyCheckPassed;
+                bridge.energyDiff = solved->energyDiff;
                 published = true;
               }
             }
@@ -71,8 +71,8 @@ namespace anaf::GUI::BEAM_WORKER {
         } catch (const std::exception& exception) {
           anaf::LOG::error("Beam solver failed: {}", exception.what());
         }
-        bridge.m_progress = 1.0f;
-        bridge.m_isRunning = false;
+        bridge.progress = 1.0f;
+        bridge.isRunning = false;
       });
   }
 

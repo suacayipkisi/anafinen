@@ -26,10 +26,10 @@
 
 namespace anaf::CLI {
 
-  Session::Session(BRIDGE::Gui_Calc_Bridge& bridge_, std::ostream& out_, std::ostream& err_) :
-    bridge(bridge_),
-    out(out_),
-    err(err_)
+  Session::Session(BRIDGE::GuiCalcBridge& sessionBridge, std::ostream& outStream, std::ostream& errStream) :
+    bridge(sessionBridge),
+    out(outStream),
+    err(errStream)
   {
     std::lock_guard lock(bridge.dataMutex);
     if (!bridge.allMaterials.empty()) defaults.materialID = bridge.allMaterials.front().getMaterialID();
@@ -42,15 +42,15 @@ namespace anaf::CLI {
     }
   }
 
-  ModelKind modelKind(const Session& session) {
-    switch (session.bridge.m_objectType.load()) {
-      case BRIDGE::truss_SQPT:
-      case BRIDGE::truss_imported_or_entered:
-        return ModelKind::truss;
-      case BRIDGE::beam_frame:
-        return ModelKind::beam;
+  E_ModelKind modelKind(const Session& session) {
+    switch (session.bridge.objectType.load()) {
+      case BRIDGE::TrussSqpt:
+      case BRIDGE::TrussImportedOrEntered:
+        return E_ModelKind::Truss;
+      case BRIDGE::BeamFrame:
+        return E_ModelKind::Beam;
       default:
-        return ModelKind::none;
+        return E_ModelKind::None;
     }
   }
 

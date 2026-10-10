@@ -41,7 +41,7 @@ namespace FEM::BEAM {
 
   // Sets one formulation on every element; the caller then changes single elements
   // (e.g. all Timoshenko, one Euler-Bernoulli).
-  inline void setFormulationForAll(MeshData& mesh, const Formulation formulation) {
+  inline void setFormulationForAll(MeshData& mesh, const E_Formulation formulation) {
     for (auto& element : mesh.elements) element.formulation = formulation;
   }
 

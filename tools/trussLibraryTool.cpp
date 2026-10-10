@@ -30,7 +30,7 @@ namespace LIBRARY = FEM::TRUSS::LIBRARY;
 
 int main(int argc, char** argv) {
   const fs::path dir = argc > 1 ? anaf::IO::pathFromUtf8(argv[1])
-                                : anaf::IO::pathFromUtf8(MAIN_DIR) / "assets" / fs::path(LIBRARY::kLibrarySubdir);
+                                : anaf::IO::pathFromUtf8(MAIN_DIR) / "assets" / fs::path(LIBRARY::librarySubdir);
   const auto written = LIBRARY::writeLibrary(dir);
   if (!written) {
     std::fprintf(stderr, "%s\n", written.error().c_str());

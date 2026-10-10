@@ -33,17 +33,17 @@
 
 namespace FEM::TRUSS {
 
-  class Truss_1D_Container{
+  class Truss1DContainer{
   private:
     bool m_isCalculationValid{false};
     double m_energyDiff{};
     double m_energyRelativeDiff{};
-    double m_workDone_external{};
-    double m_elasticDeformationEnergy_internal{};
+    double m_workDoneExternal{};
+    double m_elasticDeformationEnergyInternal{};
 
     std::span<double> m_forceVec;
     std::span<Node> m_allNodes;
-    std::span<TrussElement_1D> m_allElements;
+    std::span<TrussElement1D> m_allElements;
 
     std::vector<Eigen::Triplet<double>> m_globalStiffnessMatrix;
     std::vector<std::array<double, 3>> m_resultDisplacements;
@@ -51,7 +51,7 @@ namespace FEM::TRUSS {
     void set(
       std::span<double> forceVec,
       std::span<Node> allNodes,
-      std::span<TrussElement_1D> allElements
+      std::span<TrussElement1D> allElements
     ) {
       m_forceVec = forceVec;
       m_allNodes = allNodes;
@@ -59,12 +59,12 @@ namespace FEM::TRUSS {
     }
 
     void assembleStiffness(
-      const std::vector<TrussElement_1D>& elements,
+      const std::vector<TrussElement1D>& elements,
       std::span<const anaf::MATERIAL::Material> allMaterials
     );
 
     void considerWeight(
-      const std::vector<TrussElement_1D>& elements,
+      const std::vector<TrussElement1D>& elements,
       std::span<const anaf::MATERIAL::Material> allMaterials
     );
 
@@ -81,8 +81,8 @@ namespace FEM::TRUSS {
     inline bool getIsCalculationValid() const {return m_isCalculationValid;}
     inline double getEnergyDiff() const {return m_energyDiff;}
     inline double getEnergyRelativeDiff() const {return m_energyRelativeDiff;}
-    inline double getWorkDone_External() const {return m_workDone_external;}
-    inline double getElasticDeformationEnergy_Internal() const {return m_elasticDeformationEnergy_internal;}
+    inline double getWorkDoneExternal() const {return m_workDoneExternal;}
+    inline double getElasticDeformationEnergyInternal() const {return m_elasticDeformationEnergyInternal;}
   };
 
 } // namespace FEM::TRUSS end

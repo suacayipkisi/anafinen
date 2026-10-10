@@ -121,7 +121,7 @@ namespace FEM::BEAM {
     const double E = material.getElasticityModulus();
     const double G = material.getShearModulus();
     const SectionProperties s = computeProperties(sections[beam.sectionID].getShape(), material.getPoisson());
-    const bool timoshenko = beam.formulation == Formulation::Timoshenko;
+    const bool timoshenko = beam.formulation == E_Formulation::Timoshenko;
     const double phiY = timoshenko ? 12.0 * E * s.secondMomentZ / (G * s.shearAreaY * L * L) : 0.0;
     const double phiZ = timoshenko ? 12.0 * E * s.secondMomentY / (G * s.shearAreaZ * L * L) : 0.0;
 

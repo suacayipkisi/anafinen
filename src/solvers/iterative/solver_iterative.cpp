@@ -41,7 +41,7 @@ namespace FEM::SOLVER {
     const std::stop_token stopToken,
     Eigen::VectorXd& displacement
   ) {
-    Result result{.type = Type::BlockCG};
+    Result result{.type = E_Type::BlockCG};
     const auto start = std::chrono::steady_clock::now();
     const Eigen::Index activeDofs = force.size();
     constexpr Eigen::Index maxIterations = 50'000;

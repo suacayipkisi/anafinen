@@ -29,7 +29,7 @@ namespace FEM::BEAM {
     std::array<double, 3> moment{}; // N m, moment vector (right-hand rule)
   };
 
-  enum class LoadFrame : std::uint8_t {
+  enum class E_LoadFrame : std::uint8_t {
     Global, // components along the global X / Y / Z axes
     Local   // components along the element's local x / y / z axes
   };
@@ -40,7 +40,7 @@ namespace FEM::BEAM {
   struct DistributedLoad {
     std::uint32_t element{};        // index into MeshData::elements
     std::array<double, 3> value{};  // N/m
-    LoadFrame frame{LoadFrame::Global};
+    E_LoadFrame frame{E_LoadFrame::Global};
   };
 
 } // namespace FEM::BEAM end

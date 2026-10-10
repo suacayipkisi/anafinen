@@ -27,36 +27,36 @@
 namespace anaf::GUI {
 
   // Structure family picked in the Analyze menu; the selector asks for the rest.
-  enum class StructureFamily {
-    truss,
-    beam
+  enum class E_StructureFamily {
+    Truss,
+    Beam
   };
 
-  // Combo order: the value is the row in AnalysisSelector::kTrussTypes.
-  enum TrussTypes {
-    nodeEntered,
-    simpleQuadranglePrism
+  // Combo order: the value is the row in AnalysisSelector::trussTypes.
+  enum E_TrussTypes {
+    NodeEntered,
+    SimpleQuadranglePrism
   };
 
   // "Select Analysis" dialog: truss type (truss only) and load kind (constant / dynamic).
   // Opened by the Analyze menu through open(); the choice is applied in bindAnalysisFlow.
   class AnalysisSelector : public IPanel {
   private:
-    static constexpr std::array<std::string_view, 2> kTrussTypes{"Imported / Self-Built", "Simple Quadrangle"};
-    static constexpr std::array<std::string_view, 2> kLoadKinds{"Constant Load (Static)", "Dynamic Load (not available yet)"};
+    static constexpr std::array<std::string_view, 2> trussTypes{"Imported / Self-Built", "Simple Quadrangle"};
+    static constexpr std::array<std::string_view, 2> loadKinds{"Constant Load (Static)", "Dynamic Load (not available yet)"};
 
-    StructureFamily m_family{StructureFamily::truss};
-    TrussTypes m_trussType{nodeEntered}; // imported / self-built is offered first
-    BRIDGE::LoadKind m_loadKind{BRIDGE::LoadKind::constant};
+    E_StructureFamily m_family{E_StructureFamily::Truss};
+    E_TrussTypes m_trussType{NodeEntered}; // imported / self-built is offered first
+    BRIDGE::E_LoadKind m_loadKind{BRIDGE::E_LoadKind::Constant};
 
   public:
     // Type changed: the bridge model and the panels are reset, so nothing of the previous
     // model is left behind. A change of the load kind alone keeps the model.
-    std::function<void(TrussTypes, BRIDGE::LoadKind)> onTrussSelected;
-    std::function<void(BRIDGE::LoadKind)> onBeamSelected;
+    std::function<void(E_TrussTypes, BRIDGE::E_LoadKind)> onTrussSelected;
+    std::function<void(BRIDGE::E_LoadKind)> onBeamSelected;
 
     // Shows the dialog for family, preselecting the active load kind.
-    void open(StructureFamily family);
+    void open(E_StructureFamily family);
     void onImGuiRender() override;
   };
 } // namespace anaf::GUI end

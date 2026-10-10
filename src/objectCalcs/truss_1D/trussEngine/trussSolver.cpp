@@ -36,7 +36,7 @@ namespace FEM::TRUSS {
     // The snapshot turned into solver objects.
     struct SolverModel {
       std::vector<Node> nodes;
-      std::vector<TrussElement_1D> elements;
+      std::vector<TrussElement1D> elements;
       std::vector<std::size_t> renderIndex; // elements[i] comes from mesh.trussElements[renderIndex[i]]
       std::vector<double> force;            // 3 per node, x / y / z
     };
@@ -133,7 +133,7 @@ namespace FEM::TRUSS {
       return model;
     }
 
-    void logResult(const Truss_1D_Container& container, const SolverModel& model) {
+    void logResult(const Truss1DContainer& container, const SolverModel& model) {
       // Node locations stay undeformed: consumers draw location + displacement * scale.
       double maxDisp = 0.0;
       for (const auto& node : model.nodes) {
@@ -154,8 +154,8 @@ namespace FEM::TRUSS {
       }
       anaf::LOG::info("Max nodal displacement magnitude: {:.6g} m", maxDisp);
       anaf::LOG::info("Max element stress magnitude: {:.6g} Pa", maxStress);
-      anaf::LOG::info("Work done by external forces: {:.6g} J", container.getWorkDone_External());
-      anaf::LOG::info("Stored elastic deformation energy: {:.6g} J", container.getElasticDeformationEnergy_Internal());
+      anaf::LOG::info("Work done by external forces: {:.6g} J", container.getWorkDoneExternal());
+      anaf::LOG::info("Stored elastic deformation energy: {:.6g} J", container.getElasticDeformationEnergyInternal());
     }
 
   } // namespace end
@@ -176,7 +176,7 @@ namespace FEM::TRUSS {
     if (st.stop_requested()) return cancelled();
     report(0.30f);
 
-    Truss_1D_Container container;
+    Truss1DContainer container;
     container.set(model->force, model->nodes, model->elements);
     container.assembleStiffness(model->elements, materials);
     if (st.stop_requested()) return cancelled();

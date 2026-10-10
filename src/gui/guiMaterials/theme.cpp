@@ -35,13 +35,13 @@ namespace anaf::GUI::THEME {
     }
 
     // Status colors shared by the dark themes; tuned to stay readable on every panel background.
-    constexpr ImVec4 kGood = rgb(0x5FD38D);
-    constexpr ImVec4 kWarn = rgb(0xF2B84B);
-    constexpr ImVec4 kBad = rgb(0xF2665F);
-    constexpr ImVec4 kInfo = rgb(0x6AAEF5);
-    constexpr ImVec4 kCore = rgb(0x3FD6D0);
+    constexpr ImVec4 statusGood = rgb(0x5FD38D);
+    constexpr ImVec4 statusWarn = rgb(0xF2B84B);
+    constexpr ImVec4 statusBad = rgb(0xF2665F);
+    constexpr ImVec4 statusInfo = rgb(0x6AAEF5);
+    constexpr ImVec4 statusCore = rgb(0x3FD6D0);
 
-    constexpr ThemePalette kSteelCyan{
+    constexpr ThemePalette steelCyan{
       .key = "steel_cyan",
       .name = "Steel Blue / Cyan",
       .base = rgb(0x111418),
@@ -56,11 +56,11 @@ namespace anaf::GUI::THEME {
       .primary = rgb(0x1C7BA2),
       .primaryHovered = rgb(0x2690BB),
       .primaryActive = rgb(0x166685),
-      .good = kGood,
-      .warn = kWarn,
-      .bad = kBad,
-      .info = kInfo,
-      .core = kCore,
+      .good = statusGood,
+      .warn = statusWarn,
+      .bad = statusBad,
+      .info = statusInfo,
+      .core = statusCore,
       .note = rgb(0xA9B2BF),
       .sceneTop = rgb(0x2A3340),
       .sceneBottom = rgb(0x0E1115),
@@ -74,7 +74,7 @@ namespace anaf::GUI::THEME {
       .overlayTextDim = rgb(0x8A94A3),
     };
 
-    constexpr ThemePalette kGraphiteOrange{
+    constexpr ThemePalette graphiteOrange{
       .key = "graphite_orange",
       .name = "Graphite / Orange",
       .base = rgb(0x141416),
@@ -89,11 +89,11 @@ namespace anaf::GUI::THEME {
       .primary = rgb(0xB15E22),
       .primaryHovered = rgb(0xC86E2E),
       .primaryActive = rgb(0x944D1B),
-      .good = kGood,
+      .good = statusGood,
       .warn = rgb(0xF5CF5A), // yellower than the shared warn, so it does not read as the accent
-      .bad = kBad,
-      .info = kInfo,
-      .core = kCore,
+      .bad = statusBad,
+      .info = statusInfo,
+      .core = statusCore,
       .note = rgb(0xAEABA6),
       .sceneTop = rgb(0x3A3C42),
       .sceneBottom = rgb(0x131416),
@@ -107,7 +107,7 @@ namespace anaf::GUI::THEME {
       .overlayTextDim = rgb(0x8F8D8A),
     };
 
-    constexpr ThemePalette kClassicFem{
+    constexpr ThemePalette classicFem{
       .key = "classic_fem",
       .name = "Classic FEM",
       .base = rgb(0x16191E),
@@ -122,11 +122,11 @@ namespace anaf::GUI::THEME {
       .primary = rgb(0x2A68C8),
       .primaryHovered = rgb(0x3779DC),
       .primaryActive = rgb(0x2257A8),
-      .good = kGood,
-      .warn = kWarn,
-      .bad = kBad,
+      .good = statusGood,
+      .warn = statusWarn,
+      .bad = statusBad,
       .info = rgb(0x7DB8FF),
-      .core = kCore,
+      .core = statusCore,
       .note = rgb(0xA7AFBB),
       .sceneTop = rgb(0x5A7CA8),
       .sceneBottom = rgb(0x0D1828),
@@ -140,7 +140,7 @@ namespace anaf::GUI::THEME {
       .overlayTextDim = rgb(0xA4B2C4),
     };
 
-    constexpr ThemePalette kMidnightViolet{
+    constexpr ThemePalette midnightViolet{
       .key = "midnight_violet",
       .name = "Midnight / Violet",
       .base = rgb(0x0F1020),
@@ -155,11 +155,11 @@ namespace anaf::GUI::THEME {
       .primary = rgb(0x6650D8),
       .primaryHovered = rgb(0x765FEA),
       .primaryActive = rgb(0x5641B8),
-      .good = kGood,
-      .warn = kWarn,
-      .bad = kBad,
+      .good = statusGood,
+      .warn = statusWarn,
+      .bad = statusBad,
       .info = rgb(0x8FA8FF),
-      .core = kCore,
+      .core = statusCore,
       .note = rgb(0xA9AAC4),
       .sceneTop = rgb(0x2B2C4A),
       .sceneBottom = rgb(0x0B0C17),
@@ -173,7 +173,7 @@ namespace anaf::GUI::THEME {
       .overlayTextDim = rgb(0x8C8EAA),
     };
 
-    constexpr ThemePalette kEmeraldSlate{
+    constexpr ThemePalette emeraldSlate{
       .key = "slate_emerald",
       .name = "Slate / Emerald",
       .base = rgb(0x111615),
@@ -189,10 +189,10 @@ namespace anaf::GUI::THEME {
       .primaryHovered = rgb(0x239E71),
       .primaryActive = rgb(0x167351),
       .good = rgb(0x9BE36A), // lime, so success does not read as the accent
-      .warn = kWarn,
-      .bad = kBad,
-      .info = kInfo,
-      .core = kCore,
+      .warn = statusWarn,
+      .bad = statusBad,
+      .info = statusInfo,
+      .core = statusCore,
       .note = rgb(0xA6B3B0),
       .sceneTop = rgb(0x2B3735),
       .sceneBottom = rgb(0x0D1110),
@@ -207,7 +207,7 @@ namespace anaf::GUI::THEME {
     };
 
     // Light theme: dark text, deeper status colors (readable on white), light viewport gradient.
-    constexpr ThemePalette kStudioLight{
+    constexpr ThemePalette studioLight{
       .key = "studio_light",
       .name = "Studio Light",
       .light = true,
@@ -241,7 +241,7 @@ namespace anaf::GUI::THEME {
       .overlayTextDim = rgb(0x5E6875),
     };
 
-    ThemeId g_current = ThemeId::SteelCyan;
+    E_ThemeId g_current = E_ThemeId::SteelCyan;
     std::uint32_t g_revision = 0;
 
     void applyStyleColors(const ThemePalette& p) {
@@ -331,32 +331,32 @@ namespace anaf::GUI::THEME {
 
   } // namespace
 
-  const ThemePalette& palette(const ThemeId id) {
+  const ThemePalette& palette(const E_ThemeId id) {
     switch (id) {
-      case ThemeId::GraphiteOrange: return kGraphiteOrange;
-      case ThemeId::ClassicFem: return kClassicFem;
-      case ThemeId::MidnightViolet: return kMidnightViolet;
-      case ThemeId::EmeraldSlate: return kEmeraldSlate;
-      case ThemeId::StudioLight: return kStudioLight;
-      case ThemeId::SteelCyan: break;
+      case E_ThemeId::GraphiteOrange: return graphiteOrange;
+      case E_ThemeId::ClassicFem: return classicFem;
+      case E_ThemeId::MidnightViolet: return midnightViolet;
+      case E_ThemeId::EmeraldSlate: return emeraldSlate;
+      case E_ThemeId::StudioLight: return studioLight;
+      case E_ThemeId::SteelCyan: break;
     }
-    return kSteelCyan;
+    return steelCyan;
   }
 
-  ThemeId themeFromKey(const std::string_view key) {
-    for (const ThemeId id : kAllThemes) {
+  E_ThemeId themeFromKey(const std::string_view key) {
+    for (const E_ThemeId id : allThemes) {
       if (key == palette(id).key) return id;
     }
-    return ThemeId::SteelCyan;
+    return E_ThemeId::SteelCyan;
   }
 
   const ThemePalette& theme() { return palette(g_current); }
 
-  ThemeId currentTheme() { return g_current; }
+  E_ThemeId currentTheme() { return g_current; }
 
   std::uint32_t themeRevision() { return g_revision; }
 
-  void applyTheme(const ThemeId id) {
+  void applyTheme(const E_ThemeId id) {
     g_current = id;
     ++g_revision;
     applyStyleColors(palette(id));

@@ -54,7 +54,7 @@ namespace anaf::CLI::HANDLERS {
     // is dropped; sections the file brings are added as user sections.
     CommandResult loadModelFile(Session& session, const std::filesystem::path& path, const IO::ReadOptions& options) {
       auto& bridge = session.bridge;
-      if (bridge.m_isRunning) return std::unexpected("a solve is running");
+      if (bridge.isRunning) return std::unexpected("a solve is running");
       auto model = IO::readMesh(path, options);
       if (!model) return std::unexpected(std::format("cannot read '{}': {}", IO::pathToUtf8(path), model.error().message));
 
@@ -69,7 +69,7 @@ namespace anaf::CLI::HANDLERS {
       if (FEM::BEAM::ADAPTER::isBeamModel(*model)) {
         auto beam = FEM::BEAM::ADAPTER::toMeshData(*model, materials, sections);
         if (!beam) return std::unexpected(std::format("'{}' is not a usable beam model: {}", IO::pathToUtf8(path), beam.error()));
-        bridge.resetModel(BRIDGE::ObjectType::beam_frame);
+        bridge.resetModel(BRIDGE::E_ObjectType::BeamFrame);
         // Element section indices from sections.size() on refer to these, in order.
         for (const auto& section : beam->newSections) {
           if (const auto added = bridge.addUserSection(section); !added) {
@@ -90,7 +90,7 @@ namespace anaf::CLI::HANDLERS {
       }
 
       auto truss = FEM::TRUSS::ADAPTER::toMeshData(*model, materials);
-      bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
+      bridge.resetModel(BRIDGE::E_ObjectType::TrussImportedOrEntered);
       {
         std::lock_guard lock(bridge.dataMutex);
         bridge.activeMesh = truss.mesh;
@@ -109,8 +109,8 @@ namespace anaf::CLI::HANDLERS {
     };
 
     LibraryDirs libraryDirs() {
-      return {anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::TRUSS::LIBRARY::kLibrarySubdir)),
-              anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::BEAM::LIBRARY::kLibrarySubdir))};
+      return {anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::TRUSS::LIBRARY::librarySubdir)),
+              anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::BEAM::LIBRARY::librarySubdir))};
     }
 
     // Built-in models are never overwritten (the GUI refuses the same).
@@ -142,14 +142,14 @@ namespace anaf::CLI::HANDLERS {
       const auto dirs = libraryDirs();
       std::vector<FoundEntry> found;
       if (truss) {
-        if (dirs.truss.empty()) return std::unexpected(std::format("assets/{} not found", FEM::TRUSS::LIBRARY::kLibrarySubdir));
-        const auto index = FEM::TRUSS::LIBRARY::loadIndex(dirs.truss / std::filesystem::path(FEM::TRUSS::LIBRARY::kIndexFile));
+        if (dirs.truss.empty()) return std::unexpected(std::format("assets/{} not found", FEM::TRUSS::LIBRARY::librarySubdir));
+        const auto index = FEM::TRUSS::LIBRARY::loadIndex(dirs.truss / std::filesystem::path(FEM::TRUSS::LIBRARY::indexFileName));
         if (!index) return std::unexpected(index.error());
         appendEntries(found, false, dirs.truss, *index);
       }
       if (beam) {
-        if (dirs.beam.empty()) return std::unexpected(std::format("assets/{} not found", FEM::BEAM::LIBRARY::kLibrarySubdir));
-        const auto index = FEM::BEAM::LIBRARY::loadIndex(dirs.beam / std::filesystem::path(FEM::BEAM::LIBRARY::kIndexFile));
+        if (dirs.beam.empty()) return std::unexpected(std::format("assets/{} not found", FEM::BEAM::LIBRARY::librarySubdir));
+        const auto index = FEM::BEAM::LIBRARY::loadIndex(dirs.beam / std::filesystem::path(FEM::BEAM::LIBRARY::indexFileName));
         if (!index) return std::unexpected(index.error());
         appendEntries(found, true, dirs.beam, *index);
       }
@@ -176,19 +176,19 @@ namespace anaf::CLI::HANDLERS {
 
     struct ExportFormat {
       std::string_view key;
-      IO::FileFormat format;
-      IO::MshVersion mshVersion;
-      IO::VtkLegacyVersion vtkVersion;
+      IO::E_FileFormat format;
+      IO::E_MshVersion mshVersion;
+      IO::E_VtkLegacyVersion vtkVersion;
     };
 
-    constexpr std::array<ExportFormat, 7> kExportFormats{{
-      {"msh", IO::FileFormat::Msh, IO::MshVersion::V4_1, IO::VtkLegacyVersion::V5_1},
-      {"msh22", IO::FileFormat::Msh, IO::MshVersion::V2_2, IO::VtkLegacyVersion::V5_1},
-      {"vtu", IO::FileFormat::Vtu, IO::MshVersion::V4_1, IO::VtkLegacyVersion::V5_1},
-      {"pvd", IO::FileFormat::Pvd, IO::MshVersion::V4_1, IO::VtkLegacyVersion::V5_1},
-      {"vtk", IO::FileFormat::VtkLegacy, IO::MshVersion::V4_1, IO::VtkLegacyVersion::V5_1},
-      {"vtk42", IO::FileFormat::VtkLegacy, IO::MshVersion::V4_1, IO::VtkLegacyVersion::V4_2},
-      {"step", IO::FileFormat::Step, IO::MshVersion::V4_1, IO::VtkLegacyVersion::V5_1},
+    constexpr std::array<ExportFormat, 7> exportFormats{{
+      {"msh", IO::E_FileFormat::Msh, IO::E_MshVersion::V4_1, IO::E_VtkLegacyVersion::V5_1},
+      {"msh22", IO::E_FileFormat::Msh, IO::E_MshVersion::V2_2, IO::E_VtkLegacyVersion::V5_1},
+      {"vtu", IO::E_FileFormat::Vtu, IO::E_MshVersion::V4_1, IO::E_VtkLegacyVersion::V5_1},
+      {"pvd", IO::E_FileFormat::Pvd, IO::E_MshVersion::V4_1, IO::E_VtkLegacyVersion::V5_1},
+      {"vtk", IO::E_FileFormat::VtkLegacy, IO::E_MshVersion::V4_1, IO::E_VtkLegacyVersion::V5_1},
+      {"vtk42", IO::E_FileFormat::VtkLegacy, IO::E_MshVersion::V4_1, IO::E_VtkLegacyVersion::V4_2},
+      {"step", IO::E_FileFormat::Step, IO::E_MshVersion::V4_1, IO::E_VtkLegacyVersion::V5_1},
     }};
 
   } // namespace end
@@ -196,7 +196,7 @@ namespace anaf::CLI::HANDLERS {
   CommandResult newModel(Session& session, const Arguments args) {
     if (args.size() != 1 || (args[0] != "truss" && args[0] != "beam")) return std::unexpected("usage: -new truss|beam");
     const bool beam = args[0] == "beam";
-    session.bridge.resetModel(beam ? BRIDGE::ObjectType::beam_frame : BRIDGE::ObjectType::truss_imported_or_entered);
+    session.bridge.resetModel(beam ? BRIDGE::E_ObjectType::BeamFrame : BRIDGE::E_ObjectType::TrussImportedOrEntered);
     session.out << std::format("new empty {} model\n", beam ? "beam / frame" : "truss");
     return {};
   }
@@ -231,10 +231,10 @@ namespace anaf::CLI::HANDLERS {
       if (!index) return std::unexpected(index.error());
       materialIndex = *index;
     }
-    if (session.bridge.m_isRunning) return std::unexpected("a solve is running");
+    if (session.bridge.isRunning) return std::unexpected("a solve is running");
     auto built = FEM::TRUSS::buildSimpleTruss(cubes, edge, area, materialIndex);
     if (!built) return std::unexpected(built.error());
-    session.bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
+    session.bridge.resetModel(BRIDGE::E_ObjectType::TrussImportedOrEntered);
     const auto mesh = std::make_shared<BRIDGE::MeshData>(std::move(*built));
     {
       std::lock_guard lock(session.bridge.dataMutex);
@@ -324,22 +324,22 @@ namespace anaf::CLI::HANDLERS {
 
     IO::WriteOptions options;
     if (const auto key = parsed->get("format")) {
-      const auto* choice = std::ranges::find(kExportFormats, *key, &ExportFormat::key);
-      if (choice == kExportFormats.end()) return std::unexpected(std::format("unknown format '{}' (msh, msh22, vtu, pvd, vtk, vtk42, step)", *key));
+      const auto* choice = std::ranges::find(exportFormats, *key, &ExportFormat::key);
+      if (choice == exportFormats.end()) return std::unexpected(std::format("unknown format '{}' (msh, msh22, vtu, pvd, vtk, vtk42, step)", *key));
       options.format = choice->format;
       options.mshVersion = choice->mshVersion;
       options.vtkVersion = choice->vtkVersion;
     } else {
       options.format = IO::detectFormat(path);
-      if (options.format == IO::FileFormat::Auto) return std::unexpected("unknown extension: give format= (msh, msh22, vtu, pvd, vtk, vtk42, step)");
+      if (options.format == IO::E_FileFormat::Auto) return std::unexpected("unknown extension: give format= (msh, msh22, vtu, pvd, vtk, vtk42, step)");
     }
-    const bool canBinary = options.format == IO::FileFormat::Msh || options.format == IO::FileFormat::Vtu ||
-                           options.format == IO::FileFormat::Pvd || options.format == IO::FileFormat::VtkLegacy;
-    const bool canCompress = options.format == IO::FileFormat::Vtu || options.format == IO::FileFormat::Pvd;
-    if (options.format == IO::FileFormat::Iges || options.format == IO::FileFormat::Brep) return std::unexpected("IGES and BREP are read only");
+    const bool canBinary = options.format == IO::E_FileFormat::Msh || options.format == IO::E_FileFormat::Vtu ||
+                           options.format == IO::E_FileFormat::Pvd || options.format == IO::E_FileFormat::VtkLegacy;
+    const bool canCompress = options.format == IO::E_FileFormat::Vtu || options.format == IO::E_FileFormat::Pvd;
+    if (options.format == IO::E_FileFormat::Iges || options.format == IO::E_FileFormat::Brep) return std::unexpected("IGES and BREP are read only");
     if (binary && !canBinary) return std::unexpected(std::format("{} has no binary encoding", IO::formatName(options.format)));
     if (compress && (!binary || !canCompress)) return std::unexpected("compress needs binary and a VTU / PVD file");
-    options.encoding = binary ? IO::Encoding::Binary : IO::Encoding::Ascii;
+    options.encoding = binary ? IO::E_Encoding::Binary : IO::E_Encoding::Ascii;
     options.compress = compress;
 
     std::vector<MATERIAL::Material> materials;
@@ -350,10 +350,10 @@ namespace anaf::CLI::HANDLERS {
       sections = session.bridge.allSections;
     }
     std::optional<IO::MeshModel> model;
-    if (modelKind(session) == ModelKind::beam) {
+    if (modelKind(session) == E_ModelKind::Beam) {
       const auto mesh = beamMesh(session);
       if (mesh && !mesh->nodes.empty()) model = FEM::BEAM::ADAPTER::toMeshModel(*mesh, materials, sections);
-    } else if (modelKind(session) == ModelKind::truss) {
+    } else if (modelKind(session) == E_ModelKind::Truss) {
       const auto mesh = trussMesh(session);
       if (mesh && !mesh->trussNodes.empty()) model = FEM::TRUSS::ADAPTER::toMeshModel(*mesh, materials);
     }

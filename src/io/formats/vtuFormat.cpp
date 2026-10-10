@@ -514,7 +514,7 @@ namespace anaf::IO::formats {
       pending.values.resize(entities * static_cast<std::size_t>(pending.components), 0.0);
       Field field;
       field.name = pending.name;
-      field.location = pending.onPoints ? FieldLocation::Node : FieldLocation::Element;
+      field.location = pending.onPoints ? E_FieldLocation::Node : E_FieldLocation::Element;
       field.components = pending.components;
       field.times = {0.0};
       field.steps.push_back(pending.onPoints ? std::move(pending.values)
@@ -572,18 +572,18 @@ namespace anaf::IO::formats {
 
       // vtkZLibDataCompressor layout; header and data are base64-encoded separately like VTK does.
       static std::string compressed(const std::string& raw) {
-        constexpr std::size_t kBlockSize = 32768;
-        const std::size_t blocks = raw.empty() ? 0 : (raw.size() + kBlockSize - 1) / kBlockSize;
+        constexpr std::size_t blockSize = 32768;
+        const std::size_t blocks = raw.empty() ? 0 : (raw.size() + blockSize - 1) / blockSize;
         std::string header;
         std::string data;
         detail::appendValue(header, static_cast<std::uint64_t>(blocks), false);
-        detail::appendValue(header, static_cast<std::uint64_t>(kBlockSize), false);
-        detail::appendValue(header, static_cast<std::uint64_t>(blocks == 0 ? 0 : raw.size() - (blocks - 1) * kBlockSize), false);
+        detail::appendValue(header, static_cast<std::uint64_t>(blockSize), false);
+        detail::appendValue(header, static_cast<std::uint64_t>(blocks == 0 ? 0 : raw.size() - (blocks - 1) * blockSize), false);
         for (std::size_t b = 0; b < blocks; ++b) {
-          const std::size_t size = std::min(kBlockSize, raw.size() - b * kBlockSize);
+          const std::size_t size = std::min(blockSize, raw.size() - b * blockSize);
           uLongf length = compressBound(static_cast<uLong>(size));
           std::string out(length, '\0');
-          if (compress2(reinterpret_cast<Bytef*>(out.data()), &length, reinterpret_cast<const Bytef*>(raw.data() + b * kBlockSize),
+          if (compress2(reinterpret_cast<Bytef*>(out.data()), &length, reinterpret_cast<const Bytef*>(raw.data() + b * blockSize),
                         static_cast<uLong>(size), Z_DEFAULT_COMPRESSION) != Z_OK) {
             throw std::runtime_error("zlib compression failed");
           }
@@ -605,7 +605,7 @@ namespace anaf::IO::formats {
 
     std::string vtuDocument(const MeshModel& model, const detail::FlatData& flat, const WriteOptions& options,
                             const detail::VtkCells& cells, const IoContext& context) {
-      const bool binary = options.encoding == Encoding::Binary || options.compress;
+      const bool binary = options.encoding == E_Encoding::Binary || options.compress;
       VtuWriter writer(binary, options.compress);
       auto& out = writer.buffer();
 
@@ -626,7 +626,7 @@ namespace anaf::IO::formats {
       for (const bool onPoints : {true, false}) {
         bool opened = false;
         for (const auto& array : flat.arrays) {
-          if ((array.location == FieldLocation::Node) != onPoints) continue;
+          if ((array.location == E_FieldLocation::Node) != onPoints) continue;
           if (!opened) {
             out += onPoints ? "      <PointData>\n" : "      <CellData>\n";
             opened = true;
@@ -698,12 +698,12 @@ namespace anaf::IO::formats {
     // Distinct times of every Time field with a history; a model without one is a single step.
     std::set<double> timeSet;
     for (const auto& field : model.fields) {
-      if (field.stepKind == StepKind::Time && field.steps.size() > 1) timeSet.insert(field.times.begin(), field.times.end());
+      if (field.stepKind == E_StepKind::Time && field.steps.size() > 1) timeSet.insert(field.times.begin(), field.times.end());
     }
     if (timeSet.empty()) {
       double time = 0.0;
       for (const auto& field : model.fields) {
-        if (field.stepKind == StepKind::Time && !field.times.empty()) {
+        if (field.stepKind == E_StepKind::Time && !field.times.empty()) {
           time = field.times.back();
           break;
         }
@@ -794,7 +794,7 @@ namespace anaf::IO::formats {
         model = std::move(step);
         std::vector<Field> timeFields;
         std::erase_if(model.fields, [&](Field& field) {
-          if (field.stepKind != StepKind::Time) return false;
+          if (field.stepKind != E_StepKind::Time) return false;
           timeFields.push_back(std::move(field));
           return true;
         });
@@ -812,7 +812,7 @@ namespace anaf::IO::formats {
       }
       model.warnings.insert(model.warnings.end(), step.warnings.begin(), step.warnings.end());
       for (auto& field : step.fields) {
-        if (field.stepKind != StepKind::Time || field.steps.empty()) continue;
+        if (field.stepKind != E_StepKind::Time || field.steps.empty()) continue;
         const std::pair<std::string, int> key{field.name, static_cast<int>(field.location)};
         auto [it, inserted] = histories.try_emplace(key);
         auto& history = it->second;

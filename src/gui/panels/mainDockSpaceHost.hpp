@@ -37,23 +37,23 @@ namespace anaf::GUI {
 
   class MainDockSpaceHost : public IPanel {
   private:
-    GLFWwindow* m_window_;
-    std::vector<PanelMenuEntry> m_panelMenu_;
+    GLFWwindow* m_window;
+    std::vector<PanelMenuEntry> m_panelMenu;
 
     void renderPanelsMenu();
     void renderSettingsMenu(); // Settings > Theme
 
   public:
-    std::function<void()> on_select_truss; // Analyze > Truss (1D Element)
-    std::function<void()> on_select_beam;  // Analyze > Beam / Frame (3D Element)
-    std::function<void()> on_import_mesh;
-    std::function<void()> on_export_results;
-    std::function<void()> on_show_about;
-    std::function<void()> on_show_welcome; // Help > Welcome
+    std::function<void()> onSelectTruss; // Analyze > Truss (1D Element)
+    std::function<void()> onSelectBeam;  // Analyze > Beam / Frame (3D Element)
+    std::function<void()> onImportMesh;
+    std::function<void()> onExportResults;
+    std::function<void()> onShowAbout;
+    std::function<void()> onShowWelcome; // Help > Welcome
 
-    explicit MainDockSpaceHost(GLFWwindow* window) : m_window_(window) {}
+    explicit MainDockSpaceHost(GLFWwindow* window) : m_window(window) {}
 
-    void addPanelMenuEntry(PanelMenuEntry entry) { m_panelMenu_.push_back(std::move(entry)); }
+    void addPanelMenuEntry(PanelMenuEntry entry) { m_panelMenu.push_back(std::move(entry)); }
 
     void onImGuiRender() override;
   };

@@ -36,58 +36,58 @@
 #include <vector>
 
 namespace anaf::BRIDGE {
-  enum ObjectType {
-    truss_SQPT,
-    truss_imported_or_entered,
-    beam_frame,
-    no_type
+  enum E_ObjectType {
+    TrussSqpt,
+    TrussImportedOrEntered,
+    BeamFrame,
+    NoType
   };
 
-  std::string_view getObjectTypeName(ObjectType obj);
+  std::string_view getObjectTypeName(E_ObjectType obj);
 
   // How the model is loaded, chosen with the object type (Analyze menu). Constant: static
   // solve under the loads entered in the editors. Dynamic: time / frequency dependent
   // analysis (modal first); the editors hide the static loads and show the dynamic inputs.
   // The model itself does not depend on it, so switching keeps the model.
-  enum class LoadKind {
-    constant,
-    dynamic
+  enum class E_LoadKind {
+    Constant,
+    Dynamic
   };
 
-  std::string_view getLoadKindName(LoadKind kind);
+  std::string_view getLoadKindName(E_LoadKind kind);
 
   // The model types live in the FEM core (anaf_core), so a CLI can use them without the GUI bridge.
   using RenderElement = FEM::TRUSS::RenderElement;
   using MeshData = FEM::TRUSS::MeshData;
   using BeamMeshData = FEM::BEAM::MeshData;
 
-  struct Gui_Calc_Bridge {
-    std::atomic<bool> m_isRunning{false};
-    std::atomic<bool> m_isGeneratingPreview{false};
-    std::atomic<float> m_progress{0.0f};
+  struct GuiCalcBridge {
+    std::atomic<bool> isRunning{false};
+    std::atomic<bool> isGeneratingPreview{false};
+    std::atomic<float> progress{0.0f};
     std::atomic<std::uint64_t> dataVersion{0};
     std::mutex dataMutex;
     std::jthread workerThread;
 
-    std::atomic<ObjectType> m_objectType{no_type};
+    std::atomic<E_ObjectType> objectType{NoType};
     // Set by the analysis selector; resetModel() keeps it.
-    std::atomic<LoadKind> m_loadKind{LoadKind::constant};
+    std::atomic<E_LoadKind> loadKind{E_LoadKind::Constant};
     // Bumped by resetModel(). A worker takes it before it starts and publishes its snapshot
     // only if it is unchanged (checked under dataMutex), so a solve or preview that was still
     // running when the model was reset never brings the old model back.
     std::atomic<std::uint64_t> modelGeneration{0};
     std::shared_ptr<const MeshData> activeMesh{nullptr};
-    // The beam / frame model (object type beam_frame), published like activeMesh: immutable
+    // The beam / frame model (object type BeamFrame), published like activeMesh: immutable
     // snapshots swapped under dataMutex, dataVersion bumped. Only one of the two is set.
     std::shared_ptr<const BeamMeshData> activeBeamMesh{nullptr};
-    std::atomic<bool> m_isValid{false};
-    std::atomic<double> m_energyDiff{0.0};
+    std::atomic<bool> isValid{false};
+    std::atomic<double> energyDiff{0.0};
     // View setting, not part of the model: the viewport draws location + displacement * deformScale.
     // Written by the truss panels (then dataVersion is bumped so the scene is rebuilt).
     std::atomic<double> deformScale{1.0};
 
     // Elements refer to a material by its index in this vector (RenderElement::materialID,
-    // TrussElement_1D::m_type). Built-ins come first in file order, user materials follow.
+    // TrussElement1D::m_type). Built-ins come first in file order, user materials follow.
     // Material::getMaterialID() is a stable ID that is never reused; use it to keep a
     // selection across removals. Guarded by dataMutex.
     std::vector<anaf::MATERIAL::Material> allMaterials;
@@ -105,10 +105,10 @@ namespace anaf::BRIDGE {
     // and switches to type.
     // A running worker is asked to stop and can no longer publish (see modelGeneration).
     // Call from the GUI thread; panels reset their own inputs separately.
-    void resetModel(ObjectType type);
+    void resetModel(E_ObjectType type);
 
-    // Stops and joins the previous worker. Call before setting m_isRunning /
-    // m_isGeneratingPreview for a new job: a worker that is still finishing clears them on exit.
+    // Stops and joins the previous worker. Call before setting isRunning /
+    // isGeneratingPreview for a new job: a worker that is still finishing clears them on exit.
     void joinWorker();
 
     // Loads the built-in materials from assets/bridge/materialProperties.json.
@@ -155,7 +155,7 @@ namespace anaf::BRIDGE {
     std::uint32_t appendUserSectionLocked(const FEM::BEAM::BeamSection& section);
   };
 
-  Gui_Calc_Bridge& buildBridge();
+  GuiCalcBridge& buildBridge();
 
 } // namespace anaf::BRIDGE end
 

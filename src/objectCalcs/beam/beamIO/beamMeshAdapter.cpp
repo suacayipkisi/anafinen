@@ -40,11 +40,11 @@ namespace FEM::BEAM::ADAPTER {
       using Ts::operator()...;
     };
 
-    constexpr std::array<const char*, 5> kDimensions{
-      anaf::IO::Attribute::SectionDimension1, anaf::IO::Attribute::SectionDimension2, anaf::IO::Attribute::SectionDimension3,
-      anaf::IO::Attribute::SectionDimension4, anaf::IO::Attribute::SectionDimension5};
-    constexpr std::array<const char*, 3> kLoadGlobal{anaf::IO::Attribute::UniformLoadGlobalX, anaf::IO::Attribute::UniformLoadGlobalY, anaf::IO::Attribute::UniformLoadGlobalZ};
-    constexpr std::array<const char*, 3> kLoadLocal{anaf::IO::Attribute::UniformLoadLocalX, anaf::IO::Attribute::UniformLoadLocalY, anaf::IO::Attribute::UniformLoadLocalZ};
+    constexpr std::array<const char*, 5> dimensionAttributes{
+      anaf::IO::Attribute::sectionDimension1, anaf::IO::Attribute::sectionDimension2, anaf::IO::Attribute::sectionDimension3,
+      anaf::IO::Attribute::sectionDimension4, anaf::IO::Attribute::sectionDimension5};
+    constexpr std::array<const char*, 3> globalLoadAttributes{anaf::IO::Attribute::uniformLoadGlobalX, anaf::IO::Attribute::uniformLoadGlobalY, anaf::IO::Attribute::uniformLoadGlobalZ};
+    constexpr std::array<const char*, 3> localLoadAttributes{anaf::IO::Attribute::uniformLoadLocalX, anaf::IO::Attribute::uniformLoadLocalY, anaf::IO::Attribute::uniformLoadLocalZ};
 
     std::array<double, 5> dimensionsOf(const SectionShape& shape) {
       return std::visit(Overloaded{
@@ -105,13 +105,13 @@ namespace FEM::BEAM::ADAPTER {
       return axes;
     }
 
-    anaf::IO::Field field(const char* name, const anaf::IO::FieldLocation location, const int components, std::vector<double> values) {
-      return anaf::IO::Field{name, location, components, {0.0}, {std::move(values)}, anaf::IO::StepKind::Time, {}};
+    anaf::IO::Field field(const char* name, const anaf::IO::E_FieldLocation location, const int components, std::vector<double> values) {
+      return anaf::IO::Field{name, location, components, {0.0}, {std::move(values)}, anaf::IO::E_StepKind::Time, {}};
     }
   } // namespace end
 
   bool isBeamModel(const anaf::IO::MeshModel& model) {
-    const auto it = model.elementAttributes.find(anaf::IO::Attribute::ElementFormulation);
+    const auto it = model.elementAttributes.find(anaf::IO::Attribute::elementFormulation);
     return it != model.elementAttributes.end() && std::ranges::any_of(it->second, [](const double v) { return v >= 0.5; });
   }
 
@@ -123,7 +123,7 @@ namespace FEM::BEAM::ADAPTER {
     for (const auto& node : mesh.nodes) model.nodes.push_back(anaf::IO::Node{static_cast<std::uint64_t>(node.getNodeID()) + 1, node.getLocation()});
 
     const std::size_t count = mesh.elements.size();
-    auto& block = model.blockFor(anaf::IO::ElementType::Line2);
+    auto& block = model.blockFor(anaf::IO::E_ElementType::Line2);
     std::vector<double> material(count), area(count), iy(count), iz(count), torsion(count), asy(count), asz(count), formulation(count), shape(count),
       releases(count);
     std::array<std::vector<double>, 5> dimensions;
@@ -141,8 +141,8 @@ namespace FEM::BEAM::ADAPTER {
       block.connectivity.push_back(element.node1);
       block.connectivity.push_back(element.node2);
       material[e] = static_cast<double>(element.materialID);
-      formulation[e] = static_cast<double>(element.formulation == Formulation::Timoshenko ? anaf::IO::ElementFormulation::TimoshenkoBeam
-                                                                                          : anaf::IO::ElementFormulation::EulerBernoulliBeam);
+      formulation[e] = static_cast<double>(element.formulation == E_Formulation::Timoshenko ? anaf::IO::E_ElementFormulation::TimoshenkoBeam
+                                                                                          : anaf::IO::E_ElementFormulation::EulerBernoulliBeam);
       model.beamOrientation.push_back(element.orientation);
       releases[e] = static_cast<double>(element.endReleases);
       byMaterial[element.materialID].push_back(static_cast<std::uint32_t>(e));
@@ -164,40 +164,40 @@ namespace FEM::BEAM::ADAPTER {
     }
     for (const auto& load : mesh.distributedLoads) {
       if (load.element >= count) continue;
-      auto& target = load.frame == LoadFrame::Local ? loadLocal : loadGlobal;
+      auto& target = load.frame == E_LoadFrame::Local ? loadLocal : loadGlobal;
       for (std::size_t axis = 0; axis < 3; ++axis) target[axis][load.element] += load.value[axis];
     }
 
     auto& attributes = model.elementAttributes;
-    attributes[anaf::IO::Attribute::MaterialId] = std::move(material);
-    attributes[anaf::IO::Attribute::CrossSectionArea] = std::move(area);
-    attributes[anaf::IO::Attribute::SecondMomentY] = std::move(iy);
-    attributes[anaf::IO::Attribute::SecondMomentZ] = std::move(iz);
-    attributes[anaf::IO::Attribute::TorsionConstant] = std::move(torsion);
-    attributes[anaf::IO::Attribute::ShearAreaY] = std::move(asy);
-    attributes[anaf::IO::Attribute::ShearAreaZ] = std::move(asz);
-    attributes[anaf::IO::Attribute::ElementFormulation] = std::move(formulation);
-    attributes[anaf::IO::Attribute::SectionShape] = std::move(shape);
-    if (std::ranges::any_of(releases, [](const double v) { return v != 0.0; })) attributes[anaf::IO::Attribute::EndReleases] = std::move(releases);
-    for (std::size_t k = 0; k < 5; ++k) attributes[kDimensions[k]] = std::move(dimensions[k]);
+    attributes[anaf::IO::Attribute::materialId] = std::move(material);
+    attributes[anaf::IO::Attribute::crossSectionArea] = std::move(area);
+    attributes[anaf::IO::Attribute::secondMomentY] = std::move(iy);
+    attributes[anaf::IO::Attribute::secondMomentZ] = std::move(iz);
+    attributes[anaf::IO::Attribute::torsionConstant] = std::move(torsion);
+    attributes[anaf::IO::Attribute::shearAreaY] = std::move(asy);
+    attributes[anaf::IO::Attribute::shearAreaZ] = std::move(asz);
+    attributes[anaf::IO::Attribute::elementFormulation] = std::move(formulation);
+    attributes[anaf::IO::Attribute::sectionShape] = std::move(shape);
+    if (std::ranges::any_of(releases, [](const double v) { return v != 0.0; })) attributes[anaf::IO::Attribute::endReleases] = std::move(releases);
+    for (std::size_t k = 0; k < 5; ++k) attributes[dimensionAttributes[k]] = std::move(dimensions[k]);
     for (std::size_t axis = 0; axis < 3; ++axis) {
-      attributes[kLoadGlobal[axis]] = std::move(loadGlobal[axis]);
-      attributes[kLoadLocal[axis]] = std::move(loadLocal[axis]);
+      attributes[globalLoadAttributes[axis]] = std::move(loadGlobal[axis]);
+      attributes[localLoadAttributes[axis]] = std::move(loadLocal[axis]);
     }
 
     const auto addSet = [&](std::string name, std::vector<std::uint32_t> members) {
       anaf::IO::EntitySet set;
       set.name = std::move(name);
-      set.kind = anaf::IO::SetKind::Element;
+      set.kind = anaf::IO::E_SetKind::Element;
       set.dimension = 1;
       set.members = std::move(members);
       model.sets.push_back(std::move(set));
     };
     for (auto& [index, members] : byMaterial) {
-      if (index < materials.size()) addSet(std::string(kMaterialSetPrefix) + std::string(materials[index].getMaterialType()), std::move(members));
+      if (index < materials.size()) addSet(std::string(materialSetPrefix) + std::string(materials[index].getMaterialType()), std::move(members));
     }
-    for (auto& [index, members] : bySection) addSet(std::string(kSectionSetPrefix) + sections[index].getName(), std::move(members));
-    model.globalData.push_back(anaf::IO::GlobalArray{anaf::IO::GlobalName::Gravity, 3, {mesh.gravity.begin(), mesh.gravity.end()}});
+    for (auto& [index, members] : bySection) addSet(std::string(sectionSetPrefix) + sections[index].getName(), std::move(members));
+    model.globalData.push_back(anaf::IO::GlobalArray{anaf::IO::GlobalName::gravity, 3, {mesh.gravity.begin(), mesh.gravity.end()}});
 
     for (std::uint32_t i = 0; i < mesh.nodes.size(); ++i) {
       const auto& node = mesh.nodes[i];
@@ -234,11 +234,11 @@ namespace FEM::BEAM::ADAPTER {
         axial.push_back((element.sectionForces[0] + element.sectionForces[6]) / 2.0);
         vonMises.push_back(element.stress.available ? element.stress.maxVonMises : 0.0);
       }
-      model.fields.push_back(field(anaf::IO::FieldName::Displacement, anaf::IO::FieldLocation::Node, 3, std::move(displacement)));
-      model.fields.push_back(field(anaf::IO::FieldName::Rotation, anaf::IO::FieldLocation::Node, 3, std::move(rotation)));
-      model.fields.push_back(field(anaf::IO::FieldName::BeamSectionForce, anaf::IO::FieldLocation::Element, 12, std::move(sectionForces)));
-      model.fields.push_back(field(anaf::IO::FieldName::AxialForce, anaf::IO::FieldLocation::Element, 1, std::move(axial)));
-      model.fields.push_back(field(anaf::IO::FieldName::VonMisesStress, anaf::IO::FieldLocation::Element, 1, std::move(vonMises)));
+      model.fields.push_back(field(anaf::IO::FieldName::displacement, anaf::IO::E_FieldLocation::Node, 3, std::move(displacement)));
+      model.fields.push_back(field(anaf::IO::FieldName::rotation, anaf::IO::E_FieldLocation::Node, 3, std::move(rotation)));
+      model.fields.push_back(field(anaf::IO::FieldName::beamSectionForce, anaf::IO::E_FieldLocation::Element, 12, std::move(sectionForces)));
+      model.fields.push_back(field(anaf::IO::FieldName::axialForce, anaf::IO::E_FieldLocation::Element, 1, std::move(axial)));
+      model.fields.push_back(field(anaf::IO::FieldName::vonMisesStress, anaf::IO::E_FieldLocation::Element, 1, std::move(vonMises)));
     }
     return model;
   }
@@ -260,23 +260,23 @@ namespace FEM::BEAM::ADAPTER {
       return it == model.elementAttributes.end() ? nullptr : &it->second;
     };
     const auto value = [](const std::vector<double>* values, const std::size_t global) { return values ? (*values)[global] : 0.0; };
-    const auto* materialIds = attribute(anaf::IO::Attribute::MaterialId);
-    const auto* formulations = attribute(anaf::IO::Attribute::ElementFormulation);
-    const auto* shapes = attribute(anaf::IO::Attribute::SectionShape);
-    const auto* releases = attribute(anaf::IO::Attribute::EndReleases);
+    const auto* materialIds = attribute(anaf::IO::Attribute::materialId);
+    const auto* formulations = attribute(anaf::IO::Attribute::elementFormulation);
+    const auto* shapes = attribute(anaf::IO::Attribute::sectionShape);
+    const auto* releases = attribute(anaf::IO::Attribute::endReleases);
     const std::array<const std::vector<double>*, 6> numbers{
-      attribute(anaf::IO::Attribute::CrossSectionArea), attribute(anaf::IO::Attribute::SecondMomentY), attribute(anaf::IO::Attribute::SecondMomentZ),
-      attribute(anaf::IO::Attribute::TorsionConstant), attribute(anaf::IO::Attribute::ShearAreaY), attribute(anaf::IO::Attribute::ShearAreaZ)};
+      attribute(anaf::IO::Attribute::crossSectionArea), attribute(anaf::IO::Attribute::secondMomentY), attribute(anaf::IO::Attribute::secondMomentZ),
+      attribute(anaf::IO::Attribute::torsionConstant), attribute(anaf::IO::Attribute::shearAreaY), attribute(anaf::IO::Attribute::shearAreaZ)};
     std::array<const std::vector<double>*, 5> dimensions{};
-    for (std::size_t k = 0; k < 5; ++k) dimensions[k] = attribute(kDimensions[k]);
+    for (std::size_t k = 0; k < 5; ++k) dimensions[k] = attribute(dimensionAttributes[k]);
 
     // Names from the element sets (materials and sections travel by name).
     std::vector<std::optional<std::uint32_t>> materialByName(model.elementCount());
     std::vector<std::string> sectionName(model.elementCount());
     for (const auto& set : model.sets) {
-      if (set.kind != anaf::IO::SetKind::Element) continue;
-      if (set.name.starts_with(kMaterialSetPrefix)) {
-        const std::string_view name = std::string_view(set.name).substr(kMaterialSetPrefix.size());
+      if (set.kind != anaf::IO::E_SetKind::Element) continue;
+      if (set.name.starts_with(materialSetPrefix)) {
+        const std::string_view name = std::string_view(set.name).substr(materialSetPrefix.size());
         const auto found = std::ranges::find_if(materials, [&](const anaf::MATERIAL::Material& candidate) {
           return anaf::MATERIAL::sameMaterialName(candidate.getMaterialType(), name);
         });
@@ -290,9 +290,9 @@ namespace FEM::BEAM::ADAPTER {
         for (const auto member : set.members) {
           if (member < materialByName.size()) materialByName[member] = index;
         }
-      } else if (set.name.starts_with(kSectionSetPrefix)) {
+      } else if (set.name.starts_with(sectionSetPrefix)) {
         for (const auto member : set.members) {
-          if (member < sectionName.size()) sectionName[member] = set.name.substr(kSectionSetPrefix.size());
+          if (member < sectionName.size()) sectionName[member] = set.name.substr(sectionSetPrefix.size());
         }
       }
     }
@@ -335,7 +335,7 @@ namespace FEM::BEAM::ADAPTER {
     for (const auto& block : model.blocks) {
       const auto n = static_cast<std::size_t>(anaf::IO::elementInfo(block.type).nodeCount);
       for (std::size_t e = 0; e < block.size(); ++e, ++global) {
-        if (block.type != anaf::IO::ElementType::Line2) {
+        if (block.type != anaf::IO::E_ElementType::Line2) {
           ++skipped;
           continue;
         }
@@ -343,7 +343,7 @@ namespace FEM::BEAM::ADAPTER {
         element.node1 = block.connectivity[e * n];
         element.node2 = block.connectivity[e * n + 1];
         const double code = value(formulations, global);
-        if (code >= 1.5) element.formulation = Formulation::Timoshenko;
+        if (code >= 1.5) element.formulation = E_Formulation::Timoshenko;
         else if (code < 0.5) ++bars;
 
         if (materialByName[global]) {
@@ -373,12 +373,12 @@ namespace FEM::BEAM::ADAPTER {
         beamOfGlobal[global] = static_cast<std::uint32_t>(mesh.elements.size());
         std::array<double, 3> qGlobal{}, qLocal{};
         for (std::size_t axis = 0; axis < 3; ++axis) {
-          qGlobal[axis] = value(attribute(kLoadGlobal[axis]), global);
-          qLocal[axis] = value(attribute(kLoadLocal[axis]), global);
+          qGlobal[axis] = value(attribute(globalLoadAttributes[axis]), global);
+          qLocal[axis] = value(attribute(localLoadAttributes[axis]), global);
         }
         const auto index = static_cast<std::uint32_t>(mesh.elements.size());
-        if (qGlobal != std::array<double, 3>{}) mesh.distributedLoads.push_back({index, qGlobal, LoadFrame::Global});
-        if (qLocal != std::array<double, 3>{}) mesh.distributedLoads.push_back({index, qLocal, LoadFrame::Local});
+        if (qGlobal != std::array<double, 3>{}) mesh.distributedLoads.push_back({index, qGlobal, E_LoadFrame::Global});
+        if (qLocal != std::array<double, 3>{}) mesh.distributedLoads.push_back({index, qLocal, E_LoadFrame::Local});
         mesh.elements.push_back(element);
       }
     }
@@ -401,16 +401,16 @@ namespace FEM::BEAM::ADAPTER {
       mesh.nodalLoads.push_back({load.node, load.force, load.moment});
       if (!load.amplitude.empty()) ++withAmplitude;
     }
-    if (const auto* gravity = model.findGlobal(anaf::IO::GlobalName::Gravity); gravity && gravity->components == 3 && gravity->values.size() == 3) {
+    if (const auto* gravity = model.findGlobal(anaf::IO::GlobalName::gravity); gravity && gravity->components == 3 && gravity->values.size() == 3) {
       mesh.gravity = {gravity->values[0], gravity->values[1], gravity->values[2]};
     } else {
       result.notes.push_back("no gravity in the file: self weight is on (0, -9.80665, 0)");
     }
 
     // Results; the stresses are computed again from the section forces.
-    const auto* displacement = model.findField(anaf::IO::FieldName::Displacement, anaf::IO::FieldLocation::Node);
-    const auto* rotation = model.findField(anaf::IO::FieldName::Rotation, anaf::IO::FieldLocation::Node);
-    const auto* sectionForce = model.findField(anaf::IO::FieldName::BeamSectionForce, anaf::IO::FieldLocation::Element);
+    const auto* displacement = model.findField(anaf::IO::FieldName::displacement, anaf::IO::E_FieldLocation::Node);
+    const auto* rotation = model.findField(anaf::IO::FieldName::rotation, anaf::IO::E_FieldLocation::Node);
+    const auto* sectionForce = model.findField(anaf::IO::FieldName::beamSectionForce, anaf::IO::E_FieldLocation::Element);
     if (displacement && displacement->components == 3 && !displacement->steps.empty() && sectionForce && sectionForce->components == 12
         && !sectionForce->steps.empty()) {
       const auto& d = displacement->steps.back();

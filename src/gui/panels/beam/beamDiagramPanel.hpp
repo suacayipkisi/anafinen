@@ -35,12 +35,12 @@ namespace anaf::GUI {
   // stresses along it. Opens docked in the lower half of the Model Tree's dock node.
   class BeamDiagramPanel : public IPanel {
   private:
-    static constexpr std::uint32_t kNone = std::numeric_limits<std::uint32_t>::max();
-    static constexpr int kSamples = 61;
+    static constexpr std::uint32_t noSelection = std::numeric_limits<std::uint32_t>::max();
+    static constexpr int sampleCount = 61;
 
     // Samples of the element shown, rebuilt when the snapshot or the element changes.
     std::shared_ptr<const BRIDGE::BeamMeshData> m_mesh;
-    std::uint32_t m_element{kNone};
+    std::uint32_t m_element{noSelection};
     std::vector<FEM::BEAM::SectionState> m_states;
     std::vector<std::optional<FEM::BEAM::SectionStress>> m_stresses;
     std::string m_sectionName;
@@ -56,7 +56,7 @@ namespace anaf::GUI {
     void renderTable();
 
   public:
-    static constexpr const char* kWindowName = "Beam Diagrams";
+    static constexpr const char* windowName = "Beam Diagrams";
     void onImGuiRender() override;
   };
 

@@ -29,11 +29,11 @@
 
 namespace FEM::SOLVER {
 
-  const char* toString(const Type type) noexcept {
+  const char* toString(const E_Type type) noexcept {
     switch (type) {
-      case Type::Cholmod: return "CHOLMOD sparse Cholesky";
-      case Type::SimplicialLDLT: return "Eigen SimplicialLDLT";
-      case Type::BlockCG: return "OpenMP Block-CG";
+      case E_Type::Cholmod: return "CHOLMOD sparse Cholesky";
+      case E_Type::SimplicialLDLT: return "Eigen SimplicialLDLT";
+      case E_Type::BlockCG: return "OpenMP Block-CG";
     }
     return "Unknown";
   }
@@ -104,7 +104,7 @@ namespace FEM::SOLVER {
     // ("invalid xtype or dtype" in cholmod_analyze) and the factorization then crashes.
     if (dofs == 0) {
       displacement.resize(0);
-      result.type = Type::SimplicialLDLT;
+      result.type = E_Type::SimplicialLDLT;
       result.available = true;
       result.converged = true;
       result.message = "no free DOFs";

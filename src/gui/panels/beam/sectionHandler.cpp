@@ -39,12 +39,12 @@ namespace anaf::GUI {
   namespace {
     using namespace FEM::BEAM;
 
-    constexpr double kMm = 1e-3;
-    constexpr double kCm2 = 1e-4;
-    constexpr double kCm4 = 1e-8;
-    constexpr double kPoisson = 0.3; // shown shear areas only; the solve uses each element's material
-    constexpr std::array<const char*, 6> kShapes{"General (values)", "Rectangle", "Circle", "Pipe (CHS)", "Box (RHS / SHS)", "I / H section"};
-    constexpr std::array<const char*, 6> kShapeNames{"general", "rectangle", "circle", "pipe", "box", "I"};
+    constexpr double mmToM = 1e-3;
+    constexpr double cm2ToM2 = 1e-4;
+    constexpr double cm4ToM4 = 1e-8;
+    constexpr double poisson = 0.3; // shown shear areas only; the solve uses each element's material
+    constexpr std::array<const char*, 6> shapeLabels{"General (values)", "Rectangle", "Circle", "Pipe (CHS)", "Box (RHS / SHS)", "I / H section"};
+    constexpr std::array<const char*, 6> shapeNames{"general", "rectangle", "circle", "pipe", "box", "I"};
 
     bool contains(std::string_view text, std::string_view part) {
       const auto lower = [](const unsigned char c) { return static_cast<char>(std::tolower(c)); };
@@ -99,12 +99,12 @@ namespace anaf::GUI {
     }
 
     void propertyLines(const SectionShape& shape) {
-      const auto p = computeProperties(shape, kPoisson);
-      ImGui::Text("A   = %.4g cm^2", p.area / kCm2);
-      ImGui::Text("Iy  = %.5g cm^4  (about local y)", p.secondMomentY / kCm4);
-      ImGui::Text("Iz  = %.5g cm^4  (about local z)", p.secondMomentZ / kCm4);
-      ImGui::Text("J   = %.4g cm^4", p.torsionConstant / kCm4);
-      ImGui::Text("Asy = %.4g cm^2, Asz = %.4g cm^2", p.shearAreaY / kCm2, p.shearAreaZ / kCm2);
+      const auto p = computeProperties(shape, poisson);
+      ImGui::Text("A   = %.4g cm^2", p.area / cm2ToM2);
+      ImGui::Text("Iy  = %.5g cm^4  (about local y)", p.secondMomentY / cm4ToM4);
+      ImGui::Text("Iz  = %.5g cm^4  (about local z)", p.secondMomentZ / cm4ToM4);
+      ImGui::Text("J   = %.4g cm^4", p.torsionConstant / cm4ToM4);
+      ImGui::Text("Asy = %.4g cm^2, Asz = %.4g cm^2", p.shearAreaY / cm2ToM2, p.shearAreaZ / cm2ToM2);
       ImGui::TextDisabled("Shear areas for v = 0.3; the solve uses each material's v.");
     }
 
@@ -113,11 +113,11 @@ namespace anaf::GUI {
                                            const double innerRadius, const SectionProperties& general) {
       switch (shape) {
         case 0: return GeneralSection{general};
-        case 1: return RectangleSection{height * kMm, width * kMm};
-        case 2: return CircleSection{diameter * kMm};
-        case 3: return PipeSection{diameter * kMm, thickness * kMm};
-        case 4: return BoxSection{height * kMm, width * kMm, thickness * kMm, outerRadius * kMm, innerRadius * kMm};
-        case 5: return ISection{height * kMm, width * kMm, thickness * kMm, flangeThickness * kMm, outerRadius * kMm};
+        case 1: return RectangleSection{height * mmToM, width * mmToM};
+        case 2: return CircleSection{diameter * mmToM};
+        case 3: return PipeSection{diameter * mmToM, thickness * mmToM};
+        case 4: return BoxSection{height * mmToM, width * mmToM, thickness * mmToM, outerRadius * mmToM, innerRadius * mmToM};
+        case 5: return ISection{height * mmToM, width * mmToM, thickness * mmToM, flangeThickness * mmToM, outerRadius * mmToM};
         default: return std::nullopt;
       }
     }
@@ -195,7 +195,7 @@ namespace anaf::GUI {
         while (clipper.Step()) {
           for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
             const auto& section = bridge.allSections[rows[static_cast<std::size_t>(row)]];
-            const auto p = computeProperties(section.getShape(), kPoisson);
+            const auto p = computeProperties(section.getShape(), poisson);
             ImGui::PushID(static_cast<int>(section.getSectionID()));
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -206,15 +206,15 @@ namespace anaf::GUI {
             if (section.getIsBuiltin()) ImGui::TextDisabled("Catalogue");
             else ImGui::TextUnformatted("User");
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(kShapeNames[section.getShape().index()]);
+            ImGui::TextUnformatted(shapeNames[section.getShape().index()]);
             ImGui::TableNextColumn();
-            ImGui::Text("%.4g", p.area / kCm2);
+            ImGui::Text("%.4g", p.area / cm2ToM2);
             ImGui::TableNextColumn();
-            ImGui::Text("%.5g", p.secondMomentY / kCm4);
+            ImGui::Text("%.5g", p.secondMomentY / cm4ToM4);
             ImGui::TableNextColumn();
-            ImGui::Text("%.5g", p.secondMomentZ / kCm4);
+            ImGui::Text("%.5g", p.secondMomentZ / cm4ToM4);
             ImGui::TableNextColumn();
-            ImGui::Text("%.4g", p.torsionConstant / kCm4);
+            ImGui::Text("%.4g", p.torsionConstant / cm4ToM4);
             ImGui::TableNextColumn();
             if (!section.getIsBuiltin() && ImGui::SmallButton("Remove")) pendingRemoval = section.getSectionID();
             ImGui::PopID();
@@ -254,7 +254,7 @@ namespace anaf::GUI {
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::InputTextWithHint("##section_name", "Name", d.name.data(), d.name.size());
     ImGui::SetNextItemWidth(200.0f);
-    ImGui::Combo("Shape##section_shape", &d.shape, kShapes.data(), static_cast<int>(kShapes.size()));
+    ImGui::Combo("Shape##section_shape", &d.shape, shapeLabels.data(), static_cast<int>(shapeLabels.size()));
 
     switch (d.shape) {
       case 0:
@@ -293,8 +293,8 @@ namespace anaf::GUI {
         break;
     }
 
-    const SectionProperties general{d.area * kCm2, d.secondMomentY * kCm4, d.secondMomentZ * kCm4, d.torsionConstant * kCm4,
-                                    d.shearAreaY * kCm2, d.shearAreaZ * kCm2};
+    const SectionProperties general{d.area * cm2ToM2, d.secondMomentY * cm4ToM4, d.secondMomentZ * cm4ToM4, d.torsionConstant * cm4ToM4,
+                                    d.shearAreaY * cm2ToM2, d.shearAreaZ * cm2ToM2};
     const auto shape = draftShape(d.shape, d.height, d.width, d.diameter, d.thickness, d.flangeThickness, d.outerRadius, d.innerRadius, general);
     const auto valid = shape ? validateShape(*shape) : std::expected<void, std::string>(std::unexpect, "unknown shape");
     if (!valid) {

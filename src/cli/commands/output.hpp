@@ -43,9 +43,9 @@ namespace anaf::CLI::OUTPUT {
   // "", "hinge at 1", "N,T at 2", ...
   std::string releaseLabel(std::uint16_t releases);
 
-  std::string_view formulationName(FEM::BEAM::Formulation formulation);
+  std::string_view formulationName(FEM::BEAM::E_Formulation formulation);
   // "eb" / "euler-bernoulli" / "timoshenko" / "ti".
-  std::expected<FEM::BEAM::Formulation, std::string> parseFormulation(std::string_view token);
+  std::expected<FEM::BEAM::E_Formulation, std::string> parseFormulation(std::string_view token);
 
   // v with -0 (and denormals) shown as 0. Not "v + 0.0": -ffast-math drops it (no signed zeros).
   double tidy(double v);

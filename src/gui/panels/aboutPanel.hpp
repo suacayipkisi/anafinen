@@ -28,9 +28,9 @@
 namespace anaf::GUI {
 
   // GPLv3 section 0 / 5(d) "Appropriate Legal Notices", shown at startup and in Help > About.
-  inline constexpr const char* kCopyrightNotice =
+  inline constexpr const char* copyrightNotice =
     "Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk)";
-  inline constexpr const char* kShortLegalNotice =
+  inline constexpr const char* shortLegalNotice =
     "anafinen comes with ABSOLUTELY NO WARRANTY. This is free software, and you are welcome to "
     "redistribute it under the terms of the GNU General Public License v3.0 or later; see Help > About.";
 

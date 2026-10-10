@@ -40,9 +40,9 @@ namespace anaf::GUI {
 
     // Boundary conditions, overstressed bars and nodal displacements of the active snapshot.
     // Every object type publishes the same MeshData, so one tree serves all of them.
-    void renderMeshTree(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
+    void renderMeshTree(anaf::BRIDGE::GuiCalcBridge& bridge);
     // Supports, loads, element stresses and nodal results of the beam snapshot.
-    void renderBeamTree(anaf::BRIDGE::Gui_Calc_Bridge& bridge);
+    void renderBeamTree(anaf::BRIDGE::GuiCalcBridge& bridge);
   public:
     void onImGuiRender() override;
   };

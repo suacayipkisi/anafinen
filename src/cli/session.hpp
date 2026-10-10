@@ -40,13 +40,13 @@ namespace anaf::CLI {
     std::uint32_t materialID{0};
     std::uint32_t sectionID{0};
     double area{8e-3}; // m^2, truss bars (80 cm^2, the truss editor's default)
-    FEM::BEAM::Formulation formulation{FEM::BEAM::Formulation::EulerBernoulli};
+    FEM::BEAM::E_Formulation formulation{FEM::BEAM::E_Formulation::EulerBernoulli};
   };
 
   // State of one CLI run. The model itself lives in the bridge (activeMesh / activeBeamMesh),
   // published the same way as by the GUI editors, so every front end sees the same snapshot.
   struct Session {
-    BRIDGE::Gui_Calc_Bridge& bridge;
+    BRIDGE::GuiCalcBridge& bridge;
     std::ostream& out; // command output
     std::ostream& err; // error messages
     Defaults defaults{};
@@ -57,15 +57,15 @@ namespace anaf::CLI {
     // file has results but no check).
     std::uint64_t solvedVersion{std::numeric_limits<std::uint64_t>::max()};
 
-    Session(BRIDGE::Gui_Calc_Bridge& bridge, std::ostream& out, std::ostream& err);
+    Session(BRIDGE::GuiCalcBridge& sessionBridge, std::ostream& outStream, std::ostream& errStream);
   };
 
   using CommandResult = std::expected<void, std::string>;
 
-  enum class ModelKind { none, truss, beam };
+  enum class E_ModelKind { None, Truss, Beam };
 
   // The kind of the active model, from the bridge's object type.
-  ModelKind modelKind(const Session& session);
+  E_ModelKind modelKind(const Session& session);
 
   std::shared_ptr<const BRIDGE::MeshData> trussMesh(Session& session);
   std::shared_ptr<const BRIDGE::BeamMeshData> beamMesh(Session& session);
@@ -83,16 +83,16 @@ namespace anaf::CLI {
   // when the active model is not a truss or when edit fails (nothing is published then).
   template <typename Edit>
   CommandResult editTruss(Session& session, Edit&& edit) {
-    if (modelKind(session) != ModelKind::truss) return std::unexpected("no truss model: start one with -new truss");
+    if (modelKind(session) != E_ModelKind::Truss) return std::unexpected("no truss model: start one with -new truss");
     auto& bridge = session.bridge;
-    if (bridge.m_isRunning) return std::unexpected("a solve is running");
+    if (bridge.isRunning) return std::unexpected("a solve is running");
     {
       std::lock_guard lock(bridge.dataMutex);
       auto mesh = bridge.activeMesh ? std::make_shared<BRIDGE::MeshData>(*bridge.activeMesh) : std::make_shared<BRIDGE::MeshData>();
       if (CommandResult edited = edit(*mesh); !edited) return edited;
       FEM::TRUSS::dropResults(*mesh);
       bridge.activeMesh = std::move(mesh);
-      bridge.m_isValid = false;
+      bridge.isValid = false;
     }
     bridge.dataVersion.fetch_add(1, std::memory_order_release);
     return {};
@@ -101,9 +101,9 @@ namespace anaf::CLI {
   // The same for the beam / frame model.
   template <typename Edit>
   CommandResult editBeam(Session& session, Edit&& edit) {
-    if (modelKind(session) != ModelKind::beam) return std::unexpected("no beam model: start one with -new beam");
+    if (modelKind(session) != E_ModelKind::Beam) return std::unexpected("no beam model: start one with -new beam");
     auto& bridge = session.bridge;
-    if (bridge.m_isRunning) return std::unexpected("a solve is running");
+    if (bridge.isRunning) return std::unexpected("a solve is running");
     {
       std::lock_guard lock(bridge.dataMutex);
       auto mesh = bridge.activeBeamMesh ? std::make_shared<BRIDGE::BeamMeshData>(*bridge.activeBeamMesh)
@@ -111,7 +111,7 @@ namespace anaf::CLI {
       if (CommandResult edited = edit(*mesh); !edited) return edited;
       FEM::BEAM::dropResults(*mesh);
       bridge.activeBeamMesh = std::move(mesh);
-      bridge.m_isValid = false;
+      bridge.isValid = false;
     }
     bridge.dataVersion.fetch_add(1, std::memory_order_release);
     return {};

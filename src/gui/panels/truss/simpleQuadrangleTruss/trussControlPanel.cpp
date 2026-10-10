@@ -45,7 +45,7 @@ namespace anaf::GUI {
 
   namespace {
     // Elements and the solver take the material as an index into allMaterials.
-    bool resolveMaterialIndex(BRIDGE::Gui_Calc_Bridge& bridge, std::uint32_t materialID, std::uint32_t& index) {
+    bool resolveMaterialIndex(BRIDGE::GuiCalcBridge& bridge, std::uint32_t materialID, std::uint32_t& index) {
       std::lock_guard lock(bridge.dataMutex);
       const auto found = bridge.findMaterialIndex(materialID);
       if (!found) {
@@ -66,7 +66,7 @@ namespace anaf::GUI {
     }
 
     // Republishes the active grid with the panel's current loads and supports.
-    void publishInputs(BRIDGE::Gui_Calc_Bridge& bridge, const std::vector<FEM::TRUSS::ForceApplied>& forces, const Supports& supports) {
+    void publishInputs(BRIDGE::GuiCalcBridge& bridge, const std::vector<FEM::TRUSS::ForceApplied>& forces, const Supports& supports) {
       {
         std::lock_guard lock(bridge.dataMutex);
         if (!bridge.activeMesh) return;
@@ -95,7 +95,7 @@ namespace anaf::GUI {
     m_lastFixNode = std::numeric_limits<std::uint32_t>::max();
   }
 
-  void TrussControlPanel::renderSummary(BRIDGE::Gui_Calc_Bridge& bridge) {
+  void TrussControlPanel::renderSummary(BRIDGE::GuiCalcBridge& bridge) {
     std::shared_ptr<const BRIDGE::MeshData> mesh;
     {
       std::lock_guard lock(bridge.dataMutex);
@@ -113,7 +113,7 @@ namespace anaf::GUI {
     if (!mesh) {
       ImGui::TextDisabled("No preview yet: Generate Preview in the Grid tab.");
     } else if (mesh->hasResults) {
-      const bool valid = bridge.m_isValid.load();
+      const bool valid = bridge.isValid.load();
       ImGui::TextColored(valid ? THEME::theme().good : THEME::theme().warn, "%s", valid ? "Solved, energy check passed" : "Results shown (energy check not passed)");
     } else {
       ImGui::TextDisabled("No results yet: run the solver below.");
@@ -121,7 +121,7 @@ namespace anaf::GUI {
     LAYOUT::endCard();
   }
 
-  void TrussControlPanel::renderGridTab(BRIDGE::Gui_Calc_Bridge& bridge) {
+  void TrussControlPanel::renderGridTab(BRIDGE::GuiCalcBridge& bridge) {
     ImGui::SeparatorText("Grid");
     LAYOUT::field("Cells X");
     ImGui::InputScalar("##cube_x", ImGuiDataType_U32, &m_cubeNumX);
@@ -144,7 +144,7 @@ namespace anaf::GUI {
 
     ImGui::Spacing();
     std::uint32_t materialIndex{};
-    if (bridge.m_isGeneratingPreview.load()) {
+    if (bridge.isGeneratingPreview.load()) {
       ImGui::BeginDisabled();
       ImGui::Button("Generating Preview...", ImVec2(-FLT_MIN, 0.0f));
       ImGui::EndDisabled();
@@ -152,7 +152,7 @@ namespace anaf::GUI {
       startPreview(bridge, materialIndex);
     }
     if (ImGui::Button("Load Demo (10x1x10 self weight)", ImVec2(-FLT_MIN, 0.0f))) {
-      bridge.resetModel(BRIDGE::ObjectType::truss_SQPT);
+      bridge.resetModel(BRIDGE::E_ObjectType::TrussSqpt);
       resetState(); // the demo grid, section and load node are the panel defaults
       m_forceVector = {0.0, 0.0, 0.0};
 
@@ -169,9 +169,9 @@ namespace anaf::GUI {
     }
   }
 
-  void TrussControlPanel::startPreview(BRIDGE::Gui_Calc_Bridge& bridge, const std::uint32_t materialIndex) {
+  void TrussControlPanel::startPreview(BRIDGE::GuiCalcBridge& bridge, const std::uint32_t materialIndex) {
     bridge.joinWorker();
-    bridge.m_isGeneratingPreview = true;
+    bridge.isGeneratingPreview = true;
     bridge.workerThread = std::jthread(
       [&bridge,
        generation = bridge.modelGeneration.load(),
@@ -188,11 +188,11 @@ namespace anaf::GUI {
           auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
           if (!built) {
             anaf::LOG::error("Preview not generated: {}", built.error());
-            bridge.m_isGeneratingPreview = false;
+            bridge.isGeneratingPreview = false;
             return;
           }
           if (st.stop_requested()) {
-            bridge.m_isGeneratingPreview = false;
+            bridge.isGeneratingPreview = false;
             return;
           }
           auto newMesh = std::make_shared<BRIDGE::MeshData>(std::move(*built));
@@ -202,7 +202,7 @@ namespace anaf::GUI {
           {
             std::lock_guard lock(bridge.dataMutex);
             if (bridge.modelGeneration.load() != generation) {
-              bridge.m_isGeneratingPreview = false;
+              bridge.isGeneratingPreview = false;
               return; // the model was reset while the preview was built
             }
             bridge.activeMesh = std::move(newMesh);
@@ -215,11 +215,11 @@ namespace anaf::GUI {
           bridge.dataVersion.fetch_add(1, std::memory_order_release);
         }
 
-        bridge.m_isGeneratingPreview = false;
+        bridge.isGeneratingPreview = false;
     });
   }
 
-  void TrussControlPanel::renderLoadsTab(BRIDGE::Gui_Calc_Bridge& bridge, const std::uint32_t currentSelectedNode, const bool dynamic) {
+  void TrussControlPanel::renderLoadsTab(BRIDGE::GuiCalcBridge& bridge, const std::uint32_t currentSelectedNode, const bool dynamic) {
     if (currentSelectedNode != std::numeric_limits<std::uint32_t>::max()) {
       m_forceNodeId = currentSelectedNode;
     }
@@ -265,7 +265,7 @@ namespace anaf::GUI {
     ImGui::TextDisabled("Self weight is always applied.");
   }
 
-  void TrussControlPanel::renderSolve(BRIDGE::Gui_Calc_Bridge& bridge) {
+  void TrussControlPanel::renderSolve(BRIDGE::GuiCalcBridge& bridge) {
     LAYOUT::field("Deformation");
     double currentScale = bridge.deformScale.load();
     if (ImGui::InputDouble("##deformation_scale", &currentScale, 0.0, 0.0, "%.3f")) {
@@ -275,8 +275,8 @@ namespace anaf::GUI {
     ImGui::SetItemTooltip("Deformation scale of the drawn shape (1 = true size)");
 
     std::uint32_t materialIndex{};
-    if (bridge.m_isRunning) {
-      ImGui::ProgressBar(bridge.m_progress.load(), ImVec2(-FLT_MIN, 0.0f));
+    if (bridge.isRunning) {
+      ImGui::ProgressBar(bridge.progress.load(), ImVec2(-FLT_MIN, 0.0f));
       ImGui::BeginDisabled();
       LAYOUT::primaryButton("Calculating...");
       ImGui::EndDisabled();
@@ -297,7 +297,7 @@ namespace anaf::GUI {
   }
 
   void TrussControlPanel::onImGuiRender() {
-    BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
+    BRIDGE::GuiCalcBridge& bridge = BRIDGE::buildBridge();
 
     std::uint32_t currentSelectedNode = std::numeric_limits<std::uint32_t>::max();
     {
@@ -305,10 +305,10 @@ namespace anaf::GUI {
       currentSelectedNode = bridge.selectedNodeId;
     }
 
-    const auto loadKind = bridge.m_loadKind.load();
-    const bool dynamic = loadKind == BRIDGE::LoadKind::dynamic;
+    const auto loadKind = bridge.loadKind.load();
+    const bool dynamic = loadKind == BRIDGE::E_LoadKind::Dynamic;
     // Footer rows: deformation scale (+ progress bar) and Clear All; one run button.
-    const float footer = dynamic ? LAYOUT::footerHeight(1, 1) : LAYOUT::footerHeight(bridge.m_isRunning ? 3 : 2, 1);
+    const float footer = dynamic ? LAYOUT::footerHeight(1, 1) : LAYOUT::footerHeight(bridge.isRunning ? 3 : 2, 1);
 
     ImGui::Begin("Truss(1D) Analysis Set", &isOpen);
     renderSummary(bridge);
@@ -340,7 +340,7 @@ namespace anaf::GUI {
     else renderSolve(bridge);
 
     if (ImGui::Button("Clear All", ImVec2(-FLT_MIN, 0.0f))) {
-      bridge.resetModel(BRIDGE::ObjectType::truss_SQPT);
+      bridge.resetModel(BRIDGE::E_ObjectType::TrussSqpt);
       resetState();
       m_cubeNumX = 1;
       m_cubeNumY = 1;

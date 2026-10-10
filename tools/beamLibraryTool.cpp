@@ -36,9 +36,9 @@ namespace LIBRARY = FEM::BEAM::LIBRARY;
 int main(int argc, char** argv) {
   anaf::LOG::setConsoleOutput(false);
   const fs::path dir = argc > 1 ? anaf::IO::pathFromUtf8(argv[1])
-                                : anaf::IO::pathFromUtf8(MAIN_DIR) / "assets" / fs::path(LIBRARY::kLibrarySubdir);
+                                : anaf::IO::pathFromUtf8(MAIN_DIR) / "assets" / fs::path(LIBRARY::librarySubdir);
   const auto materials = anaf::MATERIAL::loadMaterialLibrary(anaf::IO::pathFromUtf8(MAIN_DIR) / "assets" / "bridge" / "materialProperties.json");
-  const auto sections = FEM::BEAM::loadSectionLibrary(anaf::IO::pathFromUtf8(MAIN_DIR) / "assets" / fs::path(FEM::BEAM::kSectionCatalogAsset));
+  const auto sections = FEM::BEAM::loadSectionLibrary(anaf::IO::pathFromUtf8(MAIN_DIR) / "assets" / fs::path(FEM::BEAM::sectionCatalogAsset));
   if (!materials || !sections) {
     std::fprintf(stderr, "%s\n", !materials ? materials.error().c_str() : sections.error().c_str());
     return 1;

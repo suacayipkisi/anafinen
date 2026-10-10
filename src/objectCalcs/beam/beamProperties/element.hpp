@@ -22,7 +22,7 @@
 
 namespace FEM::BEAM {
 
-  enum class Formulation : std::uint8_t {
+  enum class E_Formulation : std::uint8_t {
     EulerBernoulli, // no shear deformation; shear areas are ignored
     Timoshenko      // shear deformation through ShearAreaY / ShearAreaZ
   };
@@ -84,7 +84,7 @@ namespace FEM::BEAM {
     std::uint32_t node2{};
     std::uint32_t materialID{}; // index into the material list
     std::uint32_t sectionID{};  // index into the section list (like materialID)
-    Formulation formulation{Formulation::EulerBernoulli};
+    E_Formulation formulation{E_Formulation::EulerBernoulli};
     std::array<double, 3> orientation{}; // v; zero = default rule above
     std::uint16_t endReleases{};         // RELEASE bits; 0 = rigidly connected at both ends
 

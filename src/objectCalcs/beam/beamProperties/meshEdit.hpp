@@ -37,8 +37,8 @@ namespace FEM::BEAM {
   // element (and disappear with it).
   template <typename Predicate>
   void removeElements(MeshData& mesh, Predicate&& drop) {
-    constexpr std::uint32_t kRemoved = std::numeric_limits<std::uint32_t>::max();
-    std::vector<std::uint32_t> newIndex(mesh.elements.size(), kRemoved);
+    constexpr std::uint32_t removedIndex = std::numeric_limits<std::uint32_t>::max();
+    std::vector<std::uint32_t> newIndex(mesh.elements.size(), removedIndex);
     std::vector<BeamElement> kept;
     for (std::size_t i = 0; i < mesh.elements.size(); ++i) {
       if (drop(std::as_const(mesh.elements[i]))) continue;
@@ -47,7 +47,7 @@ namespace FEM::BEAM {
     }
     mesh.elements = std::move(kept);
     std::erase_if(mesh.distributedLoads, [&](const DistributedLoad& load) {
-      return load.element >= newIndex.size() || newIndex[load.element] == kRemoved;
+      return load.element >= newIndex.size() || newIndex[load.element] == removedIndex;
     });
     for (auto& load : mesh.distributedLoads) load.element = newIndex[load.element];
   }

@@ -63,7 +63,7 @@ namespace FEM::SOLVER {
     [[maybe_unused]] const Eigen::VectorXd& force,
     [[maybe_unused]] Eigen::VectorXd& displacement
   ) {
-    Result result{.type = Type::Cholmod};
+    Result result{.type = E_Type::Cholmod};
 #ifdef ANAFINEN_HAS_CHOLMOD
     const auto start = std::chrono::steady_clock::now();
     PivotCheckedLLT solver;

@@ -28,6 +28,6 @@ namespace anaf::GUI::BEAM_WORKER {
   // Runs FEM::BEAM::solveStatic() on bridge.workerThread with copies of the material and
   // section lists taken now, and publishes the solved snapshot into bridge.activeBeamMesh
   // unless the model was reset meanwhile (modelGeneration). Call from the GUI thread.
-  void startSolve(BRIDGE::Gui_Calc_Bridge& bridge, std::shared_ptr<const BRIDGE::BeamMeshData> mesh);
+  void startSolve(BRIDGE::GuiCalcBridge& bridge, std::shared_ptr<const BRIDGE::BeamMeshData> mesh);
 
 } // namespace anaf::GUI::BEAM_WORKER end

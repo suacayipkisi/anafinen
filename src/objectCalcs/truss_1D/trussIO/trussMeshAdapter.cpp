@@ -50,7 +50,7 @@ namespace FEM::TRUSS::ADAPTER {
       return it->second;
     };
 
-    auto& bars = model.blockFor(ElementType::Line2);
+    auto& bars = model.blockFor(E_ElementType::Line2);
     std::vector<double> material, area, stress;
     std::map<std::uint32_t, std::vector<std::uint32_t>> elementsByMaterial;
     for (std::size_t e = 0; e < mesh.trussElements.size(); ++e) {
@@ -64,14 +64,14 @@ namespace FEM::TRUSS::ADAPTER {
       area.push_back(element.crossSectionArea);
       stress.push_back(static_cast<double>(element.stress));
     }
-    model.elementAttributes[Attribute::MaterialId] = std::move(material);
-    model.elementAttributes[Attribute::CrossSectionArea] = std::move(area);
+    model.elementAttributes[Attribute::materialId] = std::move(material);
+    model.elementAttributes[Attribute::crossSectionArea] = std::move(area);
 
     for (auto& [materialIndex, members] : elementsByMaterial) {
       if (materialIndex >= materials.size()) continue; // no name known: only MaterialID is written
       EntitySet set;
-      set.name = std::string(kMaterialSetPrefix) + std::string(materials[materialIndex].getMaterialType());
-      set.kind = SetKind::Element;
+      set.name = std::string(materialSetPrefix) + std::string(materials[materialIndex].getMaterialType());
+      set.kind = E_SetKind::Element;
       set.dimension = 1;
       set.members = std::move(members);
       model.sets.push_back(std::move(set));
@@ -92,7 +92,7 @@ namespace FEM::TRUSS::ADAPTER {
     }
 
     if (mesh.hasResults) {
-      Field displacement{FieldName::Displacement, FieldLocation::Node, 3, {0.0}, {}, StepKind::Time, {}};
+      Field displacement{FieldName::displacement, E_FieldLocation::Node, 3, {0.0}, {}, E_StepKind::Time, {}};
       std::vector<double> values;
       values.reserve(mesh.trussNodes.size() * 3);
       for (const auto& node : mesh.trussNodes) {
@@ -101,7 +101,7 @@ namespace FEM::TRUSS::ADAPTER {
       }
       displacement.steps.push_back(std::move(values));
       model.fields.push_back(std::move(displacement));
-      model.fields.push_back(Field{FieldName::Stress, FieldLocation::Element, 1, {0.0}, {std::move(stress)}, StepKind::Time, {}});
+      model.fields.push_back(Field{FieldName::stress, E_FieldLocation::Element, 1, {0.0}, {std::move(stress)}, E_StepKind::Time, {}});
     }
     return model;
   }
@@ -111,9 +111,9 @@ namespace FEM::TRUSS::ADAPTER {
     result.mesh = std::make_shared<FEM::TRUSS::MeshData>();
     auto& mesh = *result.mesh;
 
-    const Field* displacement = model.findField(FieldName::Displacement, FieldLocation::Node);
+    const Field* displacement = model.findField(FieldName::displacement, E_FieldLocation::Node);
     if (displacement && (displacement->components != 3 || displacement->steps.empty())) displacement = nullptr;
-    const Field* stress = model.findField(FieldName::Stress, FieldLocation::Element);
+    const Field* stress = model.findField(FieldName::stress, E_FieldLocation::Element);
     if (stress && (stress->components != 1 || stress->steps.empty())) stress = nullptr;
     mesh.hasResults = displacement || stress;
 
@@ -132,14 +132,14 @@ namespace FEM::TRUSS::ADAPTER {
       const auto it = model.elementAttributes.find(name);
       return it == model.elementAttributes.end() ? nullptr : &it->second;
     };
-    const auto* material = attribute(Attribute::MaterialId);
-    const auto* area = attribute(Attribute::CrossSectionArea);
+    const auto* material = attribute(Attribute::materialId);
+    const auto* area = attribute(Attribute::crossSectionArea);
 
-    // Material by name wins over the MaterialID index (see kMaterialSetPrefix).
+    // Material by name wins over the MaterialID index (see materialSetPrefix).
     std::vector<std::optional<std::uint32_t>> materialByName(model.elementCount());
     for (const auto& set : model.sets) {
-      if (set.kind != SetKind::Element || !set.name.starts_with(kMaterialSetPrefix)) continue;
-      const std::string_view name = std::string_view(set.name).substr(kMaterialSetPrefix.size());
+      if (set.kind != E_SetKind::Element || !set.name.starts_with(materialSetPrefix)) continue;
+      const std::string_view name = std::string_view(set.name).substr(materialSetPrefix.size());
       const auto found = std::ranges::find_if(materials, [&](const anaf::MATERIAL::Material& candidate) {
         return anaf::MATERIAL::sameMaterialName(candidate.getMaterialType(), name);
       });
@@ -186,7 +186,7 @@ namespace FEM::TRUSS::ADAPTER {
             mesh.trussElements.push_back({nodes[info.edges[k]], nodes[info.edges[k + 1]], s, exceeded, materialId,
                                           area ? (*area)[global] : 0.0, false});
           }
-          block.type == ElementType::Line2 ? ++bars : ++splitQuadratic;
+          block.type == E_ElementType::Line2 ? ++bars : ++splitQuadratic;
           continue;
         }
         ++wireframeElements;

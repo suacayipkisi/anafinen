@@ -39,43 +39,43 @@ namespace anaf::LOG {
     return "anafinen_run.log";
   }
 
-  void write(Level level, std::string_view formattedMessage) {
+  void write(E_Level level, std::string_view formattedMessage) {
     std::string_view tag;
     std::string_view tagColor;
 
     switch (level) {
-      case Level::INFO:
+      case E_Level::INFO:
         tag = "[INFO]";
-        tagColor = COLOR_BLUE;
+        tagColor = colorBlue;
         break;
-      case Level::WARN:
+      case E_Level::WARN:
         tag = "[WARN]";
-        tagColor = COLOR_YELLOW;
+        tagColor = colorYellow;
         break;
-      case Level::ERR:
+      case E_Level::ERR:
         tag = "[ERROR]";
-        tagColor = COLOR_RED;
+        tagColor = colorRed;
         break;
-      case Level::SUCCESS:
+      case E_Level::SUCCESS:
         tag = "[SUCCESS]";
-        tagColor = COLOR_GREEN;
+        tagColor = colorGreen;
         break;
-      case Level::CORE:
+      case E_Level::CORE:
         tag = "[ANAFINEN]";
-        tagColor = COLOR_CYAN;
+        tagColor = colorCyan;
         break;
     }
 
-    const auto raw_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::tm tm_buf{};
-    portableLocalTime(&raw_time, &tm_buf);
+    const auto rawTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm tmBuf{};
+    portableLocalTime(&rawTime, &tmBuf);
 
-    const std::string timeStr = std::format("{:02d}:{:02d}:{:02d}", tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec);
+    const std::string timeStr = std::format("{:02d}:{:02d}:{:02d}", tmBuf.tm_hour, tmBuf.tm_min, tmBuf.tm_sec);
     auto& ctx = getContext();
     std::lock_guard<std::mutex> lock(ctx.mtx);
 
     if (ctx.consoleOutput) {
-      std::cout << std::format("[{}] {}{}{}{} {}\n", timeStr, COLOR_BOLD, tagColor, tag, COLOR_RESET, formattedMessage);
+      std::cout << std::format("[{}] {}{}{}{} {}\n", timeStr, colorBold, tagColor, tag, colorReset, formattedMessage);
     }
 
     // File output

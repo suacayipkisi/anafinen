@@ -332,7 +332,7 @@ namespace anaf::IO::formats {
     for (auto& raw : rawFields) {
       Field field;
       field.name = raw.name;
-      field.location = raw.onPoints ? FieldLocation::Node : FieldLocation::Element;
+      field.location = raw.onPoints ? E_FieldLocation::Node : E_FieldLocation::Element;
       field.components = raw.components;
       field.times = {0.0};
       if (raw.onPoints) {
@@ -431,8 +431,8 @@ namespace anaf::IO::formats {
     }
     WriteReport report;
     report.path = pathToUtf8(path);
-    const bool binary = options.encoding == Encoding::Binary;
-    const bool v51 = options.vtkVersion == VtkLegacyVersion::V5_1;
+    const bool binary = options.encoding == E_Encoding::Binary;
+    const bool v51 = options.vtkVersion == E_VtkLegacyVersion::V5_1;
     LegacyWriter writer(binary);
 
     std::string title = model.title.empty() ? "anafinen mesh" : model.title;
@@ -504,7 +504,7 @@ namespace anaf::IO::formats {
 
     std::vector<const detail::FlatArray*> pointArrays;
     std::vector<const detail::FlatArray*> cellArrays;
-    for (const auto& array : flat.arrays) (array.location == FieldLocation::Node ? pointArrays : cellArrays).push_back(&array);
+    for (const auto& array : flat.arrays) (array.location == E_FieldLocation::Node ? pointArrays : cellArrays).push_back(&array);
     if (!pointArrays.empty()) {
       writer.text(std::format("POINT_DATA {}\n", model.nodes.size()));
       writeAttributes(writer, pointArrays);

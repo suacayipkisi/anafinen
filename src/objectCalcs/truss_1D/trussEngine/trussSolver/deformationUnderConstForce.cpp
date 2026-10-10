@@ -64,8 +64,8 @@ namespace FEM::TRUSS {
     }
   } // namespace end
 
-  void Truss_1D_Container::assembleStiffness(
-    const std::vector<TrussElement_1D>& elements,
+  void Truss1DContainer::assembleStiffness(
+    const std::vector<TrussElement1D>& elements,
     const std::span<const anaf::MATERIAL::Material> allMaterials
   ) {
     constexpr std::size_t tripletsPerElement = 21;
@@ -115,8 +115,8 @@ namespace FEM::TRUSS {
     m_globalStiffnessMatrix = std::move(triplets);
   }
 
-  void Truss_1D_Container::considerWeight(
-    const std::vector<TrussElement_1D>& elements,
+  void Truss1DContainer::considerWeight(
+    const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> materials
   ) {
     constexpr double gravity = -9.80665;
@@ -135,7 +135,7 @@ namespace FEM::TRUSS {
     }
   }
 
-  std::expected<void, std::string> Truss_1D_Container::calculateDisplacements(const std::stop_token stopToken) {
+  std::expected<void, std::string> Truss1DContainer::calculateDisplacements(const std::stop_token stopToken) {
     #pragma omp parallel
     {
       #pragma omp single
@@ -287,7 +287,7 @@ namespace FEM::TRUSS {
     return {};
   }
 
-  void Truss_1D_Container::calculateElementForcesAndStress(
+  void Truss1DContainer::calculateElementForcesAndStress(
     const std::span<const anaf::MATERIAL::Material> materials,
     const Eigen::Vector3d gravityVector
   ) {
@@ -319,7 +319,7 @@ namespace FEM::TRUSS {
     }
   }
 
-  void Truss_1D_Container::runValidator(
+  void Truss1DContainer::runValidator(
     const std::span<const anaf::MATERIAL::Material> materials
   ) {
     double internalEnergy = 0.0;
@@ -331,7 +331,7 @@ namespace FEM::TRUSS {
       const double elongation = element.getEleElongation();
       internalEnergy += 0.5 * stiffness * elongation * elongation;
     }
-    m_elasticDeformationEnergy_internal = internalEnergy;
+    m_elasticDeformationEnergyInternal = internalEnergy;
 
     double externalWork = 0.0;
     #pragma omp parallel for schedule(static) reduction(+:externalWork)
@@ -342,7 +342,7 @@ namespace FEM::TRUSS {
         + m_forceVec[base + 1] * displacement[1]
         + m_forceVec[base + 2] * displacement[2];
     }
-    m_workDone_external = externalWork;
+    m_workDoneExternal = externalWork;
 
     const double externalEnergy = 0.5 * externalWork;
     m_energyDiff = std::abs(internalEnergy - externalEnergy);

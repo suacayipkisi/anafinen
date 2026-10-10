@@ -32,12 +32,12 @@
 
 namespace anaf::GUI {
 
-  // Editor and solver front end for beam_frame: nodes, beam elements (material, section,
+  // Editor and solver front end for BeamFrame: nodes, beam elements (material, section,
   // formulation, orientation, end releases / hinges), supports (6 DOFs), nodal and distributed loads, self weight.
   // Every edit publishes a new snapshot into bridge.activeBeamMesh and drops stale results.
   class BeamModelEditor : public IPanel {
   private:
-    static constexpr std::uint32_t kNone = std::numeric_limits<std::uint32_t>::max();
+    static constexpr std::uint32_t noSelection = std::numeric_limits<std::uint32_t>::max();
 
     // Input of one support group (translations or rotations). Both modes end up as a basis
     // of allowed directions (allowedBasis()), the only form the node stores.
@@ -61,18 +61,18 @@ namespace anaf::GUI {
     SupportInput m_rotation;
     std::array<double, 3> m_force{0.0, 0.0, 0.0};
     std::array<double, 3> m_moment{0.0, 0.0, 0.0};
-    std::uint32_t m_loadedNode{kNone};    // node whose values are in the inputs above
+    std::uint32_t m_loadedNode{noSelection};    // node whose values are in the inputs above
 
     std::uint32_t m_elementNodeA{0};
     std::uint32_t m_elementNodeB{1};
     std::uint32_t m_materialID{0};        // stable IDs, resolved to indices on use
     std::uint32_t m_sectionID{0};
-    int m_formulation{0};                 // FEM::BEAM::Formulation
+    int m_formulation{0};                 // FEM::BEAM::E_Formulation
     std::array<double, 3> m_orientation{0.0, 0.0, 0.0};
     unsigned int m_releases{0};           // FEM::BEAM::RELEASE bits
     std::array<double, 3> m_distributed{0.0, 0.0, 0.0};
-    int m_distributedFrame{0};            // FEM::BEAM::LoadFrame
-    std::uint32_t m_loadedElement{kNone};
+    int m_distributedFrame{0};            // FEM::BEAM::E_LoadFrame
+    std::uint32_t m_loadedElement{noSelection};
 
     std::uint32_t m_wholeMaterialID{0};
     std::uint32_t m_wholeSectionID{0};
@@ -80,7 +80,7 @@ namespace anaf::GUI {
 
     std::string m_status;
     bool m_statusIsError{false};
-    DynamicAnalysisInputs m_dynamic; // shown for LoadKind::dynamic
+    DynamicAnalysisInputs m_dynamic; // shown for LoadKind::Dynamic
 
     // Built-in library (assets/objects/beam/beam3D), read once on first use.
     bool m_libraryRead{false};
@@ -116,7 +116,7 @@ namespace anaf::GUI {
     // Imports a built-in model or solved-result file (the file is only read; edits stay in memory).
     std::function<void(const std::filesystem::path&)> onLoadBuiltin;
 
-    // Back to the default inputs. The model itself is cleared with Gui_Calc_Bridge::resetModel().
+    // Back to the default inputs. The model itself is cleared with GuiCalcBridge::resetModel().
     void resetState();
     void onImGuiRender() override;
   };

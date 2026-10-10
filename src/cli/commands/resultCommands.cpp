@@ -39,7 +39,7 @@ namespace anaf::CLI::HANDLERS {
 
   namespace {
 
-    // m_isRunning for the duration of a solve, also when it throws.
+    // isRunning for the duration of a solve, also when it throws.
     struct RunningFlag {
       std::atomic<bool>& flag;
       explicit RunningFlag(std::atomic<bool>& f) : flag(f) { flag = true; }
@@ -127,19 +127,19 @@ namespace anaf::CLI::HANDLERS {
   CommandResult solve(Session& session, const Arguments args) {
     if (!args.empty()) return std::unexpected("usage: -solve");
     auto& bridge = session.bridge;
-    if (bridge.m_isRunning) return std::unexpected("a solve is already running");
+    if (bridge.isRunning) return std::unexpected("a solve is already running");
     bridge.joinWorker();
     const auto lists = copyLists(session);
     const auto start = std::chrono::steady_clock::now();
     bool passed = false;
     double diff = 0.0, relative = 0.0;
 
-    if (modelKind(session) == ModelKind::truss) {
+    if (modelKind(session) == E_ModelKind::Truss) {
       const auto mesh = trussMesh(session);
       if (!mesh) return std::unexpected("the model is empty");
       std::expected<FEM::TRUSS::StaticResult, std::string> solved;
       {
-        RunningFlag running(bridge.m_isRunning);
+        RunningFlag running(bridge.isRunning);
         solved = FEM::TRUSS::solveStatic(*mesh, lists.materials);
       }
       if (!solved) return std::unexpected(std::format("solve failed: {}", solved.error()));
@@ -148,12 +148,12 @@ namespace anaf::CLI::HANDLERS {
       relative = solved->energyRelativeDiff;
       std::lock_guard lock(bridge.dataMutex);
       bridge.activeMesh = std::move(solved->mesh);
-    } else if (modelKind(session) == ModelKind::beam) {
+    } else if (modelKind(session) == E_ModelKind::Beam) {
       const auto mesh = beamMesh(session);
       if (!mesh) return std::unexpected("the model is empty");
       std::expected<FEM::BEAM::StaticResult, std::string> solved;
       {
-        RunningFlag running(bridge.m_isRunning);
+        RunningFlag running(bridge.isRunning);
         solved = FEM::BEAM::solveStatic(*mesh, lists.materials, lists.sections);
       }
       if (!solved) return std::unexpected(std::format("solve failed: {}", solved.error()));
@@ -165,8 +165,8 @@ namespace anaf::CLI::HANDLERS {
     } else {
       return std::unexpected("no model to solve");
     }
-    bridge.m_isValid = passed;
-    bridge.m_energyDiff = diff;
+    bridge.isValid = passed;
+    bridge.energyDiff = diff;
     session.solvedVersion = bridge.dataVersion.fetch_add(1, std::memory_order_acq_rel) + 1;
 
     const auto elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
@@ -183,7 +183,7 @@ namespace anaf::CLI::HANDLERS {
     const std::string_view selection = args.size() == 2 ? std::string_view(args[1]) : "all";
     const auto lists = copyLists(session);
 
-    if (modelKind(session) == ModelKind::truss) {
+    if (modelKind(session) == E_ModelKind::Truss) {
       const auto mesh = trussMesh(session);
       if (!mesh || !mesh->hasResults) return noResults();
       if (what == "summary") {
@@ -215,7 +215,7 @@ namespace anaf::CLI::HANDLERS {
       return {};
     }
 
-    if (modelKind(session) != ModelKind::beam) return std::unexpected("no model");
+    if (modelKind(session) != E_ModelKind::Beam) return std::unexpected("no model");
     const auto mesh = beamMesh(session);
     if (!mesh || !mesh->hasResults) return noResults();
     if (what == "summary") {
@@ -261,7 +261,7 @@ namespace anaf::CLI::HANDLERS {
     const auto parsed = parseArgs(args, {"points"});
     if (!parsed) return std::unexpected(parsed.error());
     if (parsed->positional.size() != 1) return std::unexpected("usage: -diagram <element> [points=<n>]");
-    if (modelKind(session) != ModelKind::beam) return std::unexpected("diagrams need a solved beam model");
+    if (modelKind(session) != E_ModelKind::Beam) return std::unexpected("diagrams need a solved beam model");
     const auto mesh = beamMesh(session);
     if (!mesh || !mesh->hasResults) return noResults();
     const auto element = parseIndex(parsed->positional.front(), "element");

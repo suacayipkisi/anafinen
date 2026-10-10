@@ -28,7 +28,7 @@ namespace anaf::GUI {
 
   // Section picker over bridge.allSections (like materialCombo). sectionID is the stable
   // BeamSection ID; it falls back to the first section when the selected one was removed.
-  inline void sectionCombo(BRIDGE::Gui_Calc_Bridge& bridge, const char* label, std::uint32_t& sectionID) {
+  inline void sectionCombo(BRIDGE::GuiCalcBridge& bridge, const char* label, std::uint32_t& sectionID) {
     std::lock_guard lock(bridge.dataMutex);
     if (bridge.allSections.empty()) {
       ImGui::TextDisabled("No sections available");

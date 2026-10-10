@@ -29,7 +29,7 @@ namespace anaf::LOG {
 
   std::string getLogFileLoc();
 
-  enum class Level {
+  enum class E_Level {
     INFO,
     WARN,
     ERR,
@@ -37,31 +37,31 @@ namespace anaf::LOG {
     CORE
   };
 
-  inline constexpr std::string_view COLOR_RESET  = "\033[0m";
-  inline constexpr std::string_view COLOR_BOLD   = "\033[1m";
-  inline constexpr std::string_view COLOR_RED    = "\033[31m";
-  inline constexpr std::string_view COLOR_GREEN  = "\033[32m";
-  inline constexpr std::string_view COLOR_YELLOW = "\033[33m";
-  inline constexpr std::string_view COLOR_BLUE   = "\033[34m";
-  inline constexpr std::string_view COLOR_CYAN   = "\033[36m";
+  inline constexpr std::string_view colorReset  = "\033[0m";
+  inline constexpr std::string_view colorBold   = "\033[1m";
+  inline constexpr std::string_view colorRed    = "\033[31m";
+  inline constexpr std::string_view colorGreen  = "\033[32m";
+  inline constexpr std::string_view colorYellow = "\033[33m";
+  inline constexpr std::string_view colorBlue   = "\033[34m";
+  inline constexpr std::string_view colorCyan   = "\033[36m";
 
   // Sinks: the log file (init()), the callback (GUI console) and colored stdout (a CLI). The
   // log lives in anaf_core, so the front end picks its sinks at run time, not by macro.
   struct LoggerContext {
     std::mutex mtx;
     std::ofstream logFile;
-    std::function<void(Level, std::string_view)> callback = nullptr;
+    std::function<void(E_Level, std::string_view)> callback = nullptr;
     bool consoleOutput{false};
   };
 
   inline LoggerContext& getContext() noexcept {
-    static LoggerContext instance;
-    return instance;
+    static LoggerContext s_instance;
+    return s_instance;
   }
 
-  void write(Level level, std::string_view formattedMessage);
+  void write(E_Level level, std::string_view formattedMessage);
 
-  inline void setCallback(std::function<void(Level, std::string_view)> cb) {
+  inline void setCallback(std::function<void(E_Level, std::string_view)> cb) {
     std::lock_guard<std::mutex> lock(getContext().mtx);
     getContext().callback = std::move(cb);
   }
@@ -88,27 +88,27 @@ namespace anaf::LOG {
 
   template <typename... Args>
   void info(std::format_string<Args...> fmt, Args&&... args) {
-    write(Level::INFO, std::format(fmt, std::forward<Args>(args)...));
+    write(E_Level::INFO, std::format(fmt, std::forward<Args>(args)...));
   }
 
   template <typename... Args>
   void warn(std::format_string<Args...> fmt, Args&&... args) {
-    write(Level::WARN, std::format(fmt, std::forward<Args>(args)...));
+    write(E_Level::WARN, std::format(fmt, std::forward<Args>(args)...));
   }
 
   template <typename... Args>
   void error(std::format_string<Args...> fmt, Args&&... args) {
-    write(Level::ERR, std::format(fmt, std::forward<Args>(args)...));
+    write(E_Level::ERR, std::format(fmt, std::forward<Args>(args)...));
   }
 
   template <typename... Args>
   void success(std::format_string<Args...> fmt, Args&&... args) {
-    write(Level::SUCCESS, std::format(fmt, std::forward<Args>(args)...));
+    write(E_Level::SUCCESS, std::format(fmt, std::forward<Args>(args)...));
   }
 
   template <typename... Args>
   void core(std::format_string<Args...> fmt, Args&&... args) {
-    write(Level::CORE, std::format(fmt, std::forward<Args>(args)...));
+    write(E_Level::CORE, std::format(fmt, std::forward<Args>(args)...));
   }
 
 } // namespace anaf::LOG end

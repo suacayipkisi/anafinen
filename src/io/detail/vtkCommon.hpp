@@ -46,7 +46,7 @@ namespace anaf::IO::detail {
                                              const std::vector<std::size_t>& sourceCell);
 
   private:
-    void emit(ElementType type, std::span<const std::int64_t> vtkOrderedPoints, std::size_t fileCell);
+    void emit(E_ElementType type, std::span<const std::int64_t> vtkOrderedPoints, std::size_t fileCell);
 
     MeshModel& m_model;
     std::size_t m_nodeOffset;

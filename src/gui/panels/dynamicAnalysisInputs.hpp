@@ -27,26 +27,26 @@
 
 namespace anaf::GUI {
 
-  // Dynamic analysis inputs, shared by the truss and beam editors (LoadKind::dynamic). GUI only
+  // Dynamic analysis inputs, shared by the truss and beam editors (E_LoadKind::Dynamic). GUI only
   // so far: nothing reads them until the modal solver exists.
   struct DynamicAnalysisInputs {
-    int analysisType{0}; // row in kDynamicAnalysisTypes
+    int analysisType{0}; // row in dynamicAnalysisTypes
     int modeCount{10};   // lowest modes to extract
-    int massMatrix{0};   // row in kMassMatrixTypes
+    int massMatrix{0};   // row in massMatrixTypes
   };
 
-  inline constexpr std::array<const char*, 3> kDynamicAnalysisTypes{"Modal (natural frequencies)", "Harmonic", "Transient"};
-  inline constexpr std::array<const char*, 2> kMassMatrixTypes{"Consistent", "Lumped"};
+  inline constexpr std::array<const char*, 3> dynamicAnalysisTypes{"Modal (natural frequencies)", "Harmonic", "Transient"};
+  inline constexpr std::array<const char*, 2> massMatrixTypes{"Consistent", "Lumped"};
 
   // Dynamic inputs: analysis type, mode count, mass matrix.
   inline void renderDynamicAnalysisInputs(DynamicAnalysisInputs& inputs) {
     ImGui::PushID("dynamic_analysis");
     LAYOUT::field("Analysis");
-    if (ImGui::BeginCombo("##type", kDynamicAnalysisTypes[static_cast<std::size_t>(inputs.analysisType)])) {
-      for (std::size_t i = 0; i < kDynamicAnalysisTypes.size(); ++i) {
+    if (ImGui::BeginCombo("##type", dynamicAnalysisTypes[static_cast<std::size_t>(inputs.analysisType)])) {
+      for (std::size_t i = 0; i < dynamicAnalysisTypes.size(); ++i) {
         // Only modal is planned next; the others are listed to show where this goes.
         const ImGuiSelectableFlags flags = i == 0 ? ImGuiSelectableFlags_None : ImGuiSelectableFlags_Disabled;
-        if (ImGui::Selectable(kDynamicAnalysisTypes[i], inputs.analysisType == static_cast<int>(i), flags)) {
+        if (ImGui::Selectable(dynamicAnalysisTypes[i], inputs.analysisType == static_cast<int>(i), flags)) {
           inputs.analysisType = static_cast<int>(i);
         }
       }
@@ -56,14 +56,14 @@ namespace anaf::GUI {
     if (ImGui::InputInt("##modes", &inputs.modeCount)) inputs.modeCount = std::clamp(inputs.modeCount, 1, 1000);
     ImGui::SetItemTooltip("Number of lowest natural frequencies and mode shapes to extract");
     LAYOUT::field("Mass matrix");
-    ImGui::Combo("##mass", &inputs.massMatrix, kMassMatrixTypes.data(), static_cast<int>(kMassMatrixTypes.size()));
+    ImGui::Combo("##mass", &inputs.massMatrix, massMatrixTypes.data(), static_cast<int>(massMatrixTypes.size()));
     ImGui::SetItemTooltip("Consistent: from the element shape functions.\nLumped: diagonal, half of the element mass at each node.");
     ImGui::PopID();
   }
 
   // Content of the editors' "Analysis" tab: the load kind and what the run button will do.
-  inline void renderAnalysisTab(const BRIDGE::LoadKind kind, DynamicAnalysisInputs& inputs) {
-    const bool dynamic = kind == BRIDGE::LoadKind::dynamic;
+  inline void renderAnalysisTab(const BRIDGE::E_LoadKind kind, DynamicAnalysisInputs& inputs) {
+    const bool dynamic = kind == BRIDGE::E_LoadKind::Dynamic;
     ImGui::SeparatorText(dynamic ? "Dynamic Analysis" : "Linear Static Analysis");
     ImGui::TextDisabled("Load type: %s", dynamic ? "Dynamic" : "Constant (static)");
     ImGui::SetItemTooltip("Change it in the Analyze menu; the model is kept.");

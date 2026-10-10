@@ -31,7 +31,7 @@ namespace FEM::BEAM {
 
   namespace {
     using nlohmann::json;
-    constexpr int kSchemaVersion = 1;
+    constexpr int currentSchemaVersion = 1;
 
     template <class... Ts> struct Overloaded : Ts... { using Ts::operator()...; };
 
@@ -161,7 +161,7 @@ namespace FEM::BEAM {
   std::expected<void, std::string> validateSection(const BeamSection& section) {
     const std::string_view name = section.getName();
     if (name.empty()) return std::unexpected("name is empty");
-    if (name.size() > kMaxSectionNameLength) return std::unexpected(std::format("name is longer than {} bytes", kMaxSectionNameLength));
+    if (name.size() > maxSectionNameLength) return std::unexpected(std::format("name is longer than {} bytes", maxSectionNameLength));
     // Names are written into mesh files, like material names.
     const auto forbidden = [](const unsigned char c) { return c < 0x20 || c == 0x7f || c == '"'; };
     if (std::ranges::any_of(name, forbidden)) return std::unexpected("name must not contain quotes or control characters");
@@ -196,7 +196,7 @@ namespace FEM::BEAM {
       entry["name"] = section.getName();
       list.push_back(std::move(entry));
     }
-    const json root = {{"schemaVersion", kSchemaVersion}, {"units", {{"length", "m"}}}, {"sections", std::move(list)}};
+    const json root = {{"schemaVersion", currentSchemaVersion}, {"units", {{"length", "m"}}}, {"sections", std::move(list)}};
     std::string text;
     try {
       text = root.dump(2);

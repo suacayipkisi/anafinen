@@ -46,8 +46,8 @@
 
 namespace FEM::BEAM::ADAPTER {
 
-  inline constexpr std::string_view kMaterialSetPrefix = "Material:"; // same as the truss adapter
-  inline constexpr std::string_view kSectionSetPrefix = "Section:";
+  inline constexpr std::string_view materialSetPrefix = "Material:"; // same as the truss adapter
+  inline constexpr std::string_view sectionSetPrefix = "Section:";
 
   // True when some element of the model is a beam (ElementFormulation 1 or 2): such a file
   // goes to the beam adapter, every other one to the truss adapter.

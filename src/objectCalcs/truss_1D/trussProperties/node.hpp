@@ -28,35 +28,35 @@ namespace FEM::TRUSS {
     std::uint32_t m_nodeID{}; // implemented with assuming definition starting with "0 (zero)"
 
     std::array<bool, 3> m_isMovable{true, true, true};
-    std::array<double, 3> m_Location{};
+    std::array<double, 3> m_location{};
     std::array<double, 3> m_displacement{};
     std::vector<std::array<double, 3>> m_allowedMotionDirections{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
     
   public:
     Node() = default;
     Node(
-      const std::uint32_t ID,
+      const std::uint32_t id,
       const double locX,
       const double locY,
       const double locZ
     ):
-      m_nodeID(ID),
-      m_Location({locX, locY, locZ})
+      m_nodeID(id),
+      m_location({locX, locY, locZ})
     {}
 
 
     // isMovable[i] == true means the DOF is free to move.
     void setMovable(const std::array<bool, 3> isMovable);
 
-    inline void setLocation(const std::array<double, 3> location) {m_Location = location;}
+    inline void setLocation(const std::array<double, 3> location) {m_location = location;}
     inline void setDisplacements(std::array<double, 3> displacementOfNode) {m_displacement = displacementOfNode;}
     void setAllowedMotionDirections(std::vector<std::array<double, 3>> directions);
 
     std::uint32_t getNodeID() const {return m_nodeID;}
-    const std::array<double, 3>& getLocation() const {return m_Location;}
-    double getLocX() const {return m_Location[0];}
-    double getLocY() const {return m_Location[1];}
-    double getLocZ() const {return m_Location[2];}
+    const std::array<double, 3>& getLocation() const {return m_location;}
+    double getLocX() const {return m_location[0];}
+    double getLocY() const {return m_location[1];}
+    double getLocZ() const {return m_location[2];}
 
     const std::array<double, 3>& getDisplacement() const {return m_displacement;}
     const std::array<bool, 3>& getMovable() const {return m_isMovable;}

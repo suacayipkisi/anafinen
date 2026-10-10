@@ -38,20 +38,20 @@
 
 namespace anaf::GUI{
 
-  struct Truss_1D_GUI_PROPERTIES {
-    bool m_meshNeedsUpdate{true};
-    std::uint64_t m_lastRenderedVersion{0};
+  struct Truss1DGuiProperties {
+    bool meshNeedsUpdate{true};
+    std::uint64_t lastRenderedVersion{0};
   };
 
   class ViewportPanel : public IPanel {
   private:
-    static constexpr std::uint32_t kNone = std::numeric_limits<std::uint32_t>::max();
+    static constexpr std::uint32_t noSelection = std::numeric_limits<std::uint32_t>::max();
 
-    std::shared_ptr<Framebuffer> m_fbo_ ;
-    std::unique_ptr<ViewportRenderer> m_renderer_;
-    std::unique_ptr<BeamSceneRenderer> m_beamRenderer_; // beam sections and node spheres
+    std::shared_ptr<Framebuffer> m_fbo ;
+    std::unique_ptr<ViewportRenderer> m_renderer;
+    std::unique_ptr<BeamSceneRenderer> m_beamRenderer; // beam sections and node spheres
 
-    bool m_viewportHovered_ {false};
+    bool m_viewportHovered {false};
 
     float m_rotationYaw {0.9f};
     float m_rotationPitch {-0.7f};
@@ -61,11 +61,11 @@ namespace anaf::GUI{
     float m_sceneRadius {10.0f};
 
     bool m_draggingView {false};
-    bool m_fitRequested_ {false};
+    bool m_fitRequested {false};
     std::shared_ptr<ViewportDisplayOptions> m_display; // toggles set in ViewportToolbar
     ImVec2 m_viewportSize{0.0f, 0.0f};
 
-    Truss_1D_GUI_PROPERTIES truss_1d_gui_prop{};
+    Truss1DGuiProperties m_truss1dGuiProp{};
 
     std::shared_ptr<const anaf::BRIDGE::MeshData> m_currentMesh{nullptr};
     std::shared_ptr<const anaf::BRIDGE::BeamMeshData> m_currentBeamMesh{nullptr};
@@ -75,8 +75,8 @@ namespace anaf::GUI{
     std::uint32_t m_themeRevision{0}; // THEME::themeRevision() the buffers were built with
     std::vector<std::array<ImVec2, 2>> m_legendRects; // legend cards drawn last frame (min, max), block picking
     bool m_legendDragged{false}; // the active legend header moved, so its release is no click
-    std::uint32_t m_selectedNode{kNone};    // bridge selections, compared every frame so a
-    std::uint32_t m_selectedElement{kNone}; // selection made in a panel redraws the highlight
+    std::uint32_t m_selectedNode{noSelection};    // bridge selections, compared every frame so a
+    std::uint32_t m_selectedElement{noSelection}; // selection made in a panel redraws the highlight
     std::vector<std::pair<std::uint32_t, glm::vec3>> m_nodeLabels; // id, drawn position
 
     // Beam scene: every element sampled at stations along it (exact displacement field, values
@@ -137,7 +137,7 @@ namespace anaf::GUI{
     void onImGuiRender() override;
 
     // Frames the camera on the next mesh that is loaded (e.g. after an import).
-    void requestFit() { m_fitRequested_ = true; }
+    void requestFit() { m_fitRequested = true; }
     glm::mat4 getViewProjectionMatrix() const;
 
   };

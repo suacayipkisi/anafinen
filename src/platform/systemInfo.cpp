@@ -107,7 +107,7 @@ namespace anaf::PLATFORM {
   }
 
   std::optional<MemoryStatus> queryMemory() {
-    constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
+    constexpr double bytesPerGiB = 1024.0 * 1024.0 * 1024.0;
 #if defined(__linux__)
     std::ifstream meminfo("/proc/meminfo");
     std::string line;
@@ -120,12 +120,12 @@ namespace anaf::PLATFORM {
       if (key == "MemTotal:") totalKiB = value;
       if (key == "MemAvailable:") availableKiB = value;
     }
-    if (totalKiB > 0.0) return MemoryStatus{totalKiB * 1024.0 / kGiB, std::min(availableKiB, totalKiB) * 1024.0 / kGiB};
+    if (totalKiB > 0.0) return MemoryStatus{totalKiB * 1024.0 / bytesPerGiB, std::min(availableKiB, totalKiB) * 1024.0 / bytesPerGiB};
 #elif defined(_WIN32)
     MEMORYSTATUSEX memory{};
     memory.dwLength = sizeof(memory);
     if (GlobalMemoryStatusEx(&memory) && memory.ullTotalPhys > 0) {
-      return MemoryStatus{static_cast<double>(memory.ullTotalPhys) / kGiB, static_cast<double>(memory.ullAvailPhys) / kGiB};
+      return MemoryStatus{static_cast<double>(memory.ullTotalPhys) / bytesPerGiB, static_cast<double>(memory.ullAvailPhys) / bytesPerGiB};
     }
 #endif
     return std::nullopt;

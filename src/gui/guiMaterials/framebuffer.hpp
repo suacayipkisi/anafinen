@@ -29,19 +29,19 @@ namespace anaf::GUI {
   class Framebuffer {
   private:
     // Resolve targets: single-sample, used for ImGui display and entity-ID picking.
-    GlFramebuffer m_fbo_;
-    GlTexture m_texture_;
-    GlTexture m_entity_tex_;
+    GlFramebuffer m_fbo;
+    GlTexture m_texture;
+    GlTexture m_entityTex;
 
     // MSAA targets: actual render destination, resolved into the above after each frame.
-    GlFramebuffer m_msaa_fbo_;
-    GlRenderbuffer m_msaa_color_rbo_;
-    GlRenderbuffer m_msaa_entity_rbo_;
-    GlRenderbuffer m_msaa_depth_rbo_;
-    int m_samples_ {4};
+    GlFramebuffer m_msaaFbo;
+    GlRenderbuffer m_msaaColorRbo;
+    GlRenderbuffer m_msaaEntityRbo;
+    GlRenderbuffer m_msaaDepthRbo;
+    int m_samples {4};
 
-    std::uint32_t m_width_ {};
-    std::uint32_t m_height_ {};
+    std::uint32_t m_width {};
+    std::uint32_t m_height {};
 
     // Blits the MSAA attachments into the single-sample resolve targets. The MSAA FBO must
     // not be bound as the draw framebuffer here: radeonsi then blits stale samples (the last
@@ -55,8 +55,8 @@ namespace anaf::GUI {
 
     // Rendering happens into the MSAA framebuffer; resolve() (called from unbind) blits it down.
     void bind() const {
-      glBindFramebuffer(GL_FRAMEBUFFER, m_msaa_fbo_.get());
-      glViewport(0, 0, static_cast<GLsizei>(m_width_), static_cast<GLsizei>(m_height_));
+      glBindFramebuffer(GL_FRAMEBUFFER, m_msaaFbo.get());
+      glViewport(0, 0, static_cast<GLsizei>(m_width), static_cast<GLsizei>(m_height));
     }
 
     void unbind() const {
@@ -74,9 +74,9 @@ namespace anaf::GUI {
     // Returns -1 when the pixel is outside the framebuffer or nothing was drawn there.
     int readEntityID(int x, int y) const;
 
-    std::uint32_t getTextureID() const { return m_texture_.get();}
-    std::uint32_t getWidth() const { return m_width_;}
-    std::uint32_t getHeight() const { return m_height_;}
+    std::uint32_t getTextureID() const { return m_texture.get();}
+    std::uint32_t getWidth() const { return m_width;}
+    std::uint32_t getHeight() const { return m_height;}
 
   };
 

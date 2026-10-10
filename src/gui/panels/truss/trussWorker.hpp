@@ -50,6 +50,6 @@ namespace anaf::GUI::TRUSS_WORKER {
   // the snapshot), and publishes
   // the result snapshot unless the model was reset meanwhile (modelGeneration).
   // Call from the GUI thread.
-  void startSolve(BRIDGE::Gui_Calc_Bridge& bridge, ModelSource source);
+  void startSolve(BRIDGE::GuiCalcBridge& bridge, ModelSource source);
 
 } // namespace anaf::GUI::TRUSS_WORKER end

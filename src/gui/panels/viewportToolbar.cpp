@@ -28,7 +28,7 @@
 namespace anaf::GUI {
 
   namespace {
-    constexpr float kPadding = 6.0f;
+    constexpr float padding = 6.0f;
 
     // Hover and press keep the button's color, so only a toggle that is on stands out.
     bool stateButton(const char* label, const bool on) {
@@ -62,7 +62,7 @@ namespace anaf::GUI {
   } // namespace end
 
   float ViewportToolbar::windowHeight() {
-    return std::max(ImGui::GetFrameHeight() + 2.0f * kPadding, ImGui::GetStyle().WindowMinSize.y);
+    return std::max(ImGui::GetFrameHeight() + 2.0f * padding, ImGui::GetStyle().WindowMinSize.y);
   }
 
   ViewportToolbar::ViewportToolbar(std::shared_ptr<ViewportDisplayOptions> options, const IPanel* viewport) :
@@ -75,8 +75,8 @@ namespace anaf::GUI {
 
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
                                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kPadding, kPadding));
-    const bool visible = ImGui::Begin(kWindowName, nullptr, flags);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padding, padding));
+    const bool visible = ImGui::Begin(windowName, nullptr, flags);
     ImGui::PopStyleVar();
     if (!visible) {
       ImGui::End();

@@ -29,51 +29,51 @@
 
 namespace anaf::BRIDGE {
 
-  std::string_view getObjectTypeName(ObjectType obj) {
+  std::string_view getObjectTypeName(E_ObjectType obj) {
     switch (obj) {
-      case truss_SQPT:
+      case TrussSqpt:
         return "truss_SQPT";
-      case truss_imported_or_entered:
+      case TrussImportedOrEntered:
         return "truss_imported_or_entered";
-      case beam_frame:
+      case BeamFrame:
         return "beam_frame";
       default:
         return "no_type";
     }
   }
 
-  std::string_view getLoadKindName(const LoadKind kind) {
-    return kind == LoadKind::dynamic ? "dynamic" : "constant";
+  std::string_view getLoadKindName(const E_LoadKind kind) {
+    return kind == E_LoadKind::Dynamic ? "dynamic" : "constant";
   }
 
-  void Gui_Calc_Bridge::resetModel(const ObjectType type) {
+  void GuiCalcBridge::resetModel(const E_ObjectType type) {
     modelGeneration.fetch_add(1, std::memory_order_acq_rel);
     if (workerThread.joinable()) workerThread.request_stop();
-    m_isRunning = false;
-    m_isGeneratingPreview = false;
-    m_progress = 0.0f;
+    isRunning = false;
+    isGeneratingPreview = false;
+    progress = 0.0f;
     {
       std::lock_guard lock(dataMutex);
       activeMesh = nullptr;
       activeBeamMesh = nullptr;
       selectedNodeId = std::numeric_limits<std::uint32_t>::max();
       selectedElementId = std::numeric_limits<std::uint32_t>::max();
-      m_isValid = false;
-      m_energyDiff = 0.0;
+      isValid = false;
+      energyDiff = 0.0;
       deformScale = 1.0;
-      m_objectType = type;
+      objectType = type;
     }
     dataVersion.fetch_add(1, std::memory_order_release);
     anaf::LOG::info("Model reset, object type: {}", getObjectTypeName(type));
   }
 
-  void Gui_Calc_Bridge::joinWorker() {
+  void GuiCalcBridge::joinWorker() {
     if (!workerThread.joinable()) return;
     workerThread.request_stop();
     workerThread.join();
   }
 
-  bool Gui_Calc_Bridge::setStaticInfo() {
+  bool GuiCalcBridge::setStaticInfo() {
     const std::filesystem::path subpath = std::filesystem::path("bridge") / "materialProperties.json";
     const std::filesystem::path path = anaf::DIRECTORY::findAssetPath(subpath);
     if (path.empty()) {
@@ -94,7 +94,7 @@ namespace anaf::BRIDGE {
     return true;
   }
 
-  void Gui_Calc_Bridge::loadUserMaterials(std::filesystem::path path) {
+  void GuiCalcBridge::loadUserMaterials(std::filesystem::path path) {
     if (path.empty()) {
       anaf::LOG::warn("No user config directory; user materials will not be saved");
       return;
@@ -131,13 +131,13 @@ namespace anaf::BRIDGE {
     if (added > 0) anaf::LOG::info("Loaded {} user materials from {}", added, anaf::IO::pathToUtf8(m_userMaterialPath));
   }
 
-  std::uint32_t Gui_Calc_Bridge::appendUserMaterialLocked(const anaf::MATERIAL::Material& material) {
+  std::uint32_t GuiCalcBridge::appendUserMaterialLocked(const anaf::MATERIAL::Material& material) {
     const std::uint32_t id = m_nextMaterialID++;
     allMaterials.emplace_back(material.getProperties(), false, id);
     return id;
   }
 
-  void Gui_Calc_Bridge::saveUserMaterials() {
+  void GuiCalcBridge::saveUserMaterials() {
     if (m_userMaterialPath.empty()) return;
 
     std::vector<anaf::MATERIAL::Material> snapshot;
@@ -150,7 +150,7 @@ namespace anaf::BRIDGE {
     }
   }
 
-  std::expected<std::uint32_t, std::string> Gui_Calc_Bridge::addUserMaterial(const anaf::MATERIAL::Material& material) {
+  std::expected<std::uint32_t, std::string> GuiCalcBridge::addUserMaterial(const anaf::MATERIAL::Material& material) {
     if (const auto valid = anaf::MATERIAL::validateMaterial(material); !valid) {
       return std::unexpected(valid.error());
     }
@@ -170,7 +170,7 @@ namespace anaf::BRIDGE {
     return id;
   }
 
-  std::expected<void, std::string> Gui_Calc_Bridge::removeUserMaterial(const std::uint32_t materialID) {
+  std::expected<void, std::string> GuiCalcBridge::removeUserMaterial(const std::uint32_t materialID) {
     bool meshShifted = false;
     {
       std::lock_guard lock(dataMutex);
@@ -182,7 +182,7 @@ namespace anaf::BRIDGE {
         return std::unexpected(std::format("'{}' is a built-in material", material.getMaterialType()));
       }
       // A running worker publishes element indices taken from its own copy of the list.
-      if (m_isRunning.load() || m_isGeneratingPreview.load()) {
+      if (isRunning.load() || isGeneratingPreview.load()) {
         return std::unexpected("wait until the running solve / preview has finished");
       }
 
@@ -221,16 +221,16 @@ namespace anaf::BRIDGE {
     return {};
   }
 
-  std::optional<std::uint32_t> Gui_Calc_Bridge::findMaterialIndex(const std::uint32_t materialID) const {
+  std::optional<std::uint32_t> GuiCalcBridge::findMaterialIndex(const std::uint32_t materialID) const {
     const auto it = std::ranges::find(allMaterials, materialID, &anaf::MATERIAL::Material::getMaterialID);
     if (it == allMaterials.end()) return std::nullopt;
     return static_cast<std::uint32_t>(it - allMaterials.begin());
   }
 
-  bool Gui_Calc_Bridge::loadSectionCatalog() {
-    const std::filesystem::path path = anaf::DIRECTORY::findAssetPath(FEM::BEAM::kSectionCatalogAsset);
+  bool GuiCalcBridge::loadSectionCatalog() {
+    const std::filesystem::path path = anaf::DIRECTORY::findAssetPath(FEM::BEAM::sectionCatalogAsset);
     if (path.empty()) {
-      anaf::LOG::error("Section catalogue not found: assets/{}", FEM::BEAM::kSectionCatalogAsset);
+      anaf::LOG::error("Section catalogue not found: assets/{}", FEM::BEAM::sectionCatalogAsset);
       return false;
     }
     auto loaded = FEM::BEAM::loadSectionLibrary(path);
@@ -245,7 +245,7 @@ namespace anaf::BRIDGE {
     return true;
   }
 
-  void Gui_Calc_Bridge::loadUserSections(std::filesystem::path path) {
+  void GuiCalcBridge::loadUserSections(std::filesystem::path path) {
     if (path.empty()) {
       anaf::LOG::warn("No user config directory; user sections will not be saved");
       return;
@@ -281,13 +281,13 @@ namespace anaf::BRIDGE {
     if (added > 0) anaf::LOG::info("Loaded {} user sections from {}", added, anaf::IO::pathToUtf8(m_userSectionPath));
   }
 
-  std::uint32_t Gui_Calc_Bridge::appendUserSectionLocked(const FEM::BEAM::BeamSection& section) {
+  std::uint32_t GuiCalcBridge::appendUserSectionLocked(const FEM::BEAM::BeamSection& section) {
     const std::uint32_t id = m_nextSectionID++;
     allSections.emplace_back(section.getName(), section.getShape(), false, id);
     return id;
   }
 
-  void Gui_Calc_Bridge::saveUserSections() {
+  void GuiCalcBridge::saveUserSections() {
     if (m_userSectionPath.empty()) return;
     std::vector<FEM::BEAM::BeamSection> snapshot;
     {
@@ -299,7 +299,7 @@ namespace anaf::BRIDGE {
     }
   }
 
-  std::expected<std::uint32_t, std::string> Gui_Calc_Bridge::addUserSection(const FEM::BEAM::BeamSection& section) {
+  std::expected<std::uint32_t, std::string> GuiCalcBridge::addUserSection(const FEM::BEAM::BeamSection& section) {
     if (const auto valid = FEM::BEAM::validateSection(section); !valid) return std::unexpected(valid.error());
     std::uint32_t id{};
     {
@@ -316,7 +316,7 @@ namespace anaf::BRIDGE {
     return id;
   }
 
-  std::expected<void, std::string> Gui_Calc_Bridge::removeUserSection(const std::uint32_t sectionID) {
+  std::expected<void, std::string> GuiCalcBridge::removeUserSection(const std::uint32_t sectionID) {
     bool meshShifted = false;
     {
       std::lock_guard lock(dataMutex);
@@ -324,7 +324,7 @@ namespace anaf::BRIDGE {
       if (!index) return std::unexpected(std::format("no section with ID {}", sectionID));
       const auto& section = allSections[*index];
       if (section.getIsBuiltin()) return std::unexpected(std::format("'{}' is a catalogue section", section.getName()));
-      if (m_isRunning.load() || m_isGeneratingPreview.load()) {
+      if (isRunning.load() || isGeneratingPreview.load()) {
         return std::unexpected("wait until the running solve has finished");
       }
       const auto uses = [i = *index](const FEM::BEAM::BeamElement& element) { return element.sectionID == i; };
@@ -347,15 +347,15 @@ namespace anaf::BRIDGE {
     return {};
   }
 
-  std::optional<std::uint32_t> Gui_Calc_Bridge::findSectionIndex(const std::uint32_t sectionID) const {
+  std::optional<std::uint32_t> GuiCalcBridge::findSectionIndex(const std::uint32_t sectionID) const {
     const auto it = std::ranges::find(allSections, sectionID, &FEM::BEAM::BeamSection::getSectionID);
     if (it == allSections.end()) return std::nullopt;
     return static_cast<std::uint32_t>(it - allSections.begin());
   }
 
-  Gui_Calc_Bridge& buildBridge() {
-    static Gui_Calc_Bridge bridge{};
-    return bridge;
+  GuiCalcBridge& buildBridge() {
+    static GuiCalcBridge s_bridge{};
+    return s_bridge;
   }
 
 } // namespace anaf::BRIDGE end

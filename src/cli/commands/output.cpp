@@ -89,14 +89,14 @@ namespace anaf::CLI::OUTPUT {
   }
 
   std::string releaseLabel(const std::uint16_t releases) {
-    constexpr std::array<std::string_view, 6> kNames{"N", "Vy", "Vz", "T", "My", "Mz"};
+    constexpr std::array<std::string_view, 6> sectionForceNames{"N", "Vy", "Vz", "T", "My", "Mz"};
     const auto endLabel = [&](const int end) {
       const auto bits = FEM::BEAM::RELEASE::ofEnd(releases, end);
       if (bits == 0) return std::string{};
       if (bits == FEM::BEAM::RELEASE::hinge) return std::format("hinge at {}", end + 1);
       std::string names;
-      for (std::size_t k = 0; k < kNames.size(); ++k) {
-        if ((bits >> k) & 1U) names += std::format("{}{}", names.empty() ? "" : ",", kNames[k]);
+      for (std::size_t k = 0; k < sectionForceNames.size(); ++k) {
+        if ((bits >> k) & 1U) names += std::format("{}{}", names.empty() ? "" : ",", sectionForceNames[k]);
       }
       return std::format("{} at {}", names, end + 1);
     };
@@ -106,15 +106,15 @@ namespace anaf::CLI::OUTPUT {
     return second.empty() ? first : first + "; " + second;
   }
 
-  std::string_view formulationName(const FEM::BEAM::Formulation formulation) {
-    return formulation == FEM::BEAM::Formulation::Timoshenko ? "Timoshenko" : "Euler-Bernoulli";
+  std::string_view formulationName(const FEM::BEAM::E_Formulation formulation) {
+    return formulation == FEM::BEAM::E_Formulation::Timoshenko ? "Timoshenko" : "Euler-Bernoulli";
   }
 
-  std::expected<FEM::BEAM::Formulation, std::string> parseFormulation(const std::string_view token) {
+  std::expected<FEM::BEAM::E_Formulation, std::string> parseFormulation(const std::string_view token) {
     std::string lower(token);
     for (auto& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    if (lower == "eb" || lower == "euler-bernoulli" || lower == "euler") return FEM::BEAM::Formulation::EulerBernoulli;
-    if (lower == "timoshenko" || lower == "ti" || lower == "timo") return FEM::BEAM::Formulation::Timoshenko;
+    if (lower == "eb" || lower == "euler-bernoulli" || lower == "euler") return FEM::BEAM::E_Formulation::EulerBernoulli;
+    if (lower == "timoshenko" || lower == "ti" || lower == "timo") return FEM::BEAM::E_Formulation::Timoshenko;
     return std::unexpected(std::format("formulation: '{}' is neither eb nor timoshenko", token));
   }
 

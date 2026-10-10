@@ -1,0 +1,49 @@
+# Naming rules of the project (readability-identifier-naming).
+#   Types (class, struct, union):         PascalCase
+#   Enums:                                E_PascalCase, enumerators PascalCase
+#   Functions and methods:                camelCase
+#   Variables and parameters:             camelCase
+#   Private / protected data members:     m_camelCase
+#   Public data members (aggregates):     camelCase
+#   Mutable globals and class statics:    g_camelCase
+#   Function-local statics:               s_camelCase
+#   Constants (constexpr / const):        camelCase, no prefix
+# Exceptions:
+#   Engineering symbols as locals, parameters and fields: E, G, L, Iz, My, Vy, S0, L2 ...
+#   File format versions as enumerators: V4_1, V2_2 ...
+#   Local variables in OpenGL code that mirror a GL / GLSL name may keep the GL style
+#   (snake_case); mark each with NOLINT(readability-identifier-naming).
+Checks: '-*,readability-identifier-naming'
+HeaderFilterRegex: '/anafinen/(src|tools|tests)/'
+CheckOptions:
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.UnionCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.EnumPrefix: E_
+  readability-identifier-naming.EnumConstantCase: CamelCase
+  readability-identifier-naming.EnumConstantIgnoredRegexp: '^V[0-9]+_[0-9]+$'
+  readability-identifier-naming.FunctionCase: camelBack
+  readability-identifier-naming.MethodCase: camelBack
+  readability-identifier-naming.ParameterCase: camelBack
+  readability-identifier-naming.ParameterIgnoredRegexp: '^[A-Z][a-z]?[0-9]?$'
+  readability-identifier-naming.LocalVariableCase: camelBack
+  readability-identifier-naming.LocalVariableIgnoredRegexp: '^[A-Z][a-z]?[0-9]?$'
+  readability-identifier-naming.LocalConstantCase: camelBack
+  readability-identifier-naming.LocalConstantIgnoredRegexp: '^[A-Z][a-z]?[0-9]?$'
+  readability-identifier-naming.PrivateMemberCase: camelBack
+  readability-identifier-naming.PrivateMemberPrefix: m_
+  readability-identifier-naming.ProtectedMemberCase: camelBack
+  readability-identifier-naming.ProtectedMemberPrefix: m_
+  readability-identifier-naming.PublicMemberCase: camelBack
+  readability-identifier-naming.PublicMemberIgnoredRegexp: '^[A-Z][a-z]?[0-9]?$'
+  readability-identifier-naming.ClassConstantCase: camelBack
+  readability-identifier-naming.ClassMemberCase: camelBack
+  readability-identifier-naming.ClassMemberPrefix: g_
+  readability-identifier-naming.GlobalVariableCase: camelBack
+  readability-identifier-naming.GlobalVariablePrefix: g_
+  readability-identifier-naming.GlobalConstantCase: camelBack
+  readability-identifier-naming.ConstexprVariableCase: camelBack
+  readability-identifier-naming.StaticConstantCase: camelBack
+  readability-identifier-naming.StaticVariableCase: camelBack
+  readability-identifier-naming.StaticVariablePrefix: s_

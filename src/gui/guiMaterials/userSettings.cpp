@@ -32,10 +32,10 @@
 namespace anaf::GUI::SETTINGS {
 
   namespace {
-    constexpr const char* kFileName = "userSettings.json";
-    constexpr int kFormatVersion = 1;
+    constexpr const char* fileName = "userSettings.json";
+    constexpr int formatVersion = 1;
     // Settings file before 2026-10-09: "key=value" lines, only the Welcome panel's flag.
-    constexpr const char* kLegacyFileName = "guiSettings.ini";
+    constexpr const char* legacyFileName = "guiSettings.ini";
 
     // The whole user document, so keys of other (newer) versions survive a save.
     nlohmann::json g_document = nlohmann::json::object();
@@ -104,7 +104,7 @@ namespace anaf::GUI::SETTINGS {
     void readLegacyFile(UserSettings& settings) {
       const auto dir = anaf::DIRECTORY::getUserConfigDirectory();
       if (dir.empty()) return;
-      std::ifstream file(dir / kLegacyFileName);
+      std::ifstream file(dir / legacyFileName);
       std::string line;
       while (std::getline(file, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
@@ -115,7 +115,7 @@ namespace anaf::GUI::SETTINGS {
 
     UserSettings load() {
       UserSettings settings;
-      apply(readJson(anaf::DIRECTORY::findAssetPath(std::filesystem::path("settings") / kFileName)), settings);
+      apply(readJson(anaf::DIRECTORY::findAssetPath(std::filesystem::path("settings") / fileName)), settings);
       const auto userPath = userSettingsPath();
       std::error_code ec;
       if (!userPath.empty() && std::filesystem::is_regular_file(userPath, ec)) {
@@ -130,12 +130,12 @@ namespace anaf::GUI::SETTINGS {
 
   std::filesystem::path userSettingsPath() {
     const auto dir = anaf::DIRECTORY::getUserConfigDirectory();
-    return dir.empty() ? dir : dir / kFileName;
+    return dir.empty() ? dir : dir / fileName;
   }
 
   UserSettings& settings() {
-    static UserSettings instance = load();
-    return instance;
+    static UserSettings s_instance = load();
+    return s_instance;
   }
 
   void save() {
@@ -143,7 +143,7 @@ namespace anaf::GUI::SETTINGS {
     if (path.empty()) return;
     const UserSettings& current = settings();
 
-    g_document["version"] = kFormatVersion;
+    g_document["version"] = formatVersion;
     g_document["theme"] = current.theme;
     objectAt(g_document, "welcome")["showOnStartup"] = current.showWelcomeOnStartup;
     nlohmann::json& legends = objectAt(objectAt(g_document, "viewport"), "legends");

@@ -33,7 +33,7 @@
 //   footer            deformation scale, run button, model buttons; always visible
 namespace anaf::GUI::LAYOUT {
 
-  inline constexpr float kRunButtonHeight = 32.0f;
+  inline constexpr float runButtonHeight = 32.0f;
   // Status colors (good / warn / bad / note) come from THEME::theme().
 
   // Bordered card that is as tall as its content. Always pair with endCard().
@@ -89,7 +89,7 @@ namespace anaf::GUI::LAYOUT {
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.primaryHovered);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, palette.primaryActive);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-    const bool pressed = ImGui::Button(label, ImVec2(-FLT_MIN, kRunButtonHeight));
+    const bool pressed = ImGui::Button(label, ImVec2(-FLT_MIN, runButtonHeight));
     ImGui::PopStyleColor(4);
     return pressed;
   }
@@ -98,7 +98,7 @@ namespace anaf::GUI::LAYOUT {
   inline float footerHeight(const int rows, const int runButtons) {
     const ImGuiStyle& style = ImGui::GetStyle();
     return style.ItemSpacing.y * 2.0f + 1.0f + static_cast<float>(rows) * ImGui::GetFrameHeightWithSpacing() +
-           static_cast<float>(runButtons) * (kRunButtonHeight + style.ItemSpacing.y);
+           static_cast<float>(runButtons) * (runButtonHeight + style.ItemSpacing.y);
   }
 
   // Scrolling body of a tab, ending footer pixels above the window bottom. Always pair with endBody().

@@ -29,7 +29,7 @@
 // the active palette through theme() every frame, so a theme switch needs no restart.
 namespace anaf::GUI::THEME {
 
-  enum class ThemeId : std::uint8_t {
+  enum class E_ThemeId : std::uint8_t {
     SteelCyan,      // dark blue-steel surfaces, cyan accent
     GraphiteOrange, // neutral graphite surfaces, orange accent
     ClassicFem,     // dark panels, blue accent, light-to-navy viewport gradient (classic FEM pre/post look)
@@ -38,8 +38,8 @@ namespace anaf::GUI::THEME {
     StudioLight,    // light grey surfaces, blue accent, light viewport
   };
 
-  inline constexpr std::array<ThemeId, 6> kAllThemes{ThemeId::SteelCyan,      ThemeId::GraphiteOrange, ThemeId::ClassicFem,
-                                                     ThemeId::MidnightViolet, ThemeId::EmeraldSlate,   ThemeId::StudioLight};
+  inline constexpr std::array<E_ThemeId, 6> allThemes{E_ThemeId::SteelCyan,      E_ThemeId::GraphiteOrange, E_ThemeId::ClassicFem,
+                                                     E_ThemeId::MidnightViolet, E_ThemeId::EmeraldSlate,   E_ThemeId::StudioLight};
 
   struct ThemePalette {
     const char* key{""};  // stable id in userSettings.json
@@ -87,13 +87,13 @@ namespace anaf::GUI::THEME {
 
   // Active palette.
   const ThemePalette& theme();
-  ThemeId currentTheme();
-  const ThemePalette& palette(ThemeId id);
+  E_ThemeId currentTheme();
+  const ThemePalette& palette(E_ThemeId id);
   // Theme with this key; SteelCyan for an unknown key.
-  ThemeId themeFromKey(std::string_view key);
+  E_ThemeId themeFromKey(std::string_view key);
 
   // Sets the palette and rewrites the ImGui style colors. ImPlot follows ImGui's colors on its own.
-  void applyTheme(ThemeId id);
+  void applyTheme(E_ThemeId id);
 
   // Bumped by every applyTheme(), so the viewport can rebuild buffers that bake palette colors in.
   std::uint32_t themeRevision();

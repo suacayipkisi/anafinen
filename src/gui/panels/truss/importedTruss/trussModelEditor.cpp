@@ -48,28 +48,28 @@ namespace anaf::GUI {
 
   namespace {
 
-    using BRIDGE::Gui_Calc_Bridge;
+    using BRIDGE::GuiCalcBridge;
     using BRIDGE::MeshData;
 
-    constexpr double kCm2ToM2 = 1e-4;
+    constexpr double cm2ToM2 = 1e-4;
 
     // Runs edit on a copy of the active snapshot (an empty one if there is none) under
     // dataMutex and publishes the copy. edit returns false to publish nothing.
     template <typename Edit>
-    bool editModel(Gui_Calc_Bridge& bridge, Edit&& edit) {
+    bool editModel(GuiCalcBridge& bridge, Edit&& edit) {
       {
         std::lock_guard lock(bridge.dataMutex);
         auto mesh = bridge.activeMesh ? std::make_shared<MeshData>(*bridge.activeMesh) : std::make_shared<MeshData>();
         if (!edit(*mesh)) return false;
         FEM::TRUSS::dropResults(*mesh);
         bridge.activeMesh = std::move(mesh);
-        bridge.m_isValid = false;
+        bridge.isValid = false;
       }
       bridge.dataVersion.fetch_add(1, std::memory_order_release);
       return true;
     }
 
-    std::shared_ptr<const MeshData> currentMesh(Gui_Calc_Bridge& bridge) {
+    std::shared_ptr<const MeshData> currentMesh(GuiCalcBridge& bridge) {
       std::lock_guard lock(bridge.dataMutex);
       return bridge.activeMesh;
     }
@@ -82,13 +82,13 @@ namespace anaf::GUI {
     m_barNodeA = 0;
     m_barNodeB = 1;
     m_areaCm2 = 80.0;
-    m_selectedBar = kNone;
+    m_selectedBar = noSelection;
     m_force = {0.0, 0.0, 0.0};
     m_fixed = {false, false, false};
     m_supportInclined = false;
     m_vectorsRestrained = true;
     setSupportVectors({{0.0, 1.0, 0.0}});
-    m_loadedNode = kNone;
+    m_loadedNode = noSelection;
     m_status.clear();
     m_statusIsError = false;
   }
@@ -104,7 +104,7 @@ namespace anaf::GUI {
     m_loadedNode = selectedNode;
     m_force = {0.0, 0.0, 0.0};
     m_fixed = {false, false, false};
-    if (selectedNode == kNone) return;
+    if (selectedNode == noSelection) return;
 
     auto& bridge = BRIDGE::buildBridge();
     std::lock_guard lock(bridge.dataMutex);
@@ -156,7 +156,7 @@ namespace anaf::GUI {
       if (wireframe > 0) ImGui::TextDisabled("Wireframe edges (not solved): %zu", wireframe);
       ImGui::Separator();
       if (mesh->hasResults) {
-        const bool valid = bridge.m_isValid.load();
+        const bool valid = bridge.isValid.load();
         ImGui::TextColored(valid ? THEME::theme().good : THEME::theme().warn, "%s", valid ? "Solved, energy check passed" : "Results shown (energy check not passed)");
       } else {
         ImGui::TextDisabled("No results yet: run the solver below.");
@@ -193,11 +193,11 @@ namespace anaf::GUI {
       {
         std::lock_guard lock(bridge.dataMutex);
         const bool exists = bridge.activeMesh && typed < bridge.activeMesh->trussNodes.size();
-        bridge.selectedNodeId = exists ? typed : kNone;
+        bridge.selectedNodeId = exists ? typed : noSelection;
       }
       bridge.dataVersion.fetch_add(1, std::memory_order_release); // redraw the highlight
     }
-    if (selectedNode == kNone) {
+    if (selectedNode == noSelection) {
       ImGui::TextDisabled("Click a node in the viewport (Nodes toolbar toggle on) or type its id.");
       return;
     }
@@ -222,10 +222,10 @@ namespace anaf::GUI {
       if (deleted) {
         {
           std::lock_guard lock(bridge.dataMutex);
-          bridge.selectedNodeId = kNone;
+          bridge.selectedNodeId = noSelection;
         }
-        m_selectedBar = kNone;
-        m_loadedNode = kNone;
+        m_selectedBar = noSelection;
+        m_loadedNode = noSelection;
         setStatus(std::format("Node {} deleted with its bars; later node ids moved down by one", selectedNode), false);
       }
     }
@@ -255,7 +255,7 @@ namespace anaf::GUI {
       const auto index = bridge.findMaterialIndex(m_materialID); // caller holds dataMutex
       if (!index || !(m_areaCm2 > 0.0)) return false;
       element.materialID = *index;
-      element.crossSectionArea = m_areaCm2 * kCm2ToM2;
+      element.crossSectionArea = m_areaCm2 * cm2ToM2;
       element.isWireframe = false;
       return true;
     };
@@ -304,7 +304,7 @@ namespace anaf::GUI {
 
     const auto mesh = currentMesh(bridge);
     const std::size_t count = mesh ? mesh->trussElements.size() : 0;
-    if (m_selectedBar != kNone && m_selectedBar >= count) m_selectedBar = kNone;
+    if (m_selectedBar != noSelection && m_selectedBar >= count) m_selectedBar = noSelection;
 
     ImGui::BeginChild("EditorBarList", ImVec2(0.0f, 160.0f), true);
     if (mesh) {
@@ -322,11 +322,11 @@ namespace anaf::GUI {
             const auto material = element.materialID < bridge.allMaterials.size()
               ? std::string(bridge.allMaterials[element.materialID].getMaterialType()) : std::string("?");
             label = std::format("{}: {} - {}  {}  {:.4g} cm^2", index, element.node1, element.node2, material,
-                                element.crossSectionArea / kCm2ToM2);
+                                element.crossSectionArea / cm2ToM2);
           }
           ImGui::PushID(row);
           if (ImGui::Selectable(label.c_str(), m_selectedBar == index)) {
-            m_selectedBar = m_selectedBar == index ? kNone : index;
+            m_selectedBar = m_selectedBar == index ? noSelection : index;
           }
           ImGui::PopID();
         }
@@ -334,7 +334,7 @@ namespace anaf::GUI {
     }
     ImGui::EndChild();
 
-    ImGui::BeginDisabled(m_selectedBar == kNone);
+    ImGui::BeginDisabled(m_selectedBar == noSelection);
     if (ImGui::Button("Apply to Selected", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
       const auto bar = m_selectedBar;
       const bool applied = editModel(bridge, [&](MeshData& edited) {
@@ -352,7 +352,7 @@ namespace anaf::GUI {
         return true;
       });
       if (deleted) {
-        m_selectedBar = kNone;
+        m_selectedBar = noSelection;
         setStatus(std::format("Bar {} deleted", bar), false);
       }
     }
@@ -394,7 +394,7 @@ namespace anaf::GUI {
         for (auto& element : edited.trussElements) {
           if (element.isWireframe && !m_includeWireframe) continue;
           element.materialID = *index;
-          element.crossSectionArea = m_wholeAreaCm2 * kCm2ToM2;
+          element.crossSectionArea = m_wholeAreaCm2 * cm2ToM2;
           element.isWireframe = false;
           ++changed;
         }
@@ -409,13 +409,13 @@ namespace anaf::GUI {
   void TrussModelEditor::readLibrary() {
     m_libraryRead = true;
     m_library.clear();
-    m_libraryDir = anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::TRUSS::LIBRARY::kLibrarySubdir));
+    m_libraryDir = anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::TRUSS::LIBRARY::librarySubdir));
     if (m_libraryDir.empty()) {
-      m_libraryError = std::format("assets/{} not found", FEM::TRUSS::LIBRARY::kLibrarySubdir);
+      m_libraryError = std::format("assets/{} not found", FEM::TRUSS::LIBRARY::librarySubdir);
       anaf::LOG::warn("Built-in truss library: {}", m_libraryError);
       return;
     }
-    auto index = FEM::TRUSS::LIBRARY::loadIndex(m_libraryDir / std::filesystem::path(FEM::TRUSS::LIBRARY::kIndexFile));
+    auto index = FEM::TRUSS::LIBRARY::loadIndex(m_libraryDir / std::filesystem::path(FEM::TRUSS::LIBRARY::indexFileName));
     if (!index) {
       m_libraryError = index.error();
       anaf::LOG::warn("Built-in truss library: {}", m_libraryError);
@@ -467,7 +467,7 @@ namespace anaf::GUI {
   }
 
   void TrussModelEditor::renderSupportsAndLoads(const std::uint32_t selectedNode, const bool withLoads) {
-    if (selectedNode == kNone) {
+    if (selectedNode == noSelection) {
       ImGui::TextDisabled("Click a node in the viewport (or type its id in the Model tab).");
       return;
     }
@@ -602,8 +602,8 @@ namespace anaf::GUI {
     }
     ImGui::SetItemTooltip("Deformation scale of the drawn shape (1 = true size)");
 
-    if (bridge.m_isRunning.load()) {
-      ImGui::ProgressBar(bridge.m_progress.load(), ImVec2(-FLT_MIN, 0.0f));
+    if (bridge.isRunning.load()) {
+      ImGui::ProgressBar(bridge.progress.load(), ImVec2(-FLT_MIN, 0.0f));
       ImGui::BeginDisabled();
       LAYOUT::primaryButton("Calculating...");
       ImGui::EndDisabled();
@@ -621,12 +621,12 @@ namespace anaf::GUI {
 
   void TrussModelEditor::renderModelButtons() {
     auto& bridge = BRIDGE::buildBridge();
-    ImGui::BeginDisabled(bridge.m_isRunning.load() || bridge.m_isGeneratingPreview.load());
+    ImGui::BeginDisabled(bridge.isRunning.load() || bridge.isGeneratingPreview.load());
     if (ImGui::Button("Import File...", ImVec2(LAYOUT::splitWidth(2), 0.0f)) && onRequestImport) onRequestImport();
     ImGui::SetItemTooltip("File > Import Mesh / CAD (Ctrl+O)");
     ImGui::SameLine();
     if (ImGui::Button("Clear Model", ImVec2(-FLT_MIN, 0.0f))) {
-      bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
+      bridge.resetModel(BRIDGE::E_ObjectType::TrussImportedOrEntered);
       resetState();
     }
     ImGui::EndDisabled();
@@ -636,17 +636,17 @@ namespace anaf::GUI {
     if (!isOpen) return;
     auto& bridge = BRIDGE::buildBridge();
 
-    std::uint32_t selectedNode = kNone;
+    std::uint32_t selectedNode = noSelection;
     {
       std::lock_guard lock(bridge.dataMutex);
       selectedNode = bridge.selectedNodeId;
-      if (!bridge.activeMesh || selectedNode >= bridge.activeMesh->trussNodes.size()) selectedNode = kNone;
+      if (!bridge.activeMesh || selectedNode >= bridge.activeMesh->trussNodes.size()) selectedNode = noSelection;
     }
     syncSelection(selectedNode);
 
-    const auto loadKind = bridge.m_loadKind.load();
-    const bool dynamic = loadKind == BRIDGE::LoadKind::dynamic;
-    const bool running = bridge.m_isRunning.load();
+    const auto loadKind = bridge.loadKind.load();
+    const bool dynamic = loadKind == BRIDGE::E_LoadKind::Dynamic;
+    const bool running = bridge.isRunning.load();
     // Footer rows: deformation scale (+ progress bar) and the model buttons; one run button.
     const float footer = dynamic ? LAYOUT::footerHeight(1, 1) : LAYOUT::footerHeight(running ? 3 : 2, 1);
 
@@ -654,7 +654,7 @@ namespace anaf::GUI {
     renderSummary();
 
     // The solve works on a copy; edits made meanwhile would be overwritten by its result.
-    const bool busy = running || bridge.m_isGeneratingPreview.load();
+    const bool busy = running || bridge.isGeneratingPreview.load();
     if (ImGui::BeginTabBar("##truss_editor_tabs")) {
       if (ImGui::BeginTabItem("Model")) {
         LAYOUT::beginBody("##truss_editor_model_tab", footer);

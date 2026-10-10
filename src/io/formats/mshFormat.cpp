@@ -154,8 +154,8 @@ namespace anaf::IO::formats {
           else if (section == "NOD") readNodes1();
           else if (section == "Elements") m_version >= 4.0 ? readElements4() : readElements2();
           else if (section == "ELM") readElements1();
-          else if (section == "NodeData") readData(FieldLocation::Node, section);
-          else if (section == "ElementData") readData(FieldLocation::Element, section);
+          else if (section == "NodeData") readData(E_FieldLocation::Node, section);
+          else if (section == "ElementData") readData(E_FieldLocation::Element, section);
           else if (section == "AnafData") readAnafData();
           else skipSection(section);
         }
@@ -497,13 +497,13 @@ namespace anaf::IO::formats {
       };
       struct RawField {
         std::string name;
-        FieldLocation location{FieldLocation::Node};
+        E_FieldLocation location{E_FieldLocation::Node};
         int components{1};
         std::map<int, RawStep> steps;
         bool inconsistent{false};
       };
 
-      void readData(const FieldLocation location, const std::string& section) {
+      void readData(const E_FieldLocation location, const std::string& section) {
         std::vector<std::string> strings(m_cursor.number<std::size_t>());
         for (auto& s : strings) {
           m_cursor.skipSpace();
@@ -544,7 +544,7 @@ namespace anaf::IO::formats {
       }
 
       struct StepInfo {
-        StepKind kind{StepKind::Time};
+        E_StepKind kind{E_StepKind::Time};
         std::vector<std::string> labels;
       };
 
@@ -581,13 +581,13 @@ namespace anaf::IO::formats {
             StepInfo info;
             const auto stepKind = stepKindFromName(kindName);
             if (!stepKind) m_model.warnings.push_back("MSH: unknown step kind '" + kindName + "' read as Time");
-            info.kind = stepKind.value_or(StepKind::Time);
+            info.kind = stepKind.value_or(E_StepKind::Time);
             const std::string name = quotedLine(false);
             if (labelled) {
               info.labels.resize(steps);
               for (auto& label : info.labels) label = quotedLine(true);
             }
-            m_stepInfo[{name, static_cast<int>(onNodes ? FieldLocation::Node : FieldLocation::Element)}] = std::move(info);
+            m_stepInfo[{name, static_cast<int>(onNodes ? E_FieldLocation::Node : E_FieldLocation::Element)}] = std::move(info);
           } else {
             throw ParseFailure("MSH: unknown $AnafData record '" + std::string(kind) + "'");
           }
@@ -624,14 +624,14 @@ namespace anaf::IO::formats {
           set.dimension = dim;
           std::set<std::uint32_t> unique;
           if (dim == 0) {
-            set.kind = SetKind::Node;
+            set.kind = E_SetKind::Node;
             for (const auto& location : members) {
               const auto& block = m_model.blocks[location.block];
               const int n = elementInfo(block.type).nodeCount;
               for (int k = 0; k < n; ++k) unique.insert(block.connectivity[location.local * static_cast<std::size_t>(n) + k]);
             }
           } else {
-            set.kind = SetKind::Element;
+            set.kind = E_SetKind::Element;
             for (const auto& location : members) unique.insert(static_cast<std::uint32_t>(offsets[location.block] + location.local));
           }
           set.members.assign(unique.begin(), unique.end());
@@ -663,7 +663,7 @@ namespace anaf::IO::formats {
             m_model.warnings.push_back(std::format("field '{}' changes its component count between steps and was skipped", rawField.name));
             continue;
           }
-          const bool onNodes = rawField.location == FieldLocation::Node;
+          const bool onNodes = rawField.location == E_FieldLocation::Node;
           const std::size_t entities = onNodes ? m_model.nodes.size() : m_model.elementCount();
           const auto components = static_cast<std::size_t>(rawField.components);
           Field field;
@@ -712,7 +712,7 @@ namespace anaf::IO::formats {
     class MshWriter {
     public:
       MshWriter(const MeshModel& model, const WriteOptions& options, WriteReport& report)
-        : m_model(model), m_binary(options.encoding == Encoding::Binary), m_v41(options.mshVersion == MshVersion::V4_1), m_report(report) {
+        : m_model(model), m_binary(options.encoding == E_Encoding::Binary), m_v41(options.mshVersion == E_MshVersion::V4_1), m_report(report) {
         prepareTags();
         preparePartitions();
       }
@@ -798,7 +798,7 @@ namespace anaf::IO::formats {
         const std::size_t elementTotal = m_model.elementCount();
         std::vector<std::vector<int>> setsOfElement(elementTotal);
         for (std::size_t s = 0; s < m_model.sets.size(); ++s) {
-          if (m_model.sets[s].kind != SetKind::Element) continue;
+          if (m_model.sets[s].kind != E_SetKind::Element) continue;
           for (const auto member : m_model.sets[s].members) setsOfElement[member].push_back(static_cast<int>(s));
         }
         m_elementEntity.resize(elementTotal);
@@ -839,11 +839,11 @@ namespace anaf::IO::formats {
         std::map<int, std::set<int>> usedPhysical;
         std::set<int> requested;
         for (const auto& set : m_model.sets) {
-          if (set.kind == SetKind::Element && set.tag > 0) requested.insert(set.tag);
+          if (set.kind == E_SetKind::Element && set.tag > 0) requested.insert(set.tag);
         }
         for (std::size_t s = 0; s < m_model.sets.size(); ++s) {
           const auto& set = m_model.sets[s];
-          if (set.kind != SetKind::Element) continue;
+          if (set.kind != E_SetKind::Element) continue;
           std::set<int> dims;
           for (const auto& entity : m_entities) {
             if (std::ranges::find(entity.sets, static_cast<int>(s)) != entity.sets.end()) dims.insert(entity.dim);
@@ -1118,7 +1118,7 @@ namespace anaf::IO::formats {
       }
 
       void data(const Field& field) {
-        const bool onNodes = field.location == FieldLocation::Node;
+        const bool onNodes = field.location == E_FieldLocation::Node;
         const auto& tags = onNodes ? m_nodeTags : m_elementTags;
         const char* section = onNodes ? "NodeData" : "ElementData";
         const auto components = static_cast<std::size_t>(field.components);
@@ -1160,7 +1160,7 @@ namespace anaf::IO::formats {
         for (const auto& global : encoded) globals.push_back(&global);
         std::size_t records = globals.size();
         for (const auto& field : m_model.fields) {
-          if (field.stepKind != StepKind::Time || !field.stepLabels.empty()) ++records;
+          if (field.stepKind != E_StepKind::Time || !field.stepLabels.empty()) ++records;
         }
         if (records == 0) return;
         text(std::format("$AnafData\n1\n{}\n", records));
@@ -1174,8 +1174,8 @@ namespace anaf::IO::formats {
           }
         }
         for (const auto& field : m_model.fields) {
-          if (field.stepKind == StepKind::Time && field.stepLabels.empty()) continue;
-          text(std::format("STEPS {} {} {} {}\n", field.location == FieldLocation::Node ? "N" : "E", stepKindName(field.stepKind),
+          if (field.stepKind == E_StepKind::Time && field.stepLabels.empty()) continue;
+          text(std::format("STEPS {} {} {} {}\n", field.location == E_FieldLocation::Node ? "N" : "E", stepKindName(field.stepKind),
             field.steps.size(), field.stepLabels.empty() ? 0 : 1));
           text(quoted(field.name));
           for (const auto& label : field.stepLabels) text(escapedQuoted(label));

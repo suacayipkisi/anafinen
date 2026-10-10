@@ -29,7 +29,7 @@
 
 namespace FEM::SOLVER {
 
-  enum class Type {
+  enum class E_Type {
     Cholmod,
     SimplicialLDLT,
     BlockCG
@@ -42,7 +42,7 @@ namespace FEM::SOLVER {
   inline constexpr double singularPivotRatio = 1e-10;
 
   struct Result {
-    Type type{};
+    E_Type type{};
     bool available{false};
     bool converged{false};
     // The factorization met a zero (or rounding level) pivot: the structure is a mechanism.
@@ -110,6 +110,6 @@ namespace FEM::SOLVER {
     Eigen::VectorXd& displacement
   );
 
-  const char* toString(Type type) noexcept;
+  const char* toString(E_Type type) noexcept;
 
 } // namespace FEM::SOLVER end

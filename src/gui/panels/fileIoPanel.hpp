@@ -63,9 +63,9 @@ namespace anaf::GUI {
     void onImGuiRender() override;
 
   private:
-    enum class Stage { Idle, ChoosingImport, CadOptions, Importing, ExportOptions, ChoosingExport, Exporting };
+    enum class E_Stage { Idle, ChoosingImport, CadOptions, Importing, ExportOptions, ChoosingExport, Exporting };
 
-    bool busy() const { return m_stage != Stage::Idle; }
+    bool busy() const { return m_stage != E_Stage::Idle; }
     void startImport(const std::filesystem::path& path);
     void startExport(std::filesystem::path path);
     void pollDialog();
@@ -75,14 +75,14 @@ namespace anaf::GUI {
     void renderProgress();
     void notify(std::string message, bool error);
     void logNotes(const std::vector<std::string>& notes);
-    // Publishes an imported beam model: switches to beam_frame and appends its new sections.
+    // Publishes an imported beam model: switches to BeamFrame and appends its new sections.
     void finishBeamImport(const FEM::BEAM::ADAPTER::ImportedBeam& imported);
 
     std::unique_ptr<anaf::IO::IoService> m_service;
     std::unique_ptr<NativeFileDialog> m_dialog;
     std::shared_ptr<anaf::IO::IoTask<ImportedModel>> m_importTask;
     std::shared_ptr<anaf::IO::IoTask<anaf::IO::WriteReport>> m_exportTask;
-    Stage m_stage{Stage::Idle};
+    E_Stage m_stage{E_Stage::Idle};
     std::filesystem::path m_pendingImport;
     std::uint64_t m_importGeneration{0}; // bridge.modelGeneration when the running import started
     std::vector<std::uint32_t> m_importSectionIDs; // section list the running import resolved against

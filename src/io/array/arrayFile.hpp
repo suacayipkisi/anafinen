@@ -35,11 +35,11 @@ namespace anaf::IO::ARRAY {
 
   class ArrayFile {
   public:
-    enum class Access { ReadOnly, ReadWrite };
+    enum class E_Access { ReadOnly, ReadWrite };
 
     // Creates the file, replacing an existing one.
     static Result<ArrayFile> create(const std::filesystem::path& path);
-    static Result<ArrayFile> open(const std::filesystem::path& path, Access access = Access::ReadOnly);
+    static Result<ArrayFile> open(const std::filesystem::path& path, E_Access access = E_Access::ReadOnly);
 
     ArrayFile(ArrayFile&& other) noexcept;
     ArrayFile& operator=(ArrayFile&& other) noexcept;
@@ -93,7 +93,7 @@ namespace anaf::IO::ARRAY {
     Result<CompressedMatrix<T>> readSparse(const std::string_view path) const {
       auto found = info(path);
       if (!found) return std::unexpected(std::move(found.error()));
-      if (found->kind != ObjectKind::Sparse) return std::unexpected(kindError(path, "a sparse matrix"));
+      if (found->kind != E_ObjectKind::Sparse) return std::unexpected(kindError(path, "a sparse matrix"));
       CompressedMatrix<T> matrix;
       matrix.rows = found->shape[0];
       matrix.cols = found->shape[1];
@@ -112,16 +112,16 @@ namespace anaf::IO::ARRAY {
   private:
     ArrayFile(std::int64_t file, std::filesystem::path path, bool writable) noexcept;
 
-    Result<void> writeDenseRaw(std::string_view path, ScalarType type, const void* values, std::uint64_t count,
+    Result<void> writeDenseRaw(std::string_view path, E_ScalarType type, const void* values, std::uint64_t count,
                                std::span<const std::uint64_t> shape, const WriteOptions& options);
-    Result<std::vector<std::uint64_t>> denseShape(std::string_view path, ScalarType requested) const;
-    Result<void> readDenseRaw(std::string_view path, ScalarType requested, void* values, std::uint64_t count) const;
+    Result<std::vector<std::uint64_t>> denseShape(std::string_view path, E_ScalarType requested) const;
+    Result<void> readDenseRaw(std::string_view path, E_ScalarType requested, void* values, std::uint64_t count) const;
 
-    Result<void> writeSparseRaw(std::string_view path, ScalarType type, std::uint64_t rows, std::uint64_t cols,
-                                SparseLayout layout, const void* values, std::uint64_t count,
+    Result<void> writeSparseRaw(std::string_view path, E_ScalarType type, std::uint64_t rows, std::uint64_t cols,
+                                E_SparseLayout layout, const void* values, std::uint64_t count,
                                 std::span<const std::int64_t> indices, std::span<const std::int64_t> pointers,
                                 const WriteOptions& options);
-    Result<void> readSparseRaw(std::string_view path, ScalarType requested, const ArrayInfo& found, void* values,
+    Result<void> readSparseRaw(std::string_view path, E_ScalarType requested, const ArrayInfo& found, void* values,
                                std::vector<std::int64_t>& indices, std::vector<std::int64_t>& pointers) const;
 
     static ArrayError kindError(std::string_view path, std::string_view expected);

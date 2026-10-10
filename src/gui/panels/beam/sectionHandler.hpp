@@ -30,7 +30,7 @@ namespace anaf::GUI {
   // one with its outline and properties, and adds user sections from a shape and dimensions.
   class SectionHandler : public IPanel {
   private:
-    static constexpr std::uint32_t kNone = std::numeric_limits<std::uint32_t>::max();
+    static constexpr std::uint32_t noSelection = std::numeric_limits<std::uint32_t>::max();
 
     // Dimensions in the units shown in the panel (mm, cm^2, cm^4).
     struct Draft {
@@ -53,7 +53,7 @@ namespace anaf::GUI {
 
     Draft m_draft{};
     std::array<char, 64> m_filter{};
-    std::uint32_t m_selectedID{kNone};
+    std::uint32_t m_selectedID{noSelection};
     std::string m_status;
     bool m_statusIsError{false};
 

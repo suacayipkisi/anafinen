@@ -111,9 +111,9 @@ namespace anaf::CLI::HANDLERS {
     auto& bridge = session.bridge;
     const auto kind = modelKind(session);
     bool solved = false;
-    if (kind == ModelKind::none) {
+    if (kind == E_ModelKind::None) {
       session.out << "Model:     none (start one with -new, -generate, -library load or -import)\n";
-    } else if (kind == ModelKind::truss) {
+    } else if (kind == E_ModelKind::Truss) {
       const auto mesh = trussMesh(session);
       const std::size_t nodeCount = mesh ? mesh->trussNodes.size() : 0;
       const auto supported = mesh ? std::ranges::count_if(mesh->trussNodes, [](const auto& n) { return n.isSupported(); }) : 0;
@@ -132,11 +132,11 @@ namespace anaf::CLI::HANDLERS {
                                  mesh ? mesh->nodalLoads.size() : 0, mesh ? mesh->distributedLoads.size() : 0,
                                  mesh ? OUTPUT::vector3(mesh->gravity) : std::string("(0, -9.80665, 0)"));
     }
-    if (kind != ModelKind::none) {
+    if (kind != E_ModelKind::None) {
       if (!solved) session.out << "Results:   none (-solve)\n";
       else if (session.solvedVersion != bridge.dataVersion.load()) session.out << "Results:   loaded from a file (no energy check)\n";
       else session.out << std::format("Results:   solved, energy check {} (|U - W/2| = {:.3g} J)\n",
-                                      bridge.m_isValid ? "passed" : "FAILED", bridge.m_energyDiff.load());
+                                      bridge.isValid ? "passed" : "FAILED", bridge.energyDiff.load());
     }
 
     std::size_t userMaterials = 0, userSections = 0;

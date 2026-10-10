@@ -45,7 +45,7 @@ namespace FEM::BEAM {
   // 12x12 local stiffness, DOF order per node {ux, uy, uz, rx, ry, rz} (Przemieniecki).
   // Timoshenko uses the interdependent interpolation element: phi = 12 E I / (G As L^2) per
   // bending plane; phi = 0 gives Euler-Bernoulli exactly, and there is no shear locking.
-  Eigen::Matrix<double, 12, 12> localStiffness(double E, double G, const SectionProperties& section, Formulation formulation, double length);
+  Eigen::Matrix<double, 12, 12> localStiffness(double E, double G, const SectionProperties& section, E_Formulation formulation, double length);
 
   // Work equivalent nodal loads of a uniform load q (local axes, N/m) over the element. The
   // same for both formulations: the Timoshenko shape functions integrate to wL/2 and wL^2/12.
@@ -89,7 +89,7 @@ namespace FEM::BEAM {
   // Static solve of a beam model. Every node has 6 DOFs; each node's allowed motion and
   // rotation bases give u = T q, and the reduced system (T^T K T) q = T^T f is solved by the
   // FEM::SOLVER portfolio with 6 DOF slots per node.
-  class Beam_3D_Container {
+  class Beam3DContainer {
   private:
     struct ElementFrame {
       double length{};
@@ -120,8 +120,8 @@ namespace FEM::BEAM {
     bool m_isCalculationValid{false};
     double m_energyDiff{};
     double m_energyRelativeDiff{};
-    double m_workDone_external{};
-    double m_elasticDeformationEnergy_internal{};
+    double m_workDoneExternal{};
+    double m_elasticDeformationEnergyInternal{};
 
   public:
     void set(std::span<Node> nodes, std::span<BeamElement> elements, std::span<const SectionProperties> properties) {
@@ -160,8 +160,8 @@ namespace FEM::BEAM {
     inline bool getIsCalculationValid() const {return m_isCalculationValid;}
     inline double getEnergyDiff() const {return m_energyDiff;}
     inline double getEnergyRelativeDiff() const {return m_energyRelativeDiff;}
-    inline double getWorkDone_External() const {return m_workDone_external;}
-    inline double getElasticDeformationEnergy_Internal() const {return m_elasticDeformationEnergy_internal;}
+    inline double getWorkDoneExternal() const {return m_workDoneExternal;}
+    inline double getElasticDeformationEnergyInternal() const {return m_elasticDeformationEnergyInternal;}
   };
 
 } // namespace FEM::BEAM end

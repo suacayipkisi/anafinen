@@ -29,8 +29,8 @@
 
 namespace anaf::GUI::TRUSS_WORKER {
 
-  void startSolve(BRIDGE::Gui_Calc_Bridge& bridge, ModelSource source) {
-    // Join first: a worker that is still finishing clears m_isRunning on exit.
+  void startSolve(BRIDGE::GuiCalcBridge& bridge, ModelSource source) {
+    // Join first: a worker that is still finishing clears isRunning on exit.
     bridge.joinWorker();
     std::vector<MATERIAL::Material> materials;
     std::uint64_t generation = 0;
@@ -39,8 +39,8 @@ namespace anaf::GUI::TRUSS_WORKER {
       materials = bridge.allMaterials;
       generation = bridge.modelGeneration.load();
     }
-    bridge.m_isRunning = true;
-    bridge.m_progress = 0.0f;
+    bridge.isRunning = true;
+    bridge.progress = 0.0f;
 
     bridge.workerThread = std::jthread(
       [&bridge, source = std::move(source), materials = std::move(materials), generation]
@@ -51,7 +51,7 @@ namespace anaf::GUI::TRUSS_WORKER {
           if (!model) {
             anaf::LOG::error("Solver not started: {}", model.error());
           } else if (auto solved = FEM::TRUSS::solveStatic(**model, materials, st, [&bridge](const float fraction) {
-                       bridge.m_progress = fraction;
+                       bridge.progress = fraction;
                      }); !solved) {
             if (!st.stop_requested()) anaf::LOG::error("Solver failed: {}", solved.error());
           } else {
@@ -60,8 +60,8 @@ namespace anaf::GUI::TRUSS_WORKER {
               std::lock_guard lock(bridge.dataMutex);
               if (bridge.modelGeneration.load() == generation) { // not reset while solving
                 bridge.activeMesh = std::move(solved->mesh);
-                bridge.m_isValid = solved->energyCheckPassed;
-                bridge.m_energyDiff = solved->energyDiff;
+                bridge.isValid = solved->energyCheckPassed;
+                bridge.energyDiff = solved->energyDiff;
                 published = true;
               }
             }
@@ -70,8 +70,8 @@ namespace anaf::GUI::TRUSS_WORKER {
         } catch (const std::exception& exception) {
           anaf::LOG::error("Solver failed: {}", exception.what());
         }
-        bridge.m_progress = 1.0f;
-        bridge.m_isRunning = false;
+        bridge.progress = 1.0f;
+        bridge.isRunning = false;
       });
   }
 

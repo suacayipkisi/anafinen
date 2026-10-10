@@ -55,7 +55,7 @@ namespace FEM::BEAM {
       if (!positive(properties.area)) return "the cross-section area must be positive";
       if (!positive(properties.secondMomentY) || !positive(properties.secondMomentZ)) return "Iy and Iz must be positive";
       if (!positive(properties.torsionConstant)) return "the torsion constant J must be positive";
-      if (element.formulation == Formulation::Timoshenko
+      if (element.formulation == E_Formulation::Timoshenko
           && (!positive(properties.shearAreaY) || !positive(properties.shearAreaZ))) {
         return std::format("a Timoshenko element needs positive shear areas Asy and Asz (section '{}')", section.getName());
       }
@@ -101,7 +101,7 @@ namespace FEM::BEAM {
         element.stress = {};
         used[element.node1] = true;
         used[element.node2] = true;
-        if (element.formulation == Formulation::Timoshenko) ++timoshenko;
+        if (element.formulation == E_Formulation::Timoshenko) ++timoshenko;
       }
 
       for (const auto& load : model.nodalLoads) {
@@ -144,7 +144,7 @@ namespace FEM::BEAM {
       }
     }
 
-    void logResult(const Beam_3D_Container& container, const MeshData& model) {
+    void logResult(const Beam3DContainer& container, const MeshData& model) {
       double maxDisplacement = 0.0;
       double maxRotation = 0.0;
       for (const auto& node : model.nodes) {
@@ -185,8 +185,8 @@ namespace FEM::BEAM {
       anaf::LOG::info("Max equivalent (von Mises, upper bound) stress: {:.6g} Pa", maxVonMises);
       if (exceeded > 0) anaf::LOG::warn("{} elements exceed the yield strength of their material", exceeded);
       if (withoutStress > 0) anaf::LOG::info("{} elements use a general section (no shape): no stresses", withoutStress);
-      anaf::LOG::info("Work done by external forces: {:.6g} J", container.getWorkDone_External());
-      anaf::LOG::info("Stored elastic deformation energy: {:.6g} J", container.getElasticDeformationEnergy_Internal());
+      anaf::LOG::info("Work done by external forces: {:.6g} J", container.getWorkDoneExternal());
+      anaf::LOG::info("Stored elastic deformation energy: {:.6g} J", container.getElasticDeformationEnergyInternal());
     }
 
   } // namespace end
@@ -210,7 +210,7 @@ namespace FEM::BEAM {
 
     auto solved = std::make_shared<MeshData>(std::move(model->mesh));
     const std::vector<SectionProperties> properties = std::move(model->properties);
-    Beam_3D_Container container;
+    Beam3DContainer container;
     container.set(solved->nodes, solved->elements, properties);
     if (auto built = container.buildElements(materials); !built) return std::unexpected(built.error());
     if (st.stop_requested()) return cancelled();

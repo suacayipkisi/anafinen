@@ -38,8 +38,8 @@ namespace FEM::BEAM {
 
   public:
     Node() = default;
-    Node(const std::uint32_t ID, const double locX, const double locY, const double locZ) :
-      m_nodeID(ID),
+    Node(const std::uint32_t id, const double locX, const double locY, const double locZ) :
+      m_nodeID(id),
       m_location({locX, locY, locZ})
     {}
 

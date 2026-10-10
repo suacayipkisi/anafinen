@@ -67,23 +67,23 @@ namespace anaf::GUI {
     io.IniFilename = nullptr;
 
     constexpr float fontSize = 18.0f;
-    const std::filesystem::path ui_font_subpath = std::filesystem::path("fonts") / "Inter" / "ttf" / "Inter-Medium.ttf";
-    const std::filesystem::path console_font_subpath = std::filesystem::path("fonts") / "CascadiaCode" / "ttf" / "CascadiaMono.ttf";
+    const std::filesystem::path uiFontSubpath = std::filesystem::path("fonts") / "Inter" / "ttf" / "Inter-Medium.ttf";
+    const std::filesystem::path consoleFontSubpath = std::filesystem::path("fonts") / "CascadiaCode" / "ttf" / "CascadiaMono.ttf";
 
-    const std::filesystem::path ui_font_resolved = anaf::DIRECTORY::findAssetPath(ui_font_subpath);
-    const std::filesystem::path console_font_resolved = anaf::DIRECTORY::findAssetPath(console_font_subpath);
+    const std::filesystem::path uiFontResolved = anaf::DIRECTORY::findAssetPath(uiFontSubpath);
+    const std::filesystem::path consoleFontResolved = anaf::DIRECTORY::findAssetPath(consoleFontSubpath);
 
-    if (!ui_font_resolved.empty()) {
-      font_ui = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(ui_font_resolved).c_str(), fontSize);
+    if (!uiFontResolved.empty()) {
+      g_fontUi = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(uiFontResolved).c_str(), fontSize);
     } else {
       anaf::LOG::warn("[ImGuiLayer] UI font missing, using fallback.");
-      font_ui = io.Fonts->AddFontDefault();
+      g_fontUi = io.Fonts->AddFontDefault();
     }
 
-    if (!console_font_resolved.empty()) {
-      font_console = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(console_font_resolved).c_str(), fontSize);
+    if (!consoleFontResolved.empty()) {
+      g_fontConsole = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(consoleFontResolved).c_str(), fontSize);
     } else {
-      font_console = font_ui;
+      g_fontConsole = g_fontUi;
     }
 
     setupSpecialTheme();

@@ -30,7 +30,7 @@ namespace anaf::GUI {
 
   void MainDockSpaceHost::renderPanelsMenu() {
     if (!ImGui::BeginMenu("Panels")) return;
-    for (auto& entry : m_panelMenu_) {
+    for (auto& entry : m_panelMenu) {
       const bool available = !entry.isAvailable || entry.isAvailable();
       // A panel of another analysis type stays closed; the checkmark shows what is open now.
       ImGui::MenuItem(entry.label, nullptr, &entry.panel->isOpen, available);
@@ -44,7 +44,7 @@ namespace anaf::GUI {
   void MainDockSpaceHost::renderSettingsMenu() {
     if (!ImGui::BeginMenu("Settings")) return;
     if (ImGui::BeginMenu("Theme")) {
-      for (const THEME::ThemeId id : THEME::kAllThemes) {
+      for (const THEME::E_ThemeId id : THEME::allThemes) {
         if (ImGui::MenuItem(THEME::palette(id).name, nullptr, THEME::currentTheme() == id)) {
           THEME::applyTheme(id);
           SETTINGS::settings().theme = THEME::palette(id).key;
@@ -67,7 +67,7 @@ namespace anaf::GUI {
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
 
-    ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | 
+    ImGuiWindowFlags hostFlags = ImGuiWindowFlags_NoTitleBar | 
                    ImGuiWindowFlags_NoCollapse | 
                    ImGuiWindowFlags_NoResize | 
                    ImGuiWindowFlags_NoMove | 
@@ -80,27 +80,27 @@ namespace anaf::GUI {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-    ImGui::Begin("MainDockSpaceHostWindow", nullptr, host_flags);
+    ImGui::Begin("MainDockSpaceHostWindow", nullptr, hostFlags);
     ImGui::PopStyleVar(3);
 
     if (ImGui::BeginMenuBar()) {
       if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Import Mesh / CAD...", "Ctrl+O")) {
-          if (on_import_mesh) on_import_mesh();
+          if (onImportMesh) onImportMesh();
         }
         if (ImGui::MenuItem("Export Model...", "Ctrl+E")) {
-          if (on_export_results) on_export_results();
+          if (onExportResults) onExportResults();
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Exit", "Alt+F4")) {
-          glfwSetWindowShouldClose(m_window_, GLFW_TRUE);
+          glfwSetWindowShouldClose(m_window, GLFW_TRUE);
         }
         ImGui::EndMenu();
       }
 
       if (ImGui::BeginMenu("Analyze")) {
-        if (ImGui::MenuItem("Truss (1D Element)") && on_select_truss) on_select_truss();
-        if (ImGui::MenuItem("Beam / Frame (3D Element)") && on_select_beam) on_select_beam();
+        if (ImGui::MenuItem("Truss (1D Element)") && onSelectTruss) onSelectTruss();
+        if (ImGui::MenuItem("Beam / Frame (3D Element)") && onSelectBeam) onSelectBeam();
         ImGui::EndMenu();
       }
 
@@ -109,10 +109,10 @@ namespace anaf::GUI {
 
       if (ImGui::BeginMenu("Help")) {
         if (ImGui::MenuItem("Welcome...")) {
-          if (on_show_welcome) on_show_welcome();
+          if (onShowWelcome) onShowWelcome();
         }
         if (ImGui::MenuItem("About anafinen...")) {
-          if (on_show_about) on_show_about();
+          if (onShowAbout) onShowAbout();
         }
         ImGui::EndMenu();
       }
@@ -120,52 +120,52 @@ namespace anaf::GUI {
       ImGui::EndMenuBar();
     }
 
-    ImGuiID dockspace_id = ImGui::GetID("AppMainDockSpace");
-    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+    ImGuiID dockspaceId = ImGui::GetID("AppMainDockSpace");
+    ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 
     // Layout initialization: only run when dimensions are valid AND it hasn't run yet
-    static bool s_layout_built = false;
-    if (!s_layout_built && viewport->WorkSize.x > 100.0f && viewport->WorkSize.y > 100.0f) {
-      s_layout_built = true;
+    static bool s_layoutBuilt = false;
+    if (!s_layoutBuilt && viewport->WorkSize.x > 100.0f && viewport->WorkSize.y > 100.0f) {
+      s_layoutBuilt = true;
 
-      ImGui::DockBuilderRemoveNode(dockspace_id);
-      ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-      ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+      ImGui::DockBuilderRemoveNode(dockspaceId);
+      ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+      ImGui::DockBuilderSetNodeSize(dockspaceId, viewport->WorkSize);
 
-      ImGuiID dock_main_id = dockspace_id;
+      ImGuiID dockMainId = dockspaceId;
 
       // 1. Split Left (Full height)
-      ImGuiID dock_left_id = ImGui::DockBuilderSplitNode(
-        dock_main_id, ImGuiDir_Left, 0.18f, nullptr, &dock_main_id);
+      ImGuiID dockLeftId = ImGui::DockBuilderSplitNode(
+        dockMainId, ImGuiDir_Left, 0.18f, nullptr, &dockMainId);
 
       // 2. Split Right (Full height)
-      ImGuiID dock_right_id = ImGui::DockBuilderSplitNode(
-        dock_main_id, ImGuiDir_Right, 0.24f, nullptr, &dock_main_id);
+      ImGuiID dockRightId = ImGui::DockBuilderSplitNode(
+        dockMainId, ImGuiDir_Right, 0.24f, nullptr, &dockMainId);
 
       // 3. Split Bottom from remaining center
-      ImGuiID dock_bottom_id = ImGui::DockBuilderSplitNode(
-        dock_main_id, ImGuiDir_Down, 0.25f, nullptr, &dock_main_id);
+      ImGuiID dockBottomId = ImGui::DockBuilderSplitNode(
+        dockMainId, ImGuiDir_Down, 0.25f, nullptr, &dockMainId);
 
       // 4. Thin toolbar strip on top of the viewport, same width, fixed height and no tab bar
       const float toolbarHeight = ViewportToolbar::windowHeight();
-      const float centerHeight = ImGui::DockBuilderGetNode(dock_main_id)->Size.y;
-      ImGuiID dock_toolbar_id = ImGui::DockBuilderSplitNode(
-        dock_main_id, ImGuiDir_Up, std::clamp(toolbarHeight / centerHeight, 0.01f, 0.5f), nullptr, &dock_main_id);
-      ImGuiDockNode* toolbarNode = ImGui::DockBuilderGetNode(dock_toolbar_id);
+      const float centerHeight = ImGui::DockBuilderGetNode(dockMainId)->Size.y;
+      ImGuiID dockToolbarId = ImGui::DockBuilderSplitNode(
+        dockMainId, ImGuiDir_Up, std::clamp(toolbarHeight / centerHeight, 0.01f, 0.5f), nullptr, &dockMainId);
+      ImGuiDockNode* toolbarNode = ImGui::DockBuilderGetNode(dockToolbarId);
       toolbarNode->LocalFlags |= ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoResizeY | ImGuiDockNodeFlags_NoDockingOverMe;
-      ImGui::DockBuilderSetNodeSize(dock_toolbar_id, ImVec2(toolbarNode->Size.x, toolbarHeight));
+      ImGui::DockBuilderSetNodeSize(dockToolbarId, ImVec2(toolbarNode->Size.x, toolbarHeight));
 
       // Dock windows into respective nodes
-      ImGui::DockBuilderDockWindow("Truss(1D) Analysis Set", dock_left_id);
-      ImGui::DockBuilderDockWindow("Truss(1D) Model Editor", dock_left_id);
-      ImGui::DockBuilderDockWindow("Beam(3D) Frame Editor", dock_left_id);
+      ImGui::DockBuilderDockWindow("Truss(1D) Analysis Set", dockLeftId);
+      ImGui::DockBuilderDockWindow("Truss(1D) Model Editor", dockLeftId);
+      ImGui::DockBuilderDockWindow("Beam(3D) Frame Editor", dockLeftId);
       // "Beam Diagrams" splits the Model Tree's node itself when it opens (BeamDiagramPanel).
-      ImGui::DockBuilderDockWindow("Model Tree", dock_right_id);
-      ImGui::DockBuilderDockWindow("Console", dock_bottom_id);
-      ImGui::DockBuilderDockWindow(ViewportToolbar::kWindowName, dock_toolbar_id);
-      ImGui::DockBuilderDockWindow("3D Simulation Viewport", dock_main_id);
+      ImGui::DockBuilderDockWindow("Model Tree", dockRightId);
+      ImGui::DockBuilderDockWindow("Console", dockBottomId);
+      ImGui::DockBuilderDockWindow(ViewportToolbar::windowName, dockToolbarId);
+      ImGui::DockBuilderDockWindow("3D Simulation Viewport", dockMainId);
 
-      ImGui::DockBuilderFinish(dockspace_id);
+      ImGui::DockBuilderFinish(dockspaceId);
     }
 
     ImGui::End();

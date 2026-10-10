@@ -28,7 +28,7 @@ namespace FEM::SOLVER {
     const Eigen::VectorXd& force,
     Eigen::VectorXd& displacement
   ) {
-    Result result{.type = Type::SimplicialLDLT};
+    Result result{.type = E_Type::SimplicialLDLT};
     const auto start = std::chrono::steady_clock::now();
     Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper> solver;
     solver.compute(upperMatrix);

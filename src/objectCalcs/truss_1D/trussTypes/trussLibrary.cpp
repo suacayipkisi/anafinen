@@ -47,16 +47,16 @@ namespace FEM::TRUSS::LIBRARY {
       std::string_view name;
       std::uint32_t index; // built-in order, written as MaterialID for viewers
     };
-    constexpr MaterialRef kSteel{"Structural Steel (AISI 4130)", 0};
-    constexpr MaterialRef kAluminum{"Aluminum 6061-T6", 1};
-    constexpr MaterialRef kSteelS355{"Structural Steel S355 (EN 10025)", 3};
-    constexpr MaterialRef kMildSteel{"Carbon Steel AISI 1020 (hot rolled)", 6};
-    constexpr MaterialRef kDuralumin{"Aluminum 2024-T3", 10};
-    constexpr MaterialRef kAluminum7075{"Aluminum 7075-T6", 13};
+    constexpr MaterialRef steel{"Structural Steel (AISI 4130)", 0};
+    constexpr MaterialRef aluminum{"Aluminum 6061-T6", 1};
+    constexpr MaterialRef steelS355{"Structural Steel S355 (EN 10025)", 3};
+    constexpr MaterialRef mildSteel{"Carbon Steel AISI 1020 (hot rolled)", 6};
+    constexpr MaterialRef duralumin{"Aluminum 2024-T3", 10};
+    constexpr MaterialRef aluminum7075{"Aluminum 7075-T6", 13};
 
-    constexpr double kCm2 = 1e-4; // cm^2 -> m^2
-    constexpr double kKN = 1e3;   // kN -> N
-    constexpr double kPi = std::numbers::pi;
+    constexpr double cm2ToM2 = 1e-4; // cm^2 -> m^2
+    constexpr double knToN = 1e3;   // kN -> N
+    constexpr double pi = std::numbers::pi;
 
     struct Bar {
       std::uint32_t a{};
@@ -76,7 +76,7 @@ namespace FEM::TRUSS::LIBRARY {
         return static_cast<std::uint32_t>(nodes.size() - 1);
       }
       void bar(const std::uint32_t a, const std::uint32_t b, const double areaCm2) {
-        if (a != b) bars.push_back({std::min(a, b), std::max(a, b), areaCm2 * kCm2});
+        if (a != b) bars.push_back({std::min(a, b), std::max(a, b), areaCm2 * cm2ToM2});
       }
       void fix(const std::uint32_t n, const std::array<bool, 3> dofs) {
         auto& fixed = supports[n];
@@ -104,11 +104,11 @@ namespace FEM::TRUSS::LIBRARY {
         model.nodes.push_back(anaf::IO::Node{static_cast<std::uint64_t>(i) + 1, draft.nodes[i]});
       }
 
-      auto& block = model.blockFor(anaf::IO::ElementType::Line2);
+      auto& block = model.blockFor(anaf::IO::E_ElementType::Line2);
       std::vector<double> area;
       anaf::IO::EntitySet set;
-      set.name = std::string(ADAPTER::kMaterialSetPrefix) + std::string(material.name);
-      set.kind = anaf::IO::SetKind::Element;
+      set.name = std::string(ADAPTER::materialSetPrefix) + std::string(material.name);
+      set.kind = anaf::IO::E_SetKind::Element;
       set.dimension = 1;
       for (std::size_t e = 0; e < draft.bars.size(); ++e) {
         block.tags.push_back(e + 1);
@@ -118,8 +118,8 @@ namespace FEM::TRUSS::LIBRARY {
         area.push_back(draft.bars[e].area);
         set.members.push_back(static_cast<std::uint32_t>(e));
       }
-      model.elementAttributes[anaf::IO::Attribute::CrossSectionArea] = std::move(area);
-      model.elementAttributes[anaf::IO::Attribute::MaterialId] = std::vector<double>(draft.bars.size(), static_cast<double>(material.index));
+      model.elementAttributes[anaf::IO::Attribute::crossSectionArea] = std::move(area);
+      model.elementAttributes[anaf::IO::Attribute::materialId] = std::vector<double>(draft.bars.size(), static_cast<double>(material.index));
       model.sets.push_back(std::move(set));
 
       for (const auto& [n, fixed] : draft.supports) model.constraints.push_back(anaf::IO::NodeConstraint{n, fixed, {}, {}, {}});
@@ -163,7 +163,7 @@ namespace FEM::TRUSS::LIBRARY {
         for (const auto n : profile.pins) draft.pin(id(c, n));
         for (const auto n : profile.rollers) draft.fix(id(c, n), {false, true, false});
         const double share = (c == 0 || c == copies - 1) ? 0.5 : 1.0;
-        for (const auto n : profile.loaded) draft.load(id(c, n), {0.0, -nodeLoad * kKN * share, 0.0});
+        for (const auto n : profile.loaded) draft.load(id(c, n), {0.0, -nodeLoad * knToN * share, 0.0});
       }
       for (int c = 0; c + 1 < copies; ++c) {
         for (std::uint32_t n = 0; n < count; ++n) draft.bar(id(c, n), id(c + 1, n), braceArea);
@@ -172,14 +172,14 @@ namespace FEM::TRUSS::LIBRARY {
       return draft;
     }
 
-    enum class Web { Pratt, Howe };
+    enum class E_Web { Pratt, Howe };
 
     // Panel truss between supports at x = 0 (pin) and x = span (roller). Top and bottom chords
     // follow top(x) / bottom(x) and meet at the supports; a vertical at every inner panel point
     // and one diagonal per panel: Pratt diagonals fall towards mid-span, Howe diagonals rise.
     // panels must be even. loadTop: roof load on the top chord, else deck load on the bottom.
     Profile panelTruss(const double span, const int panels, const std::function<double(double)>& top,
-                       const std::function<double(double)>& bottom, const Web web, const bool loadTop,
+                       const std::function<double(double)>& bottom, const E_Web web, const bool loadTop,
                        const double chordArea, const double webArea) {
       Profile p;
       const auto n = static_cast<std::uint32_t>(panels);
@@ -201,11 +201,11 @@ namespace FEM::TRUSS::LIBRARY {
       for (std::uint32_t i = 1; i < n; ++i) p.member(b[i], t[i], webArea);
       const std::uint32_t mid = n / 2;
       for (std::uint32_t i = 1; i < mid; ++i) {
-        if (web == Web::Pratt) p.member(t[i], b[i + 1], webArea);
+        if (web == E_Web::Pratt) p.member(t[i], b[i + 1], webArea);
         else p.member(b[i], t[i + 1], webArea);
       }
       for (std::uint32_t i = mid + 1; i < n; ++i) {
-        if (web == Web::Pratt) p.member(t[i], b[i - 1], webArea);
+        if (web == E_Web::Pratt) p.member(t[i], b[i - 1], webArea);
         else p.member(b[i], t[i - 1], webArea);
       }
       p.pins = {b[0]};
@@ -237,7 +237,7 @@ namespace FEM::TRUSS::LIBRARY {
                "Span 8 m, rise 2 m (26.6 deg), king post with two struts. 4 trusses at 4 m, tied by purlins and "
                "roof bracing. Pin / roller at the eaves. 6 kN per top node (roofing + snow). Steel, chords 12 cm^2, "
                "webs 8 cm^2."},
-              toModel(extrude(p, 4, 4.0, 6.0, 6.0), kSteel, "King post roof truss")};
+              toModel(extrude(p, 4, 4.0, 6.0, 6.0), steel, "King post roof truss")};
     }
 
     LibraryTruss queenPostRoof() {
@@ -255,7 +255,7 @@ namespace FEM::TRUSS::LIBRARY {
       return {{"roof_queen_post", "Queen post roof truss", "Roof",
                "Span 10 m, rise 2.5 m, two queen posts and ridge braces. 4 trusses at 4.5 m with purlins and "
                "bracing. Pin / roller at the eaves. 8 kN per top node. Steel, chords 14 cm^2, webs 9 cm^2."},
-              toModel(extrude(p, 4, 4.5, 8.0, 6.0), kSteel, "Queen post roof truss")};
+              toModel(extrude(p, 4, 4.5, 8.0, 6.0), steel, "Queen post roof truss")};
     }
 
     LibraryTruss finkRoof() {
@@ -273,65 +273,65 @@ namespace FEM::TRUSS::LIBRARY {
       return {{"roof_fink", "Fink (W) roof truss", "Roof",
                "Span 12 m, rise 3 m (26.6 deg), W-shaped web, the most common house / warehouse roof truss. "
                "5 trusses at 5 m. Pin / roller. 10 kN per top node. Steel, chords 16 cm^2, webs 10 cm^2."},
-              toModel(extrude(p, 5, 5.0, 10.0, 6.0), kSteel, "Fink roof truss")};
+              toModel(extrude(p, 5, 5.0, 10.0, 6.0), steel, "Fink roof truss")};
     }
 
     LibraryTruss howeRoof() {
       constexpr double span = 16.0, rise = 4.0;
-      const auto p = panelTruss(span, 8, gable(span, rise), flat, Web::Howe, true, 20.0, 12.0);
+      const auto p = panelTruss(span, 8, gable(span, rise), flat, E_Web::Howe, true, 20.0, 12.0);
       return {{"roof_howe", "Howe roof truss", "Roof",
                "Span 16 m, rise 4 m, 8 panels, verticals in tension and diagonals rising to the ridge. "
                "5 trusses at 6 m. Pin / roller. 12 kN per top node. Steel, chords 20 cm^2, webs 12 cm^2."},
-              toModel(extrude(p, 5, 6.0, 12.0, 8.0), kSteel, "Howe roof truss")};
+              toModel(extrude(p, 5, 6.0, 12.0, 8.0), steel, "Howe roof truss")};
     }
 
     LibraryTruss prattRoof() {
       constexpr double span = 20.0, rise = 4.0;
-      const auto p = panelTruss(span, 10, gable(span, rise), flat, Web::Pratt, true, 24.0, 14.0);
+      const auto p = panelTruss(span, 10, gable(span, rise), flat, E_Web::Pratt, true, 24.0, 14.0);
       return {{"roof_pratt", "Pratt roof truss", "Roof",
                "Span 20 m, rise 4 m, 10 panels, diagonals falling to mid-span (tension under gravity). "
                "5 trusses at 6 m. Pin / roller. 12 kN per top node. Steel, chords 24 cm^2, webs 14 cm^2."},
-              toModel(extrude(p, 5, 6.0, 12.0, 8.0), kSteel, "Pratt roof truss")};
+              toModel(extrude(p, 5, 6.0, 12.0, 8.0), steel, "Pratt roof truss")};
     }
 
     LibraryTruss scissorsRoof() {
       constexpr double span = 10.0;
-      const auto p = panelTruss(span, 6, gable(span, 3.5), gable(span, 1.5), Web::Pratt, true, 14.0, 9.0);
+      const auto p = panelTruss(span, 6, gable(span, 3.5), gable(span, 1.5), E_Web::Pratt, true, 14.0, 9.0);
       return {{"roof_scissors", "Scissors roof truss", "Roof",
                "Span 10 m, roof rise 3.5 m, sloped bottom chord rising 1.5 m for a vaulted ceiling. "
                "4 trusses at 4 m. Pin / roller (the roller lets the truss spread). 6 kN per top node. Steel, "
                "chords 14 cm^2, webs 9 cm^2."},
-              toModel(extrude(p, 4, 4.0, 6.0, 6.0), kSteel, "Scissors roof truss")};
+              toModel(extrude(p, 4, 4.0, 6.0, 6.0), steel, "Scissors roof truss")};
     }
 
     LibraryTruss bowstringRoof() {
       constexpr double span = 24.0, rise = 4.5;
       const auto arch = [=](const double x) { return 4.0 * rise * x * (span - x) / (span * span); };
-      const auto p = panelTruss(span, 8, arch, flat, Web::Pratt, true, 30.0, 14.0);
+      const auto p = panelTruss(span, 8, arch, flat, E_Web::Pratt, true, 30.0, 14.0);
       return {{"roof_bowstring", "Bowstring roof truss (hangar)", "Roof",
                "Span 24 m, parabolic top chord rising 4.5 m, flat tie, 8 panels. 5 trusses at 6 m for a "
                "hangar / sports hall. Pin / roller. 14 kN per top node. Steel, chords 30 cm^2, webs 14 cm^2."},
-              toModel(extrude(p, 5, 6.0, 14.0, 10.0), kSteel, "Bowstring roof truss")};
+              toModel(extrude(p, 5, 6.0, 14.0, 10.0), steel, "Bowstring roof truss")};
     }
 
     // ---- bridges (two main trusses 7 m apart, deck load on the bottom chord) -------------------
 
     LibraryTruss prattBridge() {
-      const auto p = panelTruss(36.0, 6, [](double) { return 6.0; }, flat, Web::Pratt, false, 220.0, 120.0);
+      const auto p = panelTruss(36.0, 6, [](double) { return 6.0; }, flat, E_Web::Pratt, false, 220.0, 120.0);
       return {{"bridge_pratt", "Pratt through-truss bridge", "Bridge",
                "Span 36 m, 6 panels of 6 m, height 6 m, inclined end posts. Two trusses 7 m apart with floor "
                "beams, top and bottom wind bracing. Pin / roller bearings. Deck: 300 kN per panel point "
                "(150 kN per truss). Steel, chords 220 cm^2, webs 120 cm^2."},
-              toModel(extrude(p, 2, 7.0, 300.0, 60.0), kSteel, "Pratt truss bridge")};
+              toModel(extrude(p, 2, 7.0, 300.0, 60.0), steel, "Pratt truss bridge")};
     }
 
     LibraryTruss howeBridge() {
-      const auto p = panelTruss(36.0, 6, [](double) { return 6.0; }, flat, Web::Howe, false, 220.0, 120.0);
+      const auto p = panelTruss(36.0, 6, [](double) { return 6.0; }, flat, E_Web::Howe, false, 220.0, 120.0);
       return {{"bridge_howe", "Howe through-truss bridge", "Bridge",
                "Span 36 m, 6 panels, height 6 m, diagonals rising to mid-span (compression) and verticals in "
                "tension, the classic timber-era layout. Two trusses 7 m apart, braced. Pin / roller. 300 kN per "
                "panel point. Steel, chords 220 cm^2, webs 120 cm^2."},
-              toModel(extrude(p, 2, 7.0, 300.0, 60.0), kSteel, "Howe truss bridge")};
+              toModel(extrude(p, 2, 7.0, 300.0, 60.0), steel, "Howe truss bridge")};
     }
 
     LibraryTruss warrenBridge() {
@@ -354,10 +354,10 @@ namespace FEM::TRUSS::LIBRARY {
                "Span 30 m, 6 panels of 5 m, height 4.5 m, equilateral-style diagonals without verticals. Two "
                "trusses 6 m apart, braced (pedestrian / light road bridge). Pin / roller. 200 kN per panel "
                "point. Steel, chords 180 cm^2, diagonals 100 cm^2."},
-              toModel(extrude(p, 2, 6.0, 200.0, 50.0), kSteel, "Warren truss bridge")};
+              toModel(extrude(p, 2, 6.0, 200.0, 50.0), steel, "Warren truss bridge")};
     }
 
-    LibraryTruss kTrussBridge() {
+    LibraryTruss trussBridge() {
       constexpr double span = 48.0, height = 8.0;
       constexpr std::uint32_t n = 8;
       Profile p;
@@ -393,18 +393,18 @@ namespace FEM::TRUSS::LIBRARY {
                "Span 48 m, 8 panels of 6 m, height 8 m. Verticals split at mid-height by K-shaped diagonals, "
                "which keeps compression members short on deep, long spans. Two trusses 8 m apart, braced. "
                "Pin / roller. 400 kN per panel point. Steel, chords 260 cm^2, webs 140 cm^2."},
-              toModel(extrude(p, 2, 8.0, 400.0, 70.0), kSteel, "K truss bridge")};
+              toModel(extrude(p, 2, 8.0, 400.0, 70.0), steel, "K truss bridge")};
     }
 
     LibraryTruss parkerBridge() {
       constexpr double span = 48.0;
-      const auto camel = [=](const double x) { return 6.0 + 3.0 * std::sin(kPi * x / span); };
-      const auto p = panelTruss(span, 8, camel, flat, Web::Pratt, false, 260.0, 140.0);
+      const auto camel = [=](const double x) { return 6.0 + 3.0 * std::sin(pi * x / span); };
+      const auto p = panelTruss(span, 8, camel, flat, E_Web::Pratt, false, 260.0, 140.0);
       return {{"bridge_parker", "Parker (camelback) bridge", "Bridge",
                "Span 48 m, 8 panels, Pratt web under a polygonal top chord rising from 6 m at the ends to 9 m at "
                "mid-span, where the bending moment peaks. Two trusses 8 m apart, braced. Pin / roller. 400 kN "
                "per panel point. Steel, chords 260 cm^2, webs 140 cm^2."},
-              toModel(extrude(p, 2, 8.0, 400.0, 70.0), kSteel, "Parker truss bridge")};
+              toModel(extrude(p, 2, 8.0, 400.0, 70.0), steel, "Parker truss bridge")};
     }
 
     LibraryTruss continuousBridge() {
@@ -438,7 +438,7 @@ namespace FEM::TRUSS::LIBRARY {
                "Depth 14 m in the spans, haunched to 24 m over the two piers. Two trusses 12 m apart, braced. "
                "Pinned on the first pier, rollers on the abutments and the second pier. 1800 kN per panel point "
                "(double track + deck). Steel S355, chords 650 cm^2, webs 350 cm^2."},
-              toModel(extrude(p, 2, 12.0, 1800.0, 150.0), kSteelS355, "Continuous truss bridge")};
+              toModel(extrude(p, 2, 12.0, 1800.0, 150.0), steelS355, "Continuous truss bridge")};
     }
 
     // ---- stadium / long-span roofs --------------------------------------------------------------
@@ -469,7 +469,7 @@ namespace FEM::TRUSS::LIBRARY {
                "20 m cantilever trusses over a stand, 3.5 m deep at the back tapering to the tip, anchored at "
                "two points on the back column (both pinned). 6 trusses at 8 m with purlins and bracing. 15 kN "
                "per top node. Steel, chords 60 cm^2, webs 30 cm^2."},
-              toModel(extrude(p, 6, 8.0, 15.0, 12.0), kSteel, "Grandstand cantilever roof")};
+              toModel(extrude(p, 6, 8.0, 15.0, 12.0), steel, "Grandstand cantilever roof")};
     }
 
     LibraryTruss spaceFrameRoof() {
@@ -492,7 +492,7 @@ namespace FEM::TRUSS::LIBRARY {
           const bool edgeI = i == 0 || i == n, edgeJ = j == 0 || j == n;
           if (edgeI || edgeJ) d.fix(ti(i, j), {edgeI && edgeJ, true, edgeI && edgeJ}); // perimeter columns, corners pinned
           const double share = (edgeI ? 0.5 : 1.0) * (edgeJ ? 0.5 : 1.0);
-          d.load(ti(i, j), {0.0, -9.0 * kKN * share, 0.0});
+          d.load(ti(i, j), {0.0, -9.0 * knToN * share, 0.0});
         }
       }
       for (std::uint32_t i = 0; i < n; ++i) {
@@ -506,11 +506,11 @@ namespace FEM::TRUSS::LIBRARY {
                "24 x 24 m square-on-square offset grid (3 m modules, 2.1 m deep) at 12 m, the typical "
                "exhibition hall / stadium concourse roof. Carried on every top perimeter node, corners pinned. "
                "9 kN per top node (1 kN/m^2). Steel, chords 20 cm^2, webs 12 cm^2."},
-              toModel(std::move(d), kSteel, "Space frame roof")};
+              toModel(std::move(d), steel, "Space frame roof")};
     }
 
     LibraryTruss schwedlerDome() {
-      constexpr double sphere = 24.0, baseAngle = 50.0 * kPi / 180.0;
+      constexpr double sphere = 24.0, baseAngle = 50.0 * pi / 180.0;
       constexpr std::uint32_t rings = 5, perRing = 16;
       Draft d;
       const double baseY = sphere * std::cos(baseAngle);
@@ -518,7 +518,7 @@ namespace FEM::TRUSS::LIBRARY {
       for (std::uint32_t k = 0; k < rings; ++k) {
         const double theta = baseAngle * (1.0 - static_cast<double>(k) / rings);
         for (std::uint32_t j = 0; j < perRing; ++j) {
-          const double phi = 2.0 * kPi * j / perRing;
+          const double phi = 2.0 * pi * j / perRing;
           ring[k].push_back(d.node(sphere * std::sin(theta) * std::cos(phi), sphere * std::cos(theta) - baseY,
                                    sphere * std::sin(theta) * std::sin(phi)));
         }
@@ -535,15 +535,15 @@ namespace FEM::TRUSS::LIBRARY {
             d.bar(ring[k][j], crown, 25.0);
           }
           if (k == 0) d.pin(ring[k][j]);
-          else d.load(ring[k][j], {0.0, -12.0 * kKN, 0.0});
+          else d.load(ring[k][j], {0.0, -12.0 * knToN, 0.0});
         }
       }
-      d.load(crown, {0.0, -12.0 * kKN, 0.0});
+      d.load(crown, {0.0, -12.0 * knToN, 0.0});
       return {{"stadium_schwedler_dome", "Schwedler dome (sports hall)", "Stadium",
                "Spherical cap, 36.8 m base diameter, 8.6 m rise: 16 meridian ribs, 5 rings and one diagonal "
                "per panel, the classic arena / gasholder dome. Pinned on the base ring. 12 kN per node "
                "(snow + cladding). Steel, ribs and rings 25 cm^2, base ring 40 cm^2, diagonals 15 cm^2."},
-              toModel(std::move(d), kSteel, "Schwedler dome")};
+              toModel(std::move(d), steel, "Schwedler dome")};
     }
 
     LibraryTruss geodesicDome() {
@@ -622,13 +622,13 @@ namespace FEM::TRUSS::LIBRARY {
       for (const auto& [edge, uses] : edgeUse) d.bar(local[edge.first], local[edge.second], 12.0);
       for (const auto n : used) {
         if (boundary.contains(n)) d.pin(local[n]);
-        else d.load(local[n], {0.0, -4.0 * kKN, 0.0});
+        else d.load(local[n], {0.0, -4.0 * knToN, 0.0});
       }
       return {{"stadium_geodesic_dome", "Geodesic dome (3V)", "Stadium",
                "Frequency-3 icosahedral geodesic dome, radius 10 m: triangulated, so every bar works in pure "
                "tension / compression. Pinned on its lower edge nodes. 4 kN per free node. Aluminum 6061-T6, "
                "12 cm^2 tubes."},
-              toModel(std::move(d), kAluminum, "Geodesic dome")};
+              toModel(std::move(d), aluminum, "Geodesic dome")};
     }
 
     LibraryTruss ovalStadiumRoof() {
@@ -641,7 +641,7 @@ namespace FEM::TRUSS::LIBRARY {
       Draft d;
       std::vector<std::vector<std::uint32_t>> top(trusses), bottom(trusses);
       for (std::uint32_t c = 0; c < trusses; ++c) {
-        const double theta = 2.0 * kPi * c / trusses;
+        const double theta = 2.0 * pi * c / trusses;
         const double bx = semiX * std::cos(theta), bz = semiZ * std::sin(theta);
         const double back = std::hypot(bx, bz);
         for (std::uint32_t i = 0; i <= panels; ++i) {
@@ -690,7 +690,7 @@ namespace FEM::TRUSS::LIBRARY {
         for (std::uint32_t i = 1; i <= panels; ++i) {
           const double width = 0.5 * (distance(id(c, true, i), id(c + 1, true, i)) + distance(id(c, true, i), id(c + trusses - 1, true, i)));
           const double length = reach / panels * (i == panels ? 0.5 : 1.0);
-          d.load(top[c][i], {0.0, -1.0 * kKN * width * length - (i == panels ? 20.0 * kKN : 0.0), 0.0});
+          d.load(top[c][i], {0.0, -1.0 * knToN * width * length - (i == panels ? 20.0 * knToN : 0.0), 0.0});
         }
       }
       return {{"stadium_oval_ring_roof", "Oval stadium roof (full ring)", "Stadium",
@@ -698,7 +698,7 @@ namespace FEM::TRUSS::LIBRARY {
                "the stands, 6 m deep at the back columns, tied by purlins and bracing into one closed ring with "
                "an open 170 x 120 m centre. Every truss pinned at its two back nodes. 1 kN/m^2 roof load plus "
                "20 kN floodlights per tip. Steel S355, chords 140 cm^2, webs 60 cm^2, ring bracing 35 cm^2."},
-              toModel(std::move(d), kSteelS355, "Oval stadium roof")};
+              toModel(std::move(d), steelS355, "Oval stadium roof")};
     }
 
     LibraryTruss archStadiumRoof() {
@@ -707,7 +707,7 @@ namespace FEM::TRUSS::LIBRARY {
       // frame per station and Warren lacing in the three faces.
       constexpr double span = 315.0, rise = 133.0, side = 7.4;
       constexpr std::uint32_t bays = 60;
-      const double lean = 22.0 * kPi / 180.0;
+      const double lean = 22.0 * pi / 180.0;
       const Point up{0.0, std::cos(lean), -std::sin(lean)};
       const Point out{0.0, std::sin(lean), std::cos(lean)};
       const double r = side / std::sqrt(3.0);
@@ -722,7 +722,7 @@ namespace FEM::TRUSS::LIBRARY {
         const double nx = -slope / norm, nv = 1.0 / norm; // in-plane normal (x, along up)
         std::array<std::uint32_t, 3> station{};
         for (std::size_t c = 0; c < 3; ++c) {
-          const double alpha = 2.0 * kPi * static_cast<double>(c) / 3.0;
+          const double alpha = 2.0 * pi * static_cast<double>(c) / 3.0;
           const double a = r * std::cos(alpha), b = r * std::sin(alpha);
           const double inPlane = v + a * nv;
           station[c] = d.node(u - span / 2.0 + a * nx, inPlane * up[1] + b * out[1], inPlane * up[2] + b * out[2]);
@@ -742,16 +742,16 @@ namespace FEM::TRUSS::LIBRARY {
       }
       // Roof cables hang from the two lower chords and pull down and back towards the stands
       // (32 deg from the vertical), which also balances the lean of the arch's own weight.
-      const double cable = 32.0 * kPi / 180.0;
+      const double cable = 32.0 * pi / 180.0;
       for (std::uint32_t s = 2; s + 2 <= bays; ++s) {
-        for (const std::size_t c : {1u, 2u}) d.load(st[s][c], {0.0, -125.0 * kKN * std::cos(cable), 125.0 * kKN * std::sin(cable)});
+        for (const std::size_t c : {1u, 2u}) d.load(st[s][c], {0.0, -125.0 * knToN * std::cos(cable), 125.0 * knToN * std::sin(cable)});
       }
       return {{"stadium_wembley_arch", "Leaning stadium arch (Wembley style)", "Stadium",
                "315 m span, 133 m high parabolic arch leaning 22 deg from the vertical, triangular lattice "
                "section with 7.4 m sides, 60 bays. Both feet pinned. The roof hangs from the lower chords: 250 kN "
                "of cable force per station, 32 deg from the vertical towards the stands. Steel S355, chords "
                "450 cm^2, frames 150 cm^2, lacing 120 cm^2."},
-              toModel(std::move(d), kSteelS355, "Leaning stadium arch")};
+              toModel(std::move(d), steelS355, "Leaning stadium arch")};
     }
 
     LibraryTruss kiewittDome() {
@@ -769,7 +769,7 @@ namespace FEM::TRUSS::LIBRARY {
         const double theta = baseAngle * k / rings;
         const std::uint32_t count = sectors * k;
         for (std::uint32_t i = 0; i < count; ++i) {
-          const double phi = 2.0 * kPi * i / count;
+          const double phi = 2.0 * pi * i / count;
           ring[k].push_back(d.node(sphere * std::sin(theta) * std::cos(phi), sphere * std::cos(theta) - baseY,
                                    sphere * std::sin(theta) * std::sin(phi)));
         }
@@ -788,17 +788,17 @@ namespace FEM::TRUSS::LIBRARY {
       for (const auto n : ring[rings]) d.pin(n);
       // 1.2 kN/m^2 on plan (roofing, snow, catwalks), lumped by the plan area around each node.
       const auto planRadius = [&](const double k) { return sphere * std::sin(baseAngle * k / rings); };
-      d.load(ring[0][0], {0.0, -1.2 * kKN * kPi * std::pow(planRadius(0.5), 2), 0.0});
+      d.load(ring[0][0], {0.0, -1.2 * knToN * pi * std::pow(planRadius(0.5), 2), 0.0});
       for (std::uint32_t k = 1; k < rings; ++k) {
-        const double area = kPi * (std::pow(planRadius(k + 0.5), 2) - std::pow(planRadius(k - 0.5), 2)) / (sectors * k);
-        for (const auto n : ring[k]) d.load(n, {0.0, -1.2 * kKN * area, 0.0});
+        const double area = pi * (std::pow(planRadius(k + 0.5), 2) - std::pow(planRadius(k - 0.5), 2)) / (sectors * k);
+        for (const auto n : ring[k]) d.load(n, {0.0, -1.2 * knToN * area, 0.0});
       }
       return {{"stadium_kiewitt_dome", "Kiewitt dome (210 m stadium)", "Stadium",
                "Single-layer Kiewitt (lamella) dome over a 210 m circle, 36 m rise: 6 main ribs, 12 rings, "
                "every panel triangulated, 469 nodes. Pinned on the base tension ring. 1.2 kN/m^2 on plan "
                "(roofing, snow, catwalks). Steel S355, ribs 260 cm^2, other members 180 cm^2, base ring "
                "600 cm^2."},
-              toModel(std::move(d), kSteelS355, "Kiewitt dome")};
+              toModel(std::move(d), steelS355, "Kiewitt dome")};
     }
 
     // ---- towers and platforms ------------------------------------------------------------------
@@ -855,33 +855,33 @@ namespace FEM::TRUSS::LIBRARY {
           d.bar(tip, top[c], 18.0);
           d.bar(tip, below[c], 18.0);
         }
-        d.load(tip, {0.0, -20.0 * kKN, 6.0 * kKN}); // conductor weight + wind on the wires
+        d.load(tip, {0.0, -20.0 * knToN, 6.0 * knToN}); // conductor weight + wind on the wires
       };
       armTip(1.0, {1, 2});
       armTip(-1.0, {0, 3});
       for (std::size_t k = 1; k < tower.level.size(); ++k) {
-        for (const auto n : tower.level[k]) d.load(n, {0.0, 0.0, 1.5 * kKN}); // wind on the tower
+        for (const auto n : tower.level[k]) d.load(n, {0.0, 0.0, 1.5 * knToN}); // wind on the tower
       }
       return {{"tower_transmission", "Transmission line tower", "Tower & Platform",
                "30 m square lattice tower tapering from 8 m to 2 m, X-braced faces, two 7 m cross-arms. Base "
                "legs pinned. Conductors: 20 kN down and 6 kN wind at each arm tip; 1.5 kN wind per tower node. "
                "Steel, legs 45 cm^2, bracing 18 cm^2."},
-              toModel(std::move(d), kSteel, "Transmission tower")};
+              toModel(std::move(d), steel, "Transmission tower")};
     }
 
     LibraryTruss offshoreJacket() {
       auto tower = latticeTower(4, 40.0, 12.0, 7.0, 400.0, 150.0);
       auto& d = tower.draft;
-      for (const auto n : tower.level[4]) d.load(n, {0.0, -2500.0 * kKN, 0.0}); // topsides, 10 MN
+      for (const auto n : tower.level[4]) d.load(n, {0.0, -2500.0 * knToN, 0.0}); // topsides, 10 MN
       for (const std::size_t k : {1u, 2u}) {
-        for (const auto n : tower.level[k]) d.load(n, {150.0 * kKN, 0.0, 0.0}); // waves and current
+        for (const auto n : tower.level[k]) d.load(n, {150.0 * knToN, 0.0, 0.0}); // waves and current
       }
       return {{"platform_offshore_jacket", "Offshore jacket platform", "Tower & Platform",
                "Four-leg steel jacket, 40 m high, battered from 24 x 24 m at the seabed to 14 x 14 m at the "
                "deck, X-braced faces and plan bracing at every level. Piles modelled as pins. 10 MN topsides "
                "(2.5 MN per leg) and 150 kN wave load per node at two levels. Steel, legs 400 cm^2, braces "
                "150 cm^2."},
-              toModel(std::move(d), kSteel, "Offshore jacket")};
+              toModel(std::move(d), steel, "Offshore jacket")};
     }
 
     LibraryTruss craneJib() {
@@ -911,13 +911,13 @@ namespace FEM::TRUSS::LIBRARY {
           d.bar(r, nt, 12.0);
         }
       }
-      d.load(station[bays][0], {0.0, -15.0 * kKN, 0.0}); // 3 t hook load at the tip
-      d.load(station[bays][1], {0.0, -15.0 * kKN, 0.0});
+      d.load(station[bays][0], {0.0, -15.0 * knToN, 0.0}); // 3 t hook load at the tip
+      d.load(station[bays][1], {0.0, -15.0 * knToN, 0.0});
       return {{"tower_crane_jib", "Crane jib (triangular lattice)", "Tower & Platform",
                "24 m cantilever jib with a triangular 1.6 m x 2.2 m section, 8 bays, laced on all three faces, "
                "fixed (pinned chords) at the mast. 30 kN hook load at the tip. Steel, chords 60 cm^2, lacing "
                "12 cm^2."},
-              toModel(std::move(d), kSteel, "Crane jib")};
+              toModel(std::move(d), steel, "Crane jib")};
     }
 
     LibraryTruss eiffelTower() {
@@ -930,19 +930,19 @@ namespace FEM::TRUSS::LIBRARY {
                                 [](const int k) { return 260.0 * (1.0 - 0.8 * k / levels); });
       auto& d = tower.draft;
       for (const auto& [k, total] : {std::pair{5, 8000.0}, {9, 4000.0}, {22, 1200.0}}) { // platforms
-        for (const auto n : tower.level[static_cast<std::size_t>(k)]) d.load(n, {0.0, -total / 4.0 * kKN, 0.0});
+        for (const auto n : tower.level[static_cast<std::size_t>(k)]) d.load(n, {0.0, -total / 4.0 * knToN, 0.0});
       }
       // Wind: 1.2 kN/m^2 on the face, 30 % solid, along +x.
       for (int k = 1; k <= levels; ++k) {
         const double force = 1.2 * 2.0 * half(k) * (height / levels) * 0.3;
-        for (const auto n : tower.level[static_cast<std::size_t>(k)]) d.load(n, {force / 4.0 * kKN, 0.0, 0.0});
+        for (const auto n : tower.level[static_cast<std::size_t>(k)]) d.load(n, {force / 4.0 * knToN, 0.0, 0.0});
       }
       return {{"tower_eiffel_style", "300 m lattice tower (Eiffel style)", "Tower & Platform",
                "300 m square lattice tower, 24 levels, the plan narrowing exponentially from 125 m at the base "
                "to 10 m at the top; X-braced faces, plan bracing at every level. Base legs pinned. Platforms: "
                "8 MN at 62.5 m, 4 MN at 112.5 m, 1.2 MN at 275 m; wind 1.2 kN/m^2 on a 30 % solid face. Mild "
                "steel, legs 1600 cm^2 tapering to 160 cm^2, bracing 260 to 52 cm^2."},
-              toModel(std::move(d), kMildSteel, "Lattice tower (Eiffel style)")};
+              toModel(std::move(d), mildSteel, "Lattice tower (Eiffel style)")};
     }
 
     // ---- aircraft --------------------------------------------------------------------------------
@@ -950,11 +950,11 @@ namespace FEM::TRUSS::LIBRARY {
     // Face k of a box girder joins corner k and corner k + 1 of every station. Rising: corner k
     // of station s to corner k + 1 of station s + 1; Falling: the other diagonal; Warren*:
     // alternating, starting with that direction; Cross: both.
-    enum class Brace { Rising, Falling, WarrenRising, WarrenFalling, Cross };
+    enum class E_Brace { Rising, Falling, WarrenRising, WarrenFalling, Cross };
 
     struct BoxGirder {
       std::vector<std::array<Point, 4>> stations;
-      std::array<Brace, 4> faces{};
+      std::array<E_Brace, 4> faces{};
       double chordArea{};  // cm^2, corner to corner along the girder
       double frameArea{};  // cm^2, station frames (bulkheads, ribs, interplane struts)
       double braceArea{};  // cm^2, face diagonals (lacing, wires)
@@ -983,10 +983,10 @@ namespace FEM::TRUSS::LIBRARY {
           d.bar(id[s][c], id[s + 1][c], g.chordAreaOf ? g.chordAreaOf(s) : g.chordArea);
           const bool even = s % 2 == 0;
           const auto brace = g.faces[c];
-          const bool rising = brace == Brace::Rising || brace == Brace::Cross || (brace == Brace::WarrenRising && even)
-                              || (brace == Brace::WarrenFalling && !even);
-          const bool falling = brace == Brace::Falling || brace == Brace::Cross || (brace == Brace::WarrenFalling && even)
-                               || (brace == Brace::WarrenRising && !even);
+          const bool rising = brace == E_Brace::Rising || brace == E_Brace::Cross || (brace == E_Brace::WarrenRising && even)
+                              || (brace == E_Brace::WarrenFalling && !even);
+          const bool falling = brace == E_Brace::Falling || brace == E_Brace::Cross || (brace == E_Brace::WarrenFalling && even)
+                               || (brace == E_Brace::WarrenRising && !even);
           if (rising) d.bar(id[s][c], id[s + 1][next], g.braceArea);
           if (falling) d.bar(id[s][next], id[s + 1][c], g.braceArea);
         }
@@ -1006,7 +1006,7 @@ namespace FEM::TRUSS::LIBRARY {
         const double bottom = 0.55 * t, top = 1.15 - 0.2 * t;
         g.stations.push_back({Point{x, bottom, -half}, Point{x, top, -half}, Point{x, top, half}, Point{x, bottom, half}});
       }
-      g.faces = {Brace::WarrenRising, Brace::WarrenRising, Brace::WarrenFalling, Brace::WarrenRising}; // sides mirrored
+      g.faces = {E_Brace::WarrenRising, E_Brace::WarrenRising, E_Brace::WarrenFalling, E_Brace::WarrenRising}; // sides mirrored
       g.chordArea = 0.94; // 1" x 0.049" tube
       g.frameArea = 0.72; // 3/4" x 0.049"
       g.braceArea = 0.72;
@@ -1017,21 +1017,21 @@ namespace FEM::TRUSS::LIBRARY {
         d.pin(st[s][2]);
       }
       // 3.8 g pull-up (normal category limit): inertia loads act downwards.
-      for (const auto n : st[0]) d.load(n, {0.0, -1.03 * kKN, 0.0});   // engine + mount, 110 kg
+      for (const auto n : st[0]) d.load(n, {0.0, -1.03 * knToN, 0.0});   // engine + mount, 110 kg
       for (const std::size_t s : {1u, 2u, 3u}) {                        // two occupants + seats, 180 kg
-        d.load(st[s][0], {0.0, -1.12 * kKN, 0.0});
-        d.load(st[s][3], {0.0, -1.12 * kKN, 0.0});
+        d.load(st[s][0], {0.0, -1.12 * knToN, 0.0});
+        d.load(st[s][3], {0.0, -1.12 * knToN, 0.0});
       }
-      d.load(st[4][0], {0.0, -0.37 * kKN, 0.0}); // baggage, 20 kg
-      d.load(st[4][3], {0.0, -0.37 * kKN, 0.0});
-      d.load(st[9][1], {0.0, -0.9 * kKN, 0.0});  // tail group weight + balancing tail download
-      d.load(st[9][2], {0.0, -0.9 * kKN, 0.0});
+      d.load(st[4][0], {0.0, -0.37 * knToN, 0.0}); // baggage, 20 kg
+      d.load(st[4][3], {0.0, -0.37 * knToN, 0.0});
+      d.load(st[9][1], {0.0, -0.9 * knToN, 0.0});  // tail group weight + balancing tail download
+      d.load(st[9][2], {0.0, -0.9 * knToN, 0.0});
       return {{"aircraft_tube_fuselage", "Welded steel-tube fuselage", "Aircraft",
                "Light two-seat fuselage (Piper Cub style), 5.9 m from firewall to tail post, 0.75 x 1.15 m "
                "cabin tapering to the tail, Warren-braced sides, top and bottom. Held at the four wing spar "
                "fittings on the upper longerons. 3.8 g pull-up: engine 4.1 kN, occupants 6.7 kN, baggage, 1.8 kN "
                "tail load. 4130 tube, longerons 0.94 cm^2 (1\" x 0.049\"), lacing 0.72 cm^2 (3/4\" x 0.049\")."},
-              toModel(std::move(d), kSteel, "Steel tube fuselage")};
+              toModel(std::move(d), steel, "Steel tube fuselage")};
     }
 
     LibraryTruss engineMount() {
@@ -1057,13 +1057,13 @@ namespace FEM::TRUSS::LIBRARY {
       const auto cg = d.node(-0.85, 0.6, 0.0);
       for (const auto n : bed) d.bar(cg, n, 20.0);
       // 110 kg engine at 3.8 g plus 2.2 kN take-off thrust, forward along -x.
-      d.load(cg, {-2.2 * kKN, -4.1 * kKN, 0.0});
+      d.load(cg, {-2.2 * knToN, -4.1 * knToN, 0.0});
       return {{"aircraft_engine_mount", "Engine mount (welded tube)", "Aircraft",
                "Four-point welded 4130 engine mount, 0.6 x 0.6 m firewall pattern to a 0.4 x 0.3 m engine bed "
                "0.5 m forward: straight legs and V tubes, braced bed ring. Firewall fittings pinned. The engine "
                "CG sits 0.35 m ahead of the bed on four stiff links (crankcase). 110 kg at 3.8 g (4.1 kN) plus "
                "2.2 kN thrust. Tubes 0.72 cm^2 (3/4\" x 0.049\")."},
-              toModel(std::move(d), kSteel, "Engine mount")};
+              toModel(std::move(d), steel, "Engine mount")};
     }
 
     LibraryTruss strutBracedWing() {
@@ -1077,7 +1077,7 @@ namespace FEM::TRUSS::LIBRARY {
         const double z = semiSpan * s / bays;
         g.stations.push_back({Point{0.4, 0.0, z}, Point{0.4, 0.19, z}, Point{1.2, 0.15, z}, Point{1.2, 0.02, z}});
       }
-      g.faces = {Brace::WarrenRising, Brace::Cross, Brace::WarrenFalling, Brace::Cross};
+      g.faces = {E_Brace::WarrenRising, E_Brace::Cross, E_Brace::WarrenFalling, E_Brace::Cross};
       g.chordArea = 4.0;
       g.frameArea = 1.2;
       g.braceArea = 1.2;
@@ -1100,11 +1100,11 @@ namespace FEM::TRUSS::LIBRARY {
       double sum = 0.0;
       for (std::uint32_t s = 1; s <= bays; ++s) {
         const double eta = static_cast<double>(s) / bays;
-        weight[s] = (s == bays ? 0.5 : 1.0) * 0.5 * (1.0 + 4.0 / kPi * std::sqrt(1.0 - eta * eta));
+        weight[s] = (s == bays ? 0.5 : 1.0) * 0.5 * (1.0 + 4.0 / pi * std::sqrt(1.0 - eta * eta));
         sum += weight[s];
       }
       for (std::uint32_t s = 1; s <= bays; ++s) {
-        const double station = lift * kKN * weight[s] / sum;
+        const double station = lift * knToN * weight[s] / sum;
         d.load(st[s][1], {0.0, 0.7 * station, 0.0});
         d.load(st[s][2], {0.0, 0.3 * station, 0.0});
       }
@@ -1114,7 +1114,7 @@ namespace FEM::TRUSS::LIBRARY {
                "fittings pinned; a V lift strut runs from a pinned fuselage fitting to both spars at 3 m. 3.8 g: "
                "10 kN lift in a Schrenk distribution, 70 / 30 % front / rear spar. Aluminum 6061-T6, spar caps "
                "4 cm^2, webs and ribs 1.2 cm^2, struts 3 cm^2."},
-              toModel(std::move(d), kAluminum, "Strut-braced wing")};
+              toModel(std::move(d), aluminum, "Strut-braced wing")};
     }
 
     LibraryTruss biplaneWingCell() {
@@ -1130,7 +1130,7 @@ namespace FEM::TRUSS::LIBRARY {
         g.stations.push_back({Point{0.3 + stagger, 0.0, z}, Point{0.3, gap, z}, Point{0.3 + 0.6 * chord, gap, z},
                               Point{0.3 + stagger + 0.6 * chord, 0.0, z}});
       }
-      g.faces = {Brace::Rising, Brace::Cross, Brace::Falling, Brace::Cross};
+      g.faces = {E_Brace::Rising, E_Brace::Cross, E_Brace::Falling, E_Brace::Cross};
       g.chordArea = 6.0; // spars
       g.frameArea = 4.0; // interplane struts and compression ribs
       g.braceArea = 0.8; // doubled streamline wires
@@ -1142,10 +1142,10 @@ namespace FEM::TRUSS::LIBRARY {
       // 660 kg at 4.5 g: 14.6 kN per half cell; inner struts take half, outer struts a quarter.
       // Upper wing 55 %, lower 45 %; front spar 65 %, rear 35 %.
       for (const auto& [s, share] : {std::pair{std::size_t{1}, 7.3}, {std::size_t{2}, 3.65}}) {
-        d.load(st[s][1], {0.0, share * 0.55 * 0.65 * kKN, 0.0});
-        d.load(st[s][2], {0.0, share * 0.55 * 0.35 * kKN, 0.0});
-        d.load(st[s][0], {0.0, share * 0.45 * 0.65 * kKN, 0.0});
-        d.load(st[s][3], {0.0, share * 0.45 * 0.35 * kKN, 0.0});
+        d.load(st[s][1], {0.0, share * 0.55 * 0.65 * knToN, 0.0});
+        d.load(st[s][2], {0.0, share * 0.55 * 0.35 * knToN, 0.0});
+        d.load(st[s][0], {0.0, share * 0.45 * 0.65 * knToN, 0.0});
+        d.load(st[s][3], {0.0, share * 0.45 * 0.35 * knToN, 0.0});
       }
       return {{"aircraft_biplane_wing_cell", "Biplane wing cell (two-bay)", "Aircraft",
                "Half wing cell of a WWI-era two-bay biplane: 4.6 m, 1.5 m chord and gap, 0.3 m stagger. "
@@ -1153,7 +1153,7 @@ namespace FEM::TRUSS::LIBRARY {
                "drag wires cross in both wings. Spar roots pinned at the cabane and fuselage. 660 kg at 4.5 g: "
                "14.6 kN lift, 55 / 45 % upper / lower wing. Steel: spars 6 cm^2, struts and ribs 4 cm^2, "
                "wires 0.8 cm^2."},
-              toModel(std::move(d), kSteel, "Biplane wing cell")};
+              toModel(std::move(d), steel, "Biplane wing cell")};
     }
 
     // Weight [N] of the bars built so far (the solver adds the same self weight).
@@ -1185,7 +1185,7 @@ namespace FEM::TRUSS::LIBRARY {
         radius[k] = maxRadius * std::sqrt(1.0 - (2.0 * xi - 1.0) * (2.0 * xi - 1.0));
         hub[k] = d.node(xs[k], 0.0, 0.0);
         for (std::uint32_t j = 0; j < sides; ++j) {
-          const double phi = 2.0 * kPi * j / sides;
+          const double phi = 2.0 * pi * j / sides;
           ring[k][j] = d.node(xs[k], -radius[k] * std::cos(phi), radius[k] * std::sin(phi));
         }
       }
@@ -1218,7 +1218,7 @@ namespace FEM::TRUSS::LIBRARY {
       // (fuel, ballast, crew, cargo) on the keel nodes, so the ship floats in equilibrium.
       constexpr double liftPerM3 = 11.0;
       std::vector<double> ringLift(rings, 0.0);
-      const auto cone = [](const double h, const double r1, const double r2) { return kPi * h / 3.0 * (r1 * r1 + r1 * r2 + r2 * r2); };
+      const auto cone = [](const double h, const double r1, const double r2) { return pi * h / 3.0 * (r1 * r1 + r1 * r2 + r2 * r2); };
       ringLift[0] += liftPerM3 * cone(xs[0], 0.0, radius[0]);
       ringLift[rings - 1] += liftPerM3 * cone(length - xs[rings - 1], radius[rings - 1], 0.0);
       for (std::uint32_t k = 0; k + 1 < rings; ++k) {
@@ -1235,7 +1235,7 @@ namespace FEM::TRUSS::LIBRARY {
         }
         for (const auto n : upper) d.load(n, {0.0, ringLift[k] / static_cast<double>(upper.size()), 0.0});
       }
-      constexpr double engineCar = 2.5 * 9.80665 * kKN, controlCar = 4.0 * 9.80665 * kKN;
+      constexpr double engineCar = 2.5 * 9.80665 * knToN, controlCar = 4.0 * 9.80665 * knToN;
       for (const auto& [k, j] : {std::pair{5u, 3u}, {5u, 13u}, {10u, 3u}, {10u, 13u}, {15u, 0u}}) d.load(ring[k][j], {0.0, -engineCar, 0.0});
       d.load(ring[2][0], {0.0, -controlCar / 2.0, 0.0});
       d.load(ring[3][0], {0.0, -controlCar / 2.0, 0.0});
@@ -1252,7 +1252,7 @@ namespace FEM::TRUSS::LIBRARY {
                "upper ring nodes; five 2.5 t engine cars, a 4 t control car and the remaining useful load on "
                "the keel, so lift and weight balance. Duralumin (2024-T3): girders 12 cm^2, axial wire 6 cm^2, "
                "radial wires 2 cm^2, shear wires 1.5 cm^2."},
-              toModel(std::move(d), kDuralumin, "Rigid airship hull")};
+              toModel(std::move(d), duralumin, "Rigid airship hull")};
     }
 
     LibraryTruss geodeticFuselage() {
@@ -1266,11 +1266,11 @@ namespace FEM::TRUSS::LIBRARY {
       std::vector<std::array<std::uint32_t, around>> st(stations);
       for (std::uint32_t k = 0; k < stations; ++k) {
         const double x = pitch * k;
-        const double s = x < 2.4 ? 0.55 + 0.45 * std::sin(x / 2.4 * kPi / 2.0)
+        const double s = x < 2.4 ? 0.55 + 0.45 * std::sin(x / 2.4 * pi / 2.0)
                                  : (x <= 9.0 ? 1.0 : 1.0 - 0.65 * (x - 9.0) / 9.0);
         const double halfHeight = 1.6 * s, halfWidth = 1.2 * s, centre = 0.6 * std::max(0.0, (x - 9.0) / 9.0);
         for (std::uint32_t j = 0; j < around; ++j) {
-          const double phi = 2.0 * kPi * (j + 0.5 * (k % 2)) / around;
+          const double phi = 2.0 * pi * (j + 0.5 * (k % 2)) / around;
           st[k][j] = d.node(x, centre - halfHeight * std::cos(phi), halfWidth * std::sin(phi));
         }
       }
@@ -1300,13 +1300,13 @@ namespace FEM::TRUSS::LIBRARY {
       }
       // 3 g pull-up: nose turret 400 kg, tail turret 500 kg, five crew of 100 kg in the cockpit
       // and fuselage, 2000 kg of bombs in the bay (stations 10..18), 10 kN tail download.
-      constexpr double g3 = 3.0 * 9.80665 / 1000.0 * kKN; // N per kg at 3 g
+      constexpr double g3 = 3.0 * 9.80665 / 1000.0 * knToN; // N per kg at 3 g
       for (const auto n : st[0]) d.load(n, {0.0, -400.0 * g3 / around, 0.0});
       for (const auto n : st[stations - 1]) d.load(n, {0.0, -500.0 * g3 / around, 0.0});
       const auto bottom = [&](const std::uint32_t k, const double limit) {
         std::vector<std::uint32_t> nodes;
         for (std::uint32_t j = 0; j < around; ++j) {
-          if (std::cos(2.0 * kPi * (j + 0.5 * (k % 2)) / around) > limit) nodes.push_back(st[k][j]);
+          if (std::cos(2.0 * pi * (j + 0.5 * (k % 2)) / around) > limit) nodes.push_back(st[k][j]);
         }
         return nodes;
       };
@@ -1321,9 +1321,9 @@ namespace FEM::TRUSS::LIBRARY {
       for (const std::uint32_t k : {stations - 2, stations - 1}) {
         std::vector<std::uint32_t> topNodes;
         for (std::uint32_t j = 0; j < around; ++j) {
-          if (std::cos(2.0 * kPi * (j + 0.5 * (k % 2)) / around) < -0.8) topNodes.push_back(st[k][j]);
+          if (std::cos(2.0 * pi * (j + 0.5 * (k % 2)) / around) < -0.8) topNodes.push_back(st[k][j]);
         }
-        for (const auto n : topNodes) d.load(n, {0.0, -5.0 * kKN / static_cast<double>(topNodes.size()), 0.0});
+        for (const auto n : topNodes) d.load(n, {0.0, -5.0 * knToN / static_cast<double>(topNodes.size()), 0.0});
       }
       return {{"aircraft_geodetic_fuselage", "Geodetic bomber fuselage (Wellington style)", "Aircraft",
                "18 m geodetic fuselage of a twin-engine bomber: a diagrid of crossing helical members on an "
@@ -1331,7 +1331,7 @@ namespace FEM::TRUSS::LIBRARY {
                "bulkheads, 620 nodes. Pinned at the four wing centre-section fittings. 3 g pull-up: turrets "
                "400 / 500 kg, five crew, 2000 kg bomb load, 10 kN tail download. Duralumin (2024-T3): geodetic "
                "members 5 cm^2, circumferential members and bulkheads 3 cm^2."},
-              toModel(std::move(d), kDuralumin, "Geodetic fuselage")};
+              toModel(std::move(d), duralumin, "Geodetic fuselage")};
     }
 
     LibraryTruss airlinerWingBox() {
@@ -1344,7 +1344,7 @@ namespace FEM::TRUSS::LIBRARY {
       for (int j = -2; j <= 2; ++j) zs.push_back(j);
       for (int j = 1; j <= 25; ++j) zs.push_back(2.0 + 0.6 * j);
       const auto eta = [](const double z) { return std::max(0.0, (std::abs(z) - 2.0) / 15.0); };
-      const double sweep = std::tan(25.0 * kPi / 180.0), dihedral = std::tan(5.0 * kPi / 180.0);
+      const double sweep = std::tan(25.0 * pi / 180.0), dihedral = std::tan(5.0 * pi / 180.0);
       const auto frontSpar = [&](const double z) {
         const double out = std::max(0.0, std::abs(z) - 2.0);
         return std::array<double, 2>{out * sweep, out * dihedral};
@@ -1357,7 +1357,7 @@ namespace FEM::TRUSS::LIBRARY {
         g.stations.push_back({Point{x, y - front / 2, z}, Point{x, y + front / 2, z}, Point{x + width, y + rear / 2, z},
                               Point{x + width, y - rear / 2, z}});
       }
-      g.faces = {Brace::WarrenRising, Brace::Cross, Brace::WarrenRising, Brace::Cross};
+      g.faces = {E_Brace::WarrenRising, E_Brace::Cross, E_Brace::WarrenRising, E_Brace::Cross};
       g.chordAreaOf = [&](const std::size_t s) { return 400.0 * (1.0 - 0.6 * eta(0.5 * (zs[s] + zs[s + 1]))); };
       g.frameArea = 25.0;
       g.braceArea = 60.0;
@@ -1374,7 +1374,7 @@ namespace FEM::TRUSS::LIBRARY {
         const std::size_t outboard = s < leftBody ? s - 1 : s + 1;
         for (const auto n : st[s]) d.bar(engine, n, 40.0);
         for (const auto n : st[outboard]) d.bar(engine, n, 40.0);
-        d.load(engine, {-25.0 * kKN, -3.5 * 9.80665 * kKN, 0.0});
+        d.load(engine, {-25.0 * knToN, -3.5 * 9.80665 * knToN, 0.0});
       }
       // 1 g cruise: 370 kN lift per outer wing in a Schrenk distribution (taper 0.3), 60 / 40 %
       // on the front / rear spar top; 6 t of fuel per wing on the lower corners out to 10 m.
@@ -1384,18 +1384,18 @@ namespace FEM::TRUSS::LIBRARY {
         const double e = eta(zs[s]);
         if (e <= 0.0) continue;
         const double planform = (1.0 - 0.7 * e) / 0.65;
-        share[s] = (e >= 1.0 ? 0.5 : 1.0) * 0.5 * (planform + 4.0 / kPi * std::sqrt(std::max(0.0, 1.0 - e * e)));
+        share[s] = (e >= 1.0 ? 0.5 : 1.0) * 0.5 * (planform + 4.0 / pi * std::sqrt(std::max(0.0, 1.0 - e * e)));
         sum += share[s];
       }
       sum /= 2.0; // both wings
       std::vector<std::size_t> tanks;
       for (std::size_t s = 0; s < zs.size(); ++s) {
-        const double lift = 370.0 * kKN * share[s] / sum;
+        const double lift = 370.0 * knToN * share[s] / sum;
         d.load(st[s][1], {0.0, 0.6 * lift, 0.0});
         d.load(st[s][2], {0.0, 0.4 * lift, 0.0});
         if (eta(zs[s]) > 0.0 && std::abs(zs[s]) <= 10.0) tanks.push_back(s);
       }
-      const double fuel = 2.0 * 6.0 * 9.80665 * kKN / (2.0 * static_cast<double>(tanks.size()));
+      const double fuel = 2.0 * 6.0 * 9.80665 * knToN / (2.0 * static_cast<double>(tanks.size()));
       for (const auto s : tanks) {
         d.load(st[s][0], {0.0, -fuel, 0.0});
         d.load(st[s][3], {0.0, -fuel, 0.0});
@@ -1407,7 +1407,7 @@ namespace FEM::TRUSS::LIBRARY {
                "cruise: 370 kN Schrenk lift per wing, 6 t fuel per wing, 3.5 t engines with 25 kN thrust. "
                "Aluminum 7075-T6: spar caps 400 cm^2 at the root tapering to 160 cm^2, webs and skins 60 cm^2, "
                "ribs 25 cm^2."},
-              toModel(std::move(d), kAluminum7075, "Airliner wing box")};
+              toModel(std::move(d), aluminum7075, "Airliner wing box")};
     }
 
   } // namespace end
@@ -1415,7 +1415,7 @@ namespace FEM::TRUSS::LIBRARY {
   std::vector<LibraryTruss> buildLibrary() {
     std::vector<LibraryTruss> library;
     for (auto* build : {kingPostRoof, queenPostRoof, finkRoof, howeRoof, prattRoof, scissorsRoof, bowstringRoof,
-                        prattBridge, howeBridge, warrenBridge, kTrussBridge, parkerBridge, continuousBridge,
+                        prattBridge, howeBridge, warrenBridge, trussBridge, parkerBridge, continuousBridge,
                         grandstandCantilever, spaceFrameRoof, schwedlerDome, geodesicDome, ovalStadiumRoof,
                         archStadiumRoof, kiewittDome,
                         transmissionTower, offshoreJacket, craneJib, eiffelTower,
@@ -1434,17 +1434,17 @@ namespace FEM::TRUSS::LIBRARY {
     std::vector<Entry> entries;
     for (const auto& truss : buildLibrary()) {
       anaf::IO::WriteOptions options;
-      options.format = anaf::IO::FileFormat::Msh;
-      options.mshVersion = anaf::IO::MshVersion::V4_1;
-      options.encoding = anaf::IO::Encoding::Ascii;
+      options.format = anaf::IO::E_FileFormat::Msh;
+      options.mshVersion = anaf::IO::E_MshVersion::V4_1;
+      options.encoding = anaf::IO::E_Encoding::Ascii;
       if (const auto written = anaf::IO::writeMesh(modelFile(dir, truss.entry), truss.model, options); !written) {
         return std::unexpected(std::format("{}: {}", truss.entry.id, written.error().message));
       }
       entries.push_back(truss.entry);
     }
-    std::ofstream index(dir / std::filesystem::path(kIndexFile), std::ios::binary | std::ios::trunc);
+    std::ofstream index(dir / std::filesystem::path(indexFileName), std::ios::binary | std::ios::trunc);
     index << indexJson(entries);
-    if (!index) return std::unexpected(std::format("cannot write '{}'", anaf::IO::pathToUtf8(dir / std::filesystem::path(kIndexFile))));
+    if (!index) return std::unexpected(std::format("cannot write '{}'", anaf::IO::pathToUtf8(dir / std::filesystem::path(indexFileName))));
     return entries;
   }
 

@@ -32,7 +32,7 @@ namespace FEM::TRUSS {
     std::uint32_t node2{};
     float stress{};               // Pa, tension > 0
     bool isStressExceeded{false};
-    std::uint32_t materialID{};   // index into the material list (Gui_Calc_Bridge::allMaterials in the GUI)
+    std::uint32_t materialID{};   // index into the material list (GuiCalcBridge::allMaterials in the GUI)
     double crossSectionArea{};    // m^2
     bool isWireframe{false};      // edge of an imported surface / volume element: drawn, never solved
   };

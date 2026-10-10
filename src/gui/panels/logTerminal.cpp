@@ -32,22 +32,22 @@
 namespace anaf::GUI {
 
   void LogTerminal::onImGuiRender() {
-    ImGui::PushFont(ImGuiLayer::font_console);
+    ImGui::PushFont(ImGuiLayer::g_fontConsole);
 
     ImGui::Begin("Console", &isOpen);
 
     if (ImGui::Button("Clear")) {
-      std::lock_guard<std::mutex> lock(g_log_mutex);
-      g_ui_logs.clear();
+      std::lock_guard<std::mutex> lock(g_logMutex);
+      g_uiLogs.clear();
     }
 
     {
       // Sinks push from worker threads, so trimming needs the lock too. Needed when the
       // limit was lowered in the console: the sink drops only one entry per new line.
-      std::lock_guard<std::mutex> lock(g_log_mutex);
-      if (g_ui_logs.size() > g_ui_log_max_num) {
-        const auto excess = static_cast<std::ptrdiff_t>(g_ui_logs.size() - g_ui_log_max_num);
-        g_ui_logs.erase(g_ui_logs.begin(), g_ui_logs.begin() + excess);
+      std::lock_guard<std::mutex> lock(g_logMutex);
+      if (g_uiLogs.size() > g_uiLogMaxNum) {
+        const auto excess = static_cast<std::ptrdiff_t>(g_uiLogs.size() - g_uiLogMaxNum);
+        g_uiLogs.erase(g_uiLogs.begin(), g_uiLogs.begin() + excess);
       }
     }
 
@@ -62,27 +62,27 @@ namespace anaf::GUI {
     static float s_copiedFeedbackTimer = 0.0f;
     ImGui::SameLine();
     if (ImGui::Button("Copy Last Log")) {
-      std::lock_guard<std::mutex> lock(g_log_mutex);
-      if(!g_ui_logs.empty()) {
-        ImGui::SetClipboardText(g_ui_logs.back().text.c_str());
+      std::lock_guard<std::mutex> lock(g_logMutex);
+      if(!g_uiLogs.empty()) {
+        ImGui::SetClipboardText(g_uiLogs.back().text.c_str());
         s_copiedFeedbackTimer = 1.5f;
         glfwPostEmptyEvent();
       }
     }
 
-    const float input_width = 80.0f;
-    const char* label_text = "Max Output";
-    const float total_width = ImGui::CalcTextSize(label_text).x + ImGui::GetStyle().ItemSpacing.x + input_width;
+    const float inputWidth = 80.0f;
+    const char* labelText = "Max Output";
+    const float totalWidth = ImGui::CalcTextSize(labelText).x + ImGui::GetStyle().ItemSpacing.x + inputWidth;
     ImGui::SameLine();
-    const float right_cursor_x = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - total_width;
-    if (right_cursor_x > ImGui::GetCursorPosX()) ImGui::SameLine(right_cursor_x);
+    const float rightCursorX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - totalWidth;
+    if (rightCursorX > ImGui::GetCursorPosX()) ImGui::SameLine(rightCursorX);
 
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label_text);
+    ImGui::TextUnformatted(labelText);
 
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(input_width);
-    ImGui::InputScalar("##output_num", ImGuiDataType_U32, &g_ui_log_max_num);
+    ImGui::SetNextItemWidth(inputWidth);
+    ImGui::InputScalar("##output_num", ImGuiDataType_U32, &g_uiLogMaxNum);
 
     ImGui::Separator();
     
@@ -92,20 +92,20 @@ namespace anaf::GUI {
     // 0.0f wraps at the right edge of the region, so lines re-wrap when the panel is resized.
     if (m_wrapLines) ImGui::PushTextWrapPos(0.0f);
     {
-      std::lock_guard<std::mutex> lock(g_log_mutex);
+      std::lock_guard<std::mutex> lock(g_logMutex);
       const auto drawLine = [](const std::size_t i) {
-        const auto& log = g_ui_logs[i];
+        const auto& log = g_uiLogs[i];
 
         ImGui::PushID(static_cast<int>(i));
 
         const THEME::ThemePalette& palette = THEME::theme();
         ImVec4 color = palette.text;
         switch (log.level) {
-          case anaf::LOG::Level::INFO: color = palette.info; break;
-          case anaf::LOG::Level::WARN: color = palette.warn; break;
-          case anaf::LOG::Level::ERR: color = palette.bad; break;
-          case anaf::LOG::Level::SUCCESS: color = palette.good; break;
-          case anaf::LOG::Level::CORE: color = palette.core; break;
+          case anaf::LOG::E_Level::INFO: color = palette.info; break;
+          case anaf::LOG::E_Level::WARN: color = palette.warn; break;
+          case anaf::LOG::E_Level::ERR: color = palette.bad; break;
+          case anaf::LOG::E_Level::SUCCESS: color = palette.good; break;
+          case anaf::LOG::E_Level::CORE: color = palette.core; break;
         }
         ImGui::PushStyleColor(ImGuiCol_Text, color);
         ImGui::TextUnformatted(log.text.c_str());
@@ -123,11 +123,11 @@ namespace anaf::GUI {
       };
       if (m_wrapLines) {
         // Wrapped lines differ in height, which ImGuiListClipper cannot skip; every line is laid out.
-        for (std::size_t i = 0; i < g_ui_logs.size(); ++i) drawLine(i);
+        for (std::size_t i = 0; i < g_uiLogs.size(); ++i) drawLine(i);
       } else {
         // One row per line: only the visible rows are drawn.
         ImGuiListClipper clipper;
-        clipper.Begin(static_cast<int>(g_ui_logs.size()));
+        clipper.Begin(static_cast<int>(g_uiLogs.size()));
         while (clipper.Step()) {
           for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) drawLine(static_cast<std::size_t>(row));
         }
@@ -137,34 +137,34 @@ namespace anaf::GUI {
 
     if (ImGui::BeginPopupContextWindow(nullptr, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
       if(ImGui::MenuItem("Copy Last Log")) {
-        std::lock_guard<std::mutex> lock(g_log_mutex);
-        if(!g_ui_logs.empty()) {
-          ImGui::SetClipboardText(g_ui_logs.back().text.c_str());
+        std::lock_guard<std::mutex> lock(g_logMutex);
+        if(!g_uiLogs.empty()) {
+          ImGui::SetClipboardText(g_uiLogs.back().text.c_str());
           glfwPostEmptyEvent();
           s_copiedFeedbackTimer = 1.5f;
         }
       }
       if (ImGui::MenuItem("Copy All Logs")) {
-        std::string full_log;
+        std::string fullLog;
         {
-          std::lock_guard<std::mutex> lock(g_log_mutex);
-          std::size_t total_size {0};
-          for (const auto& log : g_ui_logs) {
-            total_size += log.text.size() + 1;
+          std::lock_guard<std::mutex> lock(g_logMutex);
+          std::size_t totalSize {0};
+          for (const auto& log : g_uiLogs) {
+            totalSize += log.text.size() + 1;
           }
-          full_log.reserve(total_size);
-          for (const auto& log : g_ui_logs) {
-            full_log.append(log.text);
-            full_log.push_back('\n');
+          fullLog.reserve(totalSize);
+          for (const auto& log : g_uiLogs) {
+            fullLog.append(log.text);
+            fullLog.push_back('\n');
           }
-          ImGui::SetClipboardText(full_log.c_str());
+          ImGui::SetClipboardText(fullLog.c_str());
           glfwPostEmptyEvent();
           s_copiedFeedbackTimer = 1.5f;
         }
       }
       if (ImGui::MenuItem("Clear All")) {
-        std::lock_guard<std::mutex> lock(g_log_mutex);
-        g_ui_logs.clear();
+        std::lock_guard<std::mutex> lock(g_logMutex);
+        g_uiLogs.clear();
       }
       ImGui::EndPopup();
     }

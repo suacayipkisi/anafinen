@@ -37,8 +37,8 @@
 namespace FEM::TRUSS::LIBRARY {
 
   // Relative to the assets folder (anaf::DIRECTORY::findAssetPath).
-  inline constexpr std::string_view kLibrarySubdir = "objects/truss/truss1D";
-  inline constexpr std::string_view kIndexFile = "index.json";
+  inline constexpr std::string_view librarySubdir = "objects/truss/truss1D";
+  inline constexpr std::string_view indexFileName = "index.json";
 
   struct Entry {
     std::string id;          // file name without ".msh": [a-z0-9_]+

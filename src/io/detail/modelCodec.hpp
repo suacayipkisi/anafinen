@@ -87,7 +87,7 @@ namespace anaf::IO::detail {
 
   struct FlatArray {
     std::string name;
-    FieldLocation location{FieldLocation::Node};
+    E_FieldLocation location{E_FieldLocation::Node};
     int components{1};
     const std::vector<double>* values{nullptr};
   };
@@ -112,6 +112,6 @@ namespace anaf::IO::detail {
   // and applies a "TimeValue" global to the time of every Time field.
   void unflattenSteps(MeshModel& model);
 
-  inline constexpr std::string_view kTimeValue = "TimeValue";
+  inline constexpr std::string_view timeValueName = "TimeValue";
 
 } // namespace anaf::IO::detail end

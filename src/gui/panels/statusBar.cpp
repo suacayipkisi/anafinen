@@ -36,7 +36,7 @@ namespace anaf::GUI {
 
   namespace {
     // GL_NVX_gpu_memory_info: NVIDIA and Mesa (radeonsi, ...). Value in KiB.
-    constexpr GLenum kGpuMemoryDedicatedNvx = 0x9047;
+    constexpr GLenum gpuMemoryDedicatedNvx = 0x9047;
 
     bool hasGlExtension(const std::string_view name) {
       GLint count = 0;
@@ -63,7 +63,7 @@ namespace anaf::GUI {
     std::optional<double> vramGiB;
     if (hasGlExtension("GL_NVX_gpu_memory_info")) {
       GLint kib = 0;
-      glGetIntegerv(kGpuMemoryDedicatedNvx, &kib);
+      glGetIntegerv(gpuMemoryDedicatedNvx, &kib);
       if (kib > 0) vramGiB = static_cast<double>(kib) / (1024.0 * 1024.0);
     }
     if (!vramGiB) vramGiB = PLATFORM::queryVideoMemoryGiB(rendererName);
@@ -85,15 +85,15 @@ namespace anaf::GUI {
     if (m_hardware.empty()) queryHardware();
 
     const auto& bridge = BRIDGE::buildBridge();
-    const bool solving = bridge.m_isRunning.load();
-    const bool previewing = bridge.m_isGeneratingPreview.load();
+    const bool solving = bridge.isRunning.load();
+    const bool previewing = bridge.isGeneratingPreview.load();
 
     ImGui::Separator();
 
     // Left: worker state, then the hardware summary right next to it.
     const ImVec4 accent = (solving || previewing) ? THEME::theme().warn : THEME::theme().good;
     char state[32];
-    if (solving) std::snprintf(state, sizeof(state), "SOLVING %.0f%%", static_cast<double>(bridge.m_progress.load() * 100.0f));
+    if (solving) std::snprintf(state, sizeof(state), "SOLVING %.0f%%", static_cast<double>(bridge.progress.load() * 100.0f));
     else if (previewing) std::snprintf(state, sizeof(state), "PREVIEW");
     else std::snprintf(state, sizeof(state), "IDLE");
     ImGui::TextColored(accent, "%s", state);

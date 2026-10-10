@@ -36,34 +36,34 @@ namespace anaf::GUI {
 
   namespace {
 
-    using anaf::IO::FileFormat;
+    using anaf::IO::E_FileFormat;
 
     struct ExportChoice {
       const char* label;
       const char* description;
-      FileFormat format;
+      E_FileFormat format;
       const char* extension;
-      anaf::IO::MshVersion mshVersion;
-      anaf::IO::VtkLegacyVersion vtkVersion;
+      anaf::IO::E_MshVersion mshVersion;
+      anaf::IO::E_VtkLegacyVersion vtkVersion;
       bool allowsBinary;
       bool allowsCompression;
     };
 
-    constexpr std::array<ExportChoice, 7> kExportChoices{{
-      {"Gmsh MSH 4.1", "Current Gmsh format: mesh, physical groups, all result steps.", FileFormat::Msh, ".msh",
-       anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V5_1, true, false},
-      {"Gmsh MSH 2.2", "Legacy Gmsh format, read by most other solvers.", FileFormat::Msh, ".msh",
-       anaf::IO::MshVersion::V2_2, anaf::IO::VtkLegacyVersion::V5_1, true, false},
-      {"VTK XML (.vtu)", "ParaView's modern format (one time step; modes and load cases as arrays).", FileFormat::Vtu, ".vtu",
-       anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V5_1, true, true},
-      {"ParaView collection (.pvd)", "Time series for ParaView: .pvd plus one .vtu per time step in a folder.", FileFormat::Pvd, ".pvd",
-       anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V5_1, true, true},
-      {"VTK Legacy 5.1 (.vtk)", "Legacy VTK for VTK >= 9 / ParaView >= 5.10 (one result step).", FileFormat::VtkLegacy, ".vtk",
-       anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V5_1, true, false},
-      {"VTK Legacy 4.2 (.vtk)", "Legacy VTK readable by every VTK / ParaView version.", FileFormat::VtkLegacy, ".vtk",
-       anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V4_2, true, false},
-      {"STEP (.step)", "CAD geometry (bars as edges); other data in a .anafFields sidecar.", FileFormat::Step, ".step",
-       anaf::IO::MshVersion::V4_1, anaf::IO::VtkLegacyVersion::V5_1, false, false},
+    constexpr std::array<ExportChoice, 7> exportChoices{{
+      {"Gmsh MSH 4.1", "Current Gmsh format: mesh, physical groups, all result steps.", E_FileFormat::Msh, ".msh",
+       anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, true, false},
+      {"Gmsh MSH 2.2", "Legacy Gmsh format, read by most other solvers.", E_FileFormat::Msh, ".msh",
+       anaf::IO::E_MshVersion::V2_2, anaf::IO::E_VtkLegacyVersion::V5_1, true, false},
+      {"VTK XML (.vtu)", "ParaView's modern format (one time step; modes and load cases as arrays).", E_FileFormat::Vtu, ".vtu",
+       anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, true, true},
+      {"ParaView collection (.pvd)", "Time series for ParaView: .pvd plus one .vtu per time step in a folder.", E_FileFormat::Pvd, ".pvd",
+       anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, true, true},
+      {"VTK Legacy 5.1 (.vtk)", "Legacy VTK for VTK >= 9 / ParaView >= 5.10 (one result step).", E_FileFormat::VtkLegacy, ".vtk",
+       anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, true, false},
+      {"VTK Legacy 4.2 (.vtk)", "Legacy VTK readable by every VTK / ParaView version.", E_FileFormat::VtkLegacy, ".vtk",
+       anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V4_2, true, false},
+      {"STEP (.step)", "CAD geometry (bars as edges); other data in a .anafFields sidecar.", E_FileFormat::Step, ".step",
+       anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, false, false},
     }};
 
     std::vector<FileFilter> importFilters() {
@@ -84,7 +84,7 @@ namespace anaf::GUI {
 
     bool isCad(const std::filesystem::path& path) {
       const auto format = anaf::IO::detectFormat(path);
-      return format == FileFormat::Step || format == FileFormat::Iges || format == FileFormat::Brep;
+      return format == E_FileFormat::Step || format == E_FileFormat::Iges || format == E_FileFormat::Brep;
     }
 
     // Built-in models are never overwritten: nothing may be written into the library folder
@@ -93,7 +93,7 @@ namespace anaf::GUI {
       std::error_code ec;
       const auto folder = std::filesystem::weakly_canonical(std::filesystem::absolute(path, ec).parent_path(), ec);
       if (ec) return false;
-      for (const auto subdir : {FEM::TRUSS::LIBRARY::kLibrarySubdir, FEM::BEAM::LIBRARY::kLibrarySubdir}) {
+      for (const auto subdir : {FEM::TRUSS::LIBRARY::librarySubdir, FEM::BEAM::LIBRARY::librarySubdir}) {
         const auto library = anaf::DIRECTORY::findAssetPath(std::filesystem::path(subdir));
         if (!library.empty() && std::filesystem::equivalent(folder, library, ec) && !ec) return true;
       }
@@ -130,7 +130,7 @@ namespace anaf::GUI {
       return;
     }
     m_dialog = NativeFileDialog::openFile("Import mesh or CAD model", importFilters());
-    m_stage = Stage::ChoosingImport;
+    m_stage = E_Stage::ChoosingImport;
   }
 
   void FileIoPanel::importFile(const std::filesystem::path& path) {
@@ -140,7 +140,7 @@ namespace anaf::GUI {
     }
     if (isCad(path)) {
       m_pendingImport = path;
-      m_stage = Stage::CadOptions;
+      m_stage = E_Stage::CadOptions;
     } else {
       startImport(path);
     }
@@ -159,14 +159,14 @@ namespace anaf::GUI {
         return;
       }
     }
-    m_stage = Stage::ExportOptions;
+    m_stage = E_Stage::ExportOptions;
   }
 
   void FileIoPanel::startImport(const std::filesystem::path& path) {
     auto& bridge = BRIDGE::buildBridge();
-    if (bridge.m_isRunning || bridge.m_isGeneratingPreview) {
+    if (bridge.isRunning || bridge.isGeneratingPreview) {
       notify("Wait for the running calculation to finish before importing", true);
-      m_stage = Stage::Idle;
+      m_stage = E_Stage::Idle;
       return;
     }
     std::vector<anaf::MATERIAL::Material> materials;
@@ -190,7 +190,7 @@ namespace anaf::GUI {
         ImportedModel imported;
         if (FEM::BEAM::ADAPTER::isBeamModel(*model)) {
           auto beam = FEM::BEAM::ADAPTER::toMeshData(*model, materials, sections);
-          if (!beam) return std::unexpected(anaf::IO::IoError{anaf::IO::IoError::Code::InvalidModel, "beam model: " + beam.error()});
+          if (!beam) return std::unexpected(anaf::IO::IoError{anaf::IO::IoError::E_Code::InvalidModel, "beam model: " + beam.error()});
           for (const auto& warning : model->warnings) beam->notes.push_back("warning: " + warning);
           imported.beam = std::move(*beam);
         } else {
@@ -200,16 +200,16 @@ namespace anaf::GUI {
         }
         return imported;
       });
-    m_stage = Stage::Importing;
+    m_stage = E_Stage::Importing;
   }
 
   void FileIoPanel::startExport(std::filesystem::path path) {
-    const auto& choice = kExportChoices[static_cast<std::size_t>(m_exportFormat)];
+    const auto& choice = exportChoices[static_cast<std::size_t>(m_exportFormat)];
     if (path.extension().empty()) path += choice.extension;
     if (isInBuiltinLibrary(path)) {
       anaf::LOG::warn("Export refused: '{}' is in a read-only built-in library", anaf::IO::pathToUtf8(path));
       notify("The built-in libraries are read-only: export to another folder", true);
-      m_stage = Stage::Idle;
+      m_stage = E_Stage::Idle;
       return;
     }
 
@@ -227,14 +227,14 @@ namespace anaf::GUI {
     }
     if (!mesh && !beamMesh) {
       notify("Nothing to export", true);
-      m_stage = Stage::Idle;
+      m_stage = E_Stage::Idle;
       return;
     }
     anaf::IO::WriteOptions options;
     options.format = choice.format;
     options.mshVersion = choice.mshVersion;
     options.vtkVersion = choice.vtkVersion;
-    options.encoding = (choice.allowsBinary && m_exportBinary) ? anaf::IO::Encoding::Binary : anaf::IO::Encoding::Ascii;
+    options.encoding = (choice.allowsBinary && m_exportBinary) ? anaf::IO::E_Encoding::Binary : anaf::IO::E_Encoding::Ascii;
     options.compress = choice.allowsCompression && m_exportBinary && m_exportCompress;
 
     // The snapshot is immutable and the conversion runs on the I/O thread as well.
@@ -249,7 +249,7 @@ namespace anaf::GUI {
         if (report) report->warnings.insert(report->warnings.end(), model.warnings.begin(), model.warnings.end());
         return report;
       });
-    m_stage = Stage::Exporting;
+    m_stage = E_Stage::Exporting;
   }
 
   void FileIoPanel::pollDialog() {
@@ -257,17 +257,17 @@ namespace anaf::GUI {
     const auto path = m_dialog->result();
     m_dialog.reset();
     if (!path) {
-      m_stage = Stage::Idle;
+      m_stage = E_Stage::Idle;
       return;
     }
-    if (m_stage == Stage::ChoosingImport) {
+    if (m_stage == E_Stage::ChoosingImport) {
       if (isCad(*path)) {
         m_pendingImport = *path;
-        m_stage = Stage::CadOptions;
+        m_stage = E_Stage::CadOptions;
       } else {
         startImport(*path);
       }
-    } else if (m_stage == Stage::ChoosingExport) {
+    } else if (m_stage == E_Stage::ChoosingExport) {
       startExport(*path);
     }
   }
@@ -295,7 +295,7 @@ namespace anaf::GUI {
       notify("Import discarded (section list changed); import again", true);
       return;
     }
-    bridge.resetModel(BRIDGE::ObjectType::beam_frame);
+    bridge.resetModel(BRIDGE::E_ObjectType::BeamFrame);
     for (const auto& section : imported.newSections) {
       if (const auto added = bridge.addUserSection(section); !added) {
         anaf::LOG::error("{} failed: section '{}' not added: {}", m_importTask->description(), section.getName(), added.error());
@@ -326,7 +326,7 @@ namespace anaf::GUI {
         finishBeamImport(*result->beam);
       } else if (result) {
         // Replaces the whole previous model: stops a running solve and drops its results.
-        bridge.resetModel(BRIDGE::ObjectType::truss_imported_or_entered);
+        bridge.resetModel(BRIDGE::E_ObjectType::TrussImportedOrEntered);
         {
           std::lock_guard lock(bridge.dataMutex);
           bridge.activeMesh = result->truss->mesh;
@@ -336,7 +336,7 @@ namespace anaf::GUI {
         logNotes(result->truss->notes);
         notify(m_importTask->description() + " finished", false);
         if (onImported) onImported();
-      } else if (result.error().code == anaf::IO::IoError::Code::Cancelled) {
+      } else if (result.error().code == anaf::IO::IoError::E_Code::Cancelled) {
         anaf::LOG::warn("{} cancelled", m_importTask->description());
         notify("Import cancelled", false);
       } else {
@@ -344,7 +344,7 @@ namespace anaf::GUI {
         notify("Import failed: " + result.error().message, true);
       }
       m_importTask.reset();
-      m_stage = Stage::Idle;
+      m_stage = E_Stage::Idle;
     }
     if (m_exportTask && m_exportTask->ready()) {
       const auto& result = m_exportTask->wait();
@@ -353,7 +353,7 @@ namespace anaf::GUI {
         for (const auto& extra : result->extraFiles) anaf::LOG::info("Also written: '{}'", extra);
         for (const auto& warning : result->warnings) anaf::LOG::warn("{}", warning);
         notify("Exported " + anaf::IO::pathToUtf8(anaf::IO::pathFromUtf8(result->path).filename()), false);
-      } else if (result.error().code == anaf::IO::IoError::Code::Cancelled) {
+      } else if (result.error().code == anaf::IO::IoError::E_Code::Cancelled) {
         anaf::LOG::warn("{} cancelled", m_exportTask->description());
         notify("Export cancelled", false);
       } else {
@@ -361,13 +361,13 @@ namespace anaf::GUI {
         notify("Export failed: " + result.error().message, true);
       }
       m_exportTask.reset();
-      m_stage = Stage::Idle;
+      m_stage = E_Stage::Idle;
     }
   }
 
   void FileIoPanel::renderCadOptions() {
     constexpr const char* popup = "CAD Import Options";
-    if (m_stage == Stage::CadOptions && !ImGui::IsPopupOpen(popup)) ImGui::OpenPopup(popup);
+    if (m_stage == E_Stage::CadOptions && !ImGui::IsPopupOpen(popup)) ImGui::OpenPopup(popup);
     if (!ImGui::BeginPopupModal(popup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
     ImGui::TextUnformatted(anaf::IO::pathToUtf8(m_pendingImport.filename()).c_str());
@@ -395,20 +395,20 @@ namespace anaf::GUI {
     ImGui::SameLine();
     if (ImGui::Button("Cancel", ImVec2(120, 0))) {
       ImGui::CloseCurrentPopup();
-      m_stage = Stage::Idle;
+      m_stage = E_Stage::Idle;
     }
     ImGui::EndPopup();
   }
 
   void FileIoPanel::renderExportOptions() {
     constexpr const char* popup = "Export Model";
-    if (m_stage == Stage::ExportOptions && !ImGui::IsPopupOpen(popup)) ImGui::OpenPopup(popup);
+    if (m_stage == E_Stage::ExportOptions && !ImGui::IsPopupOpen(popup)) ImGui::OpenPopup(popup);
     if (!ImGui::BeginPopupModal(popup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
-    for (int i = 0; i < static_cast<int>(kExportChoices.size()); ++i) {
-      ImGui::RadioButton(kExportChoices[static_cast<std::size_t>(i)].label, &m_exportFormat, i);
+    for (int i = 0; i < static_cast<int>(exportChoices.size()); ++i) {
+      ImGui::RadioButton(exportChoices[static_cast<std::size_t>(i)].label, &m_exportFormat, i);
     }
-    const auto& choice = kExportChoices[static_cast<std::size_t>(m_exportFormat)];
+    const auto& choice = exportChoices[static_cast<std::size_t>(m_exportFormat)];
     ImGui::TextDisabled("%s", choice.description);
     ImGui::Separator();
     ImGui::BeginDisabled(!choice.allowsBinary);
@@ -423,24 +423,24 @@ namespace anaf::GUI {
       const std::vector<FileFilter> filters{{choice.label, {std::string("*") + choice.extension}}};
       if (!NativeFileDialog::available()) {
         notify("No native file dialog available (install zenity or kdialog)", true);
-        m_stage = Stage::Idle;
+        m_stage = E_Stage::Idle;
       } else {
         m_dialog = NativeFileDialog::saveFile("Export model", std::filesystem::path("anafinen_model") += choice.extension, filters);
-        m_stage = Stage::ChoosingExport;
+        m_stage = E_Stage::ChoosingExport;
       }
     }
     ImGui::SameLine();
     if (ImGui::Button("Cancel", ImVec2(120, 0))) {
       ImGui::CloseCurrentPopup();
-      m_stage = Stage::Idle;
+      m_stage = E_Stage::Idle;
     }
     ImGui::EndPopup();
   }
 
   void FileIoPanel::renderProgress() {
     const bool showNotice = std::chrono::steady_clock::now() < m_noticeUntil;
-    const bool working = m_stage == Stage::Importing || m_stage == Stage::Exporting;
-    const bool choosing = m_stage == Stage::ChoosingImport || m_stage == Stage::ChoosingExport;
+    const bool working = m_stage == E_Stage::Importing || m_stage == E_Stage::Exporting;
+    const bool choosing = m_stage == E_Stage::ChoosingImport || m_stage == E_Stage::ChoosingExport;
     if (!working && !choosing && !showNotice) return;
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();

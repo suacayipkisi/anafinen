@@ -198,13 +198,13 @@ namespace FEM::BEAM {
     const double E,
     const double G,
     const SectionProperties& section,
-    const Formulation formulation,
+    const E_Formulation formulation,
     const double length
   ) {
     const double L = length;
     const double L2 = L * L;
     const double L3 = L2 * L;
-    const bool timoshenko = formulation == Formulation::Timoshenko;
+    const bool timoshenko = formulation == E_Formulation::Timoshenko;
     // phi = ratio of shear to bending flexibility; the x-y plane (v, rz) bends about z and
     // carries Vy, the x-z plane (w, ry) bends about y and carries Vz.
     const double phiY = timoshenko ? 12.0 * E * section.secondMomentZ / (G * section.shearAreaY * L2) : 0.0;
@@ -321,12 +321,12 @@ namespace FEM::BEAM {
     // Several loads may act on one element, so they are added serially.
     for (const auto& load : distributedLoads) {
       const Eigen::Vector3d value(load.value[0], load.value[1], load.value[2]);
-      loads[load.element] += load.frame == LoadFrame::Local ? value : Eigen::Vector3d(axes[load.element] * value);
+      loads[load.element] += load.frame == E_LoadFrame::Local ? value : Eigen::Vector3d(axes[load.element] * value);
     }
     return loads;
   }
 
-  std::expected<void, std::string> Beam_3D_Container::buildElements(
+  std::expected<void, std::string> Beam3DContainer::buildElements(
     const std::span<const anaf::MATERIAL::Material> materials
   ) {
     const auto elementCount = static_cast<long long>(m_elements.size());
@@ -375,7 +375,7 @@ namespace FEM::BEAM {
     return {};
   }
 
-  void Beam_3D_Container::applyLoads(
+  void Beam3DContainer::applyLoads(
     const std::span<const NodalLoad> nodalLoads,
     const std::span<const DistributedLoad> distributedLoads,
     const std::array<double, 3>& gravity,
@@ -417,7 +417,7 @@ namespace FEM::BEAM {
     anaf::LOG::info("Applied {} nodal loads and {} distributed loads (plus self weight)", nodalLoads.size(), distributedLoads.size());
   }
 
-  std::expected<void, std::string> Beam_3D_Container::buildNodeDofs() {
+  std::expected<void, std::string> Beam3DContainer::buildNodeDofs() {
     const std::size_t nodeCount = m_nodes.size();
     m_nodeDofs.assign(nodeCount, NodeDofs{});
     m_heldFreeDirections = 0;
@@ -490,7 +490,7 @@ namespace FEM::BEAM {
     return {};
   }
 
-  std::expected<void, std::string> Beam_3D_Container::calculateDisplacements(const std::stop_token stopToken) {
+  std::expected<void, std::string> Beam3DContainer::calculateDisplacements(const std::stop_token stopToken) {
     const auto nodeCount = static_cast<std::uint32_t>(m_nodes.size());
     if (m_nodeDofs.size() != nodeCount) (void)buildNodeDofs();
 
@@ -597,7 +597,7 @@ namespace FEM::BEAM {
     return {};
   }
 
-  void Beam_3D_Container::calculateSectionForces() {
+  void Beam3DContainer::calculateSectionForces() {
     const auto elementCount = static_cast<long long>(m_elements.size());
     #pragma omp parallel for schedule(static)
     for (long long index = 0; index < elementCount; ++index) {
@@ -614,7 +614,7 @@ namespace FEM::BEAM {
     }
   }
 
-  void Beam_3D_Container::runValidator() {
+  void Beam3DContainer::runValidator() {
     double internalEnergy = 0.0;
     const auto elementCount = static_cast<long long>(m_elements.size());
     #pragma omp parallel for schedule(static) reduction(+:internalEnergy)
@@ -623,7 +623,7 @@ namespace FEM::BEAM {
       const Eigen::Matrix<double, 12, 1> u = elementDisplacements(m_nodes[element.node1], m_nodes[element.node2]);
       internalEnergy += 0.5 * u.dot(m_frames[index].globalStiffness * u);
     }
-    m_elasticDeformationEnergy_internal = internalEnergy;
+    m_elasticDeformationEnergyInternal = internalEnergy;
 
     double externalWork = 0.0;
     const auto nodeCount = static_cast<long long>(m_nodes.size());
@@ -636,7 +636,7 @@ namespace FEM::BEAM {
         externalWork += m_force[base + axis] * displacement[axis] + m_force[base + 3 + axis] * rotation[axis];
       }
     }
-    m_workDone_external = externalWork;
+    m_workDoneExternal = externalWork;
 
     const double externalEnergy = 0.5 * externalWork;
     m_energyDiff = std::abs(internalEnergy - externalEnergy);

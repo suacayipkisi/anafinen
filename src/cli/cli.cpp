@@ -46,7 +46,7 @@ namespace anaf::CLI {
 #endif
     }
 
-    constexpr std::string_view kUsage =
+    constexpr std::string_view usageText =
       "usage: anafinen-cli [--quiet] [<script> ... | -e \"<command>\" ...]\n"
       "  (no arguments)   interactive prompt; type -help for the commands\n"
       "  <script>         runs the commands of a file, stops at the first error\n"
@@ -65,7 +65,7 @@ namespace anaf::CLI {
     for (std::size_t i = 0; i < args.size(); ++i) {
       const std::string_view arg = args[i];
       if (arg == "--help" || arg == "-h") {
-        std::cout << kUsage;
+        std::cout << usageText;
         return 0;
       }
       if (arg == "--version") {
@@ -77,12 +77,12 @@ namespace anaf::CLI {
       }
       if (arg == "-e") {
         if (i + 1 == args.size()) {
-          std::cerr << "error: -e needs a command line\n" << kUsage;
+          std::cerr << "error: -e needs a command line\n" << usageText;
           return 1;
         }
         steps.push_back({false, args[++i]});
       } else if (arg.starts_with('-')) {
-        std::cerr << "error: unknown option '" << arg << "'\n" << kUsage;
+        std::cerr << "error: unknown option '" << arg << "'\n" << usageText;
         return 1;
       } else {
         steps.push_back({true, std::string(arg)});

@@ -75,7 +75,7 @@ namespace anaf::GUI {
     if (!m_loaded) loadTexts();
 
     ImGui::Text("anafinen %s - Analyze Finite Element Engineering", ANAFINEN_VERSION);
-    ImGui::TextUnformatted(kCopyrightNotice);
+    ImGui::TextUnformatted(copyrightNotice);
     ImGui::TextDisabled("Source code: https://github.com/suacayipkisi/anafinen");
     ImGui::Separator();
     ImGui::TextWrapped("This program is free software: you can redistribute it and/or modify it under the terms of the "

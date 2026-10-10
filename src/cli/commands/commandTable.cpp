@@ -31,11 +31,11 @@ namespace anaf::CLI {
 
   namespace {
 
-    constexpr int kMaxScriptDepth = 16;
+    constexpr int maxScriptDepth = 16;
 
     // Ids are 0-based everywhere; <nodes> / <elements> take "all", "3", "0,4,7", "2-9" or a mix.
     // Units are SI: m, m^2, m^4, N, N m, N/m, Pa, kg/m^3.
-    constexpr std::array kCommands{
+    constexpr std::array commands{
       // General
       Command{"help", "-help\n-help <command>", "Lists the commands, or shows the forms of one command.", HANDLERS::help},
       Command{"operations", "-operations", "Shows what each analysis can do and which commands need which model.", HANDLERS::operations},
@@ -142,11 +142,11 @@ namespace anaf::CLI {
   } // namespace end
 
   std::span<const Command> commandTable() {
-    return kCommands;
+    return commands;
   }
 
   const Command* findCommand(const std::string_view name) {
-    for (const auto& command : kCommands) {
+    for (const auto& command : commands) {
       if (command.name == name) return &command;
     }
     return nullptr;
@@ -183,7 +183,7 @@ namespace anaf::CLI {
   }
 
   CommandResult runScript(Session& session, const std::filesystem::path& path) {
-    if (session.scriptDepth >= kMaxScriptDepth) return std::unexpected("scripts nested too deeply (a script that runs itself?)");
+    if (session.scriptDepth >= maxScriptDepth) return std::unexpected("scripts nested too deeply (a script that runs itself?)");
     std::ifstream file(path);
     if (!file) return std::unexpected(std::format("cannot open '{}'", IO::pathToUtf8(path)));
     ++session.scriptDepth;

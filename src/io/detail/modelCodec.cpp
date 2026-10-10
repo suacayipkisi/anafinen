@@ -30,30 +30,30 @@ namespace anaf::IO::detail {
 
   namespace {
 
-    constexpr std::string_view kFixity = "Fixity";
-    constexpr std::string_view kFixityRotation = "FixityRotation";
-    constexpr std::string_view kAllowedMotion = "AllowedMotionBasis";
-    constexpr std::string_view kNodalForce = "NodalForce";
-    constexpr std::string_view kNodalMoment = "NodalMoment";
-    constexpr std::string_view kPrescribedDisplacement = "PrescribedDisplacement";
-    constexpr std::string_view kPrescribedRotation = "PrescribedRotation";
-    constexpr std::string_view kPrescribedTemperature = "PrescribedTemperature";
-    constexpr std::string_view kNodalHeat = "NodalHeat";
-    constexpr std::string_view kInitialPrefix = "Initial:";
-    constexpr std::string_view kAmplitudePrefix = "Amplitude:";
-    constexpr std::string_view kRayleighDamping = "RayleighDamping";
-    constexpr std::string_view kModalDampingRatio = "ModalDampingRatio";
-    constexpr std::string_view kBeamOrientation = "BeamOrientation";
-    constexpr std::string_view kAttributePrefix = "Attribute:";
-    constexpr std::string_view kNodeSetPrefix = "NodeSet:";
-    constexpr std::string_view kElementSetPrefix = "ElementSet:";
-    constexpr std::string_view kNodeTag = "NodeTag";
-    constexpr std::string_view kElementTag = "ElementTag";
-    constexpr std::string_view kEntityTag = "EntityTag";
+    constexpr std::string_view fixityName = "Fixity";
+    constexpr std::string_view fixityRotationName = "FixityRotation";
+    constexpr std::string_view allowedMotionName = "AllowedMotionBasis";
+    constexpr std::string_view nodalForceName = "NodalForce";
+    constexpr std::string_view nodalMomentName = "NodalMoment";
+    constexpr std::string_view prescribedDisplacementName = "PrescribedDisplacement";
+    constexpr std::string_view prescribedRotationName = "PrescribedRotation";
+    constexpr std::string_view prescribedTemperatureName = "PrescribedTemperature";
+    constexpr std::string_view nodalHeatName = "NodalHeat";
+    constexpr std::string_view initialPrefix = "Initial:";
+    constexpr std::string_view amplitudePrefix = "Amplitude:";
+    constexpr std::string_view rayleighDampingName = "RayleighDamping";
+    constexpr std::string_view modalDampingRatioName = "ModalDampingRatio";
+    constexpr std::string_view beamOrientationName = "BeamOrientation";
+    constexpr std::string_view attributePrefix = "Attribute:";
+    constexpr std::string_view nodeSetPrefix = "NodeSet:";
+    constexpr std::string_view elementSetPrefix = "ElementSet:";
+    constexpr std::string_view nodeTagName = "NodeTag";
+    constexpr std::string_view elementTagName = "ElementTag";
+    constexpr std::string_view entityTagName = "EntityTag";
 
     using Direction = std::array<double, 3>;
 
-    Field makeField(std::string name, const FieldLocation location, const int components, std::vector<double> values) {
+    Field makeField(std::string name, const E_FieldLocation location, const int components, std::vector<double> values) {
       Field field;
       field.name = std::move(name);
       field.location = location;
@@ -64,7 +64,7 @@ namespace anaf::IO::detail {
     }
 
     bool isKnownAttribute(const std::string_view name) {
-      return name == Attribute::MaterialId || name == Attribute::CrossSectionArea || name == Attribute::HeatGeneration;
+      return name == Attribute::materialId || name == Attribute::crossSectionArea || name == Attribute::heatGeneration;
     }
 
     // "<base>" for constant data, "<base>:<amplitude>" otherwise.
@@ -136,7 +136,7 @@ namespace anaf::IO::detail {
     }
 
     // Removes the first field matching (name, location) and returns it.
-    std::optional<Field> takeField(MeshModel& model, const std::string_view name, const FieldLocation location) {
+    std::optional<Field> takeField(MeshModel& model, const std::string_view name, const E_FieldLocation location) {
       const auto it = std::ranges::find_if(model.fields, [&](const Field& f) { return f.name == name && f.location == location; });
       if (it == model.fields.end()) return std::nullopt;
       Field field = std::move(*it);
@@ -174,7 +174,7 @@ namespace anaf::IO::detail {
     for (const auto* group : {&model.fields, &encoded}) {
       for (const auto& field : *group) {
         if (field.steps.empty()) continue;
-        if (field.stepKind == StepKind::Time) {
+        if (field.stepKind == E_StepKind::Time) {
           const bool picked = pick && group == &model.fields;
           const auto* values = picked ? pick(field) : selectStep(field, timeStep);
           if (!values) continue;
@@ -199,8 +199,8 @@ namespace anaf::IO::detail {
         labelsDropped = labelsDropped || !field.stepLabels.empty();
       }
     }
-    if (timeValue && !model.findGlobal(std::string(kTimeValue))) {
-      out.globals.push_back(GlobalArray{std::string(kTimeValue), 1, {*timeValue}});
+    if (timeValue && !model.findGlobal(std::string(timeValueName))) {
+      out.globals.push_back(GlobalArray{std::string(timeValueName), 1, {*timeValue}});
     }
     if (labelsDropped) out.warnings.push_back("step labels are not stored in VTK files");
     return out;
@@ -208,9 +208,9 @@ namespace anaf::IO::detail {
 
   void unflattenSteps(MeshModel& model) {
     struct Group {
-      FieldLocation location;
+      E_FieldLocation location;
       int components;
-      StepKind kind;
+      E_StepKind kind;
       std::map<std::size_t, std::vector<double>> steps; // mode / case number -> values
     };
     std::map<std::pair<std::string, int>, Group> groups; // (base name, kind + location key)
@@ -224,7 +224,7 @@ namespace anaf::IO::detail {
       const bool numbered = digits.size() >= 3 && std::ranges::all_of(digits, [](const char c) { return c >= '0' && c <= '9'; });
       const auto kind = numbered && kindSeparator != std::string::npos && kindSeparator > 0
         ? stepKindFromName(std::string_view(field.name).substr(kindSeparator + 1, last - kindSeparator - 1)) : std::nullopt;
-      if (!kind || *kind == StepKind::Time || field.steps.size() != 1) {
+      if (!kind || *kind == E_StepKind::Time || field.steps.size() != 1) {
         kept.push_back(std::move(field));
         continue;
       }
@@ -258,10 +258,10 @@ namespace anaf::IO::detail {
     }
     model.fields = std::move(kept);
 
-    const auto timeValue = std::ranges::find_if(model.globalData, [](const GlobalArray& a) { return a.name == kTimeValue; });
+    const auto timeValue = std::ranges::find_if(model.globalData, [](const GlobalArray& a) { return a.name == timeValueName; });
     if (timeValue != model.globalData.end() && timeValue->values.size() == 1) {
       for (auto& field : model.fields) {
-        if (field.stepKind == StepKind::Time) std::ranges::fill(field.times, timeValue->values.front());
+        if (field.stepKind == E_StepKind::Time) std::ranges::fill(field.times, timeValue->values.front());
       }
       model.globalData.erase(timeValue);
     }
@@ -279,7 +279,7 @@ namespace anaf::IO::detail {
         for (int axis = 0; axis < 3; ++axis) fixity[constraint.node * 3 + axis] = constraint.fixed[axis] ? 1.0 : 0.0;
         needsBasis = needsBasis || !isAxisAligned(constraint);
       }
-      out.push_back(makeField(std::string(kFixity), FieldLocation::Node, 3, std::move(fixity)));
+      out.push_back(makeField(std::string(fixityName), E_FieldLocation::Node, 3, std::move(fixity)));
 
       if (needsBasis) {
         // rank, then up to three free directions; nodes without a constraint are fully free (rank 3, identity).
@@ -308,7 +308,7 @@ namespace anaf::IO::detail {
             for (int a = 0; a < 3; ++a) row[1 + i * 3 + a] = directions[i][a];
           }
         }
-        out.push_back(makeField(std::string(kAllowedMotion), FieldLocation::Node, 10, std::move(basis)));
+        out.push_back(makeField(std::string(allowedMotionName), E_FieldLocation::Node, 10, std::move(basis)));
       }
 
       bool anyRotational = false;
@@ -323,7 +323,7 @@ namespace anaf::IO::detail {
         for (const auto& constraint : model.constraints) {
           for (int axis = 0; axis < 3; ++axis) fixityRot[constraint.node * 3 + axis] = constraint.fixedRotation[axis] ? 1.0 : 0.0;
         }
-        out.push_back(makeField(std::string(kFixityRotation), FieldLocation::Node, 3, std::move(fixityRot)));
+        out.push_back(makeField(std::string(fixityRotationName), E_FieldLocation::Node, 3, std::move(fixityRot)));
       }
     }
 
@@ -338,7 +338,7 @@ namespace anaf::IO::detail {
       for (int axis = 0; axis < 3; ++axis) values[constraint.node * 4 + 1 + axis] = constraint.prescribed[axis];
     }
     for (auto& [amplitude, values] : prescribed) {
-      out.push_back(makeField(withAmplitude(kPrescribedDisplacement, amplitude), FieldLocation::Node, 4, std::move(values)));
+      out.push_back(makeField(withAmplitude(prescribedDisplacementName, amplitude), E_FieldLocation::Node, 4, std::move(values)));
     }
 
     std::map<std::string, std::vector<double>> prescribedRot;
@@ -351,7 +351,7 @@ namespace anaf::IO::detail {
       for (int axis = 0; axis < 3; ++axis) values[constraint.node * 4 + 1 + axis] = constraint.prescribedRotation[axis];
     }
     for (auto& [amplitude, values] : prescribedRot) {
-      out.push_back(makeField(withAmplitude(kPrescribedRotation, amplitude), FieldLocation::Node, 4, std::move(values)));
+      out.push_back(makeField(withAmplitude(prescribedRotationName, amplitude), E_FieldLocation::Node, 4, std::move(values)));
     }
 
     std::map<std::string, std::vector<double>> forces;
@@ -362,7 +362,7 @@ namespace anaf::IO::detail {
       for (int axis = 0; axis < 3; ++axis) force[load.node * 3 + axis] += load.force[axis];
     }
     for (auto& [amplitude, force] : forces) {
-      out.push_back(makeField(withAmplitude(kNodalForce, amplitude), FieldLocation::Node, 3, std::move(force)));
+      out.push_back(makeField(withAmplitude(nodalForceName, amplitude), E_FieldLocation::Node, 3, std::move(force)));
     }
 
     std::map<std::string, std::vector<double>> moments;
@@ -373,7 +373,7 @@ namespace anaf::IO::detail {
       for (int axis = 0; axis < 3; ++axis) moment[load.node * 3 + axis] += load.moment[axis];
     }
     for (auto& [amplitude, moment] : moments) {
-      out.push_back(makeField(withAmplitude(kNodalMoment, amplitude), FieldLocation::Node, 3, std::move(moment)));
+      out.push_back(makeField(withAmplitude(nodalMomentName, amplitude), E_FieldLocation::Node, 3, std::move(moment)));
     }
 
     std::map<std::string, std::vector<double>> temperatures;
@@ -384,7 +384,7 @@ namespace anaf::IO::detail {
       values[constraint.node * 2 + 1] = constraint.temperature;
     }
     for (auto& [amplitude, values] : temperatures) {
-      out.push_back(makeField(withAmplitude(kPrescribedTemperature, amplitude), FieldLocation::Node, 2, std::move(values)));
+      out.push_back(makeField(withAmplitude(prescribedTemperatureName, amplitude), E_FieldLocation::Node, 2, std::move(values)));
     }
 
     std::map<std::string, std::vector<double>> heat;
@@ -394,18 +394,18 @@ namespace anaf::IO::detail {
       values[load.node] += load.power;
     }
     for (auto& [amplitude, values] : heat) {
-      out.push_back(makeField(withAmplitude(kNodalHeat, amplitude), FieldLocation::Node, 1, std::move(values)));
+      out.push_back(makeField(withAmplitude(nodalHeatName, amplitude), E_FieldLocation::Node, 1, std::move(values)));
     }
 
     for (const auto& condition : model.initialConditions) {
       if (condition.values.size() != nodeTotal * static_cast<std::size_t>(condition.components)) continue;
-      out.push_back(makeField(std::string(kInitialPrefix) + condition.quantity, FieldLocation::Node, condition.components, condition.values));
+      out.push_back(makeField(std::string(initialPrefix) + condition.quantity, E_FieldLocation::Node, condition.components, condition.values));
     }
 
     for (const auto& [name, values] : model.elementAttributes) {
       if (values.size() != elementTotal) continue;
-      std::string fieldName = isKnownAttribute(name) ? name : std::string(kAttributePrefix) + name;
-      out.push_back(makeField(std::move(fieldName), FieldLocation::Element, 1, values));
+      std::string fieldName = isKnownAttribute(name) ? name : std::string(attributePrefix) + name;
+      out.push_back(makeField(std::move(fieldName), E_FieldLocation::Element, 1, values));
     }
 
     if (!model.beamOrientation.empty() && model.beamOrientation.size() == elementTotal) {
@@ -413,26 +413,26 @@ namespace anaf::IO::detail {
       for (std::size_t e = 0; e < elementTotal; ++e) {
         for (int a = 0; a < 3; ++a) orientation[e * 3 + a] = model.beamOrientation[e][a];
       }
-      out.push_back(makeField(std::string(kBeamOrientation), FieldLocation::Element, 3, std::move(orientation)));
+      out.push_back(makeField(std::string(beamOrientationName), E_FieldLocation::Element, 3, std::move(orientation)));
     }
 
     if (options.nodeSets || options.elementSets) {
       for (const auto& set : model.sets) {
-        const bool isNodeSet = set.kind == SetKind::Node;
+        const bool isNodeSet = set.kind == E_SetKind::Node;
         if (isNodeSet ? !options.nodeSets : !options.elementSets) continue;
         std::vector<double> membership(isNodeSet ? nodeTotal : elementTotal, 0.0);
         for (const auto member : set.members) {
           if (member < membership.size()) membership[member] = 1.0;
         }
-        out.push_back(makeField(std::string(isNodeSet ? kNodeSetPrefix : kElementSetPrefix) + set.name,
-          isNodeSet ? FieldLocation::Node : FieldLocation::Element, 1, std::move(membership)));
+        out.push_back(makeField(std::string(isNodeSet ? nodeSetPrefix : elementSetPrefix) + set.name,
+          isNodeSet ? E_FieldLocation::Node : E_FieldLocation::Element, 1, std::move(membership)));
       }
     }
 
     if (options.tags) {
       std::vector<double> nodeTags(nodeTotal);
       for (std::size_t n = 0; n < nodeTotal; ++n) nodeTags[n] = static_cast<double>(model.nodes[n].tag);
-      out.push_back(makeField(std::string(kNodeTag), FieldLocation::Node, 1, std::move(nodeTags)));
+      out.push_back(makeField(std::string(nodeTagName), E_FieldLocation::Node, 1, std::move(nodeTags)));
 
       std::vector<double> elementTags;
       std::vector<double> entityTags;
@@ -447,8 +447,8 @@ namespace anaf::IO::detail {
           entityTags.push_back(static_cast<double>(entity));
         }
       }
-      out.push_back(makeField(std::string(kElementTag), FieldLocation::Element, 1, std::move(elementTags)));
-      if (anyEntity) out.push_back(makeField(std::string(kEntityTag), FieldLocation::Element, 1, std::move(entityTags)));
+      out.push_back(makeField(std::string(elementTagName), E_FieldLocation::Element, 1, std::move(elementTags)));
+      if (anyEntity) out.push_back(makeField(std::string(entityTagName), E_FieldLocation::Element, 1, std::move(entityTags)));
     }
     return out;
   }
@@ -456,7 +456,7 @@ namespace anaf::IO::detail {
   std::vector<GlobalArray> encodeModelGlobals(const MeshModel& model) {
     std::vector<GlobalArray> out;
     for (const auto& amplitude : model.amplitudes) {
-      GlobalArray array{std::string(kAmplitudePrefix) + amplitude.name, 2, {}};
+      GlobalArray array{std::string(amplitudePrefix) + amplitude.name, 2, {}};
       for (std::size_t i = 0; i < amplitude.times.size() && i < amplitude.factors.size(); ++i) {
         array.values.push_back(amplitude.times[i]);
         array.values.push_back(amplitude.factors[i]);
@@ -464,8 +464,8 @@ namespace anaf::IO::detail {
       out.push_back(std::move(array));
     }
     if (model.damping) {
-      out.push_back(GlobalArray{std::string(kRayleighDamping), 2, {model.damping->rayleighAlpha, model.damping->rayleighBeta}});
-      if (!model.damping->modalRatios.empty()) out.push_back(GlobalArray{std::string(kModalDampingRatio), 1, model.damping->modalRatios});
+      out.push_back(GlobalArray{std::string(rayleighDampingName), 2, {model.damping->rayleighAlpha, model.damping->rayleighBeta}});
+      if (!model.damping->modalRatios.empty()) out.push_back(GlobalArray{std::string(modalDampingRatioName), 1, model.damping->modalRatios});
     }
     return out;
   }
@@ -484,7 +484,7 @@ namespace anaf::IO::detail {
     };
 
     // Fixity (current 3-component form, then legacy per-axis scalars).
-    if (auto fixity = takeField(model, kFixity, FieldLocation::Node); fixity && fixity->components == 3 && sized(*fixity, nodeTotal)) {
+    if (auto fixity = takeField(model, fixityName, E_FieldLocation::Node); fixity && fixity->components == 3 && sized(*fixity, nodeTotal)) {
       const auto& values = *lastStep(*fixity);
       for (std::uint32_t n = 0; n < nodeTotal; ++n) {
         const std::array<bool, 3> fixed{values[n * 3] != 0.0, values[n * 3 + 1] != 0.0, values[n * 3 + 2] != 0.0};
@@ -493,7 +493,7 @@ namespace anaf::IO::detail {
     }
     constexpr std::array<std::string_view, 3> legacyAxes{"FixityX", "FixityY", "FixityZ"};
     for (int axis = 0; axis < 3; ++axis) {
-      if (auto legacy = takeField(model, legacyAxes[axis], FieldLocation::Node); legacy && sized(*legacy, nodeTotal)) {
+      if (auto legacy = takeField(model, legacyAxes[axis], E_FieldLocation::Node); legacy && sized(*legacy, nodeTotal)) {
         const auto& values = *lastStep(*legacy);
         for (std::uint32_t n = 0; n < nodeTotal; ++n) {
           if (values[n * legacy->components] != 0.0) constraintFor(model, constraintIndex, n).fixed[axis] = true;
@@ -502,8 +502,8 @@ namespace anaf::IO::detail {
     }
 
     // Inclined supports: current 10-component form or legacy rank + 9-component pair.
-    auto basisField = takeField(model, kAllowedMotion, FieldLocation::Node);
-    auto legacyRank = takeField(model, "AllowedMotionRank", FieldLocation::Node);
+    auto basisField = takeField(model, allowedMotionName, E_FieldLocation::Node);
+    auto legacyRank = takeField(model, "AllowedMotionRank", E_FieldLocation::Node);
     if (basisField && sized(*basisField, nodeTotal) && (basisField->components == 10 || (basisField->components == 9 && legacyRank))) {
       const auto& values = *lastStep(*basisField);
       const std::vector<double>* ranks = legacyRank ? lastStep(*legacyRank) : nullptr;
@@ -539,7 +539,7 @@ namespace anaf::IO::detail {
     }
 
     // Rotational fixity.
-    if (auto fixityRot = takeField(model, kFixityRotation, FieldLocation::Node); fixityRot && fixityRot->components == 3 && sized(*fixityRot, nodeTotal)) {
+    if (auto fixityRot = takeField(model, fixityRotationName, E_FieldLocation::Node); fixityRot && fixityRot->components == 3 && sized(*fixityRot, nodeTotal)) {
       const auto& values = *lastStep(*fixityRot);
       for (std::uint32_t n = 0; n < nodeTotal; ++n) {
         const std::array<bool, 3> fixedRot{values[n * 3] != 0.0, values[n * 3 + 1] != 0.0, values[n * 3 + 2] != 0.0};
@@ -550,7 +550,7 @@ namespace anaf::IO::detail {
     // Legacy "FixityDirection_*" vectors list fixed directions per node.
     std::vector<std::vector<Direction>> fixedDirections;
     for (auto it = model.fields.begin(); it != model.fields.end();) {
-      if (it->location == FieldLocation::Node && it->components == 3 && it->name.starts_with("FixityDirection_") && sized(*it, nodeTotal)) {
+      if (it->location == E_FieldLocation::Node && it->components == 3 && it->name.starts_with("FixityDirection_") && sized(*it, nodeTotal)) {
         if (fixedDirections.empty()) fixedDirections.resize(nodeTotal);
         const auto& values = it->steps.back();
         for (std::size_t n = 0; n < nodeTotal; ++n) {
@@ -596,9 +596,9 @@ namespace anaf::IO::detail {
     for (auto it = model.fields.begin(); it != model.fields.end();) {
       const Field& field = *it;
       bool consumed = false;
-      if (field.location == FieldLocation::Node && sized(field, nodeTotal)) {
+      if (field.location == E_FieldLocation::Node && sized(field, nodeTotal)) {
         const auto& values = field.steps.back();
-        if (const auto amplitude = amplitudeOf(field.name, kPrescribedDisplacement); amplitude && field.components == 4) {
+        if (const auto amplitude = amplitudeOf(field.name, prescribedDisplacementName); amplitude && field.components == 4) {
           for (std::uint32_t n = 0; n < nodeTotal; ++n) {
             if (values[n * 4] == 0.0) continue;
             auto& constraint = constraintFor(model, constraintIndex, n);
@@ -606,7 +606,7 @@ namespace anaf::IO::detail {
             constraint.amplitude = *amplitude;
           }
           consumed = true;
-        } else if (const auto rotAmplitude = amplitudeOf(field.name, kPrescribedRotation); rotAmplitude && field.components == 4) {
+        } else if (const auto rotAmplitude = amplitudeOf(field.name, prescribedRotationName); rotAmplitude && field.components == 4) {
           for (std::uint32_t n = 0; n < nodeTotal; ++n) {
             if (values[n * 4] == 0.0) continue;
             auto& constraint = constraintFor(model, constraintIndex, n);
@@ -614,30 +614,30 @@ namespace anaf::IO::detail {
             constraint.amplitudeRotation = *rotAmplitude;
           }
           consumed = true;
-        } else if (const auto forceAmplitude = amplitudeOf(field.name, kNodalForce); forceAmplitude && field.components == 3) {
+        } else if (const auto forceAmplitude = amplitudeOf(field.name, nodalForceName); forceAmplitude && field.components == 3) {
           for (std::uint32_t n = 0; n < nodeTotal; ++n) {
             const std::array<double, 3> f{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
             if (f[0] != 0.0 || f[1] != 0.0 || f[2] != 0.0) loadFor(n, *forceAmplitude).force = f;
           }
           consumed = true;
-        } else if (const auto momentAmplitude = amplitudeOf(field.name, kNodalMoment); momentAmplitude && field.components == 3) {
+        } else if (const auto momentAmplitude = amplitudeOf(field.name, nodalMomentName); momentAmplitude && field.components == 3) {
           for (std::uint32_t n = 0; n < nodeTotal; ++n) {
             const std::array<double, 3> m{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
             if (m[0] != 0.0 || m[1] != 0.0 || m[2] != 0.0) loadFor(n, *momentAmplitude).moment = m;
           }
           consumed = true;
-        } else if (const auto temperatureAmplitude = amplitudeOf(field.name, kPrescribedTemperature); temperatureAmplitude && field.components == 2) {
+        } else if (const auto temperatureAmplitude = amplitudeOf(field.name, prescribedTemperatureName); temperatureAmplitude && field.components == 2) {
           for (std::uint32_t n = 0; n < nodeTotal; ++n) {
             if (values[n * 2] != 0.0) model.temperatureConstraints.push_back(TemperatureConstraint{n, values[n * 2 + 1], *temperatureAmplitude});
           }
           consumed = true;
-        } else if (const auto heatAmplitude = amplitudeOf(field.name, kNodalHeat); heatAmplitude && field.components == 1) {
+        } else if (const auto heatAmplitude = amplitudeOf(field.name, nodalHeatName); heatAmplitude && field.components == 1) {
           for (std::uint32_t n = 0; n < nodeTotal; ++n) {
             if (values[n] != 0.0) model.heatLoads.push_back(HeatLoad{n, values[n], *heatAmplitude});
           }
           consumed = true;
-        } else if (field.name.size() > kInitialPrefix.size() && field.name.starts_with(kInitialPrefix)) {
-          model.initialConditions.push_back(InitialCondition{field.name.substr(kInitialPrefix.size()), field.components, values});
+        } else if (field.name.size() > initialPrefix.size() && field.name.starts_with(initialPrefix)) {
+          model.initialConditions.push_back(InitialCondition{field.name.substr(initialPrefix.size()), field.components, values});
           consumed = true;
         }
       }
@@ -648,21 +648,21 @@ namespace anaf::IO::detail {
     std::optional<Damping> damping;
     for (auto it = model.globalData.begin(); it != model.globalData.end();) {
       bool consumed = false;
-      if (it->name.size() > kAmplitudePrefix.size() && it->name.starts_with(kAmplitudePrefix) && it->components == 2) {
+      if (it->name.size() > amplitudePrefix.size() && it->name.starts_with(amplitudePrefix) && it->components == 2) {
         Amplitude amplitude;
-        amplitude.name = it->name.substr(kAmplitudePrefix.size());
+        amplitude.name = it->name.substr(amplitudePrefix.size());
         for (std::size_t i = 0; i + 1 < it->values.size(); i += 2) {
           amplitude.times.push_back(it->values[i]);
           amplitude.factors.push_back(it->values[i + 1]);
         }
         model.amplitudes.push_back(std::move(amplitude));
         consumed = true;
-      } else if (it->name == kRayleighDamping && it->components == 2 && it->values.size() == 2) {
+      } else if (it->name == rayleighDampingName && it->components == 2 && it->values.size() == 2) {
         if (!damping) damping.emplace();
         damping->rayleighAlpha = it->values[0];
         damping->rayleighBeta = it->values[1];
         consumed = true;
-      } else if (it->name == kModalDampingRatio && it->components == 1) {
+      } else if (it->name == modalDampingRatioName && it->components == 1) {
         if (!damping) damping.emplace();
         damping->modalRatios = it->values;
         consumed = true;
@@ -672,7 +672,7 @@ namespace anaf::IO::detail {
     if (damping) model.damping = std::move(damping);
 
     // Beam orientation (3 components, so not part of the scalar attribute loop below).
-    if (auto orientation = takeField(model, kBeamOrientation, FieldLocation::Element); orientation) {
+    if (auto orientation = takeField(model, beamOrientationName, E_FieldLocation::Element); orientation) {
       if (orientation->components == 3 && sized(*orientation, elementTotal)) {
         const auto& values = *lastStep(*orientation);
         model.beamOrientation.resize(elementTotal);
@@ -688,22 +688,22 @@ namespace anaf::IO::detail {
     std::vector<int> entityTags;
     for (auto it = model.fields.begin(); it != model.fields.end();) {
       const Field& field = *it;
-      const bool isElement = field.location == FieldLocation::Element;
+      const bool isElement = field.location == E_FieldLocation::Element;
       const std::size_t entities = isElement ? elementTotal : nodeTotal;
       bool consumed = false;
       if (field.components == 1 && sized(field, entities)) {
         const auto& values = field.steps.back();
-        if (isElement && (isKnownAttribute(field.name) || field.name.starts_with(kAttributePrefix))) {
-          const std::string name = field.name.starts_with(kAttributePrefix) ? field.name.substr(kAttributePrefix.size()) : field.name;
+        if (isElement && (isKnownAttribute(field.name) || field.name.starts_with(attributePrefix))) {
+          const std::string name = field.name.starts_with(attributePrefix) ? field.name.substr(attributePrefix.size()) : field.name;
           model.elementAttributes[name] = values;
           consumed = true;
-        } else if ((options.nodeSets && field.name.starts_with(kNodeSetPrefix))
-                   || (options.elementSets && field.name.starts_with(kElementSetPrefix))) {
-          const bool nodeSet = field.name.starts_with(kNodeSetPrefix);
+        } else if ((options.nodeSets && field.name.starts_with(nodeSetPrefix))
+                   || (options.elementSets && field.name.starts_with(elementSetPrefix))) {
+          const bool nodeSet = field.name.starts_with(nodeSetPrefix);
           if (nodeSet == !isElement) {
             EntitySet set;
-            set.name = field.name.substr(nodeSet ? kNodeSetPrefix.size() : kElementSetPrefix.size());
-            set.kind = nodeSet ? SetKind::Node : SetKind::Element;
+            set.name = field.name.substr(nodeSet ? nodeSetPrefix.size() : elementSetPrefix.size());
+            set.kind = nodeSet ? E_SetKind::Node : E_SetKind::Element;
             for (std::uint32_t i = 0; i < values.size(); ++i) {
               if (values[i] != 0.0) set.members.push_back(i);
             }
@@ -716,13 +716,13 @@ namespace anaf::IO::detail {
             model.sets.push_back(std::move(set));
             consumed = true;
           }
-        } else if (options.tags && !isElement && field.name == kNodeTag) {
+        } else if (options.tags && !isElement && field.name == nodeTagName) {
           nodeTags.assign(values.begin(), values.end());
           consumed = true;
-        } else if (options.tags && isElement && field.name == kElementTag) {
+        } else if (options.tags && isElement && field.name == elementTagName) {
           elementTags.assign(values.begin(), values.end());
           consumed = true;
-        } else if (options.tags && isElement && field.name == kEntityTag) {
+        } else if (options.tags && isElement && field.name == entityTagName) {
           entityTags.assign(values.begin(), values.end());
           consumed = true;
         }

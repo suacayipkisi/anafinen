@@ -30,20 +30,20 @@
 namespace anaf::GUI {
 
   struct LogEntry {
-    anaf::LOG::Level level;
+    anaf::LOG::E_Level level;
     std::string text;
   };
 
-  inline std::deque<LogEntry> g_ui_logs; // deque: dropping the oldest line at the limit is O(1)
-  inline std::uint32_t g_ui_log_max_num{10000}; // edited as ImGuiDataType_U32 in the console
-  inline std::mutex g_log_mutex;
+  inline std::deque<LogEntry> g_uiLogs; // deque: dropping the oldest line at the limit is O(1)
+  inline std::uint32_t g_uiLogMaxNum{10000}; // edited as ImGuiDataType_U32 in the console
+  inline std::mutex g_logMutex;
 
   // anaf::LOG callback, installed in main() before the GUI exists so startup lines are kept.
-  inline void anafUILogSink(anaf::LOG::Level level, std::string_view message) {
-    std::lock_guard<std::mutex> lock(g_log_mutex);
-    g_ui_logs.push_back({level, std::string(message)});
-    if (g_ui_logs.size() > g_ui_log_max_num) {
-      g_ui_logs.pop_front();
+  inline void anafUILogSink(anaf::LOG::E_Level level, std::string_view message) {
+    std::lock_guard<std::mutex> lock(g_logMutex);
+    g_uiLogs.push_back({level, std::string(message)});
+    if (g_uiLogs.size() > g_uiLogMaxNum) {
+      g_uiLogs.pop_front();
     }
   }
 

@@ -27,16 +27,16 @@ namespace anaf::IO::detail {
 
   namespace {
     // VTK cell type ids that are not a fixed-size element in the type table.
-    constexpr int kVtkPolyVertex = 2;
-    constexpr int kVtkPolyLine = 4;
-    constexpr int kVtkTriangleStrip = 6;
-    constexpr int kVtkPolygon = 7;
-    constexpr int kVtkPixel = 8;
-    constexpr int kVtkVoxel = 11;
-    constexpr int kVtkEmptyCell = 0;
+    constexpr int vtkPolyVertex = 2;
+    constexpr int vtkPolyLine = 4;
+    constexpr int vtkTriangleStrip = 6;
+    constexpr int vtkPolygon = 7;
+    constexpr int vtkPixel = 8;
+    constexpr int vtkVoxel = 11;
+    constexpr int vtkEmptyCell = 0;
   } // namespace end
 
-  void VtkCellCollector::emit(const ElementType type, const std::span<const std::int64_t> vtkOrderedPoints, const std::size_t fileCell) {
+  void VtkCellCollector::emit(const E_ElementType type, const std::span<const std::int64_t> vtkOrderedPoints, const std::size_t fileCell) {
     const auto& info = elementInfo(type);
     auto& block = m_model.blockFor(type);
     const std::size_t blockIndex = static_cast<std::size_t>(&block - m_model.blocks.data());
@@ -67,28 +67,28 @@ namespace anaf::IO::detail {
       return;
     }
     switch (vtkType) {
-      case kVtkEmptyCell:
+      case vtkEmptyCell:
         return;
-      case kVtkPolyVertex:
-        for (std::size_t i = 0; i < points.size(); ++i) emit(ElementType::Point1, points.subspan(i, 1), fileCell);
+      case vtkPolyVertex:
+        for (std::size_t i = 0; i < points.size(); ++i) emit(E_ElementType::Point1, points.subspan(i, 1), fileCell);
         return;
-      case kVtkPolyLine:
-        for (std::size_t i = 0; i + 1 < points.size(); ++i) emit(ElementType::Line2, points.subspan(i, 2), fileCell);
+      case vtkPolyLine:
+        for (std::size_t i = 0; i + 1 < points.size(); ++i) emit(E_ElementType::Line2, points.subspan(i, 2), fileCell);
         return;
-      case kVtkTriangleStrip:
+      case vtkTriangleStrip:
         for (std::size_t i = 0; i + 2 < points.size(); ++i) {
           // Every second triangle is flipped to keep a consistent orientation.
           const std::array<std::int64_t, 3> tri = (i % 2 == 0)
             ? std::array<std::int64_t, 3>{points[i], points[i + 1], points[i + 2]}
             : std::array<std::int64_t, 3>{points[i + 1], points[i], points[i + 2]};
-          emit(ElementType::Tri3, tri, fileCell);
+          emit(E_ElementType::Tri3, tri, fileCell);
         }
         return;
-      case kVtkPolygon:
+      case vtkPolygon:
         if (points.size() == 3) {
-          emit(ElementType::Tri3, points, fileCell);
+          emit(E_ElementType::Tri3, points, fileCell);
         } else if (points.size() == 4) {
-          emit(ElementType::Quad4, points, fileCell);
+          emit(E_ElementType::Quad4, points, fileCell);
         } else if (points.size() > 4) {
           if (!m_warnedPolygon) {
             m_model.warnings.push_back("polygons with more than 4 points were fan-triangulated");
@@ -96,21 +96,21 @@ namespace anaf::IO::detail {
           }
           for (std::size_t i = 1; i + 1 < points.size(); ++i) {
             const std::array<std::int64_t, 3> tri{points[0], points[i], points[i + 1]};
-            emit(ElementType::Tri3, tri, fileCell);
+            emit(E_ElementType::Tri3, tri, fileCell);
           }
         }
         return;
-      case kVtkPixel:
+      case vtkPixel:
         if (points.size() == 4) {
           const std::array<std::int64_t, 4> quad{points[0], points[1], points[3], points[2]};
-          emit(ElementType::Quad4, quad, fileCell);
+          emit(E_ElementType::Quad4, quad, fileCell);
           return;
         }
         break;
-      case kVtkVoxel:
+      case vtkVoxel:
         if (points.size() == 8) {
           const std::array<std::int64_t, 8> hex{points[0], points[1], points[3], points[2], points[4], points[5], points[7], points[6]};
-          emit(ElementType::Hex8, hex, fileCell);
+          emit(E_ElementType::Hex8, hex, fileCell);
           return;
         }
         break;

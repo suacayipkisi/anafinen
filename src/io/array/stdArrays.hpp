@@ -60,7 +60,7 @@ namespace anaf::IO::ARRAY {
     values.reserve(rows.size() * cols);
     for (const auto& row : rows) {
       if (row.size() != cols) {
-        return std::unexpected(ArrayError{ArrayError::Code::ShapeMismatch, std::format("'{}': rows have different lengths", path)});
+        return std::unexpected(ArrayError{ArrayError::E_Code::ShapeMismatch, std::format("'{}': rows have different lengths", path)});
       }
       values.insert(values.end(), row.begin(), row.end());
     }
@@ -73,7 +73,7 @@ namespace anaf::IO::ARRAY {
     auto array = file.readDense<T>(path);
     if (!array) return std::unexpected(std::move(array.error()));
     if (array->shape.size() != 1) {
-      return std::unexpected(ArrayError{ArrayError::Code::ShapeMismatch, std::format("'{}' has rank {}, expected 1", path, array->shape.size())});
+      return std::unexpected(ArrayError{ArrayError::E_Code::ShapeMismatch, std::format("'{}' has rank {}, expected 1", path, array->shape.size())});
     }
     return std::move(array->values);
   }
@@ -83,7 +83,7 @@ namespace anaf::IO::ARRAY {
     auto array = file.readDense<T>(path);
     if (!array) return std::unexpected(std::move(array.error()));
     if (array->shape.size() != 2) {
-      return std::unexpected(ArrayError{ArrayError::Code::ShapeMismatch, std::format("'{}' has rank {}, expected 2", path, array->shape.size())});
+      return std::unexpected(ArrayError{ArrayError::E_Code::ShapeMismatch, std::format("'{}' has rank {}, expected 2", path, array->shape.size())});
     }
     const auto cols = static_cast<std::size_t>(array->shape[1]);
     std::vector<std::vector<T>> rows(static_cast<std::size_t>(array->shape[0]));
@@ -134,7 +134,7 @@ namespace anaf::IO::ARRAY {
   template <std::size_t Rank, Scalar T>
   Result<std::mdspan<T, std::dextents<std::size_t, Rank>>> asMdspan(DenseArray<T>& array) {
     if (array.shape.size() != Rank) {
-      return std::unexpected(ArrayError{ArrayError::Code::ShapeMismatch, std::format("array has rank {}, expected {}", array.shape.size(), Rank)});
+      return std::unexpected(ArrayError{ArrayError::E_Code::ShapeMismatch, std::format("array has rank {}, expected {}", array.shape.size(), Rank)});
     }
     std::array<std::size_t, Rank> extents{};
     for (std::size_t d = 0; d < Rank; ++d) extents[d] = static_cast<std::size_t>(array.shape[d]);

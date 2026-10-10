@@ -39,42 +39,42 @@
 
 namespace anaf::IO::ARRAY {
 
-  enum class ScalarType { Float32, Float64, Int32, Int64, UInt64, Complex64, Complex128 };
+  enum class E_ScalarType { Float32, Float64, Int32, Int64, UInt64, Complex64, Complex128 };
 
   template <class T> struct ScalarTraits;
-  template <> struct ScalarTraits<float> { static constexpr ScalarType type = ScalarType::Float32; };
-  template <> struct ScalarTraits<double> { static constexpr ScalarType type = ScalarType::Float64; };
-  template <> struct ScalarTraits<std::int32_t> { static constexpr ScalarType type = ScalarType::Int32; };
-  template <> struct ScalarTraits<std::int64_t> { static constexpr ScalarType type = ScalarType::Int64; };
-  template <> struct ScalarTraits<std::uint64_t> { static constexpr ScalarType type = ScalarType::UInt64; };
-  template <> struct ScalarTraits<std::complex<float>> { static constexpr ScalarType type = ScalarType::Complex64; };
-  template <> struct ScalarTraits<std::complex<double>> { static constexpr ScalarType type = ScalarType::Complex128; };
+  template <> struct ScalarTraits<float> { static constexpr E_ScalarType type = E_ScalarType::Float32; };
+  template <> struct ScalarTraits<double> { static constexpr E_ScalarType type = E_ScalarType::Float64; };
+  template <> struct ScalarTraits<std::int32_t> { static constexpr E_ScalarType type = E_ScalarType::Int32; };
+  template <> struct ScalarTraits<std::int64_t> { static constexpr E_ScalarType type = E_ScalarType::Int64; };
+  template <> struct ScalarTraits<std::uint64_t> { static constexpr E_ScalarType type = E_ScalarType::UInt64; };
+  template <> struct ScalarTraits<std::complex<float>> { static constexpr E_ScalarType type = E_ScalarType::Complex64; };
+  template <> struct ScalarTraits<std::complex<double>> { static constexpr E_ScalarType type = E_ScalarType::Complex128; };
 
   template <class T>
   concept Scalar = requires { ScalarTraits<T>::type; };
 
-  std::string_view scalarTypeName(ScalarType type) noexcept;
+  std::string_view scalarTypeName(E_ScalarType type) noexcept;
 
   // A stored type can be read into a requested type when they are equal or the conversion is a
   // lossless widening (Float32 -> Float64, Int32 -> Int64, Complex64 -> Complex128).
-  bool canReadAs(ScalarType stored, ScalarType requested) noexcept;
+  bool canReadAs(E_ScalarType stored, E_ScalarType requested) noexcept;
 
-  enum class ObjectKind { Group, Dense, Sparse };
+  enum class E_ObjectKind { Group, Dense, Sparse };
 
   // Csc: pointers per column, indices are row indices (Eigen ColMajor, CHOLMOD, scipy csc_matrix).
   // Csr: pointers per row, indices are column indices (Eigen RowMajor, scipy csr_matrix).
-  enum class SparseLayout { Csc, Csr };
+  enum class E_SparseLayout { Csc, Csr };
 
   struct ArrayInfo {
-    ObjectKind kind{ObjectKind::Group};
-    std::optional<ScalarType> scalar;   // empty for groups and unsupported element types
+    E_ObjectKind kind{E_ObjectKind::Group};
+    std::optional<E_ScalarType> scalar;   // empty for groups and unsupported element types
     std::vector<std::uint64_t> shape;   // dense: dataset dimensions; sparse: {rows, cols}
-    SparseLayout layout{SparseLayout::Csc};
+    E_SparseLayout layout{E_SparseLayout::Csc};
     std::uint64_t nonZeros{0};          // sparse only
   };
 
   struct ArrayError {
-    enum class Code {
+    enum class E_Code {
       FileNotFound,   // the file does not exist
       InvalidFile,    // not an HDF5 file
       NotFound,       // no object at the given path
@@ -86,7 +86,7 @@ namespace anaf::IO::ARRAY {
       ReadOnly,       // write through a file opened read-only
       BackendError    // HDF5 reported an error (message holds its error stack)
     };
-    Code code{Code::BackendError};
+    E_Code code{E_Code::BackendError};
     std::string message;
   };
 
@@ -106,7 +106,7 @@ namespace anaf::IO::ARRAY {
   struct CompressedMatrix {
     std::uint64_t rows{0};
     std::uint64_t cols{0};
-    SparseLayout layout{SparseLayout::Csc};
+    E_SparseLayout layout{E_SparseLayout::Csc};
     std::vector<T> values;
     std::vector<std::int64_t> indices;
     std::vector<std::int64_t> pointers;
@@ -117,7 +117,7 @@ namespace anaf::IO::ARRAY {
   struct CompressedView {
     std::uint64_t rows{0};
     std::uint64_t cols{0};
-    SparseLayout layout{SparseLayout::Csc};
+    E_SparseLayout layout{E_SparseLayout::Csc};
     std::span<const T> values;
     std::span<const std::int64_t> indices;
     std::span<const std::int64_t> pointers;

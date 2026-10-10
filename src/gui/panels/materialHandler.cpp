@@ -32,8 +32,8 @@
 namespace anaf::GUI {
 
   namespace {
-    constexpr double kGiga = 1.0e9;
-    constexpr double kMega = 1.0e6;
+    constexpr double giga = 1.0e9;
+    constexpr double mega = 1.0e6;
 
     void labeledInput(const char* label, const char* id, double* value, const char* format) {
       ImGui::TableNextRow();
@@ -84,7 +84,7 @@ namespace anaf::GUI {
   }
 
   void MaterialHandler::renderMaterialTable() {
-    BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
+    BRIDGE::GuiCalcBridge& bridge = BRIDGE::buildBridge();
 
     ImGui::SeparatorText("Materials");
 
@@ -126,15 +126,15 @@ namespace anaf::GUI {
           if (material.getIsBuiltin()) ImGui::TextDisabled("Built-in");
           else ImGui::TextUnformatted("User");
           ImGui::TableNextColumn();
-          ImGui::Text("%.2f", material.getElasticityModulus() / kGiga);
+          ImGui::Text("%.2f", material.getElasticityModulus() / giga);
           ImGui::TableNextColumn();
-          ImGui::Text("%.2f", material.getShearModulus() / kGiga);
+          ImGui::Text("%.2f", material.getShearModulus() / giga);
           ImGui::TableNextColumn();
-          ImGui::Text("%.2f", material.getBulkModulus() / kGiga);
+          ImGui::Text("%.2f", material.getBulkModulus() / giga);
           ImGui::TableNextColumn();
-          ImGui::Text("%.1f", material.getYieldTensile() / kMega);
+          ImGui::Text("%.1f", material.getYieldTensile() / mega);
           ImGui::TableNextColumn();
-          ImGui::Text("%.1f", material.getUltTensile() / kMega);
+          ImGui::Text("%.1f", material.getUltTensile() / mega);
           ImGui::TableNextColumn();
           ImGui::Text("%.1f", material.getDensity());
           ImGui::TableNextColumn();
@@ -165,7 +165,7 @@ namespace anaf::GUI {
   }
 
   void MaterialHandler::renderAddForm() {
-    BRIDGE::Gui_Calc_Bridge& bridge = BRIDGE::buildBridge();
+    BRIDGE::GuiCalcBridge& bridge = BRIDGE::buildBridge();
 
     ImGui::SeparatorText("Add User Material");
     ImGui::TextDisabled("User materials are saved in your user settings folder. The solver uses E for the axial stiffness.");
@@ -202,11 +202,11 @@ namespace anaf::GUI {
       // Built-in flag and ID are assigned by the bridge.
       const anaf::MATERIAL::Material material{anaf::MATERIAL::MaterialProperties{
         .name = std::move(name),
-        .elasticityModulus = m_draft.elasticityModulusGPa * kGiga,
-        .shearModulus = m_draft.shearModulusGPa * kGiga,
-        .bulkModulus = m_draft.bulkModulusGPa * kGiga,
-        .yieldTensileStrength = m_draft.yieldStrengthMPa * kMega,
-        .ultimateTensileStrength = m_draft.ultimateStrengthMPa * kMega,
+        .elasticityModulus = m_draft.elasticityModulusGPa * giga,
+        .shearModulus = m_draft.shearModulusGPa * giga,
+        .bulkModulus = m_draft.bulkModulusGPa * giga,
+        .yieldTensileStrength = m_draft.yieldStrengthMPa * mega,
+        .ultimateTensileStrength = m_draft.ultimateStrengthMPa * mega,
         .density = m_draft.density,
         .poissonsRatio = m_draft.poissonsRatio,
         .ductility = m_draft.ductilityPercent / 100.0,

@@ -38,7 +38,7 @@ namespace anaf::CLI::HANDLERS {
 
   namespace {
 
-    constexpr std::array<double, 3> kDefaultGravity{0.0, -9.80665, 0.0};
+    constexpr std::array<double, 3> defaultGravity{0.0, -9.80665, 0.0};
 
     std::vector<FEM::TRUSS::Node>& nodeList(BRIDGE::MeshData& mesh) { return mesh.trussNodes; }
     std::vector<FEM::BEAM::Node>& nodeList(BRIDGE::BeamMeshData& mesh) { return mesh.nodes; }
@@ -58,8 +58,8 @@ namespace anaf::CLI::HANDLERS {
     template <typename Edit>
     CommandResult editActive(Session& session, Edit&& edit) {
       switch (modelKind(session)) {
-        case ModelKind::truss: return editTruss(session, [&](BRIDGE::MeshData& mesh) { return edit(mesh); });
-        case ModelKind::beam: return editBeam(session, [&](BRIDGE::BeamMeshData& mesh) { return edit(mesh); });
+        case E_ModelKind::Truss: return editTruss(session, [&](BRIDGE::MeshData& mesh) { return edit(mesh); });
+        case E_ModelKind::Beam: return editBeam(session, [&](BRIDGE::BeamMeshData& mesh) { return edit(mesh); });
         default: return noModel();
       }
     }
@@ -68,11 +68,11 @@ namespace anaf::CLI::HANDLERS {
     template <typename Show>
     CommandResult showActive(Session& session, Show&& show) {
       switch (modelKind(session)) {
-        case ModelKind::truss: {
+        case E_ModelKind::Truss: {
           const auto mesh = trussMesh(session);
           return show(mesh ? *mesh : BRIDGE::MeshData{});
         }
-        case ModelKind::beam: {
+        case E_ModelKind::Beam: {
           const auto mesh = beamMesh(session);
           return show(mesh ? *mesh : BRIDGE::BeamMeshData{});
         }
@@ -150,7 +150,7 @@ namespace anaf::CLI::HANDLERS {
       std::optional<std::uint32_t> material;
       std::optional<double> area;
       std::optional<std::uint32_t> section;
-      std::optional<FEM::BEAM::Formulation> formulation;
+      std::optional<FEM::BEAM::E_Formulation> formulation;
       std::optional<std::array<double, 3>> orientation;
     };
 
@@ -196,13 +196,13 @@ namespace anaf::CLI::HANDLERS {
     std::expected<std::uint16_t, std::string> parseReleaseBits(const std::string_view text) {
       if (text == "none") return std::uint16_t{0};
       if (text == "hinge") return FEM::BEAM::RELEASE::hinge;
-      constexpr std::array<std::string_view, 6> kNames{"N", "Vy", "Vz", "T", "My", "Mz"};
+      constexpr std::array<std::string_view, 6> sectionForceNames{"N", "Vy", "Vz", "T", "My", "Mz"};
       std::uint16_t bits = 0;
       for (const auto part : std::views::split(text, ',')) {
         const std::string_view name(part.begin(), part.end());
-        const auto* found = std::ranges::find(kNames, name);
-        if (found == kNames.end()) return std::unexpected(std::format("unknown release '{}' (none, hinge or N,Vy,Vz,T,My,Mz)", name));
-        bits = static_cast<std::uint16_t>(bits | (1U << (found - kNames.begin())));
+        const auto* found = std::ranges::find(sectionForceNames, name);
+        if (found == sectionForceNames.end()) return std::unexpected(std::format("unknown release '{}' (none, hinge or N,Vy,Vz,T,My,Mz)", name));
+        bits = static_cast<std::uint16_t>(bits | (1U << (found - sectionForceNames.begin())));
       }
       return bits;
     }
@@ -280,8 +280,8 @@ namespace anaf::CLI::HANDLERS {
   CommandResult element(Session& session, const Arguments args) {
     if (args.empty()) return std::unexpected("usage: -element add|set|remove ... (see -help element)");
     const std::string_view action = args[0];
-    const bool beam = modelKind(session) == ModelKind::beam;
-    if (modelKind(session) == ModelKind::none) return noModel();
+    const bool beam = modelKind(session) == E_ModelKind::Beam;
+    if (modelKind(session) == E_ModelKind::None) return noModel();
 
     if (action == "add" || action == "set") {
       const auto parsed = parseArgs(args.subspan(1), {"material", "area", "section", "formulation", "orient"});
@@ -395,7 +395,7 @@ namespace anaf::CLI::HANDLERS {
           if (e.endReleases != 0) extra += "; " + OUTPUT::releaseLabel(e.endReleases);
           session.out << std::format("{:>6}  {:>6}  {:>6}  {:>10.6g}  {:<{}}  {:<{}}  {:<4}  {}\n", id, e.node1, e.node2,
                                      OUTPUT::distance(nodes[e.node1].getLocation(), nodes[e.node2].getLocation()), materialName(e.materialID), mw,
-                                     section, sw, e.formulation == FEM::BEAM::Formulation::Timoshenko ? "TI" : "EB", extra);
+                                     section, sw, e.formulation == FEM::BEAM::E_Formulation::Timoshenko ? "TI" : "EB", extra);
         }
       } else {
         session.out << std::format("{:>6}  {:>6}  {:>6}  {:>10}  {:<{}}  {:>10}\n", "id", "node1", "node2", "L [m]", "material", mw, "A [m^2]");
@@ -417,7 +417,7 @@ namespace anaf::CLI::HANDLERS {
     if (positional.empty() || positional.size() > 2 || (positional.size() == 1 && parsed->named.empty())) {
       return std::unexpected("usage: -support <nodes> fixed|pinned|free | fix=<dofs> | motion=... rotation=... (see -help support)");
     }
-    const bool beam = modelKind(session) == ModelKind::beam;
+    const bool beam = modelKind(session) == E_ModelKind::Beam;
     if (!beam && parsed->get("rotation")) return std::unexpected("truss nodes have no rotations");
 
     // nullopt = keep the node's current basis.
@@ -534,14 +534,14 @@ namespace anaf::CLI::HANDLERS {
       if (args.size() != 5 && !(args.size() == 6 && (args[5] == "local" || args[5] == "global"))) {
         return std::unexpected("usage: -load element <elements> <wx> <wy> <wz> [local]");
       }
-      if (modelKind(session) != ModelKind::beam) return std::unexpected("line loads need a beam model (truss bars take nodal loads)");
+      if (modelKind(session) != E_ModelKind::Beam) return std::unexpected("line loads need a beam model (truss bars take nodal loads)");
       std::array<double, 3> value{};
       for (std::size_t i = 0; i < 3; ++i) {
         const auto number = parseDouble(args[i + 2], "line load");
         if (!number) return std::unexpected(number.error());
         value[i] = *number;
       }
-      const auto frame = args.size() == 6 && args[5] == "local" ? FEM::BEAM::LoadFrame::Local : FEM::BEAM::LoadFrame::Global;
+      const auto frame = args.size() == 6 && args[5] == "local" ? FEM::BEAM::E_LoadFrame::Local : FEM::BEAM::E_LoadFrame::Global;
       return editBeam(session, [&](BRIDGE::BeamMeshData& mesh) -> CommandResult {
         const auto ids = parseIdList(args[1], mesh.elements.size(), "element");
         if (!ids) return std::unexpected(ids.error());
@@ -563,7 +563,7 @@ namespace anaf::CLI::HANDLERS {
         }
         for (const auto& l : mesh.distributedLoads) {
           session.out << std::format("element {:>3}  w {} N/m ({})\n", l.element, OUTPUT::vector3(l.value),
-                                     l.frame == FEM::BEAM::LoadFrame::Local ? "local" : "global");
+                                     l.frame == FEM::BEAM::E_LoadFrame::Local ? "local" : "global");
         }
         count = mesh.nodalLoads.size() + mesh.distributedLoads.size();
         session.out << std::format("self weight: gravity {} m/s^2\n", OUTPUT::vector3(mesh.gravity));
@@ -578,11 +578,11 @@ namespace anaf::CLI::HANDLERS {
   }
 
   CommandResult gravity(Session& session, const Arguments args) {
-    if (modelKind(session) == ModelKind::truss) return std::unexpected("truss self weight always acts along -Y (9.80665 m/s^2)");
-    if (modelKind(session) != ModelKind::beam) return noModel();
+    if (modelKind(session) == E_ModelKind::Truss) return std::unexpected("truss self weight always acts along -Y (9.80665 m/s^2)");
+    if (modelKind(session) != E_ModelKind::Beam) return noModel();
     if (args.empty()) {
       const auto mesh = beamMesh(session);
-      session.out << std::format("gravity {} m/s^2\n", OUTPUT::vector3(mesh ? mesh->gravity : kDefaultGravity));
+      session.out << std::format("gravity {} m/s^2\n", OUTPUT::vector3(mesh ? mesh->gravity : defaultGravity));
       return {};
     }
     std::array<double, 3> value{};
