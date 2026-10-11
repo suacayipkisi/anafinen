@@ -178,7 +178,7 @@ namespace FEM::TRUSS {
 
     Truss1DContainer container;
     container.set(model->force, model->nodes, model->elements);
-    container.assembleStiffness(model->elements, materials);
+    container.setStiffness(model->elements, materials);
     if (st.stop_requested()) return cancelled();
     report(0.50f);
     container.considerWeight(model->elements, materials);

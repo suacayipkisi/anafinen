@@ -15,7 +15,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-What the command line can do (v0.2.1). Analyses: linear static only; dynamic (modal,
+What the command line can do (v0.3.0). Analyses: linear static only; dynamic (modal,
 harmonic, transient) analysis is not available yet.
 
 Any time

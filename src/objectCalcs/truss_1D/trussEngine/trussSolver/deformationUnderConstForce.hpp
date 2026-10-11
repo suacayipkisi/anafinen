@@ -58,7 +58,7 @@ namespace FEM::TRUSS {
       m_allElements = allElements;
     }
 
-    void assembleStiffness(
+    void setStiffness(
       const std::vector<TrussElement1D>& elements,
       std::span<const anaf::MATERIAL::Material> allMaterials
     );

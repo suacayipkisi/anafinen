@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "deformationUnderConstForce.hpp"
+#include "trussEngine/trussSolver/assembleStiffness.hpp"
 #include <solvers/solverPortfolio.hpp>
 #include <log/anaf_info.hpp>
 
@@ -63,56 +64,12 @@ namespace FEM::TRUSS {
         moving > 1 ? std::format(" ({} more {} with it)", moving - 1, moving == 2 ? "node" : "nodes") : std::string{}, advice);
     }
   } // namespace end
-
-  void Truss1DContainer::assembleStiffness(
+  
+  void Truss1DContainer::setStiffness(
     const std::vector<TrussElement1D>& elements,
-    const std::span<const anaf::MATERIAL::Material> allMaterials
+    std::span<const anaf::MATERIAL::Material> allMaterials
   ) {
-    constexpr std::size_t tripletsPerElement = 21;
-    const std::size_t elementCount = elements.size();
-    std::vector<Eigen::Triplet<double>> triplets(elementCount * tripletsPerElement);
-    const auto nodeCount = m_allNodes.size();
-
-    #pragma omp parallel for schedule(static)
-    for (long long index = 0; index < static_cast<long long>(elementCount); ++index) {
-      const auto& element = elements[index];
-      const auto& nodes = element.getEleNodes();
-      const std::uint32_t dof1 = 3 * nodes[0];
-      const std::uint32_t dof2 = 3 * nodes[1];
-      const std::uint32_t crossRow = std::min(dof1, dof2);
-      const std::uint32_t crossCol = std::max(dof1, dof2);
-      const double aeOverLength = element.getEleCrossSection()
-        * allMaterials[element.getEleProperties()].getElasticityModulus()
-        / element.getEleLength();
-      const auto& cosines = element.getEleCosines();
-      std::size_t output = static_cast<std::size_t>(index) * tripletsPerElement;
-
-      for (std::size_t row = 0; row < 3; ++row) {
-        for (std::size_t col = row; col < 3; ++col) {
-          const double value = cosines[row] * cosines[col] * aeOverLength;
-          triplets[output++] = {
-            static_cast<int>(dof1 + row), static_cast<int>(dof1 + col), value
-          };
-          triplets[output++] = {
-            static_cast<int>(dof2 + row), static_cast<int>(dof2 + col), value
-          };
-        }
-      }
-      for (std::size_t row = 0; row < 3; ++row) {
-        for (std::size_t col = 0; col < 3; ++col) {
-          const double value = cosines[row] * cosines[col] * aeOverLength;
-          triplets[output++] = {
-            static_cast<int>(crossRow + row), static_cast<int>(crossCol + col), -value
-          };
-        }
-      }
-    }
-
-    anaf::LOG::info(
-      "Global Stiffness Matrix Created, size: {}x{}",
-      nodeCount * 3, nodeCount * 3
-    );
-    m_globalStiffnessMatrix = std::move(triplets);
+    m_globalStiffnessMatrix = assembleStiffness(elements, allMaterials, m_allNodes.size());
   }
 
   void Truss1DContainer::considerWeight(

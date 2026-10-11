@@ -7,7 +7,7 @@ endif()
 # Windows: locate the vcpkg toolchain (and define the Gmsh SDK lookup) on any drive.
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LocateWindowsSdks.cmake")
 
-project(anafinen VERSION 0.2.1 LANGUAGES C CXX)
+project(anafinen VERSION 0.3.0 LANGUAGES C CXX)
 
 # A 32-bit compiler (e.g. the VS Code kit "amd64_x86", Hostx64/x86/cl.exe) cannot link the 64-bit
 # vcpkg packages; find_package would only report an unrelated "version not compatible" error.
@@ -77,6 +77,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
     src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
     src/objectCalcs/truss_1D/trussTypes/trussLibrary.cpp
+    src/objectCalcs/truss_1D/trussEngine/trussSolver/assembleStiffness.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp
     src/solvers/direct/solver_cholmod.cpp
     src/solvers/direct/solver_simplicial.cpp
