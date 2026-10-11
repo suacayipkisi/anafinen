@@ -31,7 +31,11 @@ if ($Toolchain -and -not (Test-Path $Toolchain)) {
 }
 
 # Load the MSVC x64 environment unless this shell already has it (Developer PowerShell).
-if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+# cl.exe on PATH alone is not enough: an editor can inherit it without LIB, and the link then
+# misses the Windows SDK (LNK1181 opengl32.lib).
+$hasMsvcEnv = (Get-Command cl.exe -ErrorAction SilentlyContinue) -and
+    $env:VSCMD_ARG_TGT_ARCH -eq 'x64' -and $env:LIB -match 'Windows Kits'
+if (-not $hasMsvcEnv) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     if (-not (Test-Path $vswhere)) { throw 'vswhere.exe not found; install Visual Studio or the Build Tools.' }
     $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -52,7 +56,12 @@ if ($GmshSdkDir) { $configureArgs += "-DGMSH_SDK_DIR=$GmshSdkDir" }
 
 & cmake @configureArgs
 if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
-& cmake --build $BuildDir --target anafinen anafinen_material_library
+$targets = @('anafinen', 'anafinen_material_library')
+# Packaging.cmake installs anafinen-cli whenever its target exists, so it has to be built too.
+if (Select-String -Path (Join-Path $BuildDir 'CMakeCache.txt') -Pattern '^ANAFINEN_BUILD_CLI:BOOL=ON$' -Quiet) {
+    $targets += 'anafinen_cli'
+}
+& cmake --build $BuildDir --target @targets
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 & cpack --config (Join-Path $BuildDir 'CPackConfig.cmake') -G ZIP -B $BuildDir
 if ($LASTEXITCODE -ne 0) { throw 'CPack failed.' }

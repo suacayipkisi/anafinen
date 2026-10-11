@@ -200,7 +200,7 @@ namespace anaf::CLI::HANDLERS {
       std::uint16_t bits = 0;
       for (const auto part : std::views::split(text, ',')) {
         const std::string_view name(part.begin(), part.end());
-        const auto* found = std::ranges::find(sectionForceNames, name);
+        const auto found = std::ranges::find(sectionForceNames, name);
         if (found == sectionForceNames.end()) return std::unexpected(std::format("unknown release '{}' (none, hinge or N,Vy,Vz,T,My,Mz)", name));
         bits = static_cast<std::uint16_t>(bits | (1U << (found - sectionForceNames.begin())));
       }

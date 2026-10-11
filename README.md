@@ -14,7 +14,7 @@
 
 [![ANAFINEN GUI tutorial on YouTube](https://img.youtube.com/vi/JjmFkoa7xvk/maxresdefault.jpg)](https://youtu.be/JjmFkoa7xvk)
 
-*A 3.5-minute walkthrough of the GUI (English subtitles): build a steel portal frame node by node, add supports and loads, solve, read the stress colors and the beam diagrams, pin the beam ends, and solve the built-in football stadium (3312 elements). Recorded on the current development build (v0.3.0).*
+*A 3.5-minute walkthrough of the GUI (English subtitles): build a steel portal frame node by node, add supports and loads, solve, read the stress colors and the beam diagrams, pin the beam ends, and solve the built-in football stadium (3312 elements). Recorded on the current development build (v0.2.1).*
 
 ## Features
 

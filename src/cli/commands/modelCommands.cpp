@@ -324,7 +324,7 @@ namespace anaf::CLI::HANDLERS {
 
     IO::WriteOptions options;
     if (const auto key = parsed->get("format")) {
-      const auto* choice = std::ranges::find(exportFormats, *key, &ExportFormat::key);
+      const auto choice = std::ranges::find(exportFormats, *key, &ExportFormat::key);
       if (choice == exportFormats.end()) return std::unexpected(std::format("unknown format '{}' (msh, msh22, vtu, pvd, vtk, vtk42, step)", *key));
       options.format = choice->format;
       options.mshVersion = choice->mshVersion;
