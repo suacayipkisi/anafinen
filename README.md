@@ -14,7 +14,7 @@
 
 [![ANAFINEN GUI tutorial on YouTube](https://img.youtube.com/vi/JjmFkoa7xvk/maxresdefault.jpg)](https://youtu.be/JjmFkoa7xvk)
 
-*A 3.5-minute walkthrough of the GUI (English subtitles): build a steel portal frame node by node, add supports and loads, solve, read the stress colors and the beam diagrams, pin the beam ends, and solve the built-in football stadium (3312 elements). Recorded on the current development build (v0.2.1).*
+*A 3.5-minute walkthrough of the GUI (English subtitles): build a steel portal frame node by node, add supports and loads, solve, read the stress colors and the beam diagrams, pin the beam ends, and solve the built-in football stadium (3312 elements). Recorded on v0.2.1-alpha.*
 
 ## Features
 
@@ -24,32 +24,60 @@
   - Cross-section library: rectangle, circle, pipe, box, I with fillets; a catalogue of 118 standard profiles (IPE, HEA, HEB, CHS, SHS, RHS, ...).
   - Uniform and self-weight loads, nodal forces and moments, inclined supports, end releases (hinges) by static condensation.
   - Exact displacement and N / V / T / M diagrams along each element; normal, shear and von Mises stresses with a yield check.
-- **Solvers:** sparse direct (SuiteSparse CHOLMOD or Eigen LDLT) and an OpenMP block conjugate gradient solver for large models; every solve is checked by an energy balance (external work = 2 × strain energy).
+- **Solvers:** sparse direct (SuiteSparse CHOLMOD or Eigen LDLT) and an OpenMP block conjugate gradient solver for large models; every solve is checked by an energy balance (external work = 2 × strain energy). The direct solvers detect mechanisms (an unstable or under-supported model) and name the node and the direction that can move or rotate freely, instead of returning a meaningless result.
+- **Command line** (new in v0.2.1-alpha): `anafinen-cli` builds, solves and exports the same truss and beam models without the GUI, at a prompt, from a script file or with `-e "..."` (see [Command Line](#command-line)).
 - **File formats:** Gmsh MSH, legacy VTK, VTU and ParaView `.pvd`; STEP, IGES and BREP through Gmsh + OpenCASCADE (import and export); HDF5 array store readable from Python / MATLAB.
-- **GUI:** Dear ImGui docking interface, instanced rendering of real beam sections with level of detail, picking, model and section editors, diagrams with ImPlot.
+- **GUI:** Dear ImGui docking interface, instanced rendering of real beam sections with level of detail, picking, model and section editors, diagrams with ImPlot, a Welcome panel with a solved example, seven color themes (Settings > Theme), movable and collapsible viewport legends.
 - **Built-in models:** 49 beam / frame models (buildings, bridges, machines, aerospace, hinged structures, and large structures of about 3000 elements: a stadium, an airport terminal, a complete airliner airframe) and a truss library, each tested against the generator.
 - **Tests:** closed-form checks (cantilevers, clamped beams, three-hinged frame, published section tables) and file round trips through every format, on GCC and Clang with zero warnings.
 
-**Not available yet:** dynamic analysis of any kind (modal, harmonic, transient). The GUI already offers a "Dynamic Load" analysis type that shows the planned inputs (mode count, mass matrix), but it cannot be run in v0.2.0-alpha; every solve is linear static. Modal analysis is the next step.
+**Not available yet:** dynamic analysis of any kind (modal, harmonic, transient). The GUI already offers a "Dynamic Load" analysis type that shows the planned inputs (mode count, mass matrix), but it cannot be run in v0.2.1-alpha; every solve is linear static. Modal analysis is the next step.
 
 ## Roadmap
 
 1. Static displacement under applied force: trusses and beams / frames done
-2. Modal analysis (next; not in v0.2.0-alpha)
+2. Modal analysis (next; not in v0.2.1-alpha)
 3. Heat transfer
 4. Nonlinear elasticity
 5. CFD (computational fluid dynamics)
 
-## 📦 Downloads (v0.2.0-alpha)
+## 📦 Downloads (v0.2.1-alpha)
 
-Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases). v0.2.0-alpha contains the truss and the beam / frame solvers (linear static analysis only; dynamic analysis is not available yet).
+Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases). v0.2.1-alpha contains the truss and the beam / frame solvers (linear static analysis only; dynamic analysis is not available yet), the GUI `anafinen` and the command line `anafinen-cli` in one package.
 
 | Platform | File | Quick Run / Install Command |
 | --- | --- | --- |
-| **Windows** (10/11 x64 Portable) | [`anafinen-0.2.0-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.0-alpha/anafinen-0.2.0-windows-AMD64-alpha.zip) | Extract the `.zip` into a folder you can write to (not `Program Files`) and run `anafinen.exe`. The MSVC runtime is included; no Visual C++ Redistributable is needed. |
-| **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.2.0-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.0-alpha/anafinen-0.2.0-alpha.rpm) | `sudo dnf install ./anafinen-0.2.0-alpha.rpm` |
-| **Linux** (Debian / Ubuntu / DEB-based) | [`anafinen-0.2.0-alpha.deb`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.0-alpha/anafinen-0.2.0-alpha.deb) | `sudo apt install ./anafinen-0.2.0-alpha.deb` |
-| **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.2.0_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.0-alpha/anafinen-0.2.0_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.2.0_alpha-1-x86_64.pkg.tar.zst` (needs `gmsh` or `gmsh-bin` from the AUR) |
+| **Windows** (10/11 x64 Portable) | [`anafinen-0.2.1-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-windows-AMD64-alpha.zip) | Extract the `.zip` into a folder you can write to (not `Program Files`) and run `anafinen.exe` (GUI) or `anafinen-cli.exe` (command line). The MSVC runtime is included; no Visual C++ Redistributable is needed. |
+| **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.2.1-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-alpha.rpm) | `sudo dnf install ./anafinen-0.2.1-alpha.rpm` |
+| **Linux** (Debian / Ubuntu / DEB-based) | [`anafinen-0.2.1-alpha.deb`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-alpha.deb) | `sudo apt install ./anafinen-0.2.1-alpha.deb` |
+| **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.2.1_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.2.1_alpha-1-x86_64.pkg.tar.zst` (needs `gmsh` or `gmsh-bin` from the AUR) |
+
+Each release lists the SHA-256 checksums of its files (`SHA256SUMS.txt`).
+
+## Command Line
+
+`anafinen-cli` is installed next to the GUI. Commands start with `-`; `-help` lists them and `-help <command>` shows the exact forms. Units are SI, ids are 0-based. A steel cantilever (IPE 300, 2 m) with a 1 kN tip load:
+
+```text
+# cantilever.anaf
+-new beam
+-gravity off
+-node add 0 0 0  2 0 0
+-element add 0 1 section="IPE 300" material=#0
+-support 0 fixed
+-load node 1 0 -1000 0
+-solve
+-results nodes 1
+-export cantilever_solved.msh
+```
+
+```bash
+anafinen-cli cantilever.anaf          # run a script (stops at the first error, exit code 1)
+anafinen-cli                          # interactive prompt
+anafinen-cli -e "-library list beam"  # single commands
+```
+
+The same models can be built from the built-in libraries (`-library load <id>`), imported and exported (`-import`, `-export`), and opened in the GUI. A solved file written by the CLI opens in the GUI with its results.
 
 ## References
 
@@ -111,7 +139,7 @@ Calculation libs:
 ```
 
 HDF5 is required. vcpkg builds it once into `installed/x64-windows`; the anafinen
-build only links it, and the packaging script copies `hdf5.dll` into the ZIP.
+build only links it. The packaging script copies every DLL the executables import into the ZIP.
 
 SuiteSparse is optional at configure time. When its headers and libraries are
 found, the build uses Eigen's CHOLMOD backend; otherwise it uses Eigen's
