@@ -71,6 +71,8 @@ set(ANAF_CORE_SOURCES
     src/directory/getExecutableDirectory.cpp
     src/platform/systemInfo.cpp
     src/material/materialLibrary.cpp
+    src/numericalMethods/error.cpp
+    src/numericalMethods/rootsOfEquation.cpp
     src/objectCalcs/common/supportBasis.cpp
     src/objectCalcs/truss_1D/trussProperties/node.cpp
     src/objectCalcs/truss_1D/trussProperties/meshEdit.cpp
