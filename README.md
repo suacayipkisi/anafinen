@@ -48,10 +48,10 @@ Dates are estimates; ANAFINEN is a one-person project next to university studies
 | 5 | 3D solid elements | Tet and hex elements, STEP → Gmsh → solve | Early summer 2027 |
 | 6 | Nastran interoperability | `.bdf` import / export, comparison with MYSTRAN; semi-rigid joints | Summer 2027 |
 | 7 | Flutter (strip theory) | Theodorsen strip theory, p-k method, Goland wing | Fall 2027 |
-| 8 | 3D aerodynamics | VLM and DLM | Fall 2028 |
-| 9 | State-space export | State-space matrices for control design | Late 2028 |
-| 10 | Shells and composites | Shells, composite laminates | 2029 |
-| 11 | Heat transfer and nonlinear elasticity | Heat conduction, geometric nonlinearity | 2029 and later |
+| 8 | 3D aerodynamics | VLM and DLM | no date |
+| 9 | State-space export | State-space matrices for control design | no date |
+| 10 | Shells and composites | Shells, composite laminates | no date |
+| 11 | Heat transfer and nonlinear elasticity | Heat conduction, geometric nonlinearity | no date |
 | 12 | CFD |  | Last; no date |
 
 Every stage ends with closed-form or published reference checks in the test suite before it is released.
