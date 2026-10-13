@@ -304,3 +304,27 @@ For commercial inquiries: `konuki8523@gmail.com`
 
 ### Contributing
 Contributions are welcome. By submitting a pull request, you agree to our [Contributor License Agreement (CLA)](.github/CLA.md), granting the maintainer the right to re-license contributions under both GPLv3 and commercial terms.
+
+#### Commit messages
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```text
+<type>(<scope>): <short summary, at most ~72 characters>
+
+<body: what changed and why>
+
+Phase: <development phase, e.g. 3.1>
+```
+
+- **type:** `feat` (new feature), `fix` (bug fix), `refactor` (no behavior change), `perf`, `docs`, `test`, `build` (CMake, packaging, dependencies), `chore` (version bumps, cleanup).
+- **scope** (optional): `truss`, `beam`, `solver`, `io`, `gui`, `cli`, `bridge`, `numeric`, `package`.
+- **Phase** trailer: the development phase the change belongs to; `git log --grep="Phase: 3.1"` lists a phase.
+
+Examples:
+
+```text
+feat(numeric): add error definitions and root-finding methods
+refactor(truss): move stiffness assembly to assembleStiffness()
+docs(readme): aerospace-focused roadmap with estimated dates
+```
