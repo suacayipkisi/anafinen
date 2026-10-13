@@ -35,11 +35,26 @@
 
 ## Roadmap
 
-1. Static displacement under applied force: trusses and beams / frames done
-2. Modal analysis (next; not in v0.2.1-alpha)
-3. Heat transfer
-4. Nonlinear elasticity
-5. CFD (computational fluid dynamics)
+**Focus:** structural dynamics and flutter of small aircraft, UAVs and small satellites, for preliminary design and education.
+
+Dates are estimates; ANAFINEN is a one-person project next to university studies.
+
+| # | Stage | Contents | Estimate |
+| --- | --- | --- | --- |
+| 1 | Linear statics | Trusses, beams / frames, hinges, section library | ✅ Done (v0.2.x) |
+| 2 | Modal analysis | Mass matrices, natural frequencies, mode shapes | November 2026 |
+| 3 | Linear buckling and thermal loads | Buckling loads and modes, thermal loads | Spring 2027 |
+| 4 | Frequency response and random vibration | Harmonic response, PSD / random vibration | Spring 2027 |
+| 5 | 3D solid elements | Tet and hex elements, STEP → Gmsh → solve | Early summer 2027 |
+| 6 | Nastran interoperability | `.bdf` import / export, comparison with MYSTRAN; semi-rigid joints | Summer 2027 |
+| 7 | Flutter (strip theory) | Theodorsen strip theory, p-k method, Goland wing | Fall 2027 |
+| 8 | 3D aerodynamics | VLM and DLM | Fall 2028 |
+| 9 | State-space export | State-space matrices for control design | Late 2028 |
+| 10 | Shells and composites | Shells, composite laminates | 2029 |
+| 11 | Heat transfer and nonlinear elasticity | Heat conduction, geometric nonlinearity | 2029 and later |
+| 12 | CFD |  | Last; no date |
+
+Every stage ends with closed-form or published reference checks in the test suite before it is released.
 
 ## 📦 Downloads (v0.2.1-alpha)
 
