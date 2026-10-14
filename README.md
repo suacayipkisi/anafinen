@@ -6,9 +6,9 @@
 [![GitHub Release](https://img.shields.io/github/v/release/suacayipkisi/anafinen?include_prereleases&style=flat-square&color=blue)](https://github.com/suacayipkisi/anafinen/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/suacayipkisi/anafinen/total?style=flat-square&color=green)](https://github.com/suacayipkisi/anafinen/releases)
 
-![anafinen: narrow-body airliner airframe solved with beam elements, von Mises stress coloring, bending moment diagram and solver log](docs/images/anafinen-beam-fuselage.png)
+![anafinen: narrow-body airliner airframe solved with beam elements, displacement coloring, bending moment diagram and solver log](docs/images/anafinen-beam-fuselage.png)
 
-*A built-in large structure (a complete 38 m narrow-body airliner airframe on its landing gear: 961 nodes, 2910 beam elements, aluminium 2024-T3 / 7075-T6 and a steel gear) solved with 3D beam elements: real cross-sections colored by von Mises stress, the bending moment diagram and end forces of the selected element, and the solver log with the energy check.*
+*A built-in large structure (a complete 38 m narrow-body airliner airframe on its landing gear: 961 nodes, 2910 beam elements, aluminium 2024-T3 / 7075-T6 and a steel gear) solved with 3D beam elements: real cross-sections colored by displacement magnitude (up to 245 mm at the wing tips; von Mises stress coloring is one click away), the bending moment diagram and end forces of the selected element, and the solver log with the energy check.*
 
 ## Video Tutorial
 
