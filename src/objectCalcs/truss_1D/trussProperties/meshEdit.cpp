@@ -56,7 +56,9 @@ namespace FEM::TRUSS {
 
     std::vector<ForceApplied> forces;
     for (const auto& force : mesh.appliedForces) {
-      if (force.getAppliedNode() != k) forces.emplace_back(shift(force.getAppliedNode()), force.getForce());
+      if (force.getAppliedNode() == k) continue;
+      forces.push_back(force);
+      forces.back().setAppliedNode(shift(force.getAppliedNode()));
     }
     mesh.appliedForces = std::move(forces);
   }

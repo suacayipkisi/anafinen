@@ -95,11 +95,12 @@ namespace anaf::GUI {
         ImGui::BeginChild("AppliedForceList", ImVec2(0, 110), true);
         clippedRows(meshData->appliedForces.size(), [&](const std::size_t row) {
           const auto& force = meshData->appliedForces[row];
-          ImGui::Text("Node %u: Fx=%.3f, Fy=%.3f, Fz=%.3f",
+          ImGui::Text("Node %u: Fx=%.3f, Fy=%.3f, Fz=%.3f (%s)",
             force.getAppliedNode(),
             force.getForce()[0],
             force.getForce()[1],
-            force.getForce()[2]);
+            force.getForce()[2],
+            FEM::TRUSS::forceTypeName(force.getForceType()).data());
         });
         ImGui::EndChild();
       }

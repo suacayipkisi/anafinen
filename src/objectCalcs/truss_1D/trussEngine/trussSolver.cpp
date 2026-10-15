@@ -126,6 +126,10 @@ namespace FEM::TRUSS {
           ++skipped;
           continue;
         }
+        if (load.getForceType() != E_ForceType::Constant) {
+          return std::unexpected(std::format("the load on node {} is {}; the static solver takes constant loads only", nodeId,
+                                             forceTypeName(load.getForceType())));
+        }
         for (std::size_t axis = 0; axis < 3; ++axis) model.force[3U * nodeId + axis] += load.getForce()[axis];
       }
       if (skipped > 0) anaf::LOG::warn("{} loads reference missing nodes and were skipped", skipped);

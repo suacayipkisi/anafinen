@@ -568,7 +568,10 @@ namespace anaf::CLI::HANDLERS {
         count = mesh.nodalLoads.size() + mesh.distributedLoads.size();
         session.out << std::format("self weight: gravity {} m/s^2\n", OUTPUT::vector3(mesh.gravity));
       } else {
-        for (const auto& f : mesh.appliedForces) session.out << std::format("node {:>6}  F {} N\n", f.getAppliedNode(), OUTPUT::vector3(f.getForce()));
+        for (const auto& f : mesh.appliedForces) {
+          session.out << std::format("node {:>6}  F {} N  ({})\n", f.getAppliedNode(), OUTPUT::vector3(f.getForce()),
+                                     FEM::TRUSS::forceTypeName(f.getForceType()));
+        }
         count = mesh.appliedForces.size();
         session.out << "self weight: always on, gravity (0, -9.80665, 0) m/s^2\n";
       }

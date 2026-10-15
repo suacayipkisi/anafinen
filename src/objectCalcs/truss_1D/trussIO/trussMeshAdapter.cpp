@@ -17,6 +17,7 @@
 
 #include "trussMeshAdapter.hpp"
 
+#include <log/anaf_info.hpp>
 #include <material/materialLibrary.hpp>
 
 #include <algorithm>
@@ -85,11 +86,22 @@ namespace FEM::TRUSS::ADAPTER {
       auto allowedMotion = node.hasInclinedSupport() ? node.getAllowedMotionDirections() : std::vector<std::array<double, 3>>{};
       model.constraints.push_back(NodeConstraint{i, {!movable[0], !movable[1], !movable[2]}, std::move(allowedMotion), {}, {}});
     }
+    std::size_t harmonicSkipped = 0;
     for (const auto& force : mesh.appliedForces) {
-      if (const auto it = indexById.find(force.getAppliedNode()); it != indexById.end()) {
-        model.loads.push_back(NodalLoad{it->second, force.getForce(), {}});
+      const auto it = indexById.find(force.getAppliedNode());
+      if (it == indexById.end()) continue;
+      if (force.getForceType() == E_ForceType::Harmonic) {
+        ++harmonicSkipped; // no frequency-domain load in MeshModel yet
+        continue;
       }
+      std::string amplitude;
+      if (const auto* tabular = force.getTabular()) {
+        amplitude = std::format("TabularForce{}", model.amplitudes.size());
+        model.amplitudes.push_back(Amplitude{amplitude, tabular->times, tabular->factors});
+      }
+      model.loads.push_back(NodalLoad{it->second, force.getForce(), std::move(amplitude), {}});
     }
+    if (harmonicSkipped > 0) anaf::LOG::warn("{} harmonic loads cannot be written to a mesh file yet and were left out", harmonicSkipped);
 
     if (mesh.hasResults) {
       Field displacement{FieldName::displacement, E_FieldLocation::Node, 3, {0.0}, {}, E_StepKind::Time, {}};
@@ -210,7 +222,24 @@ namespace FEM::TRUSS::ADAPTER {
         }
       }
     }
-    for (const auto& load : model.loads) mesh.appliedForces.emplace_back(load.node, load.force);
+    for (const auto& load : model.loads) {
+      if (load.amplitude.empty()) {
+        mesh.appliedForces.emplace_back(load.node, load.force);
+        continue;
+      }
+      const Amplitude* amplitude = model.findAmplitude(load.amplitude);
+      if (amplitude == nullptr) {
+        result.notes.push_back(std::format("warning: node {}: amplitude '{}' not found; the load is taken as constant", load.node, load.amplitude));
+        mesh.appliedForces.emplace_back(load.node, load.force);
+        continue;
+      }
+      try {
+        mesh.appliedForces.emplace_back(load.node, load.force, TabularForce{amplitude->times, amplitude->factors});
+      } catch (const std::exception& exception) {
+        result.notes.push_back(std::format("warning: node {}: amplitude '{}' ignored: {}", load.node, load.amplitude, exception.what()));
+        mesh.appliedForces.emplace_back(load.node, load.force);
+      }
+    }
 
     result.notes.push_back(std::format("{} nodes, {} bars", model.nodes.size(), bars));
     if (splitQuadratic > 0) result.notes.push_back(std::format("{} quadratic line elements shown as two straight segments", splitQuadratic));

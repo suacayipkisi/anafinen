@@ -58,4 +58,8 @@ namespace FEM::TRUSS {
     const ProgressCallback& progress = {}
   );
 
+  struct DynamicResult {
+    
+  };
+
 } // namespace FEM::TRUSS end
