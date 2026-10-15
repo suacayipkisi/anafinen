@@ -16,23 +16,55 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "assembleMass.hpp"
-
-#include "trussProperties/element.hpp"
 #include <Eigen/SparseCore>
-#include <span>
-#include <vector>
 
 namespace FEM::TRUSS {
 
+  // Consistent mass of a 3D bar (Logan): m = rho A L / 6 * [2I I; I 2I]. It does not depend on
+  // the direction cosines, so no transformation is needed. Only the upper triangle is written,
+  // like the stiffness: 3 + 3 diagonal terms and the 3 diagonal terms of the coupling block.
   std::vector<Eigen::Triplet<double>> assembleMass(
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> allMaterials,
     const std::size_t allNodesSize
   ) {
-    constexpr std::size_t tripletsPerElement = 21;
+    constexpr std::size_t tripletsPerElement = 9;
     const std::size_t elementCount = elements.size();
     std::vector<Eigen::Triplet<double>> triplets(elementCount * tripletsPerElement);
     const auto nodeCount = allNodesSize;
+
+    #pragma omp parallel for schedule(static)
+    for (long long index = 0; index < static_cast<long long>(elementCount); ++index) {
+      const auto& element = elements[index];
+      const auto& nodes = element.getEleNodes();
+      const std::uint32_t dof1 = 3 * nodes[0];
+      const std::uint32_t dof2 = 3 * nodes[1];
+      const std::uint32_t crossRow = std::min(dof1, dof2);
+      const std::uint32_t crossCol = std::max(dof1, dof2);
+      const double massOverSix = allMaterials[element.getEleProperties()].getDensity()
+        * element.getEleCrossSection()
+        * element.getEleLength() / 6.0;
+      std::size_t output = static_cast<std::size_t>(index) * tripletsPerElement;
+
+      for (std::size_t axis = 0; axis < 3; ++axis) {
+        triplets[output++] = {
+          static_cast<int>(dof1 + axis), static_cast<int>(dof1 + axis), 2.0 * massOverSix
+        };
+        triplets[output++] = {
+          static_cast<int>(dof2 + axis), static_cast<int>(dof2 + axis), 2.0 * massOverSix
+        };
+        triplets[output++] = {
+          static_cast<int>(crossRow + axis), static_cast<int>(crossCol + axis), massOverSix
+        };
+      }
+    }
+
+    anaf::LOG::info(
+      "Global Mass Matrix Created, size: {}x{}",
+      nodeCount * 3, nodeCount * 3
+    );
+
+    return triplets;
   }
 
 } // namespace FEM::TRUSS end
