@@ -33,6 +33,105 @@
 
 namespace FEM::SOLVER {
 
+  namespace {
+    // y = K x for a symmetric K of which only the upper triangle is stored (column-major, as
+    // the containers assemble it), without building the full matrix: Block-CG then holds no
+    // second copy of K. Column c of the upper triangle is row c of the lower one. Chunk t owns
+    // the columns [m_begin[t], m_begin[t + 1]) (balanced by entries) and, for each entry K_rc
+    // (r <= c), adds K_rc x_r to y_c (gather) and K_rc x_c to y_r (scatter, r < c). A scatter
+    // row inside the chunk is written directly; one below it goes to the chunk's spill buffer,
+    // which spans only the rows its columns reach, and is added after a barrier by the chunk
+    // owning that row. With node-by-node DOF numbering the spill is a narrow band and the
+    // product reads half the bytes of the full one (about 1.7x faster); a randomly numbered
+    // mesh widens the spill and scatters across memory (about 1.8x slower), still without the
+    // full copy.
+    class UpperSymmetricProduct {
+    public:
+      UpperSymmetricProduct(const Eigen::SparseMatrix<double>& upper, const int chunks) :
+        m_upper(upper),
+        m_begin(static_cast<std::size_t>(chunks) + 1, upper.cols()),
+        m_spillFirst(static_cast<std::size_t>(chunks), 0),
+        m_spill(static_cast<std::size_t>(chunks))
+      {
+        m_begin[0] = 0;
+        const double total = static_cast<double>(upper.nonZeros());
+        Eigen::Index count = 0;
+        std::size_t next = 1;
+        for (Eigen::Index col = 0; col < upper.cols() && next < m_spill.size(); ++col) {
+          count += upper.innerVector(col).nonZeros();
+          while (next < m_spill.size() && static_cast<double>(count) >= total * static_cast<double>(next) / chunks) m_begin[next++] = col + 1;
+        }
+
+        #pragma omp parallel for schedule(dynamic, 1)
+        for (long long chunk = 0; chunk < chunks; ++chunk) {
+          const std::size_t t = static_cast<std::size_t>(chunk);
+          Eigen::Index first = m_begin[t];
+          for (Eigen::Index col = m_begin[t]; col < m_begin[t + 1]; ++col) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(upper, col); it; ++it) first = std::min(first, it.row());
+          }
+          m_spillFirst[t] = first;
+          m_spill[t].assign(static_cast<std::size_t>(m_begin[t] - first), 0.0);
+        }
+      }
+
+      std::size_t spillEntries() const {
+        std::size_t entries = 0;
+        for (const auto& spill : m_spill) entries += spill.size();
+        return entries;
+      }
+
+      std::size_t chunks() const { return m_spill.size(); }
+
+      // x and y must not alias.
+      void multiply(const Eigen::VectorXd& x, Eigen::VectorXd& y) {
+        const long long chunkCount = static_cast<long long>(m_spill.size());
+        #pragma omp parallel
+        {
+          const long long threads = omp_get_num_threads();
+          for (long long chunk = omp_get_thread_num(); chunk < chunkCount; chunk += threads) {
+            const std::size_t t = static_cast<std::size_t>(chunk);
+            const Eigen::Index begin = m_begin[t];
+            const Eigen::Index end = m_begin[t + 1];
+            y.segment(begin, end - begin).setZero();
+            std::ranges::fill(m_spill[t], 0.0);
+            double* spill = m_spill[t].data();
+            for (Eigen::Index col = begin; col < end; ++col) {
+              const double xCol = x[col];
+              double sum = 0.0;
+              for (Eigen::SparseMatrix<double>::InnerIterator it(m_upper, col); it; ++it) {
+                const Eigen::Index row = it.row();
+                if (row > col) continue; // a stored lower entry is not part of the upper triangle
+                const double value = it.value();
+                sum += value * x[row];
+                if (row == col) continue;
+                if (row >= begin) y[row] += value * xCol;
+                else spill[row - m_spillFirst[t]] += value * xCol;
+              }
+              y[col] += sum;
+            }
+          }
+
+          #pragma omp barrier
+
+          for (long long chunk = omp_get_thread_num(); chunk < chunkCount; chunk += threads) {
+            const std::size_t t = static_cast<std::size_t>(chunk);
+            for (std::size_t other = t + 1; other < m_spill.size(); ++other) {
+              const Eigen::Index from = std::max(m_begin[t], m_spillFirst[other]);
+              const Eigen::Index to = std::min(m_begin[t + 1], m_begin[other]);
+              for (Eigen::Index row = from; row < to; ++row) y[row] += m_spill[other][static_cast<std::size_t>(row - m_spillFirst[other])];
+            }
+          }
+        }
+      }
+
+    private:
+      const Eigen::SparseMatrix<double>& m_upper;
+      std::vector<Eigen::Index> m_begin;      // chunk column bounds, chunks + 1 entries
+      std::vector<Eigen::Index> m_spillFirst; // lowest scatter row of each chunk
+      std::vector<std::vector<double>> m_spill;
+    };
+  } // namespace end
+
   Result solveBlockCG(
     const Eigen::SparseMatrix<double>& upperMatrix,
     const Eigen::VectorXd& force,
@@ -61,8 +160,19 @@ namespace FEM::SOLVER {
       return result;
     }
 
-    Eigen::SparseMatrix<double, Eigen::RowMajor> matrix = upperMatrix.selfadjointView<Eigen::Upper>();
+    if (upperMatrix.rows() != activeDofs || upperMatrix.cols() != activeDofs) {
+      result.message = std::format("Block-CG matrix is {} x {}, expected {} DOFs", upperMatrix.rows(), upperMatrix.cols(), activeDofs);
+      return result;
+    }
+
     displacement = Eigen::VectorXd::Zero(activeDofs);
+    UpperSymmetricProduct stiffness(upperMatrix, std::max(omp_get_max_threads(), 1));
+    anaf::LOG::info("Block-CG: symmetric product on the stored upper triangle ({} entries), {} chunks, spill buffers {:.1f} MB",
+                    upperMatrix.nonZeros(), stiffness.chunks(), static_cast<double>(stiffness.spillEntries()) * sizeof(double) / 1e6);
+    // Entry (row, col) of K from the upper triangle.
+    const auto coefficient = [&](const Eigen::Index row, const Eigen::Index col) {
+      return upperMatrix.coeff(std::min(row, col), std::max(row, col));
+    };
 
     // One dofsPerNode x dofsPerNode inverse per node, row-major, indexed by DOF slot; the rows
     // and columns of unused slots stay zero. The blocks are principal submatrices of K, so they
@@ -83,7 +193,7 @@ namespace FEM::SOLVER {
       Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor, maxDofsPerNode, maxDofsPerNode> block(count, count);
       for (int row = 0; row < count; ++row) {
         for (int col = 0; col < count; ++col) {
-          block(row, col) = matrix.coeff(remapTable[first + slots[row]], remapTable[first + slots[col]]);
+          block(row, col) = coefficient(remapTable[first + slots[row]], remapTable[first + slots[col]]);
         }
       }
       return block;
@@ -183,7 +293,9 @@ namespace FEM::SOLVER {
       }
     };
 
-    Eigen::VectorXd residual = force - matrix * displacement;
+    Eigen::VectorXd product(activeDofs);
+    stiffness.multiply(displacement, product);
+    Eigen::VectorXd residual = force - product;
     const double forceNormSquared = force.squaredNorm();
     const double threshold = std::max(
       tolerance * tolerance * forceNormSquared,
@@ -192,7 +304,6 @@ namespace FEM::SOLVER {
     double residualNormSquared = residual.squaredNorm();
     Eigen::VectorXd direction(activeDofs);
     Eigen::VectorXd preconditioned(activeDofs);
-    Eigen::VectorXd product(activeDofs);
     applyPreconditioner(residual, direction);
     double rho = residual.dot(direction);
 
@@ -202,7 +313,7 @@ namespace FEM::SOLVER {
          && residualNormSquared >= threshold
          && forceNormSquared > 0.0;
          ++iteration) {
-      product.noalias() = matrix * direction;
+      stiffness.multiply(direction, product);
       const double denominator = direction.dot(product);
       if (!std::isfinite(denominator) || denominator <= 0.0) {
         result.message = "CG encountered a non-positive curvature";

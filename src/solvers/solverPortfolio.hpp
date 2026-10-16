@@ -89,7 +89,8 @@ namespace FEM::SOLVER {
 
   // remapTable holds, at dofsPerNode * node + k, the reduced DOF of the k-th DOF slot of that
   // node (-1 when unused); Block-CG inverts one dofsPerNode x dofsPerNode block per node for
-  // its Jacobi preconditioner. dofsPerNode is 3 for a truss, 6 for a 3D beam. A node block
+  // its Jacobi preconditioner. dofsPerNode is 3 for a truss, 6 for a 3D beam. K x is formed
+  // from the stored upper triangle directly (no full copy of K). A node block
   // with a Cholesky pivot / diagonal at or below singularPivotRatio stops the solve before the
   // first iteration with singular set and that node's own mechanism as the mode; a mechanism
   // spread over several nodes is not detected here (CG then ends without convergence).
