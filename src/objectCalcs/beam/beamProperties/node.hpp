@@ -57,6 +57,8 @@ namespace FEM::BEAM {
     inline void setDisplacement(const std::array<double, 3>& displacement) {m_displacement = displacement;}
     inline void setRotation(const std::array<double, 3>& rotation) {m_rotation = rotation;}
 
+    // Renumbering only (ids equal positions: meshEdit deleteNodes()).
+    void setNodeID(const std::uint32_t id) {m_nodeID = id;}
     std::uint32_t getNodeID() const {return m_nodeID;}
     const std::array<double, 3>& getLocation() const {return m_location;}
     const std::array<double, 3>& getDisplacement() const {return m_displacement;}

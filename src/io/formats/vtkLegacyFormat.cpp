@@ -129,9 +129,16 @@ namespace anaf::IO::formats {
       }
     }
 
-    // Cell list in either the classic "n i0 i1 ..." layout or the 5.x OFFSETS / CONNECTIVITY layout.
+    // Cell list in either the classic "n i0 i1 ..." layout or the 5.x OFFSETS / CONNECTIVITY layout,
+    // kept flat: cell c is points[offsets[c] .. offsets[c + 1]) (no vector per cell).
     struct CellList {
-      std::vector<std::vector<std::int64_t>> cells;
+      std::vector<std::int64_t> offsets{0};
+      std::vector<std::int64_t> points;
+
+      std::size_t size() const { return offsets.size() - 1; }
+      std::span<const std::int64_t> cell(const std::size_t c) const {
+        return std::span<const std::int64_t>(points).subspan(static_cast<std::size_t>(offsets[c]), static_cast<std::size_t>(offsets[c + 1] - offsets[c]));
+      }
     };
 
     CellList readCellList(detail::Cursor& cursor, const std::vector<std::string>& args, const bool binary, const bool offsetsLayout) {
@@ -142,26 +149,32 @@ namespace anaf::IO::formats {
         const auto connectivitySize = detail::Cursor::parseNumber<std::size_t>(args[1]);
         if (upper(cursor.token()) != "OFFSETS") throw detail::ParseFailure("OFFSETS expected");
         const auto offsetType = lineArguments(cursor);
-        const auto offsets = readArray<std::int64_t>(cursor, offsetCount, offsetType.empty() ? "vtktypeint64" : offsetType[0], binary);
+        auto offsets = readArray<std::int64_t>(cursor, offsetCount, offsetType.empty() ? "vtktypeint64" : offsetType[0], binary);
         if (upper(cursor.token()) != "CONNECTIVITY") throw detail::ParseFailure("CONNECTIVITY expected");
         const auto connectivityType = lineArguments(cursor);
-        const auto connectivity = readArray<std::int64_t>(cursor, connectivitySize, connectivityType.empty() ? "vtktypeint64" : connectivityType[0], binary);
+        auto connectivity = readArray<std::int64_t>(cursor, connectivitySize, connectivityType.empty() ? "vtktypeint64" : connectivityType[0], binary);
         for (std::size_t c = 0; c + 1 < offsets.size(); ++c) {
           if (offsets[c] < 0 || offsets[c + 1] < offsets[c] || static_cast<std::size_t>(offsets[c + 1]) > connectivity.size()) {
             throw detail::ParseFailure("invalid cell offsets");
           }
-          list.cells.emplace_back(connectivity.begin() + offsets[c], connectivity.begin() + offsets[c + 1]);
         }
+        // The file's own arrays are the flat list (cells start at offsets[0]; usually 0).
+        if (offsets.empty()) offsets.push_back(0);
+        list.offsets = std::move(offsets);
+        list.points = std::move(connectivity);
       } else {
         const auto cellCount = detail::Cursor::parseNumber<std::size_t>(args[0]);
         const auto totalSize = detail::Cursor::parseNumber<std::size_t>(args[1]);
         const auto flat = readArray<std::int64_t>(cursor, totalSize, "int", binary);
+        list.offsets.reserve(cellCount + 1);
+        list.points.reserve(flat.size() >= cellCount ? flat.size() - cellCount : 0);
         std::size_t pos = 0;
         for (std::size_t c = 0; c < cellCount; ++c) {
           if (pos >= flat.size()) throw detail::ParseFailure("cell list shorter than declared");
           const auto n = static_cast<std::size_t>(flat[pos++]);
           if (pos + n > flat.size()) throw detail::ParseFailure("cell list shorter than declared");
-          list.cells.emplace_back(flat.begin() + static_cast<std::ptrdiff_t>(pos), flat.begin() + static_cast<std::ptrdiff_t>(pos + n));
+          list.points.insert(list.points.end(), flat.begin() + static_cast<std::ptrdiff_t>(pos), flat.begin() + static_cast<std::ptrdiff_t>(pos + n));
+          list.offsets.push_back(static_cast<std::int64_t>(list.points.size()));
           pos += n;
         }
       }
@@ -315,13 +328,13 @@ namespace anaf::IO::formats {
     std::size_t fileCell = 0;
     if (polydata) {
       for (const auto& [implied, list] : polySections) {
-        for (const auto& cell : list.cells) collector.addCell(implied, cell, fileCell++);
+        for (std::size_t c = 0; c < list.size(); ++c) collector.addCell(implied, list.cell(c), fileCell++);
       }
     } else {
-      if (cellTypes.size() != cells.cells.size()) {
-        throw detail::ParseFailure(std::format("{} cells but {} cell types", cells.cells.size(), cellTypes.size()));
+      if (cellTypes.size() != cells.size()) {
+        throw detail::ParseFailure(std::format("{} cells but {} cell types", cells.size(), cellTypes.size()));
       }
-      for (std::size_t c = 0; c < cells.cells.size(); ++c) collector.addCell(cellTypes[c], cells.cells[c], fileCell++);
+      for (std::size_t c = 0; c < cells.size(); ++c) collector.addCell(cellTypes[c], cells.cell(c), fileCell++);
     }
     const auto sourceCell = collector.finish();
     context.progress(0.8f, "attributes");

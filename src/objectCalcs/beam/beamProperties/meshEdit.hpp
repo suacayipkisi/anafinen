@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <limits>
 #include <utility>
+#include <span>
 #include <vector>
 
 namespace FEM::BEAM {
@@ -55,5 +56,9 @@ namespace FEM::BEAM {
   // Removes node k with its elements and loads; later ids move down by one. The other nodes
   // keep their supports.
   void deleteNode(MeshData& mesh, std::uint32_t k);
+
+  // Removes several nodes in one pass (ids in any order, duplicates allowed, all < node count):
+  // every node, element and load is visited once, not once per removed node.
+  void deleteNodes(MeshData& mesh, std::span<const std::uint32_t> ids);
 
 } // namespace FEM::BEAM end

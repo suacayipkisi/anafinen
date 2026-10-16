@@ -45,12 +45,11 @@ namespace anaf::GUI {
     constexpr std::array<const char*, 6> shapeLabels{"General (values)", "Rectangle", "Circle", "Pipe (CHS)", "Box (RHS / SHS)", "I / H section"};
     constexpr std::array<const char*, 6> shapeNames{"general", "rectangle", "circle", "pipe", "box", "I"};
 
-    bool contains(std::string_view text, std::string_view part) {
-      const auto lower = [](const unsigned char c) { return static_cast<char>(std::tolower(c)); };
-      std::string a(text), b(part);
-      std::ranges::transform(a, a.begin(), lower);
-      std::ranges::transform(b, b.begin(), lower);
-      return a.find(b) != std::string::npos;
+    // Case-insensitive substring test without copies (it runs for every section every frame).
+    bool contains(const std::string_view text, const std::string_view part) {
+      if (part.empty()) return true;
+      const auto sameLetter = [](const unsigned char x, const unsigned char y) { return std::tolower(x) == std::tolower(y); };
+      return !std::ranges::search(text, part, sameLetter).empty();
     }
 
     // Outline in a canvas of the given size: local z to the right, local y up, i.e. looking

@@ -69,7 +69,11 @@ namespace FEM::BEAM {
 
   std::optional<SectionStress> sectionStress(const SectionShape& shape, const std::array<double, 6>& forces) {
     if (std::holds_alternative<GeneralSection>(shape)) return std::nullopt;
-    const auto p = computeProperties(shape, 0.0); // A, I, J do not depend on Poisson's ratio
+    return sectionStress(shape, computeProperties(shape, 0.0), forces); // A, I, J do not depend on Poisson's ratio
+  }
+
+  std::optional<SectionStress> sectionStress(const SectionShape& shape, const SectionProperties& p, const std::array<double, 6>& forces) {
+    if (std::holds_alternative<GeneralSection>(shape)) return std::nullopt;
     const double N = forces[0], Vy = forces[1], Vz = forces[2], T = forces[3], My = forces[4], Mz = forces[5];
     const double a = -Mz / p.secondMomentZ; // sigma = N / A + a y + b z
     const double b = My / p.secondMomentY;

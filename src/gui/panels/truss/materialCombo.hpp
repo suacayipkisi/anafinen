@@ -34,8 +34,9 @@ namespace anaf::GUI {
       ImGui::TextDisabled("No materials available");
       return;
     }
-    if (!bridge.findMaterialIndex(materialID)) materialID = bridge.allMaterials.front().getMaterialID();
-    const auto& selected = bridge.allMaterials[*bridge.findMaterialIndex(materialID)];
+    const auto index = bridge.findMaterialIndex(materialID);
+    if (!index) materialID = bridge.allMaterials.front().getMaterialID();
+    const auto& selected = bridge.allMaterials[index.value_or(0)];
     if (ImGui::BeginCombo(label, selected.getMaterialType().data())) {
       for (const auto& material : bridge.allMaterials) {
         ImGui::PushID(static_cast<int>(material.getMaterialID()));

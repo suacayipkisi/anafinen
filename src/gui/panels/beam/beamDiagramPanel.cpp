@@ -30,6 +30,7 @@
 #include <cmath>
 #include <exception>
 #include <mutex>
+#include <stdexcept>
 
 namespace anaf::GUI {
 
@@ -77,68 +78,71 @@ namespace anaf::GUI {
       materials = bridge.allMaterials;
       sections = bridge.allSections;
     }
+    m_plot = PlotSeries{};
     try {
-      const auto properties = FEM::BEAM::elementSectionProperties(mesh->elements, sections, materials);
-      const auto loads = FEM::BEAM::elementLocalLoads(mesh->nodes, mesh->elements, properties, mesh->distributedLoads, mesh->gravity, materials);
-      m_states = FEM::BEAM::sampleElement(*mesh, element, sampleCount, loads[element], materials, sections);
-      const auto& shape = sections[mesh->elements[element].sectionID].getShape();
-      for (const auto& state : m_states) m_stresses.push_back(FEM::BEAM::sectionStress(shape, state.forces));
-      m_sectionName = sections[mesh->elements[element].sectionID].getName();
+      // Only this element: its section properties and loads, not those of the whole model.
+      const auto& beam = mesh->elements[element];
+      if (beam.materialID >= materials.size() || beam.sectionID >= sections.size()) {
+        throw std::invalid_argument("material or section index out of range");
+      }
+      const auto& shape = sections[beam.sectionID].getShape();
+      const auto properties = FEM::BEAM::computeProperties(shape, materials[beam.materialID].getPoisson());
+      const auto load = FEM::BEAM::elementLocalLoad(mesh->nodes, mesh->elements, element, properties, mesh->distributedLoads, mesh->gravity, materials);
+      m_states = FEM::BEAM::sampleElement(*mesh, element, sampleCount, load, materials, sections);
+      for (const auto& state : m_states) m_stresses.push_back(FEM::BEAM::sectionStress(shape, properties, state.forces));
+      m_sectionName = sections[beam.sectionID].getName();
     } catch (const std::exception& exception) {
       // The lists changed after the solve (e.g. a section was removed): run the solver again.
       m_states.clear();
       m_stresses.clear();
       m_error = exception.what();
+      return;
+    }
+
+    for (const auto& state : m_states) {
+      m_plot.x.push_back(state.position);
+      for (std::size_t k = 0; k < 6; ++k) m_plot.forces[k].push_back(state.forces[k] / 1e3);
+      for (std::size_t axis = 0; axis < 3; ++axis) m_plot.displacement[axis].push_back(state.localDisplacement[axis] * 1e3);
+    }
+    if (!m_stresses.empty() && m_stresses.front()) {
+      for (const auto& stress : m_stresses) {
+        m_plot.maxNormal.push_back(stress->maxNormal / 1e6);
+        m_plot.minNormal.push_back(stress->minNormal / 1e6);
+        m_plot.vonMises.push_back(stress->vonMises / 1e6);
+      }
     }
   }
 
   void BeamDiagramPanel::renderPlot() {
     const auto& quantity = quantities[static_cast<std::size_t>(m_quantity)];
-    std::vector<double> x;
-    x.reserve(m_states.size());
-    for (const auto& state : m_states) x.push_back(state.position);
+    const auto& x = m_plot.x;
     const int count = static_cast<int>(x.size());
-
-    const auto values = [&](auto&& get) {
-      std::vector<double> y;
-      y.reserve(m_states.size());
-      for (std::size_t i = 0; i < m_states.size(); ++i) y.push_back(get(i));
-      return y;
-    };
+    const bool hasStresses = !m_plot.vonMises.empty();
 
     if (!ImPlot::BeginPlot("##beam_diagram", ImVec2(-1.0f, ImGui::GetContentRegionAvail().y * 0.6f))) return;
     ImPlot::SetupAxes("x from node 1 [m]", quantity.unit, ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
     if (m_quantity <= 5) {
-      const auto y = values([&](const std::size_t i) {
-        const double v = m_states[i].forces[static_cast<std::size_t>(m_quantity)];
-        return v / 1e3;
-      });
+      const auto& y = m_plot.forces[static_cast<std::size_t>(m_quantity)];
       ImPlotSpec shade;
       shade.FillAlpha = 0.25f;
       ImPlot::PlotShaded(quantity.label, x.data(), y.data(), count, 0.0, shade);
       ImPlot::PlotLine(quantity.label, x.data(), y.data(), count);
     } else if (m_quantity == 6) {
       constexpr std::array<const char*, 3> names{"u (axial)", "v (local y)", "w (local z)"};
-      for (std::size_t axis = 0; axis < 3; ++axis) {
-        const auto y = values([&](const std::size_t i) { return m_states[i].localDisplacement[axis] * 1e3; });
-        ImPlot::PlotLine(names[axis], x.data(), y.data(), count);
-      }
-    } else if (!m_stresses.empty() && m_stresses.front()) {
+      for (std::size_t axis = 0; axis < 3; ++axis) ImPlot::PlotLine(names[axis], x.data(), m_plot.displacement[axis].data(), count);
+    } else if (hasStresses) {
       if (m_quantity == 7) {
-        const auto top = values([&](const std::size_t i) { return m_stresses[i]->maxNormal / 1e6; });
-        const auto bottom = values([&](const std::size_t i) { return m_stresses[i]->minNormal / 1e6; });
-        ImPlot::PlotLine("max", x.data(), top.data(), count);
-        ImPlot::PlotLine("min", x.data(), bottom.data(), count);
+        ImPlot::PlotLine("max", x.data(), m_plot.maxNormal.data(), count);
+        ImPlot::PlotLine("min", x.data(), m_plot.minNormal.data(), count);
       } else {
-        const auto y = values([&](const std::size_t i) { return m_stresses[i]->vonMises / 1e6; });
         ImPlotSpec shade;
         shade.FillAlpha = 0.25f;
-        ImPlot::PlotShaded("von Mises", x.data(), y.data(), count, 0.0, shade);
-        ImPlot::PlotLine("von Mises", x.data(), y.data(), count);
+        ImPlot::PlotShaded("von Mises", x.data(), m_plot.vonMises.data(), count, 0.0, shade);
+        ImPlot::PlotLine("von Mises", x.data(), m_plot.vonMises.data(), count);
       }
     }
     ImPlot::EndPlot();
-    if (m_quantity >= 7 && (m_stresses.empty() || !m_stresses.front())) {
+    if (m_quantity >= 7 && !hasStresses) {
       ImGui::TextDisabled("General section (no shape): no stresses.");
     }
   }

@@ -294,53 +294,80 @@ namespace anaf::IO::formats {
       }
     }
 
-    // Returns the uncompressed payload bytes of a binary / appended array.
-    std::string decodeBinaryPayload(const std::string_view source, const bool base64, const Layout& layout) {
-      auto available = [&](const std::size_t bytes) -> std::string {
-        if (base64) return base64AtLeast(source, bytes);
+    // Payload bytes of a binary / appended array. Raw (not base64) uncompressed data is a view
+    // into the file itself; anything decoded or decompressed lives in storage. Offset and length
+    // instead of a view into storage: a moved short std::string would leave the view dangling.
+    struct Payload {
+      std::string storage;
+      std::string_view file;
+      bool owned{false};
+      std::size_t offset{0};
+      std::size_t length{0};
+
+      std::string_view bytes() const { return (owned ? std::string_view(storage) : file).substr(offset, length); }
+    };
+
+    Payload decodeBinaryPayload(const std::string_view source, const bool base64, const Layout& layout) {
+      // The first `bytes` bytes of the payload: decoded for base64, the file itself for raw data.
+      std::string decoded;
+      auto available = [&](const std::size_t bytes) -> std::string_view {
+        if (base64) {
+          decoded = base64AtLeast(source, bytes);
+          return decoded;
+        }
         if (bytes > source.size()) throw detail::ParseFailure("truncated binary array");
-        return std::string(source.substr(0, bytes));
+        return source.substr(0, bytes);
       };
 
       if (!layout.zlib) {
-        const std::string head = available(layout.headerSize);
-        const std::uint64_t length = headerWord(head, 0, layout);
-        const std::string all = available(layout.headerSize + length);
+        const std::uint64_t length = headerWord(available(layout.headerSize), 0, layout);
+        const std::string_view all = available(layout.headerSize + length);
         if (all.size() < layout.headerSize + length) throw detail::ParseFailure("truncated binary array");
-        return all.substr(layout.headerSize, length);
+        Payload payload{.storage = {}, .file = source, .owned = base64, .offset = layout.headerSize, .length = length};
+        if (base64) payload.storage = std::move(decoded);
+        return payload;
       }
 
       // Compressed: [blocks, blockSize, lastBlockSize, compressedSize x blocks] then the blocks.
-      const std::string first = available(layout.headerSize * 3);
-      const std::uint64_t blocks = headerWord(first, 0, layout);
-      const std::uint64_t blockSize = headerWord(first, 1, layout);
-      const std::uint64_t lastBlockSize = headerWord(first, 2, layout);
+      std::uint64_t blocks = 0, blockSize = 0, lastBlockSize = 0;
+      {
+        const std::string_view first = available(layout.headerSize * 3);
+        blocks = headerWord(first, 0, layout);
+        blockSize = headerWord(first, 1, layout);
+        lastBlockSize = headerWord(first, 2, layout);
+      }
       const std::size_t headerBytes = layout.headerSize * (3 + blocks);
-      const std::string header = available(headerBytes);
       std::uint64_t compressedTotal = 0;
-      for (std::uint64_t b = 0; b < blocks; ++b) compressedTotal += headerWord(header, 3 + b, layout);
+      {
+        const std::string_view header = available(headerBytes);
+        for (std::uint64_t b = 0; b < blocks; ++b) compressedTotal += headerWord(header, 3 + b, layout);
+      }
 
       // For base64 the decoder flushes at padding, so a header and data encoded separately
       // (VTK's convention) decode the same as one joint base64 string.
-      const std::string all = available(headerBytes + compressedTotal);
+      const std::string_view all = available(headerBytes + compressedTotal);
       if (all.size() < headerBytes + compressedTotal) throw detail::ParseFailure("truncated compressed array");
-      const std::string compressed = all.substr(headerBytes, compressedTotal);
 
-      std::string out;
-      out.reserve(blocks * blockSize);
-      std::size_t pos = 0;
+      // Every block is inflated straight into the output.
+      Payload payload{.storage = {}, .file = {}, .owned = true, .offset = 0, .length = 0};
+      std::string& out = payload.storage;
+      out.resize(blocks * blockSize);
+      std::size_t written = 0;
+      std::size_t pos = headerBytes;
       for (std::uint64_t b = 0; b < blocks; ++b) {
-        const auto compressedSize = headerWord(header, 3 + b, layout);
+        const auto compressedSize = headerWord(all, 3 + b, layout);
         const std::uint64_t expected = (b + 1 == blocks && lastBlockSize != 0) ? lastBlockSize : blockSize;
-        std::string block(expected, '\0');
+        if (written + expected > out.size()) out.resize(written + expected);
         uLongf length = static_cast<uLongf>(expected);
-        const int status = uncompress(reinterpret_cast<Bytef*>(block.data()), &length,
-                                      reinterpret_cast<const Bytef*>(compressed.data() + pos), static_cast<uLong>(compressedSize));
+        const int status = uncompress(reinterpret_cast<Bytef*>(out.data() + written), &length,
+                                      reinterpret_cast<const Bytef*>(all.data() + pos), static_cast<uLong>(compressedSize));
         if (status != Z_OK) throw detail::ParseFailure("zlib decompression failed");
-        out.append(block.data(), length);
+        written += length;
         pos += compressedSize;
       }
-      return out;
+      out.resize(written);
+      payload.length = written;
+      return payload;
     }
 
     template <typename Out>
@@ -362,9 +389,12 @@ namespace anaf::IO::formats {
           values.push_back(value);
         }
       } else {
-        std::string payload;
+        Payload payload;
         if (format == "binary") {
-          payload = decodeBinaryPayload(array.text(), true, layout);
+          // One text piece (the usual case) is used in place; split text is joined first.
+          std::string joined;
+          const std::string_view text = array.textPieces.size() == 1 ? array.textPieces.front() : std::string_view(joined = array.text());
+          payload = decodeBinaryPayload(text, true, layout);
         } else if (format == "appended") {
           const auto offset = detail::Cursor::parseNumber<std::size_t>(array.attribute("offset", "0"));
           if (offset > layout.appended.size()) throw detail::ParseFailure("appended offset beyond the data section");
@@ -372,12 +402,13 @@ namespace anaf::IO::formats {
         } else {
           throw detail::ParseFailure("unsupported DataArray format '" + format + "'");
         }
+        const std::string_view bytes = payload.bytes();
         const std::size_t size = scalarSize(type);
-        const std::size_t count = payload.size() / size;
+        const std::size_t count = bytes.size() / size;
         values.resize(count);
         for (std::size_t i = 0; i < count; ++i) {
-          if constexpr (std::is_integral_v<Out>) values[i] = static_cast<Out>(integerAt(payload.data() + i * size, type, layout.bigEndian));
-          else values[i] = static_cast<Out>(scalarAt(payload.data() + i * size, type, layout.bigEndian));
+          if constexpr (std::is_integral_v<Out>) values[i] = static_cast<Out>(integerAt(bytes.data() + i * size, type, layout.bigEndian));
+          else values[i] = static_cast<Out>(scalarAt(bytes.data() + i * size, type, layout.bigEndian));
         }
       }
       if (expectedCount != 0 && values.size() != expectedCount) {
@@ -396,135 +427,179 @@ namespace anaf::IO::formats {
 
   } // namespace end
 
+  namespace {
+    // The mesh of a .vtu as parsed (before decodeModelData() sets tags), for the later files of
+    // a .pvd collection: they repeat it, so their Points / Cells arrays need not be decoded again.
+    struct VtuMesh {
+      std::vector<Node> nodes;
+      std::vector<ElementBlock> blocks;
+      std::vector<std::size_t> sourceCell; // file cell of every element (VtkCellCollector)
+      std::size_t fileCells{0};
+    };
+
+    // known: reuse that mesh when the file's point and cell counts match it (else parse as usual);
+    // found: receives the parsed mesh.
+    MeshModel readVtuFile(const std::filesystem::path& path, const IoContext& context, const VtuMesh* known, VtuMesh* found);
+  } // namespace end
+
   MeshModel readVtu(const std::filesystem::path& path, const ReadOptions&, const IoContext& context) {
-    const std::string content = detail::readWholeFile(path);
-    XmlParser parser(content);
-    const XmlElement root = parser.parseDocument();
-    if (root.name != "VTKFile") throw detail::ParseFailure("not a VTK XML file (root element is '" + root.name + "')");
-    if (root.attribute("type") == "Collection") throw detail::ParseFailure("this is a ParaView collection: read it as .pvd");
-    if (root.attribute("type") != "UnstructuredGrid") {
-      throw detail::ParseFailure("VTK XML type '" + root.attribute("type") + "' is not supported (UnstructuredGrid expected)");
-    }
-    Layout layout;
-    layout.bigEndian = root.attribute("byte_order", "LittleEndian") == "BigEndian";
-    layout.headerSize = root.attribute("header_type", "UInt32") == "UInt64" ? 8 : 4;
-    const std::string compressor = root.attribute("compressor");
-    if (!compressor.empty() && compressor != "vtkZLibDataCompressor") {
-      throw detail::ParseFailure("compressor '" + compressor + "' is not supported (only vtkZLibDataCompressor)");
-    }
-    layout.zlib = !compressor.empty();
-    if (parser.appendedStart() != std::string_view::npos) {
-      layout.appended = std::string_view(content).substr(parser.appendedStart());
-      layout.appendedBase64 = parser.appendedEncoding() == "base64";
-    }
-
-    const XmlElement* grid = root.child("UnstructuredGrid");
-    if (!grid) throw detail::ParseFailure("UnstructuredGrid element missing");
-
-    MeshModel model;
-    if (const XmlElement* fieldData = grid->child("FieldData")) {
-      for (const auto& array : fieldData->children) {
-        if (array.name != "DataArray" || array.attribute("type") == "String") continue;
-        GlobalArray global;
-        global.name = array.attribute("Name");
-        global.components = std::max(1, detail::Cursor::parseNumber<int>(array.attribute("NumberOfComponents", "1")));
-        const auto tuples = detail::Cursor::parseNumber<std::size_t>(array.attribute("NumberOfTuples", "0"));
-        global.values = readDataArray<double>(array, layout, tuples * static_cast<std::size_t>(global.components));
-        model.globalData.push_back(std::move(global));
-      }
-    }
-    // All pieces are concatenated first, then turned into elements in one pass.
-    std::vector<std::int64_t> connectivity, offsets, types;
-    struct PendingArray { std::string name; bool onPoints; int components; std::vector<double> values; };
-    std::map<std::pair<std::string, bool>, PendingArray> arrays;
-    std::size_t cellTotal = 0;
-
-    std::size_t pieceIndex = 0;
-    for (const auto& piece : grid->children) {
-      if (piece.name != "Piece") continue;
-      if (context.cancelled()) throw detail::CancelledFailure();
-      const auto points = detail::Cursor::parseNumber<std::size_t>(piece.attribute("NumberOfPoints", "0"));
-      const auto cellCount = detail::Cursor::parseNumber<std::size_t>(piece.attribute("NumberOfCells", "0"));
-      const std::size_t pointOffset = model.nodes.size();
-
-      if (points > 0) {
-        const XmlElement* pointsElement = piece.child("Points");
-        const XmlElement* coordsArray = pointsElement ? pointsElement->child("DataArray") : nullptr;
-        if (!coordsArray) throw detail::ParseFailure("Points/DataArray missing");
-        const auto coords = readDataArray<double>(*coordsArray, layout, points * 3);
-        for (std::size_t i = 0; i < points; ++i) {
-          model.nodes.push_back(Node{pointOffset + i + 1, {coords[i * 3], coords[i * 3 + 1], coords[i * 3 + 2]}});
-        }
-      }
-      if (cellCount > 0) {
-        const XmlElement* cells = piece.child("Cells");
-        const auto* connectivityArray = findArray(cells, "connectivity");
-        const auto* offsetsArray = findArray(cells, "offsets");
-        const auto* typesArray = findArray(cells, "types");
-        if (!connectivityArray || !offsetsArray || !typesArray) throw detail::ParseFailure("Cells arrays missing");
-        const auto pieceOffsets = readDataArray<std::int64_t>(*offsetsArray, layout, cellCount);
-        const auto pieceConnectivity = readDataArray<std::int64_t>(*connectivityArray, layout, 0);
-        const auto pieceTypes = readDataArray<std::int64_t>(*typesArray, layout, cellCount);
-        const auto base = static_cast<std::int64_t>(connectivity.size());
-        for (const auto node : pieceConnectivity) connectivity.push_back(node + static_cast<std::int64_t>(pointOffset));
-        for (const auto offset : pieceOffsets) offsets.push_back(offset + base);
-        types.insert(types.end(), pieceTypes.begin(), pieceTypes.end());
-      }
-
-      for (const bool onPoints : {true, false}) {
-        const XmlElement* data = piece.child(onPoints ? "PointData" : "CellData");
-        if (!data) continue;
-        const std::size_t entities = onPoints ? points : cellCount;
-        for (const auto& array : data->children) {
-          if (array.name != "DataArray") continue;
-          const std::string type = array.attribute("type");
-          if (type == "String") continue;
-          const int components = detail::Cursor::parseNumber<int>(array.attribute("NumberOfComponents", "1"));
-          auto values = readDataArray<double>(array, layout, entities * static_cast<std::size_t>(components));
-          auto& pending = arrays[{array.attribute("Name"), onPoints}];
-          if (pending.values.empty() && pieceIndex > 0) {
-            // Array missing from earlier pieces: pad them with zeros.
-            pending.values.assign((onPoints ? pointOffset : cellTotal) * static_cast<std::size_t>(components), 0.0);
-          }
-          pending.name = array.attribute("Name");
-          pending.onPoints = onPoints;
-          pending.components = components;
-          pending.values.insert(pending.values.end(), values.begin(), values.end());
-        }
-      }
-      cellTotal += cellCount;
-      ++pieceIndex;
-      context.progress(0.1f + 0.6f * static_cast<float>(pieceIndex) / static_cast<float>(grid->children.size()), "pieces");
-    }
-
-    detail::VtkCellCollector collector(model, 0);
-    std::int64_t begin = 0;
-    for (std::size_t c = 0; c < types.size(); ++c) {
-      const std::int64_t end = offsets[c];
-      if (end < begin || static_cast<std::size_t>(end) > connectivity.size()) throw detail::ParseFailure("invalid cell offsets");
-      collector.addCell(static_cast<int>(types[c]), std::span<const std::int64_t>(connectivity.data() + begin, static_cast<std::size_t>(end - begin)), c);
-      begin = end;
-    }
-    const auto sourceCell = collector.finish();
-
-    for (auto& [key, pending] : arrays) {
-      const std::size_t entities = pending.onPoints ? model.nodes.size() : types.size();
-      pending.values.resize(entities * static_cast<std::size_t>(pending.components), 0.0);
-      Field field;
-      field.name = pending.name;
-      field.location = pending.onPoints ? E_FieldLocation::Node : E_FieldLocation::Element;
-      field.components = pending.components;
-      field.times = {0.0};
-      field.steps.push_back(pending.onPoints ? std::move(pending.values)
-                                             : detail::VtkCellCollector::remapCellData(pending.values, pending.components, sourceCell));
-      model.fields.push_back(std::move(field));
-    }
-
-    detail::unflattenSteps(model);
-    detail::decodeModelData(model, detail::CodecOptions{});
-    context.progress(1.0f, "done");
-    return model;
+    return readVtuFile(path, context, nullptr, nullptr);
   }
+
+  namespace {
+    MeshModel readVtuFile(const std::filesystem::path& path, const IoContext& context, const VtuMesh* known, VtuMesh* found) {
+      const std::string content = detail::readWholeFile(path);
+      XmlParser parser(content);
+      const XmlElement root = parser.parseDocument();
+      if (root.name != "VTKFile") throw detail::ParseFailure("not a VTK XML file (root element is '" + root.name + "')");
+      if (root.attribute("type") == "Collection") throw detail::ParseFailure("this is a ParaView collection: read it as .pvd");
+      if (root.attribute("type") != "UnstructuredGrid") {
+        throw detail::ParseFailure("VTK XML type '" + root.attribute("type") + "' is not supported (UnstructuredGrid expected)");
+      }
+      Layout layout;
+      layout.bigEndian = root.attribute("byte_order", "LittleEndian") == "BigEndian";
+      layout.headerSize = root.attribute("header_type", "UInt32") == "UInt64" ? 8 : 4;
+      const std::string compressor = root.attribute("compressor");
+      if (!compressor.empty() && compressor != "vtkZLibDataCompressor") {
+        throw detail::ParseFailure("compressor '" + compressor + "' is not supported (only vtkZLibDataCompressor)");
+      }
+      layout.zlib = !compressor.empty();
+      if (parser.appendedStart() != std::string_view::npos) {
+        layout.appended = std::string_view(content).substr(parser.appendedStart());
+        layout.appendedBase64 = parser.appendedEncoding() == "base64";
+      }
+
+      const XmlElement* grid = root.child("UnstructuredGrid");
+      if (!grid) throw detail::ParseFailure("UnstructuredGrid element missing");
+
+      // A known mesh is reused only when this file has the same number of points and cells.
+      bool reuse = false;
+      if (known) {
+        std::size_t pointTotal = 0, fileCellTotal = 0;
+        for (const auto& piece : grid->children) {
+          if (piece.name != "Piece") continue;
+          pointTotal += detail::Cursor::parseNumber<std::size_t>(piece.attribute("NumberOfPoints", "0"));
+          fileCellTotal += detail::Cursor::parseNumber<std::size_t>(piece.attribute("NumberOfCells", "0"));
+        }
+        reuse = pointTotal == known->nodes.size() && fileCellTotal == known->fileCells;
+      }
+
+      MeshModel model;
+      if (const XmlElement* fieldData = grid->child("FieldData")) {
+        for (const auto& array : fieldData->children) {
+          if (array.name != "DataArray" || array.attribute("type") == "String") continue;
+          GlobalArray global;
+          global.name = array.attribute("Name");
+          global.components = std::max(1, detail::Cursor::parseNumber<int>(array.attribute("NumberOfComponents", "1")));
+          const auto tuples = detail::Cursor::parseNumber<std::size_t>(array.attribute("NumberOfTuples", "0"));
+          global.values = readDataArray<double>(array, layout, tuples * static_cast<std::size_t>(global.components));
+          model.globalData.push_back(std::move(global));
+        }
+      }
+      // All pieces are concatenated first, then turned into elements in one pass.
+      std::vector<std::int64_t> connectivity, offsets, types;
+      struct PendingArray { std::string name; bool onPoints; int components; std::vector<double> values; };
+      std::map<std::pair<std::string, bool>, PendingArray> arrays;
+      std::size_t cellTotal = 0;
+      std::size_t pointsSeen = 0;
+
+      std::size_t pieceIndex = 0;
+      for (const auto& piece : grid->children) {
+        if (piece.name != "Piece") continue;
+        if (context.cancelled()) throw detail::CancelledFailure();
+        const auto points = detail::Cursor::parseNumber<std::size_t>(piece.attribute("NumberOfPoints", "0"));
+        const auto cellCount = detail::Cursor::parseNumber<std::size_t>(piece.attribute("NumberOfCells", "0"));
+        const std::size_t pointOffset = reuse ? pointsSeen : model.nodes.size();
+        pointsSeen += points;
+
+        if (points > 0 && !reuse) {
+          const XmlElement* pointsElement = piece.child("Points");
+          const XmlElement* coordsArray = pointsElement ? pointsElement->child("DataArray") : nullptr;
+          if (!coordsArray) throw detail::ParseFailure("Points/DataArray missing");
+          const auto coords = readDataArray<double>(*coordsArray, layout, points * 3);
+          for (std::size_t i = 0; i < points; ++i) {
+            model.nodes.push_back(Node{pointOffset + i + 1, {coords[i * 3], coords[i * 3 + 1], coords[i * 3 + 2]}});
+          }
+        }
+        if (cellCount > 0 && !reuse) {
+          const XmlElement* cells = piece.child("Cells");
+          const auto* connectivityArray = findArray(cells, "connectivity");
+          const auto* offsetsArray = findArray(cells, "offsets");
+          const auto* typesArray = findArray(cells, "types");
+          if (!connectivityArray || !offsetsArray || !typesArray) throw detail::ParseFailure("Cells arrays missing");
+          const auto pieceOffsets = readDataArray<std::int64_t>(*offsetsArray, layout, cellCount);
+          const auto pieceConnectivity = readDataArray<std::int64_t>(*connectivityArray, layout, 0);
+          const auto pieceTypes = readDataArray<std::int64_t>(*typesArray, layout, cellCount);
+          const auto base = static_cast<std::int64_t>(connectivity.size());
+          for (const auto node : pieceConnectivity) connectivity.push_back(node + static_cast<std::int64_t>(pointOffset));
+          for (const auto offset : pieceOffsets) offsets.push_back(offset + base);
+          types.insert(types.end(), pieceTypes.begin(), pieceTypes.end());
+        }
+
+        for (const bool onPoints : {true, false}) {
+          const XmlElement* data = piece.child(onPoints ? "PointData" : "CellData");
+          if (!data) continue;
+          const std::size_t entities = onPoints ? points : cellCount;
+          for (const auto& array : data->children) {
+            if (array.name != "DataArray") continue;
+            const std::string type = array.attribute("type");
+            if (type == "String") continue;
+            const int components = detail::Cursor::parseNumber<int>(array.attribute("NumberOfComponents", "1"));
+            auto values = readDataArray<double>(array, layout, entities * static_cast<std::size_t>(components));
+            auto& pending = arrays[{array.attribute("Name"), onPoints}];
+            if (pending.values.empty() && pieceIndex > 0) {
+              // Array missing from earlier pieces: pad them with zeros.
+              pending.values.assign((onPoints ? pointOffset : cellTotal) * static_cast<std::size_t>(components), 0.0);
+            }
+            pending.name = array.attribute("Name");
+            pending.onPoints = onPoints;
+            pending.components = components;
+            pending.values.insert(pending.values.end(), values.begin(), values.end());
+          }
+        }
+        cellTotal += cellCount;
+        ++pieceIndex;
+        context.progress(0.1f + 0.6f * static_cast<float>(pieceIndex) / static_cast<float>(grid->children.size()), "pieces");
+      }
+
+      std::vector<std::size_t> parsedSourceCell;
+      if (reuse) {
+        model.nodes = known->nodes;
+        model.blocks = known->blocks;
+      } else {
+        detail::VtkCellCollector collector(model, 0);
+        std::int64_t begin = 0;
+        for (std::size_t c = 0; c < types.size(); ++c) {
+          const std::int64_t end = offsets[c];
+          if (end < begin || static_cast<std::size_t>(end) > connectivity.size()) throw detail::ParseFailure("invalid cell offsets");
+          collector.addCell(static_cast<int>(types[c]), std::span<const std::int64_t>(connectivity.data() + begin, static_cast<std::size_t>(end - begin)), c);
+          begin = end;
+        }
+        parsedSourceCell = collector.finish();
+        if (found) *found = VtuMesh{model.nodes, model.blocks, parsedSourceCell, types.size()};
+      }
+      const auto& sourceCell = reuse ? known->sourceCell : parsedSourceCell;
+      const std::size_t fileCells = reuse ? known->fileCells : types.size();
+
+      for (auto& [key, pending] : arrays) {
+        const std::size_t entities = pending.onPoints ? model.nodes.size() : fileCells;
+        pending.values.resize(entities * static_cast<std::size_t>(pending.components), 0.0);
+        Field field;
+        field.name = pending.name;
+        field.location = pending.onPoints ? E_FieldLocation::Node : E_FieldLocation::Element;
+        field.components = pending.components;
+        field.times = {0.0};
+        field.steps.push_back(pending.onPoints ? std::move(pending.values)
+                                               : detail::VtkCellCollector::remapCellData(pending.values, pending.components, sourceCell));
+        model.fields.push_back(std::move(field));
+      }
+
+      detail::unflattenSteps(model);
+      detail::decodeModelData(model, detail::CodecOptions{});
+      context.progress(1.0f, "done");
+      return model;
+    }
+  } // namespace end
 
   // ---------------------------------------------------------------- write
 
@@ -542,11 +617,15 @@ namespace anaf::IO::formats {
         if (withTuples) m_out += std::format(" NumberOfTuples=\"{}\"", values.size() / static_cast<std::size_t>(std::max(components, 1)));
         m_out += std::format(" format=\"{}\">\n", m_binary ? "binary" : "ascii");
         if (m_binary) {
+          // Uncompressed: the UInt64 byte count and the values in one buffer, base64-encoded
+          // straight into m_out (no block copy, no encoded temporary).
           std::string raw;
-          raw.reserve(values.size() * sizeof(T));
+          raw.reserve(sizeof(std::uint64_t) + values.size() * sizeof(T));
+          if (!m_compress) detail::appendValue(raw, static_cast<std::uint64_t>(values.size() * sizeof(T)), false);
           for (const T v : values) detail::appendValue(raw, v, false);
           m_out += "          ";
-          m_out += m_compress ? compressed(raw) : uncompressed(raw);
+          if (m_compress) appendCompressed(m_out, raw);
+          else detail::base64Append(m_out, raw);
           m_out.push_back('\n');
         } else {
           for (std::size_t i = 0; i < values.size(); ++i) {
@@ -561,15 +640,8 @@ namespace anaf::IO::formats {
       std::string& buffer() { return m_out; }
 
     private:
-      static std::string uncompressed(const std::string& raw) {
-        std::string block;
-        detail::appendValue(block, static_cast<std::uint64_t>(raw.size()), false);
-        block += raw;
-        return detail::base64Encode(block);
-      }
-
       // vtkZLibDataCompressor layout; header and data are base64-encoded separately like VTK does.
-      static std::string compressed(const std::string& raw) {
+      static void appendCompressed(std::string& target, const std::string& raw) {
         constexpr std::size_t blockSize = 32768;
         const std::size_t blocks = raw.empty() ? 0 : (raw.size() + blockSize - 1) / blockSize;
         std::string header;
@@ -589,7 +661,8 @@ namespace anaf::IO::formats {
           detail::appendValue(header, static_cast<std::uint64_t>(length), false);
           data += out;
         }
-        return detail::base64Encode(header) + detail::base64Encode(data);
+        detail::base64Append(target, header);
+        detail::base64Append(target, data);
       }
 
       bool m_binary;
@@ -751,7 +824,7 @@ namespace anaf::IO::formats {
     return report;
   }
 
-  MeshModel readPvd(const std::filesystem::path& path, const ReadOptions& options, const IoContext& context) {
+  MeshModel readPvd(const std::filesystem::path& path, const ReadOptions&, const IoContext& context) {
     const std::string content = detail::readWholeFile(path);
     XmlParser parser(content);
     const XmlElement root = parser.parseDocument();
@@ -779,6 +852,7 @@ namespace anaf::IO::formats {
     // Time fields per (name, location), one step per file that contains them.
     struct History { Field field; std::size_t files{0}; bool constant{true}; };
     std::map<std::pair<std::string, int>, History> histories;
+    VtuMesh firstMesh;
     std::vector<std::pair<std::string, int>> order;
     for (std::size_t k = 0; k < entries.size(); ++k) {
       const auto stepContext = subContext(context, static_cast<float>(k) / static_cast<float>(entries.size()),
@@ -787,7 +861,9 @@ namespace anaf::IO::formats {
       if (entries[k].file.extension() != ".vtu") {
         throw detail::ParseFailure("collection entry '" + pathToUtf8(entries[k].file) + "' is not a .vtu file");
       }
-      MeshModel step = readVtu(entries[k].file, options, stepContext);
+      // Later files repeat the first one's mesh: it is reused instead of decoded again (a file
+      // with other point / cell counts is parsed in full and refused below).
+      MeshModel step = readVtuFile(entries[k].file, stepContext, k == 0 ? nullptr : &firstMesh, k == 0 ? &firstMesh : nullptr);
       if (k == 0) {
         model = std::move(step);
         std::vector<Field> timeFields;

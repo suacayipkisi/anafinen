@@ -48,7 +48,12 @@ namespace anaf::IO::detail {
 
   std::string base64Encode(const std::string_view bytes) {
     std::string out;
-    out.reserve((bytes.size() + 2) / 3 * 4);
+    base64Append(out, bytes);
+    return out;
+  }
+
+  void base64Append(std::string& out, const std::string_view bytes) {
+    out.reserve(out.size() + (bytes.size() + 2) / 3 * 4);
     std::size_t i = 0;
     for (; i + 2 < bytes.size(); i += 3) {
       const unsigned value = (static_cast<unsigned char>(bytes[i]) << 16) | (static_cast<unsigned char>(bytes[i + 1]) << 8)
@@ -67,7 +72,6 @@ namespace anaf::IO::detail {
       out.push_back(rest == 2 ? alphabet[(value >> 6) & 63] : '=');
       out.push_back('=');
     }
-    return out;
   }
 
   std::string base64Decode(const std::string_view text) {

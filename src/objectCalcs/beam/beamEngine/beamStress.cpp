@@ -22,7 +22,6 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <vector>
 
 namespace FEM::BEAM {
 
@@ -37,19 +36,14 @@ namespace FEM::BEAM {
     BeamStress result;
     if (std::holds_alternative<GeneralSection>(shape)) return result;
 
-    std::vector<double> positions{0.0, length};
-    for (std::size_t i = 1; i < samples; ++i) positions.push_back(length * static_cast<double>(i) / static_cast<double>(samples));
-    // dMz/dx = -Vy0 + qy x = 0 and dMy/dx = Vz0 - qz x = 0.
     const auto& S0 = element.sectionForces;
-    if (localLoad[1] != 0.0) positions.push_back(S0[1] / localLoad[1]);
-    if (localLoad[2] != 0.0) positions.push_back(S0[2] / localLoad[2]);
-
+    const SectionProperties properties = computeProperties(shape, 0.0); // once per element, not per position
     result.available = true;
     result.maxNormal = -std::numeric_limits<double>::infinity();
     result.minNormal = std::numeric_limits<double>::infinity();
-    for (const double x : positions) {
-      if (!(x >= 0.0 && x <= length)) continue;
-      const auto stress = sectionStress(shape, sectionForcesAt(S0, localLoad, x));
+    const auto visit = [&](const double x) {
+      if (!(x >= 0.0 && x <= length)) return;
+      const auto stress = sectionStress(shape, properties, sectionForcesAt(S0, localLoad, x));
       result.maxNormal = std::max(result.maxNormal, stress->maxNormal);
       result.minNormal = std::min(result.minNormal, stress->minNormal);
       result.maxShear = std::max(result.maxShear, stress->shearFromForce + stress->shearFromTorsion);
@@ -57,7 +51,14 @@ namespace FEM::BEAM {
         result.maxVonMises = stress->vonMises;
         result.vonMisesPosition = x;
       }
-    }
+    };
+    // Ends, interior samples, then the moment extremes dMz/dx = -Vy0 + qy x = 0 and
+    // dMy/dx = Vz0 - qz x = 0 (this order decides the reported position on a tie).
+    visit(0.0);
+    visit(length);
+    for (std::size_t i = 1; i < samples; ++i) visit(length * static_cast<double>(i) / static_cast<double>(samples));
+    if (localLoad[1] != 0.0) visit(S0[1] / localLoad[1]);
+    if (localLoad[2] != 0.0) visit(S0[2] / localLoad[2]);
     result.isStressExceeded = result.maxVonMises > yieldStrength;
     return result;
   }

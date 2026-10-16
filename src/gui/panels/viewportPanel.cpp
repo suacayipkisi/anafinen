@@ -525,6 +525,7 @@ namespace anaf::GUI {
     m_renderer->clearBuffers();
     m_beamRenderer->clearSpheres();
     m_nodeLabels.clear();
+    ++m_nodeLabelsRevision;
 
     // Coordinate axes X, Y, Z (only with the axes toggle on), extended far past the camera's far clip plane so they appear infinite (EntityID = -1)
     // farPlane() stays below ~100 scene radii at the widest zoom, so 200 radii look infinite.
@@ -1143,22 +1144,32 @@ namespace anaf::GUI {
       m_renderer->render(mvp, eye, 2.0f * std::tan(fovY * 0.5f) / fbHeight);
     }
 
-    // Node number labels, rendered as OpenGL glyph quads (ImGui font atlas) instead of an ImGui 2D overlay.
-    m_renderer->clearTextBuffer();
-    if (m_display->showNodes()) {
-      const float fbWidth = static_cast<float>(m_fbo->getWidth());
-      const float fbHeight = static_cast<float>(m_fbo->getHeight());
-      for (const auto& [id, worldPos] : m_nodeLabels) {
-        if (m_cameraDistance >= 15.0f && id != m_selectedNode) continue;
-        const glm::vec4 clipPos = mvp * glm::vec4(worldPos, 1.0f);
-        if (clipPos.w <= 0.1f) continue;
-        const glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
-        const float screenX = (ndc.x * 0.5f + 0.5f) * fbWidth + 8.0f;
-        const float screenY = (-ndc.y * 0.5f + 0.5f) * fbHeight - 8.0f;
-        m_renderer->addText(glm::vec2(screenX, screenY), std::to_string(id), toGlm(palette.sceneLabel), fbWidth, fbHeight);
+    // Node number labels, rendered as OpenGL glyph quads (ImGui font atlas) instead of an ImGui 2D
+    // overlay. Rebuilt and uploaded only when the camera, the framebuffer, the selection, the
+    // color or the labels changed; otherwise the uploaded buffer is drawn again.
+    const ImTextureData* atlas = ImGui::GetIO().Fonts->TexData;
+    const LabelState labelState{mvp, m_fbo->getWidth(), m_fbo->getHeight(), m_selectedNode, m_display->showNodes(),
+                                m_cameraDistance >= 15.0f, toGlm(palette.sceneLabel), m_nodeLabelsRevision,
+                                atlas ? atlas->UniqueID : -1, atlas ? atlas->Width : 0, atlas ? atlas->Height : 0,
+                                ImGui::GetFontBaked()};
+    if (m_labelState != labelState) {
+      m_labelState = labelState;
+      m_renderer->clearTextBuffer();
+      if (labelState.show) {
+        const float fbWidth = static_cast<float>(labelState.width);
+        const float fbHeight = static_cast<float>(labelState.height);
+        for (const auto& [id, worldPos] : m_nodeLabels) {
+          if (labelState.far && id != m_selectedNode) continue;
+          const glm::vec4 clipPos = mvp * glm::vec4(worldPos, 1.0f);
+          if (clipPos.w <= 0.1f) continue;
+          const glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+          const float screenX = (ndc.x * 0.5f + 0.5f) * fbWidth + 8.0f;
+          const float screenY = (-ndc.y * 0.5f + 0.5f) * fbHeight - 8.0f;
+          m_renderer->addText(glm::vec2(screenX, screenY), std::to_string(id), labelState.color, fbWidth, fbHeight);
+        }
       }
+      m_renderer->uploadTextBuffer();
     }
-    m_renderer->uploadTextBuffer();
     m_renderer->renderText();
 
     m_fbo->unbind();

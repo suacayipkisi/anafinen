@@ -1590,25 +1590,4 @@ namespace FEM::BEAM::LIBRARY {
     return root.dump(2) + "\n";
   }
 
-  std::expected<std::vector<Entry>, std::string> loadIndex(const std::filesystem::path& indexFile) {
-    std::ifstream in(indexFile, std::ios::binary);
-    if (!in) return std::unexpected(std::format("cannot open '{}'", anaf::IO::pathToUtf8(indexFile)));
-    try {
-      const auto root = nlohmann::json::parse(in);
-      std::vector<Entry> entries;
-      for (const auto& item : root.at("models")) {
-        Entry entry{item.at("id").get<std::string>(), item.at("name").get<std::string>(), item.at("category").get<std::string>(),
-                    item.at("description").get<std::string>()};
-        const bool safeId = !entry.id.empty() && std::ranges::all_of(entry.id, [](const char c) {
-          return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
-        });
-        if (!safeId) return std::unexpected(std::format("invalid model id '{}'", entry.id));
-        entries.push_back(std::move(entry));
-      }
-      return entries;
-    } catch (const std::exception& exception) {
-      return std::unexpected(std::format("'{}': {}", anaf::IO::pathToUtf8(indexFile), exception.what()));
-    }
-  }
-
 } // namespace FEM::BEAM::LIBRARY end

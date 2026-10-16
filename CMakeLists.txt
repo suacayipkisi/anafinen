@@ -78,7 +78,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/truss_1D/trussProperties/meshEdit.cpp
     src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
     src/objectCalcs/truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.cpp
-    src/objectCalcs/truss_1D/trussTypes/trussLibrary.cpp
+    src/objectCalcs/truss_1D/trussTypes/trussLibraryIndex.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/assembleStiffness.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/reducedDofs.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/assembleMass.cpp
@@ -100,7 +100,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/beam/beamEngine/beamDiagrams.cpp
     src/objectCalcs/beam/beamEngine/beamStress.cpp
     src/objectCalcs/beam/beamIO/beamMeshAdapter.cpp
-    src/objectCalcs/beam/beamTypes/beamLibrary.cpp
+    src/objectCalcs/beam/beamTypes/beamLibraryIndex.cpp
 )
 
 add_library(anaf_core STATIC ${ANAF_CORE_SOURCES})
@@ -311,6 +311,20 @@ endif()
 
 if(ANAFINEN_BUILD_CLI)
     add_subdirectory(src/cli)
+endif()
+
+# Generators of the committed built-in libraries (about 3000 lines of model code). Only the
+# library tools and the tests use them; anaf_core keeps the index reader, so the GUI and the
+# CLI do not link the generators.
+if(ANAFINEN_BUILD_TOOLS OR ANAFINEN_BUILD_TESTS)
+    add_library(anaf_library_generators STATIC
+        src/objectCalcs/truss_1D/trussTypes/trussLibrary.cpp
+        src/objectCalcs/beam/beamTypes/beamLibrary.cpp
+    )
+    target_link_libraries(anaf_library_generators
+        PUBLIC anaf_core
+        PRIVATE nlohmann_json::nlohmann_json project_warnings_and_optimizations
+    )
 endif()
 
 if(ANAFINEN_BUILD_TOOLS)

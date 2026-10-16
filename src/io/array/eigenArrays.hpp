@@ -29,8 +29,12 @@
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 
+#include <cstdint>
 #include <format>
 #include <limits>
+#include <span>
+#include <type_traits>
+#include <vector>
 
 namespace anaf::IO::ARRAY {
 
@@ -77,8 +81,19 @@ namespace anaf::IO::ARRAY {
     }
     const auto nonZeros = static_cast<std::size_t>(source->nonZeros());
     const auto outer = static_cast<std::size_t>(source->outerSize());
-    const std::vector<std::int64_t> indices(source->innerIndexPtr(), source->innerIndexPtr() + nonZeros);
-    const std::vector<std::int64_t> pointers(source->outerIndexPtr(), source->outerIndexPtr() + outer + 1);
+    // The file stores int64 indices: a 64-bit StorageIndex is passed as it is, a narrower one
+    // (Eigen's default int) is widened into a copy.
+    std::vector<std::int64_t> widenedIndices, widenedPointers;
+    std::span<const std::int64_t> indices, pointers;
+    if constexpr (std::is_same_v<StorageIndex, std::int64_t>) {
+      indices = std::span<const std::int64_t>(source->innerIndexPtr(), nonZeros);
+      pointers = std::span<const std::int64_t>(source->outerIndexPtr(), outer + 1);
+    } else {
+      widenedIndices.assign(source->innerIndexPtr(), source->innerIndexPtr() + nonZeros);
+      widenedPointers.assign(source->outerIndexPtr(), source->outerIndexPtr() + outer + 1);
+      indices = widenedIndices;
+      pointers = widenedPointers;
+    }
     const CompressedView<Value> view{
       .rows = static_cast<std::uint64_t>(source->rows()),
       .cols = static_cast<std::uint64_t>(source->cols()),

@@ -22,6 +22,7 @@
 #include <bridge/generalStatus.hpp>
 #include <guiMaterials/iPanel.hpp>
 
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -45,6 +46,15 @@ namespace anaf::GUI {
     std::vector<std::optional<FEM::BEAM::SectionStress>> m_stresses;
     std::string m_sectionName;
     std::string m_error;
+
+    // Plot series in display units, built with the samples (not every frame).
+    struct PlotSeries {
+      std::vector<double> x;                            // m
+      std::array<std::vector<double>, 6> forces;        // kN, kN m
+      std::array<std::vector<double>, 3> displacement;  // mm, local axes
+      std::vector<double> maxNormal, minNormal, vonMises; // MPa (empty for a general section)
+    };
+    PlotSeries m_plot;
 
     int m_quantity{5}; // Mz
     bool m_dockPending{true}; // dock under the Model Tree the next time it is possible

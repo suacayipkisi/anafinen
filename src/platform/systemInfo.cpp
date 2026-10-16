@@ -18,6 +18,7 @@
 #include "systemInfo.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <regex>
 #include <thread>
@@ -34,16 +35,20 @@
 namespace anaf::PLATFORM {
 
   namespace {
+    // The patterns are compiled once per process (function-local statics), not per call.
     std::string collapseSpaces(std::string text) {
-      text = std::regex_replace(text, std::regex(R"(\s+)"), " ");
+      static const std::regex spaces(R"(\s+)");
+      text = std::regex_replace(text, spaces, " ");
       const auto first = text.find_first_not_of(' ');
       if (first == std::string::npos) return {};
       return text.substr(first, text.find_last_not_of(' ') - first + 1);
     }
 
-    std::string removeAll(std::string text, const char* pattern) {
-      return std::regex_replace(text, std::regex(pattern, std::regex::icase), " ");
+    std::string removeAll(const std::string& text, const std::regex& pattern) {
+      return std::regex_replace(text, pattern, " ");
     }
+
+    std::regex caseless(const char* pattern) { return std::regex(pattern, std::regex::icase); }
 
 #if defined(_WIN32)
     std::string toUtf8(const std::wstring_view text) {
@@ -57,24 +62,30 @@ namespace anaf::PLATFORM {
   } // namespace end
 
   std::string shortCpuName(const std::string_view name) {
+    static const std::array<std::regex, 6> noise{
+      caseless(R"(\((R|TM|tm)\))"),
+      caseless(R"(\s+with\s.*$)"),     // "with Radeon Graphics"
+      caseless(R"(\s*@.*$)"),          // "@ 3.70GHz"
+      caseless(R"(\b\d+-Cores?\b)"),
+      caseless(R"(\b(CPU|Processor|APU)\b)"),
+      caseless(R"(^\s*(AMD|Intel|Genuine Intel|\d+(st|nd|rd|th) Gen Intel)\s)"),
+    };
     std::string text(name);
-    text = removeAll(text, R"(\((R|TM|tm)\))");
-    text = removeAll(text, R"(\s+with\s.*$)");     // "with Radeon Graphics"
-    text = removeAll(text, R"(\s*@.*$)");          // "@ 3.70GHz"
-    text = removeAll(text, R"(\b\d+-Cores?\b)");
-    text = removeAll(text, R"(\b(CPU|Processor|APU)\b)");
-    text = removeAll(text, R"(^\s*(AMD|Intel|Genuine Intel|\d+(st|nd|rd|th) Gen Intel)\s)");
+    for (const auto& pattern : noise) text = removeAll(text, pattern);
     text = collapseSpaces(text);
     return text.empty() ? std::string(name) : text;
   }
 
   std::string shortGpuName(const std::string_view name) {
+    static const std::array<std::regex, 3> noise{
+      caseless(R"(\((R|TM|tm)\))"),
+      caseless(R"(^\s*(Mesa\s+)?(AMD|NVIDIA|Intel|ATI)\s)"),
+      caseless(R"(\b(GPU|Series)\b)"),
+    };
     std::string text(name);
     if (const auto slash = text.find('/'); slash != std::string::npos) text.resize(slash);     // "/PCIe/SSE2"
     if (const auto paren = text.find(" ("); paren != std::string::npos) text.resize(paren);  // driver details
-    text = removeAll(text, R"(\((R|TM|tm)\))");
-    text = removeAll(text, R"(^\s*(Mesa\s+)?(AMD|NVIDIA|Intel|ATI)\s)");
-    text = removeAll(text, R"(\b(GPU|Series)\b)");
+    for (const auto& pattern : noise) text = removeAll(text, pattern);
     text = collapseSpaces(text);
     return text.empty() ? std::string(name) : text;
   }

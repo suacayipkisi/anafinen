@@ -25,10 +25,9 @@
 #include <format>
 #include <map>
 #include <optional>
-#include <set>
 #include <stdexcept>
-#include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace FEM::TRUSS::ADAPTER {
 
@@ -36,17 +35,17 @@ namespace FEM::TRUSS::ADAPTER {
     anaf::IO::MeshModel model;
     model.title = "anafinen truss";
 
-    std::unordered_map<std::uint32_t, std::uint32_t> indexById;
+    // Snapshot node ids equal their positions (meshEdit, the solvers): an id is its index.
     model.nodes.reserve(mesh.trussNodes.size());
     for (std::uint32_t i = 0; i < mesh.trussNodes.size(); ++i) {
       const auto& node = mesh.trussNodes[i];
-      indexById.emplace(node.getNodeID(), i);
+      if (node.getNodeID() != i) throw std::invalid_argument(std::format("snapshot node at position {} has id {}", i, node.getNodeID()));
       model.nodes.push_back(anaf::IO::Node{static_cast<std::uint64_t>(node.getNodeID()) + 1, node.getLocation()});
     }
+    const auto nodeCount = static_cast<std::uint32_t>(mesh.trussNodes.size());
     auto indexOf = [&](const std::uint32_t id) {
-      const auto it = indexById.find(id);
-      if (it == indexById.end()) throw std::out_of_range(std::format("snapshot references unknown node {}", id));
-      return it->second;
+      if (id >= nodeCount) throw std::out_of_range(std::format("snapshot references unknown node {}", id));
+      return id;
     };
 
     auto& bars = model.blockFor(anaf::IO::E_ElementType::Line2);
@@ -86,8 +85,7 @@ namespace FEM::TRUSS::ADAPTER {
     }
     std::size_t harmonicSkipped = 0;
     for (const auto& force : mesh.appliedForces) {
-      const auto it = indexById.find(force.getAppliedNode());
-      if (it == indexById.end()) continue;
+      if (force.getAppliedNode() >= nodeCount) continue;
       if (force.getForceType() == E_ForceType::Harmonic) {
         ++harmonicSkipped; // no frequency-domain load in MeshModel yet
         continue;
@@ -97,7 +95,7 @@ namespace FEM::TRUSS::ADAPTER {
         amplitude = std::format("TabularForce{}", model.amplitudes.size());
         model.amplitudes.push_back(anaf::IO::Amplitude{amplitude, tabular->times, tabular->factors});
       }
-      model.loads.push_back(anaf::IO::NodalLoad{it->second, force.getForce(), std::move(amplitude), {}});
+      model.loads.push_back(anaf::IO::NodalLoad{force.getAppliedNode(), force.getForce(), std::move(amplitude), {}});
     }
     if (harmonicSkipped > 0) anaf::LOG::warn("{} harmonic loads cannot be written to a mesh file yet and were left out", harmonicSkipped);
 
@@ -169,7 +167,7 @@ namespace FEM::TRUSS::ADAPTER {
     std::size_t invalidMaterialIds = 0;
 
     std::size_t bars = 0, splitQuadratic = 0, wireframeElements = 0, points = 0;
-    std::set<std::pair<std::uint32_t, std::uint32_t>> wireframeEdges;
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> wireframeEdges; // sorted and made unique below
     std::size_t global = 0;
     for (const auto& block : model.blocks) {
       const auto& info = anaf::IO::elementInfo(block.type);
@@ -205,10 +203,13 @@ namespace FEM::TRUSS::ADAPTER {
         for (std::size_t k = 0; k + 1 < info.edges.size(); k += 2) {
           const auto a = nodes[info.edges[k]];
           const auto b = nodes[info.edges[k + 1]];
-          wireframeEdges.emplace(std::min(a, b), std::max(a, b));
+          wireframeEdges.emplace_back(std::min(a, b), std::max(a, b));
         }
       }
     }
+    std::ranges::sort(wireframeEdges);
+    const auto [duplicates, end] = std::ranges::unique(wireframeEdges);
+    wireframeEdges.erase(duplicates, end);
     for (const auto& [a, b] : wireframeEdges) mesh.trussElements.push_back({a, b, 0.0f, false, 0u, 0.0, true});
 
     for (const auto& constraint : model.constraints) {

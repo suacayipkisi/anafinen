@@ -54,6 +54,8 @@ namespace FEM::TRUSS {
     inline void setDisplacements(std::array<double, 3> displacementOfNode) {m_displacement = displacementOfNode;}
     void setAllowedMotionDirections(const FEM::SUPPORT::Basis& directions);
 
+    // Renumbering only (ids equal positions: meshEdit deleteNodes()).
+    void setNodeID(const std::uint32_t id) {m_nodeID = id;}
     std::uint32_t getNodeID() const {return m_nodeID;}
     const std::array<double, 3>& getLocation() const {return m_location;}
     double getLocX() const {return m_location[0];}

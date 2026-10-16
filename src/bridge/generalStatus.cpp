@@ -141,14 +141,8 @@ namespace anaf::BRIDGE {
     return id;
   }
 
-  void GuiCalcBridge::saveUserMaterials() {
+  void GuiCalcBridge::saveUserMaterials(const std::vector<anaf::MATERIAL::Material>& snapshot) const {
     if (m_userMaterialPath.empty()) return;
-
-    std::vector<anaf::MATERIAL::Material> snapshot;
-    {
-      std::lock_guard lock(dataMutex);
-      snapshot = allMaterials;
-    }
     if (const auto saved = anaf::MATERIAL::saveUserMaterialFile(m_userMaterialPath, snapshot); !saved) {
       anaf::LOG::warn("User materials not saved (kept for this session): {}", saved.error());
     }
@@ -160,6 +154,7 @@ namespace anaf::BRIDGE {
     }
 
     std::uint32_t id{};
+    std::vector<anaf::MATERIAL::Material> snapshot;
     {
       std::lock_guard lock(dataMutex);
       const auto sameName = [&](const anaf::MATERIAL::Material& other) {
@@ -169,13 +164,15 @@ namespace anaf::BRIDGE {
         return std::unexpected(std::format("a material named '{}' already exists", material.getMaterialType()));
       }
       id = appendUserMaterialLocked(material);
+      if (!m_userMaterialPath.empty()) snapshot = allMaterials;
     }
-    saveUserMaterials();
+    saveUserMaterials(snapshot);
     return id;
   }
 
   std::expected<void, std::string> GuiCalcBridge::removeUserMaterial(const std::uint32_t materialID) {
     bool meshShifted = false;
+    std::vector<anaf::MATERIAL::Material> snapshot;
     {
       std::lock_guard lock(dataMutex);
       const auto index = findMaterialIndex(materialID);
@@ -219,9 +216,10 @@ namespace anaf::BRIDGE {
         activeBeamMesh = std::move(shifted);
         meshShifted = true;
       }
+      if (!m_userMaterialPath.empty()) snapshot = allMaterials;
     }
     if (meshShifted) dataVersion.fetch_add(1, std::memory_order_release);
-    saveUserMaterials();
+    saveUserMaterials(snapshot);
     return {};
   }
 
@@ -291,13 +289,8 @@ namespace anaf::BRIDGE {
     return id;
   }
 
-  void GuiCalcBridge::saveUserSections() {
+  void GuiCalcBridge::saveUserSections(const std::vector<FEM::BEAM::BeamSection>& snapshot) const {
     if (m_userSectionPath.empty()) return;
-    std::vector<FEM::BEAM::BeamSection> snapshot;
-    {
-      std::lock_guard lock(dataMutex);
-      snapshot = allSections;
-    }
     if (const auto saved = FEM::BEAM::saveUserSectionFile(m_userSectionPath, snapshot); !saved) {
       anaf::LOG::warn("User sections not saved (kept for this session): {}", saved.error());
     }
@@ -306,6 +299,7 @@ namespace anaf::BRIDGE {
   std::expected<std::uint32_t, std::string> GuiCalcBridge::addUserSection(const FEM::BEAM::BeamSection& section) {
     if (const auto valid = FEM::BEAM::validateSection(section); !valid) return std::unexpected(valid.error());
     std::uint32_t id{};
+    std::vector<FEM::BEAM::BeamSection> snapshot;
     {
       std::lock_guard lock(dataMutex);
       const auto sameName = [&](const FEM::BEAM::BeamSection& other) {
@@ -315,13 +309,15 @@ namespace anaf::BRIDGE {
         return std::unexpected(std::format("a section named '{}' already exists", section.getName()));
       }
       id = appendUserSectionLocked(section);
+      if (!m_userSectionPath.empty()) snapshot = allSections;
     }
-    saveUserSections();
+    saveUserSections(snapshot);
     return id;
   }
 
   std::expected<void, std::string> GuiCalcBridge::removeUserSection(const std::uint32_t sectionID) {
     bool meshShifted = false;
+    std::vector<FEM::BEAM::BeamSection> snapshot;
     {
       std::lock_guard lock(dataMutex);
       const auto index = findSectionIndex(sectionID);
@@ -345,9 +341,10 @@ namespace anaf::BRIDGE {
         activeBeamMesh = std::move(shifted);
         meshShifted = true;
       }
+      if (!m_userSectionPath.empty()) snapshot = allSections;
     }
     if (meshShifted) dataVersion.fetch_add(1, std::memory_order_release);
-    saveUserSections();
+    saveUserSections(snapshot);
     return {};
   }
 

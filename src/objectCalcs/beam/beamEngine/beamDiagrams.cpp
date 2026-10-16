@@ -86,6 +86,97 @@ namespace FEM::BEAM {
     return u;
   }
 
+  namespace {
+    // Everything of one element that does not depend on the position: built once, then
+    // evaluated at any number of points (a released element condenses its stiffness here, not
+    // per point).
+    struct ElementField {
+      Eigen::Vector3d p1;
+      Eigen::Vector3d p2;
+      double L{};
+      Eigen::Matrix3d axes;
+      Eigen::Vector3d u1, r1, u2, r2; // end values in local axes
+      double E{};
+      double G{};
+      SectionProperties s;
+      bool timoshenko{};
+      double phiY{};
+      double phiZ{};
+      Eigen::Vector3d localLoad;
+      const std::array<double, 12>* sectionForces{};
+
+      SectionState at(const double xi) const {
+        const double x = xi * L;
+        const double clamped = x * x * (L - x) * (L - x) / 24.0; // x^2 (L - x)^2 / 24
+        const double shearShape = x * (L - x) / 2.0;
+        const Eigen::Vector4d shapeY = bendingShape(xi, L, phiY);
+        const Eigen::Vector4d shapeZ = bendingShape(xi, L, phiZ);
+
+        Eigen::Vector3d local;
+        local[0] = (1.0 - xi) * u1[0] + xi * u2[0] + localLoad[0] * shearShape / (E * s.area);
+        local[1] = shapeY.dot(Eigen::Vector4d(u1[1], r1[2], u2[1], r2[2]))
+          + localLoad[1] * (clamped / (E * s.secondMomentZ) + (timoshenko ? shearShape / (G * s.shearAreaY) : 0.0));
+        // ry = -dw/dx: the rotation terms enter with a minus sign.
+        local[2] = shapeZ.dot(Eigen::Vector4d(u1[2], -r1[1], u2[2], -r2[1]))
+          + localLoad[2] * (clamped / (E * s.secondMomentY) + (timoshenko ? shearShape / (G * s.shearAreaZ) : 0.0));
+
+        SectionState state;
+        state.position = x;
+        const Eigen::Vector3d location = p1 + xi * (p2 - p1);
+        const Eigen::Vector3d global = axes.transpose() * local;
+        for (Eigen::Index i = 0; i < 3; ++i) {
+          const auto k = static_cast<std::size_t>(i);
+          state.location[k] = location[i];
+          state.displacement[k] = global[i];
+          state.localDisplacement[k] = local[i];
+        }
+        state.forces = sectionForcesAt(*sectionForces, localLoad, x);
+        return state;
+      }
+    };
+
+    ElementField prepareElement(
+      const MeshData& solved,
+      const std::size_t element,
+      const Eigen::Vector3d& localLoad,
+      const std::span<const anaf::MATERIAL::Material> materials,
+      const std::span<const BeamSection> sections
+    ) {
+      if (!solved.hasResults) throw std::invalid_argument("the beam model has no results");
+      if (element >= solved.elements.size()) throw std::invalid_argument("element index out of range");
+      const auto& beam = solved.elements[element];
+      if (beam.materialID >= materials.size() || beam.sectionID >= sections.size()) {
+        throw std::invalid_argument("material or section index out of range");
+      }
+      const auto& start = solved.nodes[beam.node1];
+      const auto& end = solved.nodes[beam.node2];
+
+      ElementField field;
+      field.p1 = Eigen::Vector3d(start.getLocation().data());
+      field.p2 = Eigen::Vector3d(end.getLocation().data());
+      field.L = (field.p2 - field.p1).norm();
+      field.axes = localAxes(start.getLocation(), end.getLocation(), beam.orientation);
+      // End values in local axes (released DOFs: the element end's own motion).
+      const Eigen::Matrix<double, 12, 1> ends = elementEndDisplacements(solved, element, localLoad, materials, sections);
+      field.u1 = ends.segment<3>(0);
+      field.r1 = ends.segment<3>(3);
+      field.u2 = ends.segment<3>(6);
+      field.r2 = ends.segment<3>(9);
+
+      const auto& material = materials[beam.materialID];
+      field.E = material.getElasticityModulus();
+      field.G = material.getShearModulus();
+      field.s = computeProperties(sections[beam.sectionID].getShape(), material.getPoisson());
+      field.timoshenko = beam.formulation == E_Formulation::Timoshenko;
+      const double L2 = field.L * field.L;
+      field.phiY = field.timoshenko ? 12.0 * field.E * field.s.secondMomentZ / (field.G * field.s.shearAreaY * L2) : 0.0;
+      field.phiZ = field.timoshenko ? 12.0 * field.E * field.s.secondMomentY / (field.G * field.s.shearAreaZ * L2) : 0.0;
+      field.localLoad = localLoad;
+      field.sectionForces = &beam.sectionForces;
+      return field;
+    }
+  } // namespace end
+
   SectionState sectionAt(
     const MeshData& solved,
     const std::size_t element,
@@ -94,63 +185,8 @@ namespace FEM::BEAM {
     const std::span<const anaf::MATERIAL::Material> materials,
     const std::span<const BeamSection> sections
   ) {
-    if (!solved.hasResults) throw std::invalid_argument("the beam model has no results");
-    if (element >= solved.elements.size()) throw std::invalid_argument("element index out of range");
     if (!(xi >= 0.0 && xi <= 1.0)) throw std::invalid_argument("xi must be in [0, 1]");
-
-    const auto& beam = solved.elements[element];
-    if (beam.materialID >= materials.size() || beam.sectionID >= sections.size()) {
-      throw std::invalid_argument("material or section index out of range");
-    }
-    const auto& start = solved.nodes[beam.node1];
-    const auto& end = solved.nodes[beam.node2];
-    const Eigen::Vector3d p1(start.getLocation().data());
-    const Eigen::Vector3d p2(end.getLocation().data());
-    const double L = (p2 - p1).norm();
-    const double x = xi * L;
-    const Eigen::Matrix3d axes = localAxes(start.getLocation(), end.getLocation(), beam.orientation);
-
-    // End values in local axes (released DOFs: the element end's own motion).
-    const Eigen::Matrix<double, 12, 1> ends = elementEndDisplacements(solved, element, localLoad, materials, sections);
-    const Eigen::Vector3d u1 = ends.segment<3>(0);
-    const Eigen::Vector3d r1 = ends.segment<3>(3);
-    const Eigen::Vector3d u2 = ends.segment<3>(6);
-    const Eigen::Vector3d r2 = ends.segment<3>(9);
-
-    const auto& material = materials[beam.materialID];
-    const double E = material.getElasticityModulus();
-    const double G = material.getShearModulus();
-    const SectionProperties s = computeProperties(sections[beam.sectionID].getShape(), material.getPoisson());
-    const bool timoshenko = beam.formulation == E_Formulation::Timoshenko;
-    const double phiY = timoshenko ? 12.0 * E * s.secondMomentZ / (G * s.shearAreaY * L * L) : 0.0;
-    const double phiZ = timoshenko ? 12.0 * E * s.secondMomentY / (G * s.shearAreaZ * L * L) : 0.0;
-
-    const double clamped = x * x * (L - x) * (L - x) / 24.0; // x^2 (L - x)^2 / 24
-    const double shearShape = x * (L - x) / 2.0;
-    const Eigen::Vector4d shapeY = bendingShape(xi, L, phiY);
-    const Eigen::Vector4d shapeZ = bendingShape(xi, L, phiZ);
-
-    Eigen::Vector3d local;
-    local[0] = (1.0 - xi) * u1[0] + xi * u2[0] + localLoad[0] * shearShape / (E * s.area);
-    local[1] = shapeY.dot(Eigen::Vector4d(u1[1], r1[2], u2[1], r2[2]))
-      + localLoad[1] * (clamped / (E * s.secondMomentZ) + (timoshenko ? shearShape / (G * s.shearAreaY) : 0.0));
-    // ry = -dw/dx: the rotation terms enter with a minus sign.
-    local[2] = shapeZ.dot(Eigen::Vector4d(u1[2], -r1[1], u2[2], -r2[1]))
-      + localLoad[2] * (clamped / (E * s.secondMomentY) + (timoshenko ? shearShape / (G * s.shearAreaZ) : 0.0));
-
-    SectionState state;
-    state.position = x;
-    const Eigen::Vector3d location = p1 + xi * (p2 - p1);
-    const Eigen::Vector3d global = axes.transpose() * local;
-    for (Eigen::Index i = 0; i < 3; ++i) {
-      const auto k = static_cast<std::size_t>(i);
-      state.location[k] = location[i];
-      state.displacement[k] = global[i];
-      state.localDisplacement[k] = local[i];
-    }
-
-    state.forces = sectionForcesAt(beam.sectionForces, localLoad, x);
-    return state;
+    return prepareElement(solved, element, localLoad, materials, sections).at(xi);
   }
 
   std::vector<SectionState> sampleElement(
@@ -162,12 +198,10 @@ namespace FEM::BEAM {
     const std::span<const BeamSection> sections
   ) {
     if (count < 2) throw std::invalid_argument("an element needs at least two sample points");
+    const ElementField field = prepareElement(solved, element, localLoad, materials, sections);
     std::vector<SectionState> states;
     states.reserve(count);
-    for (std::size_t i = 0; i < count; ++i) {
-      const double xi = static_cast<double>(i) / static_cast<double>(count - 1);
-      states.push_back(sectionAt(solved, element, xi, localLoad, materials, sections));
-    }
+    for (std::size_t i = 0; i < count; ++i) states.push_back(field.at(static_cast<double>(i) / static_cast<double>(count - 1)));
     return states;
   }
 

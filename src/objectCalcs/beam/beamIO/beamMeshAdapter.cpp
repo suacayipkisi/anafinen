@@ -268,6 +268,12 @@ namespace FEM::BEAM::ADAPTER {
     const std::array<const std::vector<double>*, 6> numbers{
       attribute(anaf::IO::Attribute::crossSectionArea), attribute(anaf::IO::Attribute::secondMomentY), attribute(anaf::IO::Attribute::secondMomentZ),
       attribute(anaf::IO::Attribute::torsionConstant), attribute(anaf::IO::Attribute::shearAreaY), attribute(anaf::IO::Attribute::shearAreaZ)};
+    // Looked up once, not per element.
+    std::array<const std::vector<double>*, 3> globalLoads{}, localLoads{};
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+      globalLoads[axis] = attribute(globalLoadAttributes[axis]);
+      localLoads[axis] = attribute(localLoadAttributes[axis]);
+    }
     std::array<const std::vector<double>*, 5> dimensions{};
     for (std::size_t k = 0; k < 5; ++k) dimensions[k] = attribute(dimensionAttributes[k]);
 
@@ -374,8 +380,8 @@ namespace FEM::BEAM::ADAPTER {
         beamOfGlobal[global] = static_cast<std::uint32_t>(mesh.elements.size());
         std::array<double, 3> qGlobal{}, qLocal{};
         for (std::size_t axis = 0; axis < 3; ++axis) {
-          qGlobal[axis] = value(attribute(globalLoadAttributes[axis]), global);
-          qLocal[axis] = value(attribute(localLoadAttributes[axis]), global);
+          qGlobal[axis] = value(globalLoads[axis], global);
+          qLocal[axis] = value(localLoads[axis], global);
         }
         const auto index = static_cast<std::uint32_t>(mesh.elements.size());
         if (qGlobal != std::array<double, 3>{}) mesh.distributedLoads.push_back({index, qGlobal, E_LoadFrame::Global});

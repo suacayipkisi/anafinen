@@ -20,6 +20,7 @@
 #include "meshData.hpp"
 
 #include <cstdint>
+#include <span>
 
 namespace FEM::TRUSS {
 
@@ -32,5 +33,9 @@ namespace FEM::TRUSS {
   // Removes node k with its bars and loads; later ids move down by one (ids = positions: the
   // solver and the viewport index nodes by id). The other nodes keep their supports.
   void deleteNode(MeshData& mesh, std::uint32_t k);
+
+  // Removes several nodes in one pass (ids in any order, duplicates allowed, all < node count):
+  // every node, bar and load is visited once, not once per removed node.
+  void deleteNodes(MeshData& mesh, std::span<const std::uint32_t> ids);
 
 } // namespace FEM::TRUSS end

@@ -67,9 +67,17 @@ namespace FEM::BEAM {
       return {area, own, own, y, z, 1.0};
     }
 
+    // Adds a part's A, Iy, Iz about the composite centroid (the origin, doubly symmetric) to p.
+    // The parts are added straight into the result: no list of parts is kept.
+    void add(SectionProperties& p, const Part& part) {
+      p.area += part.sign * part.area;
+      p.secondMomentY += part.sign * (part.ownIy + part.area * part.z * part.z);
+      p.secondMomentZ += part.sign * (part.ownIz + part.area * part.y * part.y);
+    }
+
     // Rectangle with four convex corners of radius r (r = 0: plain rectangle).
-    void roundedRectangle(std::vector<Part>& parts, const double height, const double width, const double r, const double sign) {
-      parts.push_back(rectangle(height, width, 0.0, 0.0, sign));
+    void roundedRectangle(SectionProperties& p, const double height, const double width, const double r, const double sign) {
+      add(p, rectangle(height, width, 0.0, 0.0, sign));
       if (r <= 0.0) return;
       const double cornerY = height / 2.0 - r / 2.0;
       const double cornerZ = width / 2.0 - r / 2.0;
@@ -77,21 +85,10 @@ namespace FEM::BEAM {
       const double discZ = width / 2.0 - r + quarterDiscOffset(r);
       for (const double sy : {-1.0, 1.0}) {
         for (const double sz : {-1.0, 1.0}) {
-          parts.push_back(rectangle(r, r, sy * cornerY, sz * cornerZ, -sign));
-          parts.push_back(quarterDisc(r, sy * discY, sz * discZ, sign));
+          add(p, rectangle(r, r, sy * cornerY, sz * cornerZ, -sign));
+          add(p, quarterDisc(r, sy * discY, sz * discZ, sign));
         }
       }
-    }
-
-    // A, Iy, Iz of a doubly symmetric composite (centroid at the origin).
-    SectionProperties sum(const std::vector<Part>& parts) {
-      SectionProperties p;
-      for (const auto& part : parts) {
-        p.area += part.sign * part.area;
-        p.secondMomentY += part.sign * (part.ownIy + part.area * part.z * part.z);
-        p.secondMomentZ += part.sign * (part.ownIz + part.area * part.y * part.y);
-      }
-      return p;
     }
 
     double kappaRectangle(const double v) { return 10.0 * (1.0 + v) / (12.0 + 11.0 * v); }
@@ -234,7 +231,8 @@ namespace FEM::BEAM {
     return std::visit(Overloaded{
       [](const GeneralSection& s) { return s.values; },
       [&](const RectangleSection& s) {
-        SectionProperties p = sum({rectangle(s.height, s.width, 0.0, 0.0)});
+        SectionProperties p;
+        add(p, rectangle(s.height, s.width, 0.0, 0.0));
         const double a = std::max(s.height, s.width);
         const double c = std::min(s.height, s.width);
         const double ratio = c / a;
@@ -263,10 +261,9 @@ namespace FEM::BEAM {
       },
       [&](const BoxSection& s) {
         const double t = s.wallThickness;
-        std::vector<Part> parts;
-        roundedRectangle(parts, s.height, s.width, s.outerCornerRadius, 1.0);
-        roundedRectangle(parts, s.height - 2.0 * t, s.width - 2.0 * t, s.innerCornerRadius, -1.0);
-        SectionProperties p = sum(parts);
+        SectionProperties p;
+        roundedRectangle(p, s.height, s.width, s.outerCornerRadius, 1.0);
+        roundedRectangle(p, s.height - 2.0 * t, s.width - 2.0 * t, s.innerCornerRadius, -1.0);
         // EN 10219-2 / EN 10210-2: J = t^3 h / 3 + 2 K Ah over the centre line.
         const double rc = (s.outerCornerRadius + s.innerCornerRadius) / 2.0;
         const double perimeter = 2.0 * ((s.width - t) + (s.height - t)) - 2.0 * rc * (4.0 - pi);
@@ -283,18 +280,16 @@ namespace FEM::BEAM {
         const double tw = s.webThickness;
         const double tf = s.flangeThickness;
         const double r = s.rootRadius;
-        std::vector<Part> parts{
-          rectangle(tf, b, h / 2.0 - tf / 2.0, 0.0),
-          rectangle(tf, b, -(h / 2.0 - tf / 2.0), 0.0),
-          rectangle(h - 2.0 * tf, tw, 0.0, 0.0),
-        };
+        SectionProperties p;
+        add(p, rectangle(tf, b, h / 2.0 - tf / 2.0, 0.0));
+        add(p, rectangle(tf, b, -(h / 2.0 - tf / 2.0), 0.0));
+        add(p, rectangle(h - 2.0 * tf, tw, 0.0, 0.0));
         if (r > 0.0) {
           const double e = spandrelOffset(r);
           for (const double sy : {-1.0, 1.0}) {
-            for (const double sz : {-1.0, 1.0}) parts.push_back(spandrel(r, sy * (h / 2.0 - tf - e), sz * (tw / 2.0 + e)));
+            for (const double sz : {-1.0, 1.0}) add(p, spandrel(r, sy * (h / 2.0 - tf - e), sz * (tw / 2.0 + e)));
           }
         }
-        SectionProperties p = sum(parts);
         // ArcelorMittal (sections catalogue, technical notes): flanges and web as thin plates
         // plus the web-flange junction with its fillets.
         const double alpha = tw / tf * (0.145 + 0.1 * r / tf);

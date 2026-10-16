@@ -17,7 +17,7 @@
 
 #include "meshEdit.hpp"
 
-#include <utility>
+#include <limits>
 #include <vector>
 
 namespace FEM::TRUSS {
@@ -33,34 +33,37 @@ namespace FEM::TRUSS {
   }
 
   void deleteNode(MeshData& mesh, const std::uint32_t k) {
-    const auto shift = [k](const std::uint32_t id) { return id > k ? id - 1 : id; };
+    deleteNodes(mesh, std::span<const std::uint32_t>(&k, 1));
+  }
 
-    std::vector<Node> nodes;
-    nodes.reserve(mesh.trussNodes.size());
-    for (const auto& node : mesh.trussNodes) {
-      if (node.getNodeID() == k) continue;
-      Node renumbered(shift(node.getNodeID()), node.getLocX(), node.getLocY(), node.getLocZ());
-      renumbered.setAllowedMotionDirections(node.getAllowedMotionDirections()); // keeps the support
-      renumbered.setDisplacements(node.getDisplacement());
-      nodes.push_back(std::move(renumbered));
+  void deleteNodes(MeshData& mesh, const std::span<const std::uint32_t> ids) {
+    // New id of every old node, removed = max.
+    constexpr std::uint32_t removed = std::numeric_limits<std::uint32_t>::max();
+    std::vector<std::uint32_t> newId(mesh.trussNodes.size(), 0);
+    for (const auto id : ids) newId[id] = removed;
+    std::uint32_t next = 0;
+    for (auto& id : newId) id = id == removed ? removed : next++;
+
+    // Nodes are trivially copyable: moved down in place, support basis and all.
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < mesh.trussNodes.size(); ++i) {
+      if (newId[i] == removed) continue;
+      mesh.trussNodes[kept] = mesh.trussNodes[i];
+      mesh.trussNodes[kept].setNodeID(newId[i]);
+      ++kept;
     }
-    mesh.trussNodes = std::move(nodes);
+    mesh.trussNodes.resize(kept);
 
-    std::erase_if(mesh.trussElements, [k](const RenderElement& element) {
-      return element.node1 == k || element.node2 == k;
+    std::erase_if(mesh.trussElements, [&](const RenderElement& element) {
+      return newId[element.node1] == removed || newId[element.node2] == removed;
     });
     for (auto& element : mesh.trussElements) {
-      element.node1 = shift(element.node1);
-      element.node2 = shift(element.node2);
+      element.node1 = newId[element.node1];
+      element.node2 = newId[element.node2];
     }
 
-    std::vector<ForceApplied> forces;
-    for (const auto& force : mesh.appliedForces) {
-      if (force.getAppliedNode() == k) continue;
-      forces.push_back(force);
-      forces.back().setAppliedNode(shift(force.getAppliedNode()));
-    }
-    mesh.appliedForces = std::move(forces);
+    std::erase_if(mesh.appliedForces, [&](const ForceApplied& force) { return newId[force.getAppliedNode()] == removed; });
+    for (auto& force : mesh.appliedForces) force.setAppliedNode(newId[force.getAppliedNode()]);
   }
 
 } // namespace FEM::TRUSS end

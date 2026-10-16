@@ -17,6 +17,9 @@
 
 #include "meshEdit.hpp"
 
+#include <limits>
+#include <vector>
+
 namespace FEM::BEAM {
 
   void dropResults(MeshData& mesh) {
@@ -33,25 +36,34 @@ namespace FEM::BEAM {
   }
 
   void deleteNode(MeshData& mesh, const std::uint32_t k) {
-    const auto shift = [k](const std::uint32_t id) { return id > k ? id - 1 : id; };
-    std::vector<Node> nodes;
-    nodes.reserve(mesh.nodes.size());
-    for (const auto& node : mesh.nodes) {
-      if (node.getNodeID() == k) continue;
-      const auto& p = node.getLocation();
-      Node renumbered(shift(node.getNodeID()), p[0], p[1], p[2]);
-      renumbered.setAllowedMotionDirections(node.getAllowedMotionDirections());
-      renumbered.setAllowedRotationAxes(node.getAllowedRotationAxes());
-      nodes.push_back(std::move(renumbered));
+    deleteNodes(mesh, std::span<const std::uint32_t>(&k, 1));
+  }
+
+  void deleteNodes(MeshData& mesh, const std::span<const std::uint32_t> ids) {
+    // New id of every old node, removed = max.
+    constexpr std::uint32_t removed = std::numeric_limits<std::uint32_t>::max();
+    std::vector<std::uint32_t> newId(mesh.nodes.size(), 0);
+    for (const auto id : ids) newId[id] = removed;
+    std::uint32_t next = 0;
+    for (auto& id : newId) id = id == removed ? removed : next++;
+
+    // Nodes are trivially copyable: moved down in place, support bases and all.
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < mesh.nodes.size(); ++i) {
+      if (newId[i] == removed) continue;
+      mesh.nodes[kept] = mesh.nodes[i];
+      mesh.nodes[kept].setNodeID(newId[i]);
+      ++kept;
     }
-    mesh.nodes = std::move(nodes);
-    removeElements(mesh, [k](const BeamElement& element) { return element.node1 == k || element.node2 == k; });
+    mesh.nodes.resize(kept);
+
+    removeElements(mesh, [&](const BeamElement& element) { return newId[element.node1] == removed || newId[element.node2] == removed; });
     for (auto& element : mesh.elements) {
-      element.node1 = shift(element.node1);
-      element.node2 = shift(element.node2);
+      element.node1 = newId[element.node1];
+      element.node2 = newId[element.node2];
     }
-    std::erase_if(mesh.nodalLoads, [k](const NodalLoad& load) { return load.node == k; });
-    for (auto& load : mesh.nodalLoads) load.node = shift(load.node);
+    std::erase_if(mesh.nodalLoads, [&](const NodalLoad& load) { return newId[load.node] == removed; });
+    for (auto& load : mesh.nodalLoads) load.node = newId[load.node];
   }
 
 } // namespace FEM::BEAM end

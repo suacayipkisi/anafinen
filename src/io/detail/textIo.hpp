@@ -219,6 +219,8 @@ namespace anaf::IO::detail {
 
   // RFC 4648 base64 (used by VTU inline binary / appended base64 data).
   std::string base64Encode(std::string_view bytes);
+  // The same appended to out (a writer's buffer), without a temporary string.
+  void base64Append(std::string& out, std::string_view bytes);
   // Decodes `text`, ignoring whitespace. Stops at the end or at the first padding group.
   std::string base64Decode(std::string_view text);
 

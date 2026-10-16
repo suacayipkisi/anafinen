@@ -51,5 +51,8 @@ namespace FEM::BEAM {
   // Stresses of a valid shape under the given internal forces; nothing for a GeneralSection,
   // which has no shape.
   std::optional<SectionStress> sectionStress(const SectionShape& shape, const std::array<double, 6>& forces);
+  // Same with the shape's properties already computed (computeProperties(), any Poisson's ratio:
+  // the stresses use A, Iy, Iz and J only), for many sections of one element.
+  std::optional<SectionStress> sectionStress(const SectionShape& shape, const SectionProperties& p, const std::array<double, 6>& forces);
 
 } // namespace FEM::BEAM end

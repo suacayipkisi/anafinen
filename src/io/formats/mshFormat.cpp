@@ -57,6 +57,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -68,6 +69,14 @@
 namespace anaf::IO::formats {
 
   namespace {
+
+    // Transparent lexicographic order of int lists: a std::vector key found with a std::span.
+    struct LexicographicLess {
+      using is_transparent = void;
+      bool operator()(const std::span<const int> a, const std::span<const int> b) const {
+        return std::ranges::lexicographical_compare(a, b);
+      }
+    };
 
     // Map key used instead of std::pair<int, int>. Gmsh keeps its physical names in a
     // std::map<std::pair<int, int>, std::string>; the same instantiation here would be exported
@@ -488,9 +497,12 @@ namespace anaf::IO::formats {
         expectEnd("Elements");
       }
 
+      // One step as read: tags[i] owns values[i * components .. (i + 1) * components) (flat, no
+      // allocation per entry; a field whose component count changes is skipped later).
       struct RawStep {
         double time{0.0};
-        std::vector<std::pair<std::uint64_t, std::vector<double>>> entries;
+        std::vector<std::uint64_t> tags;
+        std::vector<double> values;
       };
       struct RawField {
         std::string name;
@@ -529,12 +541,11 @@ namespace anaf::IO::formats {
         auto& target = field.steps[step];
         target.time = reals.empty() ? 0.0 : reals[0];
         if (binary()) m_cursor.skipLineBreak();
-        target.entries.reserve(target.entries.size() + count);
+        target.tags.reserve(target.tags.size() + count);
+        target.values.reserve(target.values.size() + count * static_cast<std::size_t>(components));
         for (std::size_t i = 0; i < count; ++i) {
-          const std::uint64_t tag = binary() ? static_cast<std::uint64_t>(raw<std::int32_t>()) : m_cursor.number<std::uint64_t>();
-          std::vector<double> values(static_cast<std::size_t>(components));
-          for (auto& v : values) v = doubleValue();
-          target.entries.emplace_back(tag, std::move(values));
+          target.tags.push_back(binary() ? static_cast<std::uint64_t>(raw<std::int32_t>()) : m_cursor.number<std::uint64_t>());
+          for (int c = 0; c < components; ++c) target.values.push_back(doubleValue());
         }
         if (binary()) m_cursor.skipLineBreak();
         expectEnd(section);
@@ -670,14 +681,15 @@ namespace anaf::IO::formats {
           std::size_t unmatched = 0;
           for (auto& [step, data] : rawField.steps) {
             std::vector<double> values(entities * components, 0.0);
-            for (const auto& [tag, entry] : data.entries) {
-              const auto& index = onNodes ? m_nodeIndex : elementIndex;
-              const auto found = index.find(tag);
+            const auto& index = onNodes ? m_nodeIndex : elementIndex;
+            for (std::size_t i = 0; i < data.tags.size(); ++i) {
+              const auto found = index.find(data.tags[i]);
               if (found == index.end()) {
                 ++unmatched;
                 continue;
               }
-              std::copy(entry.begin(), entry.end(), values.begin() + static_cast<std::ptrdiff_t>(found->second * components));
+              const auto entry = data.values.begin() + static_cast<std::ptrdiff_t>(i * components);
+              std::copy(entry, entry + static_cast<std::ptrdiff_t>(components), values.begin() + static_cast<std::ptrdiff_t>(found->second * components));
             }
             field.times.push_back(data.time);
             field.steps.push_back(std::move(values));
@@ -793,25 +805,50 @@ namespace anaf::IO::formats {
       // membership) and assigns one physical tag per (set, dimension).
       void preparePartitions() {
         const std::size_t elementTotal = m_model.elementCount();
-        std::vector<std::vector<int>> setsOfElement(elementTotal);
-        for (std::size_t s = 0; s < m_model.sets.size(); ++s) {
-          if (m_model.sets[s].kind != E_SetKind::Element) continue;
-          for (const auto member : m_model.sets[s].members) setsOfElement[member].push_back(static_cast<int>(s));
+        // Sets of every element, compressed: element g's sets (ascending) are
+        // setList[setStart[g] .. setStart[g + 1]), no vector per element.
+        std::vector<std::size_t> setStart(elementTotal + 1, 0);
+        for (const auto& set : m_model.sets) {
+          if (set.kind != E_SetKind::Element) continue;
+          for (const auto member : set.members) ++setStart[member + 1];
         }
+        for (std::size_t g = 0; g < elementTotal; ++g) setStart[g + 1] += setStart[g];
+        std::vector<int> setList(setStart.back());
+        {
+          std::vector<std::size_t> fill(setStart.begin(), setStart.end() - 1);
+          for (std::size_t s = 0; s < m_model.sets.size(); ++s) {
+            if (m_model.sets[s].kind != E_SetKind::Element) continue;
+            for (const auto member : m_model.sets[s].members) setList[fill[member]++] = static_cast<int>(s);
+          }
+        }
+        const auto setsOf = [&](const std::size_t g) {
+          return std::span<const int>(setList.data() + setStart[g], setStart[g + 1] - setStart[g]);
+        };
+        // Each distinct list of sets gets a number; only a new list is copied.
+        std::map<std::vector<int>, int, LexicographicLess> membershipId;
+        const auto membershipOf = [&](const std::span<const int> sets) {
+          const auto found = membershipId.find(sets);
+          if (found != membershipId.end()) return found->second;
+          const int id = static_cast<int>(membershipId.size());
+          membershipId.emplace(std::vector<int>(sets.begin(), sets.end()), id);
+          return id;
+        };
+
         m_elementEntity.resize(elementTotal);
         // Element type is part of the key: Gmsh drops elements when one entity mixes element
         // orders (e.g. Tri3 with Tri6), so every entity holds a single element type.
-        std::map<std::tuple<int, int, int, std::vector<int>>, std::size_t> partitionIndex;
+        std::map<std::tuple<int, int, int, int>, std::size_t> partitionIndex;
         std::map<IntPair, int> partitionsPerSource;
         std::size_t global = 0;
         for (const auto& block : m_model.blocks) {
           const int dim = elementInfo(block.type).dimension;
           for (std::size_t e = 0; e < block.size(); ++e, ++global) {
             const int source = block.entityTags.empty() ? 0 : block.entityTags[e];
+            const auto sets = setsOf(global);
             const auto [it, inserted] = partitionIndex.try_emplace(
-              std::make_tuple(dim, source, static_cast<int>(block.type), setsOfElement[global]), m_entities.size());
+              std::make_tuple(dim, source, static_cast<int>(block.type), membershipOf(sets)), m_entities.size());
             if (inserted) {
-              m_entities.push_back(Entity{dim, source, 0, setsOfElement[global], {}});
+              m_entities.push_back(Entity{dim, source, 0, std::vector<int>(sets.begin(), sets.end()), {}});
               ++partitionsPerSource[{dim, source}];
             }
             m_elementEntity[global] = it->second;
@@ -882,14 +919,16 @@ namespace anaf::IO::formats {
         text("$EndPhysicalNames\n");
       }
 
-      std::array<double, 6> boundingBox(const std::size_t entityIndex) const {
+      // Bounding boxes of every entity in one pass over the elements (one pass per entity made
+      // the $Entities section quadratic).
+      std::vector<std::array<double, 6>> boundingBoxes() const {
         constexpr double big = std::numeric_limits<double>::max();
-        std::array<double, 6> box{big, big, big, -big, -big, -big};
+        std::vector<std::array<double, 6>> boxes(m_entities.size(), std::array<double, 6>{big, big, big, -big, -big, -big});
         std::size_t global = 0;
         for (const auto& block : m_model.blocks) {
           const auto n = static_cast<std::size_t>(elementInfo(block.type).nodeCount);
           for (std::size_t e = 0; e < block.size(); ++e, ++global) {
-            if (m_elementEntity[global] != entityIndex) continue;
+            auto& box = boxes[m_elementEntity[global]];
             for (std::size_t k = 0; k < n; ++k) {
               const auto& p = m_model.nodes[block.connectivity[e * n + k]].position;
               for (std::size_t a = 0; a < 3; ++a) {
@@ -899,7 +938,7 @@ namespace anaf::IO::formats {
             }
           }
         }
-        return box;
+        return boxes;
       }
 
       // Nodes live in one block on the highest-dimensional entity; elements of any entity may use them.
@@ -921,9 +960,10 @@ namespace anaf::IO::formats {
           text(std::format("{} {} {} {}\n", counts[0], counts[1], counts[2], counts[3]));
         }
         if (m_entities.empty()) writeEntity(0, 1, {0, 0, 0, 0, 0, 0}, {});
+        const auto boxes = boundingBoxes();
         for (int dim = 0; dim < 4; ++dim) {
           for (std::size_t i = 0; i < m_entities.size(); ++i) {
-            if (m_entities[i].dim == dim) writeEntity(dim, m_entities[i].tag, boundingBox(i), m_entities[i].physicals);
+            if (m_entities[i].dim == dim) writeEntity(dim, m_entities[i].tag, boxes[i], m_entities[i].physicals);
           }
         }
         if (m_binary) text("\n");

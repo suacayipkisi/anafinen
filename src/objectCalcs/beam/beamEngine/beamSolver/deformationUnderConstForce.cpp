@@ -326,6 +326,29 @@ namespace FEM::BEAM {
     return loads;
   }
 
+  Eigen::Vector3d elementLocalLoad(
+    const std::span<const Node> nodes,
+    const std::span<const BeamElement> elements,
+    const std::size_t element,
+    const SectionProperties& properties,
+    const std::span<const DistributedLoad> distributedLoads,
+    const std::array<double, 3>& gravity,
+    const std::span<const anaf::MATERIAL::Material> materials
+  ) {
+    const auto& beam = elements[element];
+    const Eigen::Matrix3d axes = localAxes(nodes[beam.node1].getLocation(), nodes[beam.node2].getLocation(), beam.orientation);
+    Eigen::Vector3d load = Eigen::Vector3d::Zero();
+    const double massPerLength = materials[beam.materialID].getDensity() * properties.area;
+    if (massPerLength != 0.0) load = axes * (massPerLength * Eigen::Vector3d(gravity[0], gravity[1], gravity[2]));
+    // Same order as elementLocalLoads(): self weight first, then the loads in list order.
+    for (const auto& distributed : distributedLoads) {
+      if (distributed.element != element) continue;
+      const Eigen::Vector3d value(distributed.value[0], distributed.value[1], distributed.value[2]);
+      load += distributed.frame == E_LoadFrame::Local ? value : Eigen::Vector3d(axes * value);
+    }
+    return load;
+  }
+
   std::expected<void, std::string> Beam3DContainer::buildElements(
     const std::span<const anaf::MATERIAL::Material> materials
   ) {
@@ -389,7 +412,8 @@ namespace FEM::BEAM {
       }
     }
 
-    const auto localLoads = elementLocalLoads(m_nodes, m_elements, m_properties, distributedLoads, gravity, materials);
+    m_localLoads = elementLocalLoads(m_nodes, m_elements, m_properties, distributedLoads, gravity, materials);
+    const auto& localLoads = m_localLoads;
     const auto elementCount = static_cast<long long>(m_elements.size());
     #pragma omp parallel for schedule(static)
     for (long long index = 0; index < elementCount; ++index) {

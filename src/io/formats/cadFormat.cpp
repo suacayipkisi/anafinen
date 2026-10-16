@@ -43,8 +43,8 @@
 #include <format>
 #include <limits>
 #include <map>
-#include <set>
 #include <optional>
+#include <set>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -172,11 +172,14 @@ namespace anaf::IO::formats {
       // Elements are identified by their end nodes (indices into the NODES list above), which
       // stays unique where centroids do not (crossing X-braces share their midpoint).
       out += std::format("ELEMENTS {}\n", exportedElements.size());
+      // exportedElements is ascending (built in block order): walk the blocks alongside it.
+      std::size_t block = 0, blockStart = 0;
       for (const auto e : exportedElements) {
-        const auto location = model.locateElement(e);
-        const auto& block = model.blocks[location.block];
-        const auto n = static_cast<std::size_t>(elementInfo(block.type).nodeCount);
-        out += std::format("2 {} {}\n", block.connectivity[location.local * n], block.connectivity[location.local * n + 1]);
+        while (e >= blockStart + model.blocks[block].size()) blockStart += model.blocks[block++].size();
+        const auto& elements = model.blocks[block];
+        const auto n = static_cast<std::size_t>(elementInfo(elements.type).nodeCount);
+        const std::size_t local = e - blockStart;
+        out += std::format("2 {} {}\n", elements.connectivity[local * n], elements.connectivity[local * n + 1]);
       }
 
       // All non-geometric data, expressed as fields over the listed nodes / elements.
@@ -246,28 +249,34 @@ namespace anaf::IO::formats {
       std::size_t unmatchedNodes = 0, unmatchedElements = 0;
       for (std::size_t i = 0; i < nodeCount; ++i) if (!(nodeMap[i] = nodeIndex.nearest(sideNodes[i]))) ++unmatchedNodes;
 
-      std::map<std::vector<std::uint32_t>, std::uint32_t> elementByEnds;
+      // (lower end, higher end, element); the first element of a pair of ends wins, like a map
+      // insert. Sorted once and searched, no per-element containers.
+      std::vector<std::tuple<std::uint32_t, std::uint32_t, std::uint32_t>> elementByEnds;
       {
         std::uint32_t global = 0;
         for (const auto& block : model.blocks) {
           const auto n = static_cast<std::size_t>(elementInfo(block.type).nodeCount);
           for (std::size_t e = 0; e < block.size(); ++e, ++global) {
             if (n < 2) continue;
-            std::vector<std::uint32_t> ends{block.connectivity[e * n], block.connectivity[e * n + 1]};
-            std::ranges::sort(ends);
-            elementByEnds.emplace(std::move(ends), global);
+            const auto a = block.connectivity[e * n], b = block.connectivity[e * n + 1];
+            elementByEnds.emplace_back(std::min(a, b), std::max(a, b), global);
           }
         }
+        std::ranges::stable_sort(elementByEnds, {}, [](const auto& entry) { return std::pair(std::get<0>(entry), std::get<1>(entry)); });
       }
       for (std::size_t i = 0; i < elementCount; ++i) {
-        std::vector<std::uint32_t> ends;
-        for (const auto n : sideElements[i]) {
-          if (n < nodeCount && nodeMap[n]) ends.push_back(*nodeMap[n]);
+        // Elements are identified by two matched end nodes.
+        const auto& ends = sideElements[i];
+        const bool matched = ends.size() == 2 && ends[0] < nodeCount && ends[1] < nodeCount && nodeMap[ends[0]] && nodeMap[ends[1]];
+        if (matched) {
+          const std::pair key(std::min(*nodeMap[ends[0]], *nodeMap[ends[1]]), std::max(*nodeMap[ends[0]], *nodeMap[ends[1]]));
+          const auto it = std::ranges::lower_bound(elementByEnds, key, {}, [](const auto& entry) { return std::pair(std::get<0>(entry), std::get<1>(entry)); });
+          if (it != elementByEnds.end() && std::get<0>(*it) == key.first && std::get<1>(*it) == key.second) {
+            elementMap[i] = std::get<2>(*it);
+            continue;
+          }
         }
-        std::ranges::sort(ends);
-        const auto it = elementByEnds.find(ends);
-        if (ends.size() == sideElements[i].size() && it != elementByEnds.end()) elementMap[i] = it->second;
-        else ++unmatchedElements;
+        ++unmatchedElements;
       }
       if (unmatchedNodes + unmatchedElements > 0) {
         model.warnings.push_back(std::format("sidecar: {} nodes and {} elements did not match the CAD mesh", unmatchedNodes, unmatchedElements));
@@ -546,13 +555,16 @@ namespace anaf::IO::formats {
       std::size_t removed = 0;
       for (auto& block : model.blocks) {
         const auto n = static_cast<std::size_t>(elementInfo(block.type).nodeCount);
-        std::set<std::vector<std::uint32_t>> seen;
+        if (n > 3) continue; // points and lines only (1 to 3 nodes)
+        // Sorted node triple (unused slots max) of every element; the first of equal keys stays.
+        std::set<std::array<std::uint32_t, 3>> seen;
         ElementBlock kept{block.type, {}, {}, {}};
         for (std::size_t e = 0; e < block.size(); ++e) {
-          std::vector<std::uint32_t> key(block.connectivity.begin() + static_cast<std::ptrdiff_t>(e * n),
-                                         block.connectivity.begin() + static_cast<std::ptrdiff_t>((e + 1) * n));
+          std::array<std::uint32_t, 3> key;
+          key.fill(std::numeric_limits<std::uint32_t>::max());
+          std::copy_n(block.connectivity.begin() + static_cast<std::ptrdiff_t>(e * n), n, key.begin());
           std::ranges::sort(key);
-          if (!seen.insert(std::move(key)).second) {
+          if (!seen.insert(key).second) {
             ++removed;
             continue;
           }

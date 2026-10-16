@@ -152,34 +152,41 @@ namespace anaf::CLI {
     return nullptr;
   }
 
+  namespace {
+    // executeLine() on a line tokenized by the caller (runScript() needs the tokens first to
+    // skip blank and comment lines; the line is not tokenized twice).
+    bool executeTokens(Session& session, const std::expected<std::vector<std::string>, std::string>& tokens) {
+      if (!tokens) {
+        session.err << "error: " << tokens.error() << '\n';
+        return false;
+      }
+      if (tokens->empty()) return true;
+      const std::string_view name = tokens->front();
+      if (!name.starts_with('-') || name.size() < 2) {
+        session.err << std::format("error: '{}' is not a command; commands start with '-' (see -help)\n", name);
+        return false;
+      }
+      const Command* command = findCommand(name.substr(1));
+      if (!command) {
+        session.err << std::format("error: unknown command '{}' (see -help)\n", name);
+        return false;
+      }
+      CommandResult result;
+      try {
+        result = command->run(session, std::span(*tokens).subspan(1));
+      } catch (const std::exception& exception) {
+        result = std::unexpected(exception.what());
+      }
+      if (!result) {
+        session.err << std::format("error: {}\n", result.error());
+        return false;
+      }
+      return true;
+    }
+  } // namespace end
+
   bool executeLine(Session& session, const std::string_view line) {
-    const auto tokens = tokenize(line);
-    if (!tokens) {
-      session.err << "error: " << tokens.error() << '\n';
-      return false;
-    }
-    if (tokens->empty()) return true;
-    const std::string_view name = tokens->front();
-    if (!name.starts_with('-') || name.size() < 2) {
-      session.err << std::format("error: '{}' is not a command; commands start with '-' (see -help)\n", name);
-      return false;
-    }
-    const Command* command = findCommand(name.substr(1));
-    if (!command) {
-      session.err << std::format("error: unknown command '{}' (see -help)\n", name);
-      return false;
-    }
-    CommandResult result;
-    try {
-      result = command->run(session, std::span(*tokens).subspan(1));
-    } catch (const std::exception& exception) {
-      result = std::unexpected(exception.what());
-    }
-    if (!result) {
-      session.err << std::format("error: {}\n", result.error());
-      return false;
-    }
-    return true;
+    return executeTokens(session, tokenize(line));
   }
 
   CommandResult runScript(Session& session, const std::filesystem::path& path) {
@@ -193,9 +200,10 @@ namespace anaf::CLI {
     while (!session.exitRequested && std::getline(file, line)) {
       ++lineNumber;
       if (!line.empty() && line.back() == '\r') line.pop_back(); // CRLF scripts
-      if (const auto tokens = tokenize(line); tokens && tokens->empty()) continue;
+      const auto tokens = tokenize(line);
+      if (tokens && tokens->empty()) continue;
       session.out << "> " << line << '\n';
-      if (!executeLine(session, line)) {
+      if (!executeTokens(session, tokens)) {
         result = std::unexpected(std::format("{}:{}: script stopped", IO::pathToUtf8(path), lineNumber));
         break;
       }

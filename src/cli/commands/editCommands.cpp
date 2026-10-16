@@ -29,6 +29,7 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -47,8 +48,8 @@ namespace anaf::CLI::HANDLERS {
     std::size_t elementCount(const FEM::TRUSS::MeshData& mesh) { return mesh.trussElements.size(); }
     std::size_t elementCount(const FEM::BEAM::MeshData& mesh) { return mesh.elements.size(); }
 
-    void removeNode(FEM::TRUSS::MeshData& mesh, const std::uint32_t k) { FEM::TRUSS::deleteNode(mesh, k); }
-    void removeNode(FEM::BEAM::MeshData& mesh, const std::uint32_t k) { FEM::BEAM::deleteNode(mesh, k); }
+    void removeNodes(FEM::TRUSS::MeshData& mesh, const std::span<const std::uint32_t> ids) { FEM::TRUSS::deleteNodes(mesh, ids); }
+    void removeNodes(FEM::BEAM::MeshData& mesh, const std::span<const std::uint32_t> ids) { FEM::BEAM::deleteNodes(mesh, ids); }
 
     CommandResult noModel() {
       return std::unexpected("no model: start one with -new truss|beam, -generate, -library load or -import");
@@ -248,7 +249,7 @@ namespace anaf::CLI::HANDLERS {
         const auto ids = parseIdList(args[1], nodeList(mesh).size(), "node");
         if (!ids) return std::unexpected(ids.error());
         const std::size_t elementsBefore = elementCount(mesh);
-        for (const auto id : std::views::reverse(*ids)) removeNode(mesh, id); // highest first: lower ids stay valid
+        removeNodes(mesh, *ids); // one pass over the model, not one per node
         session.out << std::format("removed {} node{} and {} element{}; the later ids moved down\n", ids->size(),
                                    ids->size() == 1 ? "" : "s", elementsBefore - elementCount(mesh),
                                    elementsBefore - elementCount(mesh) == 1 ? "" : "s");

@@ -34,6 +34,7 @@
 #include <complex>
 #include <format>
 #include <limits>
+#include <span>
 
 namespace anaf::IO::ARRAY {
 
@@ -97,10 +98,23 @@ namespace anaf::IO::ARRAY {
     if (matrix.itype != CHOLMOD_INT && matrix.itype != CHOLMOD_LONG) {
       return std::unexpected(cholmodDetail::error(ArrayError::E_Code::TypeMismatch, path, "unsupported CHOLMOD index type"));
     }
+    // CHOLMOD_LONG indices are int64 already and are passed as they are; int indices are widened.
     const bool wide = matrix.itype == CHOLMOD_LONG;
-    const auto pointers = wide ? cholmodDetail::widen<std::int64_t>(matrix.p, matrix.ncol + 1) : cholmodDetail::widen<int>(matrix.p, matrix.ncol + 1);
+    std::vector<std::int64_t> widenedPointers, widenedIndices;
+    std::span<const std::int64_t> pointers, indices;
+    if (wide) {
+      pointers = std::span<const std::int64_t>(static_cast<const std::int64_t*>(matrix.p), matrix.ncol + 1);
+    } else {
+      widenedPointers = cholmodDetail::widen<int>(matrix.p, matrix.ncol + 1);
+      pointers = widenedPointers;
+    }
     const auto nonZeros = static_cast<std::size_t>(pointers.back());
-    const auto indices = wide ? cholmodDetail::widen<std::int64_t>(matrix.i, nonZeros) : cholmodDetail::widen<int>(matrix.i, nonZeros);
+    if (wide) {
+      indices = std::span<const std::int64_t>(static_cast<const std::int64_t*>(matrix.i), nonZeros);
+    } else {
+      widenedIndices = cholmodDetail::widen<int>(matrix.i, nonZeros);
+      indices = widenedIndices;
+    }
 
     const auto writeAs = [&]<class Value>() {
       const CompressedView<Value> view{

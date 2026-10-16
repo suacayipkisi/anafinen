@@ -46,6 +46,11 @@ namespace anaf::CLI {
       return true;
     }
 
+    bool help(std::ostream& out) { return printAssetText("cli-help.txt", out); }
+    bool operations(std::ostream& out) { return printAssetText("operations.txt", out); }
+    bool license(std::ostream& out) { return printAssetText("license.txt", out); }
+    bool thirdPartyLicenses(std::ostream& out) { return printAssetText("thirdPartyLicenses.txt", out); }
+
   } // namespace SIDE_COMMANDS end
 
 } // namespace anaf::CLI end

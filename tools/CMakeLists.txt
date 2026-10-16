@@ -5,12 +5,12 @@
 # Regenerates assets/objects/beam/beam3D (built-in beam library, models and solved results) from beamLibrary.cpp.
 add_executable(anaf_beam_library_tool beamLibraryTool.cpp)
 target_compile_definitions(anaf_beam_library_tool PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}")
-target_link_libraries(anaf_beam_library_tool PRIVATE anaf_core project_warnings_and_optimizations)
+target_link_libraries(anaf_beam_library_tool PRIVATE anaf_library_generators project_warnings_and_optimizations)
 
 # Regenerates assets/objects/truss/truss1D (built-in truss library) from trussLibrary.cpp.
 add_executable(anaf_truss_library_tool trussLibraryTool.cpp)
 target_compile_definitions(anaf_truss_library_tool PRIVATE MAIN_DIR="${PROJECT_SOURCE_DIR}")
-target_link_libraries(anaf_truss_library_tool PRIVATE anaf_core project_warnings_and_optimizations)
+target_link_libraries(anaf_truss_library_tool PRIVATE anaf_library_generators project_warnings_and_optimizations)
 
 # Gmsh SDK DLL next to the executables (vcpkg's applocal step copies only vcpkg DLLs).
 if(WIN32)

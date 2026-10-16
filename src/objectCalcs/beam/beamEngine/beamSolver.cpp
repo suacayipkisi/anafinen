@@ -129,18 +129,16 @@ namespace FEM::BEAM {
       return solverModel;
     }
 
-    void calculateStresses(MeshData& model, const std::span<const SectionProperties> properties,
+    // Lengths and local loads come from the container (computed for the solve, not again).
+    void calculateStresses(MeshData& model, const Beam3DContainer& container,
                            const std::span<const anaf::MATERIAL::Material> materials, const std::span<const BeamSection> sections) {
-      const auto loads = elementLocalLoads(model.nodes, model.elements, properties, model.distributedLoads, model.gravity, materials);
+      const auto& loads = container.getLocalLoads();
       const auto elementCount = static_cast<long long>(model.elements.size());
       #pragma omp parallel for schedule(static)
       for (long long index = 0; index < elementCount; ++index) {
         auto& element = model.elements[index];
-        const auto& a = model.nodes[element.node1].getLocation();
-        const auto& b = model.nodes[element.node2].getLocation();
-        const double length = std::sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]) + (b[2] - a[2]) * (b[2] - a[2]));
-        element.stress = elementStress(element, loads[index], length, sections[element.sectionID].getShape(),
-                                       materials[element.materialID].getYieldTensile());
+        element.stress = elementStress(element, loads[index], container.getLength(static_cast<std::size_t>(index)),
+                                       sections[element.sectionID].getShape(), materials[element.materialID].getYieldTensile());
       }
     }
 
@@ -224,7 +222,7 @@ namespace FEM::BEAM {
     }
     report(0.85f);
     container.calculateSectionForces();
-    calculateStresses(*solved, properties, materials, sections);
+    calculateStresses(*solved, container, materials, sections);
     report(0.90f);
     container.runValidator();
     report(0.95f);

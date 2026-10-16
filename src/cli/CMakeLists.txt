@@ -19,9 +19,6 @@ set(ANAF_CLI_SOURCES
     commands/materialCommands.cpp
     commands/editCommands.cpp
     commands/resultCommands.cpp
-    operations/help.cpp
-    operations/operations.cpp
-    operations/licenses.cpp
     operations/sideCommands.cpp
 )
 

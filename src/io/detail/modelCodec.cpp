@@ -133,6 +133,19 @@ namespace anaf::IO::detail {
       return true;
     }
 
+    // Calls consume(field) for every field in order and removes those it returns true for, in one
+    // pass (an erase per consumed field moved every later field each time).
+    template <class Consume>
+    void consumeFields(std::vector<Field>& fields, Consume&& consume) {
+      std::size_t kept = 0;
+      for (std::size_t i = 0; i < fields.size(); ++i) {
+        if (consume(fields[i])) continue;
+        if (kept != i) fields[kept] = std::move(fields[i]);
+        ++kept;
+      }
+      fields.resize(kept);
+    }
+
     // Removes the first field matching (name, location) and returns it.
     std::optional<Field> takeField(MeshModel& model, const std::string_view name, const E_FieldLocation location) {
       const auto it = std::ranges::find_if(model.fields, [&](const Field& f) { return f.name == name && f.location == location; });
@@ -547,19 +560,18 @@ namespace anaf::IO::detail {
 
     // Legacy "FixityDirection_*" vectors list fixed directions per node.
     std::vector<std::vector<std::array<double, 3>>> fixedDirections;
-    for (auto it = model.fields.begin(); it != model.fields.end();) {
-      if (it->location == E_FieldLocation::Node && it->components == 3 && it->name.starts_with("FixityDirection_") && sized(*it, nodeTotal)) {
-        if (fixedDirections.empty()) fixedDirections.resize(nodeTotal);
-        const auto& values = it->steps.back();
-        for (std::size_t n = 0; n < nodeTotal; ++n) {
-          const std::array<double, 3> d{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
-          if (d[0] != 0.0 || d[1] != 0.0 || d[2] != 0.0) fixedDirections[n].push_back(d);
-        }
-        it = model.fields.erase(it);
-      } else {
-        ++it;
+    consumeFields(model.fields, [&](const Field& field) {
+      if (!(field.location == E_FieldLocation::Node && field.components == 3 && field.name.starts_with("FixityDirection_") && sized(field, nodeTotal))) {
+        return false;
       }
-    }
+      if (fixedDirections.empty()) fixedDirections.resize(nodeTotal);
+      const auto& values = field.steps.back();
+      for (std::size_t n = 0; n < nodeTotal; ++n) {
+        const std::array<double, 3> d{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
+        if (d[0] != 0.0 || d[1] != 0.0 || d[2] != 0.0) fixedDirections[n].push_back(d);
+      }
+      return true;
+    });
     for (std::uint32_t n = 0; n < fixedDirections.size(); ++n) {
       if (fixedDirections[n].empty()) continue;
       auto& constraint = constraintFor(model, constraintIndex, n);
@@ -591,8 +603,7 @@ namespace anaf::IO::detail {
       if (inserted) model.loads.push_back(NodalLoad{node, {}, amplitude});
       return model.loads[entry->second];
     };
-    for (auto it = model.fields.begin(); it != model.fields.end();) {
-      const Field& field = *it;
+    consumeFields(model.fields, [&](const Field& field) {
       bool consumed = false;
       if (field.location == E_FieldLocation::Node && sized(field, nodeTotal)) {
         const auto& values = field.steps.back();
@@ -639,8 +650,8 @@ namespace anaf::IO::detail {
           consumed = true;
         }
       }
-      it = consumed ? model.fields.erase(it) : it + 1;
-    }
+      return consumed;
+    });
 
     // Amplitudes and damping (global arrays).
     std::optional<Damping> damping;
@@ -684,8 +695,7 @@ namespace anaf::IO::detail {
     std::vector<std::uint64_t> nodeTags;
     std::vector<std::uint64_t> elementTags;
     std::vector<int> entityTags;
-    for (auto it = model.fields.begin(); it != model.fields.end();) {
-      const Field& field = *it;
+    consumeFields(model.fields, [&](const Field& field) {
       const bool isElement = field.location == E_FieldLocation::Element;
       const std::size_t entities = isElement ? elementTotal : nodeTotal;
       bool consumed = false;
@@ -706,9 +716,14 @@ namespace anaf::IO::detail {
               if (values[i] != 0.0) set.members.push_back(i);
             }
             if (!nodeSet) {
-              for (const auto member : set.members) {
-                const auto location = model.locateElement(member);
-                set.dimension = std::max(set.dimension, elementInfo(model.blocks[location.block].type).dimension);
+              // Members are ascending: a block counts when any member falls in its index range
+              // (one search per block, not a block walk per member).
+              std::size_t first = 0;
+              for (const auto& block : model.blocks) {
+                const std::size_t last = first + block.size();
+                const auto member = std::ranges::lower_bound(set.members, first);
+                if (member != set.members.end() && *member < last) set.dimension = std::max(set.dimension, elementInfo(block.type).dimension);
+                first = last;
               }
             }
             model.sets.push_back(std::move(set));
@@ -725,8 +740,8 @@ namespace anaf::IO::detail {
           consumed = true;
         }
       }
-      it = consumed ? model.fields.erase(it) : it + 1;
-    }
+      return consumed;
+    });
 
     if (!nodeTags.empty()) {
       for (std::size_t n = 0; n < nodeTotal; ++n) model.nodes[n].tag = nodeTags[n];

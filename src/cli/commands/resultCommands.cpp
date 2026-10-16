@@ -22,7 +22,7 @@
 
 #include <beam/beamEngine/beamDiagrams.hpp>
 #include <beam/beamEngine/beamSolver.hpp>
-#include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp> // elementSectionProperties(), elementLocalLoads()
+#include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp> // elementLocalLoad()
 #include <truss_1D/trussEngine/trussSolver.hpp>
 
 #include <algorithm>
@@ -276,9 +276,15 @@ namespace anaf::CLI::HANDLERS {
     }
 
     const auto lists = copyLists(session);
-    const auto properties = FEM::BEAM::elementSectionProperties(mesh->elements, lists.sections, lists.materials);
-    const auto loads = FEM::BEAM::elementLocalLoads(mesh->nodes, mesh->elements, properties, mesh->distributedLoads, mesh->gravity, lists.materials);
-    const auto states = FEM::BEAM::sampleElement(*mesh, *element, points, loads[*element], lists.materials, lists.sections);
+    // Only this element's section properties and loads (not those of the whole model).
+    const auto& beam = mesh->elements[*element];
+    if (beam.materialID >= lists.materials.size() || beam.sectionID >= lists.sections.size()) {
+      return std::unexpected("the element's material or section no longer exists; solve again");
+    }
+    const auto properties = FEM::BEAM::computeProperties(lists.sections[beam.sectionID].getShape(), lists.materials[beam.materialID].getPoisson());
+    const auto load = FEM::BEAM::elementLocalLoad(mesh->nodes, mesh->elements, *element, properties, mesh->distributedLoads, mesh->gravity,
+                                                  lists.materials);
+    const auto states = FEM::BEAM::sampleElement(*mesh, *element, points, load, lists.materials, lists.sections);
     session.out << std::format("element {} ({}-{}), local axes, section sign convention\n", *element, mesh->elements[*element].node1,
                                mesh->elements[*element].node2);
     session.out << std::format("{:>9}  {:>11}  {:>11}  {:>11}  {:>11}  {:>11}  {:>11}  {:>11}\n", "x [m]", "N [N]", "Vy [N]", "Vz [N]", "T [N m]",

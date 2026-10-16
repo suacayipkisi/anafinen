@@ -144,9 +144,11 @@ namespace anaf::BRIDGE {
     std::uint32_t m_nextSectionID{0};
     std::filesystem::path m_userSectionPath;  // empty: user sections are not persisted
 
-    void saveUserMaterials();
+    // Writes a list taken in the caller's critical section (one lock per edit; the file is
+    // written outside dataMutex).
+    void saveUserMaterials(const std::vector<anaf::MATERIAL::Material>& snapshot) const;
     std::uint32_t appendUserMaterialLocked(const anaf::MATERIAL::Material& material);
-    void saveUserSections();
+    void saveUserSections(const std::vector<FEM::BEAM::BeamSection>& snapshot) const;
     std::uint32_t appendUserSectionLocked(const FEM::BEAM::BeamSection& section);
   };
 

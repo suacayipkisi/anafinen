@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -78,6 +79,27 @@ namespace anaf::GUI{
     std::uint32_t m_selectedNode{noSelection};    // bridge selections, compared every frame so a
     std::uint32_t m_selectedElement{noSelection}; // selection made in a panel redraws the highlight
     std::vector<std::pair<std::uint32_t, glm::vec3>> m_nodeLabels; // id, drawn position
+    std::uint64_t m_nodeLabelsRevision{0}; // bumped when m_nodeLabels is rebuilt
+    // Everything the label glyphs depend on: the text buffer is rebuilt and uploaded only when
+    // this changes, not every frame.
+    struct LabelState {
+      glm::mat4 mvp{1.0f};
+      std::uint32_t width{};
+      std::uint32_t height{};
+      std::uint32_t selected{};
+      bool show{};
+      bool far{};
+      glm::vec4 color{0.0f};
+      std::uint64_t labelsRevision{};
+      // The glyph UVs come from ImGui's dynamic font atlas: a grown or repacked atlas is a new
+      // texture (UniqueID, size), and another font size is another baked font.
+      int atlasTexture{-1};
+      int atlasWidth{};
+      int atlasHeight{};
+      const void* bakedFont{};
+      bool operator==(const LabelState&) const = default;
+    };
+    std::optional<LabelState> m_labelState;
 
     // Beam scene: every element sampled at stations along it (exact displacement field, values
     // for the coloring), rebuilt when the snapshot changes; the drawn shape (positions and

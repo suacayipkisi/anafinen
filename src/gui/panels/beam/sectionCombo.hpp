@@ -34,8 +34,9 @@ namespace anaf::GUI {
       ImGui::TextDisabled("No sections available");
       return;
     }
-    if (!bridge.findSectionIndex(sectionID)) sectionID = bridge.allSections.front().getSectionID();
-    const auto& selected = bridge.allSections[*bridge.findSectionIndex(sectionID)];
+    const auto index = bridge.findSectionIndex(sectionID);
+    if (!index) sectionID = bridge.allSections.front().getSectionID();
+    const auto& selected = bridge.allSections[index.value_or(0)];
     if (ImGui::BeginCombo(label, selected.getName().c_str(), ImGuiComboFlags_HeightLarge)) {
       for (const auto& section : bridge.allSections) {
         ImGui::PushID(static_cast<int>(section.getSectionID()));

@@ -86,6 +86,18 @@ namespace FEM::BEAM {
     std::span<const anaf::MATERIAL::Material> materials
   );
 
+  // The same for one element (a diagram, the CLI -diagram command) without building the list
+  // of every element: its self weight plus the distributed loads that name it.
+  Eigen::Vector3d elementLocalLoad(
+    std::span<const Node> nodes,
+    std::span<const BeamElement> elements,
+    std::size_t element,
+    const SectionProperties& properties,
+    std::span<const DistributedLoad> distributedLoads,
+    const std::array<double, 3>& gravity,
+    std::span<const anaf::MATERIAL::Material> materials
+  );
+
   // Static solve of a beam model. Every node has 6 DOFs; each node's allowed motion and
   // rotation bases give u = T q, and the reduced system (T^T K T) q = T^T f is solved by the
   // FEM::SOLVER portfolio with 6 DOF slots per node.
@@ -113,6 +125,7 @@ namespace FEM::BEAM {
     std::span<BeamElement> m_elements;
     std::span<const SectionProperties> m_properties; // one per element
     std::vector<ElementFrame> m_frames;
+    std::vector<Eigen::Vector3d> m_localLoads; // per element, from applyLoads() (stresses reuse it)
     std::vector<double> m_force; // 6 per node, global: fx fy fz mx my mz
     std::vector<NodeDofs> m_nodeDofs;
     std::size_t m_heldFreeDirections{};
@@ -150,6 +163,9 @@ namespace FEM::BEAM {
     // load acts along it: then the model is a mechanism and this fails.
     std::expected<void, std::string> buildNodeDofs();
     inline std::size_t getHeldFreeDirections() const {return m_heldFreeDirections;}
+    // Element lengths (buildElements()) and total local uniform loads (applyLoads()).
+    inline double getLength(const std::size_t element) const {return m_frames[element].length;}
+    inline const std::vector<Eigen::Vector3d>& getLocalLoads() const {return m_localLoads;}
 
     // An error (a mechanism names a node and its free direction) when the solve failed or was
     // stopped; displacements and rotations are then zero.
