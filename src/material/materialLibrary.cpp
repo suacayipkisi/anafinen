@@ -27,6 +27,7 @@
 #include <fstream>
 #include <set>
 #include <string>
+#include <utility>
 
 namespace anaf::MATERIAL {
 
@@ -100,7 +101,10 @@ namespace anaf::MATERIAL {
         if (const auto valid = validateMaterial(material); !valid) {
           return std::unexpected(std::format("'{}': '{}': {}", anaf::IO::pathToUtf8(path), material.getMaterialType(), valid.error()));
         }
-        if (!names.emplace(material.getMaterialType()).second) {
+        // Same rule as sameMaterialName(): names that differ only in ASCII case are duplicates.
+        std::string key(material.getMaterialType());
+        std::ranges::transform(key, key.begin(), [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (!names.emplace(std::move(key)).second) {
           return std::unexpected(std::format("'{}': duplicate material name '{}'", anaf::IO::pathToUtf8(path), material.getMaterialType()));
         }
       }
