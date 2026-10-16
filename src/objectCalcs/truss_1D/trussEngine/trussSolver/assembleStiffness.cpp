@@ -16,22 +16,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "assembleStiffness.hpp"
-#include <Eigen/SparseCore>
+#include <log/anaf_info.hpp>
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
 
 namespace FEM::TRUSS {
 
-  std::vector<Eigen::Triplet<double>> assembleStiffness(
+  Eigen::SparseMatrix<double> assembleStiffness(
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> allMaterials,
-    const std::size_t allNodesSize
+    const std::size_t nodeCount,
+    const ReducedDofs& dofs
   ) {
-    constexpr std::size_t tripletsPerElement = 21;
-    const std::size_t elementCount = elements.size();
-    std::vector<Eigen::Triplet<double>> triplets(elementCount * tripletsPerElement);
-    const auto nodeCount = allNodesSize;
-
-    #pragma omp parallel for schedule(static)
-    for (long long index = 0; index < static_cast<long long>(elementCount); ++index) {
+    // Element e in global DOFs: the 3 x 3 block k = (AE / L) c c^T on both node diagonals
+    // (upper triangles) and -k between them, 21 upper entries.
+    const auto nodesOf = [&](const std::size_t index) -> const std::array<std::uint32_t, 2>& { return elements[index].getEleNodes(); };
+    auto matrix = assembleReduced(elements.size(), nodeCount, dofs, nodesOf, [&](const std::size_t index, auto&& add) {
       const auto& element = elements[index];
       const auto& nodes = element.getEleNodes();
       const std::uint32_t dof1 = 3 * nodes[0];
@@ -42,35 +45,23 @@ namespace FEM::TRUSS {
         * allMaterials[element.getEleProperties()].getElasticityModulus()
         / element.getEleLength();
       const auto& cosines = element.getEleCosines();
-      std::size_t output = static_cast<std::size_t>(index) * tripletsPerElement;
 
-      for (std::size_t row = 0; row < 3; ++row) {
-        for (std::size_t col = row; col < 3; ++col) {
+      for (std::uint32_t row = 0; row < 3; ++row) {
+        for (std::uint32_t col = row; col < 3; ++col) {
           const double value = cosines[row] * cosines[col] * aeOverLength;
-          triplets[output++] = {
-            static_cast<int>(dof1 + row), static_cast<int>(dof1 + col), value
-          };
-          triplets[output++] = {
-            static_cast<int>(dof2 + row), static_cast<int>(dof2 + col), value
-          };
+          add(dof1 + row, dof1 + col, value);
+          add(dof2 + row, dof2 + col, value);
         }
       }
-      for (std::size_t row = 0; row < 3; ++row) {
-        for (std::size_t col = 0; col < 3; ++col) {
-          const double value = cosines[row] * cosines[col] * aeOverLength;
-          triplets[output++] = {
-            static_cast<int>(crossRow + row), static_cast<int>(crossCol + col), -value
-          };
+      for (std::uint32_t row = 0; row < 3; ++row) {
+        for (std::uint32_t col = 0; col < 3; ++col) {
+          add(crossRow + row, crossCol + col, -cosines[row] * cosines[col] * aeOverLength);
         }
       }
-    }
+    });
 
-    anaf::LOG::info(
-      "Global Stiffness Matrix Created, size: {}x{}",
-      nodeCount * 3, nodeCount * 3
-    );
-
-    return triplets;
+    anaf::LOG::info("Reduced stiffness assembled: {} DOFs, {} stored upper entries", dofs.count(), matrix.nonZeros());
+    return matrix;
   }
 
 } // namespace FEM::TRUSS end

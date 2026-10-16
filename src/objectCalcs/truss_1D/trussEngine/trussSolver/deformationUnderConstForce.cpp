@@ -31,6 +31,7 @@
 #include <omp.h>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace FEM::TRUSS {
@@ -69,7 +70,9 @@ namespace FEM::TRUSS {
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> allMaterials
   ) {
-    m_globalStiffnessMatrix = assembleStiffness(elements, allMaterials, m_allNodes.size());
+    m_dofs = ReducedDofs(m_allNodes);
+    if (m_dofs.inclinedNodes() > 0) anaf::LOG::info("Inclined supports on {} nodes", m_dofs.inclinedNodes());
+    m_reducedStiffness = assembleStiffness(elements, allMaterials, m_allNodes.size(), m_dofs);
   }
 
   void Truss1DContainer::considerWeight(
@@ -104,99 +107,11 @@ namespace FEM::TRUSS {
     }
 
     const std::uint32_t nodeCount = static_cast<std::uint32_t>(m_allNodes.size());
-    const std::uint32_t totalDofs = nodeCount * 3;
-    m_resultDisplacements.resize(nodeCount);
+    const std::int32_t activeDofCount = m_dofs.count();
+    const auto& nodeDofSlots = m_dofs.nodeDofSlots();
 
-    // Every node owns one reduced DOF per allowed motion direction b_k (orthonormal). With
-    // u = T q, T(3 n + axis, k) = b_k[axis], the reduced system is (T^T K T) q = T^T f.
-    // For supports along the global axes T only selects columns, which is the classic
-    // fixed-DOF removal; inclined supports (Logan, 5th ed., ch. 3) need the full product.
-    struct DofLink {
-      std::int32_t reduced;
-      double factor;
-    };
-    std::vector<std::array<DofLink, 3>> links(totalDofs);
-    std::vector<std::uint8_t> linkCount(totalDofs, 0);
-    // Reduced DOF of direction k of node n at 3 n + k, -1 when unused (Block-CG node blocks).
-    std::vector<std::int32_t> nodeDofSlots(totalDofs, -1);
-    std::int32_t activeDofCount = 0;
-    std::uint32_t inclinedNodes = 0;
-    for (std::uint32_t node = 0; node < nodeCount; ++node) {
-      const auto& directions = m_allNodes[node].getAllowedMotionDirections(); // b_k
-      if (m_allNodes[node].hasInclinedSupport()) ++inclinedNodes;
-      for (std::size_t k = 0; k < directions.size(); ++k) { // one reduced DOF per orthonormal direction b_k
-        const std::int32_t reduced = activeDofCount++;
-        nodeDofSlots[3 * node + k] = reduced;
-
-        // Link every global x / y / z DOF to this reduced DOF with the direction cosine b_k[axis].
-        for (std::uint32_t axis = 0; axis < 3; ++axis) {
-          if (directions[k][axis] == 0.0) continue;
-          const std::uint32_t dof = 3 * node + axis;
-          links[dof][linkCount[dof]++] = {reduced, directions[k][axis]};
-        }
-      }
-    }
-    if (inclinedNodes > 0) anaf::LOG::info("Inclined supports on {} nodes", inclinedNodes);
-
-    // Calls emit(p, q, value) for every upper-triangle entry of T^T K T that the stored upper
-    // entry K(i, j) and its mirror K(j, i) produce.
-    const auto forEachReduced = [&](const Eigen::Triplet<double>& triplet, auto&& emit) {
-      const auto visit = [&](const std::uint32_t row, const std::uint32_t col) {
-        for (std::uint8_t a = 0; a < linkCount[row]; ++a) {
-          for (std::uint8_t b = 0; b < linkCount[col]; ++b) {
-            const auto& rowLink = links[row][a];
-            const auto& colLink = links[col][b];
-            if (rowLink.reduced <= colLink.reduced) {
-              emit(rowLink.reduced, colLink.reduced, rowLink.factor * colLink.factor * triplet.value());
-            }
-          }
-        }
-      };
-      const auto row = static_cast<std::uint32_t>(triplet.row());
-      const auto col = static_cast<std::uint32_t>(triplet.col());
-      visit(row, col);
-      if (row != col) visit(col, row);
-    };
-
-    const int threadCount = omp_get_max_threads();
-    std::vector<std::size_t> validCounts(threadCount, 0);
-    #pragma omp parallel
-    {
-      const int thread = omp_get_thread_num();
-      #pragma omp for schedule(static)
-      for (long long index = 0; index < static_cast<long long>(m_globalStiffnessMatrix.size()); ++index) {
-        forEachReduced(m_globalStiffnessMatrix[index], [&](std::int32_t, std::int32_t, double) {
-          ++validCounts[thread];
-        });
-      }
-    }
-
-    std::vector<std::size_t> offsets(threadCount + 1, 0);
-    for (int thread = 0; thread < threadCount; ++thread) {
-      offsets[thread + 1] = offsets[thread] + validCounts[thread];
-    }
-    std::vector<Eigen::Triplet<double>> reducedTriplets(offsets.back());
-
-    #pragma omp parallel
-    {
-      const int thread = omp_get_thread_num();
-      std::size_t output = offsets[thread];
-      #pragma omp for schedule(static)
-      for (long long index = 0; index < static_cast<long long>(m_globalStiffnessMatrix.size()); ++index) {
-        forEachReduced(m_globalStiffnessMatrix[index], [&](const std::int32_t row, const std::int32_t col, const double value) {
-          reducedTriplets[output++] = {row, col, value};
-        });
-      }
-    }
-
-    m_globalStiffnessMatrix.clear();
-    m_globalStiffnessMatrix.shrink_to_fit();
-
-    Eigen::SparseMatrix<double> reducedStiffnessMatrix(activeDofCount, activeDofCount);
-    reducedStiffnessMatrix.setFromTriplets(reducedTriplets.begin(), reducedTriplets.end());
-    reducedStiffnessMatrix.makeCompressed();
-    reducedTriplets.clear();
-    reducedTriplets.shrink_to_fit();
+    const Eigen::SparseMatrix<double> reducedStiffnessMatrix = std::move(m_reducedStiffness);
+    m_reducedStiffness = Eigen::SparseMatrix<double>();
 
     Eigen::VectorXd reducedForce(activeDofCount);
     #pragma omp parallel for schedule(static)
@@ -225,7 +140,6 @@ namespace FEM::TRUSS {
         "Stiffness solve failed using {}: {}",
         FEM::SOLVER::toString(solverResult.type), solverResult.message
       );
-      m_resultDisplacements.assign(nodeCount, {0.0, 0.0, 0.0});
       for (auto& node : m_allNodes) node.setDisplacements({0.0, 0.0, 0.0});
       if (solverResult.singular) return std::unexpected(mechanismMessage(solverResult, nodeDofSlots, m_allNodes));
       return std::unexpected("the stiffness solve failed (is the structure a mechanism? check the supports)");
@@ -239,7 +153,6 @@ namespace FEM::TRUSS {
         const double amount = reducedDisplacements[nodeDofSlots[3 * node + k]];
         for (std::size_t axis = 0; axis < 3; ++axis) displacement[axis] += directions[k][axis] * amount;
       }
-      m_resultDisplacements[node] = displacement;
       m_allNodes[node].setDisplacements(displacement);
     }
     return {};
@@ -255,8 +168,8 @@ namespace FEM::TRUSS {
       const auto& direction = element.getEleCosines();
       Eigen::Vector<double, 6> displacement;
       for (std::uint8_t axis = 0; axis < 3; ++axis) {
-        displacement[axis] = m_resultDisplacements[nodes[0]][axis];
-        displacement[axis + 3] = m_resultDisplacements[nodes[1]][axis];
+        displacement[axis] = m_allNodes[nodes[0]].getDisplacement()[axis];
+        displacement[axis + 3] = m_allNodes[nodes[1]].getDisplacement()[axis];
       }
 
       const Eigen::Vector3d axis(direction[0], direction[1], direction[2]);
@@ -294,8 +207,8 @@ namespace FEM::TRUSS {
 
     double externalWork = 0.0;
     #pragma omp parallel for schedule(static) reduction(+:externalWork)
-    for (long long node = 0; node < static_cast<long long>(m_resultDisplacements.size()); ++node) {
-      const auto& displacement = m_resultDisplacements[node];
+    for (long long node = 0; node < static_cast<long long>(m_allNodes.size()); ++node) {
+      const auto& displacement = m_allNodes[node].getDisplacement();
       const std::size_t base = 3 * node;
       externalWork += m_forceVec[base] * displacement[0]
         + m_forceVec[base + 1] * displacement[1]

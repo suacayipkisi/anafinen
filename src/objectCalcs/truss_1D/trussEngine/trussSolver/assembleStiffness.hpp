@@ -18,15 +18,23 @@
 #pragma once
 
 #include "trussProperties/element.hpp"
+#include "trussEngine/trussSolver/reducedDofs.hpp"
+
+#include <material/properties.hpp>
+
 #include <Eigen/SparseCore>
+#include <cstddef>
+#include <span>
 #include <vector>
 
 namespace FEM::TRUSS {
 
-  std::vector<Eigen::Triplet<double>> assembleStiffness(
+  // Reduced stiffness T^T K T, upper triangle, compressed column-major (assembleReduced()).
+  Eigen::SparseMatrix<double> assembleStiffness(
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> allMaterials,
-    const std::size_t allNodesSize
+    std::size_t nodeCount,
+    const ReducedDofs& dofs
   );
 
 } // namespace FEM::TRUSS end

@@ -18,22 +18,34 @@
 #pragma once
 
 #include "trussProperties/element.hpp"
+#include "trussEngine/trussSolver/reducedDofs.hpp"
+
+#include <material/properties.hpp>
+
 #include <Eigen/SparseCore>
+#include <cstddef>
 #include <span>
 #include <vector>
 
 namespace FEM::TRUSS {
 
-  std::vector<Eigen::Triplet<double>> assembleMassConsistent(
+  // Reduced mass matrices T^T M T (support reduction of ReducedDofs), upper triangle,
+  // compressed column-major, the same layout as assembleStiffness().
+
+  // Consistent mass (assembleReduced()).
+  Eigen::SparseMatrix<double> assembleMassConsistent(
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> allMaterials,
-    const std::size_t allNodesSize
+    std::size_t nodeCount,
+    const ReducedDofs& dofs
   );
 
-  std::vector<Eigen::Triplet<double>> assembleMassLumped(
+  // Lumped mass: diagonal, one entry per reduced DOF.
+  Eigen::SparseMatrix<double> assembleMassLumped(
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> allMaterials,
-    const std::size_t allNodesSize
+    std::size_t nodeCount,
+    const ReducedDofs& dofs
   );
 
 } // namespace FEM::TRUSS end

@@ -16,25 +16,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "assembleMass.hpp"
-#include <Eigen/SparseCore>
+#include <log/anaf_info.hpp>
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 
 namespace FEM::TRUSS {
 
   // Consistent mass of a 3D bar (Logan): m = rho A L / 6 * [2I I; I 2I]. It does not depend on
-  // the direction cosines, so no transformation is needed. Only the upper triangle is written,
+  // the direction cosines, so no transformation is needed. Only the upper triangle is given,
   // like the stiffness: 3 + 3 diagonal terms and the 3 diagonal terms of the coupling block.
-  std::vector<Eigen::Triplet<double>> assembleMassConsistent(
+  Eigen::SparseMatrix<double> assembleMassConsistent(
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> allMaterials,
-    const std::size_t allNodesSize
+    const std::size_t nodeCount,
+    const ReducedDofs& dofs
   ) {
-    constexpr std::size_t tripletsPerElement = 9;
-    const std::size_t elementCount = elements.size();
-    std::vector<Eigen::Triplet<double>> triplets(elementCount * tripletsPerElement);
-    const auto nodeCount = allNodesSize;
-
-    #pragma omp parallel for schedule(static)
-    for (long long index = 0; index < static_cast<long long>(elementCount); ++index) {
+    const auto nodesOf = [&](const std::size_t index) -> const std::array<std::uint32_t, 2>& { return elements[index].getEleNodes(); };
+    auto matrix = assembleReduced(elements.size(), nodeCount, dofs, nodesOf, [&](const std::size_t index, auto&& add) {
       const auto& element = elements[index];
       const auto& nodes = element.getEleNodes();
       const std::uint32_t dof1 = 3 * nodes[0];
@@ -44,69 +46,57 @@ namespace FEM::TRUSS {
       const double massOverSix = allMaterials[element.getEleProperties()].getDensity()
         * element.getEleCrossSection()
         * element.getEleLength() / 6.0;
-      std::size_t output = static_cast<std::size_t>(index) * tripletsPerElement;
-
-      for (std::size_t axis = 0; axis < 3; ++axis) {
-        triplets[output++] = {
-          static_cast<int>(dof1 + axis), static_cast<int>(dof1 + axis), 2.0 * massOverSix
-        };
-        triplets[output++] = {
-          static_cast<int>(dof2 + axis), static_cast<int>(dof2 + axis), 2.0 * massOverSix
-        };
-        triplets[output++] = {
-          static_cast<int>(crossRow + axis), static_cast<int>(crossCol + axis), massOverSix
-        };
+      for (std::uint32_t axis = 0; axis < 3; ++axis) {
+        add(dof1 + axis, dof1 + axis, 2.0 * massOverSix);
+        add(dof2 + axis, dof2 + axis, 2.0 * massOverSix);
+        add(crossRow + axis, crossCol + axis, massOverSix);
       }
-    }
+    });
 
-    anaf::LOG::info(
-      "Global Mass Matrix Created, size: {}x{}",
-      nodeCount * 3, nodeCount * 3
-    );
-
-    return triplets;
+    anaf::LOG::info("Reduced consistent mass assembled: {} DOFs, {} stored upper entries", dofs.count(), matrix.nonZeros());
+    return matrix;
   }
 
-  // Lumped mass of a 3D bar (Logan): m = rho A L / 2 * [I 0; 0 I]. Half of the element mass goes
-  // to each node on every translational DOF, so the matrix is diagonal: 3 + 3 terms per element.
-  // Duplicate triplets of shared nodes are summed by setFromTriplets.
-  std::vector<Eigen::Triplet<double>> assembleMassLumped(
+  // Lumped mass of a 3D bar (Logan): m = rho A L / 2 * [I 0; 0 I], half of the element mass on
+  // every translational DOF of each node. The nodal block m_n I is isotropic and the support
+  // bases are orthonormal, so T^T M T is diagonal with m_n on every reduced DOF of node n: no
+  // element coupling and no triplets are needed.
+  Eigen::SparseMatrix<double> assembleMassLumped(
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> allMaterials,
-    const std::size_t allNodesSize
+    const std::size_t nodeCount,
+    const ReducedDofs& dofs
   ) {
-    constexpr std::size_t tripletsPerElement = 6;
-    const std::size_t elementCount = elements.size();
-    std::vector<Eigen::Triplet<double>> triplets(elementCount * tripletsPerElement);
-    const auto nodeCount = allNodesSize;
-
+    std::vector<double> nodeMass(nodeCount, 0.0);
     #pragma omp parallel for schedule(static)
-    for (long long index = 0; index < static_cast<long long>(elementCount); ++index) {
-      const auto& element = elements[index];
-      const auto& nodes = element.getEleNodes();
-      const std::uint32_t dof1 = 3 * nodes[0];
-      const std::uint32_t dof2 = 3 * nodes[1];
+    for (long long index = 0; index < static_cast<long long>(elements.size()); ++index) {
+      const auto& element = elements[static_cast<std::size_t>(index)];
       const double massOverTwo = allMaterials[element.getEleProperties()].getDensity()
         * element.getEleCrossSection()
         * element.getEleLength() / 2.0;
-      std::size_t output = static_cast<std::size_t>(index) * tripletsPerElement;
-
-      for (std::size_t axis = 0; axis < 3; ++axis) {
-        triplets[output++] = {
-          static_cast<int>(dof1 + axis), static_cast<int>(dof1 + axis), massOverTwo
-        };
-        triplets[output++] = {
-          static_cast<int>(dof2 + axis), static_cast<int>(dof2 + axis), massOverTwo
-        };
+      for (const auto node : element.getEleNodes()) {
+        #pragma omp atomic
+        nodeMass[node] += massOverTwo;
       }
     }
 
-    anaf::LOG::info(
-      "Global Lumped Mass Matrix Created, size: {}x{}",
-      nodeCount * 3, nodeCount * 3
-    );
+    const std::int32_t count = dofs.count();
+    Eigen::SparseMatrix<double> matrix(count, count);
+    matrix.resizeNonZeros(count);
+    auto* outer = matrix.outerIndexPtr();
+    auto* inner = matrix.innerIndexPtr();
+    double* values = matrix.valuePtr();
+    for (std::int32_t q = 0; q <= count; ++q) outer[q] = q;
+    const auto& slots = dofs.nodeDofSlots();
+    for (std::size_t slot = 0; slot < slots.size(); ++slot) {
+      const std::int32_t q = slots[slot];
+      if (q < 0) continue;
+      inner[q] = q;
+      values[q] = nodeMass[slot / 3];
+    }
 
-    return triplets;
+    anaf::LOG::info("Reduced lumped mass assembled: {} DOFs (diagonal)", count);
+    return matrix;
   }
 
 } // namespace FEM::TRUSS end

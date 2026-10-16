@@ -55,7 +55,9 @@ namespace FEM::TRUSS {
           return std::unexpected(std::format("node at position {} has id {}; node ids must be 0..{} in order",
                                              i, source.getNodeID(), nodeCount - 1));
         }
-        model.nodes.emplace_back(static_cast<std::uint32_t>(i), source.getLocX(), source.getLocY(), source.getLocZ());
+        // A plain copy keeps the support basis (already orthonormal); old results are dropped.
+        model.nodes.push_back(source);
+        model.nodes.back().setDisplacements({0.0, 0.0, 0.0});
       }
 
       std::size_t withoutArea = 0;
@@ -111,9 +113,7 @@ namespace FEM::TRUSS {
           ++isolated;
           continue;
         }
-        const auto& source = mesh.trussNodes[id];
-        node.setAllowedMotionDirections(source.getAllowedMotionDirections());
-        if (source.isSupported()) ++supported;
+        if (node.isSupported()) ++supported;
       }
       if (isolated > 0) anaf::LOG::warn("{} nodes are not connected to any bar; they are held fixed", isolated);
       anaf::LOG::info("Model: {} nodes, {} bars, {} supported nodes", nodeCount, model.elements.size(), supported);

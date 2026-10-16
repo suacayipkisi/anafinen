@@ -19,6 +19,7 @@
 
 #include <trussProperties/element.hpp>
 #include <trussProperties/node.hpp>
+#include <trussEngine/trussSolver/reducedDofs.hpp>
 
 #include <material/properties.hpp>
 
@@ -48,8 +49,10 @@ namespace FEM::TRUSS {
     // One gravity for the self-weight nodal loads and the self-weight stress term (m/s^2).
     Eigen::Vector3d m_gravity{0.0, -9.80665, 0.0};
 
-    std::vector<Eigen::Triplet<double>> m_globalStiffnessMatrix;
-    std::vector<std::array<double, 3>> m_resultDisplacements;
+    // Support reduction of the nodes and the reduced stiffness (setStiffness()); the matrix is
+    // released after the solve.
+    ReducedDofs m_dofs;
+    Eigen::SparseMatrix<double> m_reducedStiffness;
   public:
     void set(
       std::span<double> forceVec,
@@ -61,6 +64,7 @@ namespace FEM::TRUSS {
       m_allElements = allElements;
     }
 
+    // Builds the support reduction of the nodes given to set() and the reduced stiffness.
     void setStiffness(
       const std::vector<TrussElement1D>& elements,
       std::span<const anaf::MATERIAL::Material> allMaterials
