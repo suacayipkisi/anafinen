@@ -18,7 +18,8 @@
 #include <solvers/solverPortfolio.hpp>
 #include <log/anaf_info.hpp>
 
-#include <Eigen/LU> // MatrixXd::inverse()
+#include <Eigen/Cholesky>
+#include <Eigen/Eigenvalues>
 #include <Eigen/SparseCore>
 #include <algorithm>
 #include <array>
@@ -64,33 +65,104 @@ namespace FEM::SOLVER {
     displacement = Eigen::VectorXd::Zero(activeDofs);
 
     // One dofsPerNode x dofsPerNode inverse per node, row-major, indexed by DOF slot; the rows
-    // and columns of unused slots stay zero.
+    // and columns of unused slots stay zero. The blocks are principal submatrices of K, so they
+    // are positive definite whenever K is: a block whose Cholesky pivot / diagonal (the
+    // direct solvers' measure) is at or below singularPivotRatio means K is singular, and its
+    // null vector is a mechanism of that node alone. The block size is at most
+    // maxDofsPerNode, so the blocks live on the stack.
     const std::size_t blockSize = static_cast<std::size_t>(dofsPerNode) * dofsPerNode;
     std::vector<double> inverses(static_cast<std::size_t>(totalNodes) * blockSize, 0.0);
+    std::vector<double> nodePivotRatios(totalNodes, std::numeric_limits<double>::infinity());
 
-    #pragma omp parallel for schedule(static)
-    for (long long node = 0; node < totalNodes; ++node) {
-      const std::size_t first = static_cast<std::size_t>(node) * dofsPerNode;
-      std::array<std::uint32_t, maxDofsPerNode> slots{};
-      int count = 0;
+    const auto gatherBlock = [&](const std::size_t node, std::array<std::uint32_t, maxDofsPerNode>& slots, int& count) {
+      const std::size_t first = node * dofsPerNode;
+      count = 0;
       for (std::uint32_t slot = 0; slot < dofsPerNode; ++slot) {
         if (remapTable[first + slot] >= 0) slots[count++] = slot;
       }
-      if (count == 0) continue;
-
-      Eigen::MatrixXd block(count, count);
+      Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor, maxDofsPerNode, maxDofsPerNode> block(count, count);
       for (int row = 0; row < count; ++row) {
         for (int col = 0; col < count; ++col) {
           block(row, col) = matrix.coeff(remapTable[first + slots[row]], remapTable[first + slots[col]]);
         }
       }
-      const Eigen::MatrixXd inverse = block.inverse();
+      return block;
+    };
+
+    #pragma omp parallel for schedule(static)
+    for (long long node = 0; node < totalNodes; ++node) {
+      std::array<std::uint32_t, maxDofsPerNode> slots{};
+      int count = 0;
+      const auto block = gatherBlock(static_cast<std::size_t>(node), slots, count);
+      if (count == 0) continue;
+
+      const Eigen::LLT<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor, maxDofsPerNode, maxDofsPerNode>> llt(block);
+      double pivotRatio = llt.info() == Eigen::Success ? std::numeric_limits<double>::infinity() : 0.0;
+      for (int k = 0; k < count && pivotRatio > 0.0; ++k) {
+        const double diagonal = block(k, k);
+        const double pivot = llt.matrixLLT()(k, k) * llt.matrixLLT()(k, k);
+        pivotRatio = diagonal > 0.0 ? std::min(pivotRatio, pivot / diagonal) : 0.0;
+      }
+      nodePivotRatios[static_cast<std::size_t>(node)] = pivotRatio;
+      if (!(pivotRatio > singularPivotRatio)) continue;
+
+      const auto inverse = llt.solve(
+        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor, maxDofsPerNode, maxDofsPerNode>::Identity(count, count)
+      ).eval();
       double* nodeInverse = inverses.data() + static_cast<std::size_t>(node) * blockSize;
       for (int row = 0; row < count; ++row) {
         for (int col = 0; col < count; ++col) {
           nodeInverse[slots[row] * dofsPerNode + slots[col]] = inverse(row, col);
         }
       }
+    }
+
+    // Serial scan (MSVC's OpenMP 2.0 has no min reduction).
+    const auto worst = std::ranges::min_element(nodePivotRatios);
+    if (worst != nodePivotRatios.end()) result.smallestPivotRatio = *worst;
+    if (worst != nodePivotRatios.end() && !(*worst > singularPivotRatio)) {
+      const std::size_t node = static_cast<std::size_t>(worst - nodePivotRatios.begin());
+      std::array<std::uint32_t, maxDofsPerNode> slots{};
+      int count = 0;
+      const auto block = gatherBlock(node, slots, count);
+
+      // Null vector of the unit-diagonal scaled block, largest component 1. A zero (or
+      // negative) diagonal entry k of a positive semidefinite K has a zero row: e_k is the mode.
+      Eigen::Matrix<double, Eigen::Dynamic, 1, Eigen::ColMajor, maxDofsPerNode, 1> scaled(count);
+      Eigen::Matrix<double, Eigen::Dynamic, 1, Eigen::ColMajor, maxDofsPerNode, 1> scale(count);
+      int zeroDiagonal = -1;
+      for (int k = 0; k < count; ++k) {
+        if (!(block(k, k) > 0.0) && zeroDiagonal < 0) zeroDiagonal = k;
+        scale[k] = block(k, k) > 0.0 ? 1.0 / std::sqrt(block(k, k)) : 0.0;
+      }
+      if (zeroDiagonal >= 0) {
+        scaled.setZero();
+        scaled[zeroDiagonal] = 1.0;
+      }
+      else {
+        const Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor, maxDofsPerNode, maxDofsPerNode>> eigen(
+          scale.asDiagonal() * block * scale.asDiagonal()
+        );
+        scaled = eigen.eigenvectors().col(0);
+      }
+      Eigen::Index largest = 0;
+      scaled.cwiseAbs().maxCoeff(&largest);
+      scaled /= scaled[largest];
+
+      result.singular = true;
+      result.mechanismMode = Eigen::VectorXd::Zero(activeDofs);
+      for (int k = 0; k < count; ++k) {
+        const std::int32_t reduced = remapTable[node * dofsPerNode + slots[k]];
+        result.mechanismMode[reduced] = zeroDiagonal >= 0 ? scaled[k] : scaled[k] * scale[k];
+      }
+      result.mechanismDof = remapTable[node * dofsPerNode + slots[static_cast<std::size_t>(largest)]];
+      result.message = std::format(
+        "Block-CG: the diagonal block of node {} is singular (pivot / diagonal {:.2e}), the stiffness is singular (a mechanism)",
+        node, *worst
+      );
+      result.available = true;
+      result.elapsedSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+      return result;
     }
 
     auto applyPreconditioner = [&](const Eigen::VectorXd& input, Eigen::VectorXd& output) {
