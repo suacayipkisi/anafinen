@@ -45,6 +45,9 @@ namespace FEM::TRUSS {
     std::span<Node> m_allNodes;
     std::span<TrussElement1D> m_allElements;
 
+    // One gravity for the self-weight nodal loads and the self-weight stress term (m/s^2).
+    Eigen::Vector3d m_gravity{0.0, -9.80665, 0.0};
+
     std::vector<Eigen::Triplet<double>> m_globalStiffnessMatrix;
     std::vector<std::array<double, 3>> m_resultDisplacements;
   public:
@@ -63,6 +66,9 @@ namespace FEM::TRUSS {
       std::span<const anaf::MATERIAL::Material> allMaterials
     );
 
+    inline void setGravity(const Eigen::Vector3d& gravity) {m_gravity = gravity;}
+    inline const Eigen::Vector3d& getGravity() const {return m_gravity;}
+
     void considerWeight(
       const std::vector<TrussElement1D>& elements,
       std::span<const anaf::MATERIAL::Material> allMaterials
@@ -71,10 +77,7 @@ namespace FEM::TRUSS {
     // An error (a mechanism names a node and its free direction) when the solve failed or was
     // stopped; the displacements are then zero.
     std::expected<void, std::string> calculateDisplacements(std::stop_token stopToken = {});
-    void calculateElementForcesAndStress(
-      const std::span<const anaf::MATERIAL::Material> allMaterials, 
-      const Eigen::Vector3d gravityVector = {0.0, -9.80665, 0.0}
-    );
+    void calculateElementForcesAndStress(const std::span<const anaf::MATERIAL::Material> allMaterials);
 
     void runValidator(const std::span<const anaf::MATERIAL::Material> allMaterials);
 

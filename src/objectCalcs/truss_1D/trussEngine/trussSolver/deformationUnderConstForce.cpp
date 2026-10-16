@@ -76,19 +76,20 @@ namespace FEM::TRUSS {
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> materials
   ) {
-    constexpr double gravity = -9.80665;
     #pragma omp parallel for schedule(static)
     for (long long index = 0; index < static_cast<long long>(elements.size()); ++index) {
       const auto& element = elements[index];
-      const double weight = materials[element.getEleProperties()].getDensity()
-        * element.getEleCrossSection() * element.getEleLength() * gravity;
+      const double mass = materials[element.getEleProperties()].getDensity()
+        * element.getEleCrossSection() * element.getEleLength();
       const auto& nodes = element.getEleNodes();
-      const std::uint32_t dof1 = 3 * nodes[0] + 1;
-      const std::uint32_t dof2 = 3 * nodes[1] + 1;
-      #pragma omp atomic
-      m_forceVec[dof1] += weight / 2.0;
-      #pragma omp atomic
-      m_forceVec[dof2] += weight / 2.0;
+      for (std::uint32_t axis = 0; axis < 3; ++axis) {
+        const double halfWeight = 0.5 * mass * m_gravity[axis];
+        if (halfWeight == 0.0) continue;
+        #pragma omp atomic
+        m_forceVec[3 * nodes[0] + axis] += halfWeight;
+        #pragma omp atomic
+        m_forceVec[3 * nodes[1] + axis] += halfWeight;
+      }
     }
   }
 
@@ -245,8 +246,7 @@ namespace FEM::TRUSS {
   }
 
   void Truss1DContainer::calculateElementForcesAndStress(
-    const std::span<const anaf::MATERIAL::Material> materials,
-    const Eigen::Vector3d gravityVector
+    const std::span<const anaf::MATERIAL::Material> materials
   ) {
     #pragma omp parallel for schedule(static)
     for (long long index = 0; index < static_cast<long long>(m_allElements.size()); ++index) {
@@ -269,10 +269,12 @@ namespace FEM::TRUSS {
       const double length = element.getEleLength();
       const double stress = elongation / length * material.getElasticityModulus();
       const double gravityStress = 0.5 * material.getDensity() * length
-        * std::abs(gravityVector.dot(axis));
+        * std::abs(m_gravity.dot(axis));
       // Sign convention: tension > 0, compression < 0. The self-weight term raises the
       // magnitude in the direction of the FE result, so |stress| is the same envelope as before.
-      element.setEleStress(stress + std::copysign(gravityStress, stress));
+      // An explicit comparison instead of std::copysign: -ffast-math does not keep the sign of
+      // zero, and a zero FE stress takes the tension side of the envelope.
+      element.setEleStress(stress < 0.0 ? stress - gravityStress : stress + gravityStress);
     }
   }
 
