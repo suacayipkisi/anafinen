@@ -17,9 +17,11 @@
 
 #pragma once
 
+#include <objectCalcs/common/supportBasis.hpp>
+
 #include <array>
 #include <cstdint>
-#include <vector>
+#include <type_traits>
 
 namespace FEM::BEAM {
 
@@ -33,8 +35,8 @@ namespace FEM::BEAM {
     std::array<double, 3> m_location{};
     std::array<double, 3> m_displacement{}; // m
     std::array<double, 3> m_rotation{};     // rad, rotation vector components about the global axes
-    std::vector<std::array<double, 3>> m_allowedMotionDirections{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
-    std::vector<std::array<double, 3>> m_allowedRotationAxes{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+    FEM::SUPPORT::Basis m_allowedMotionDirections{FEM::SUPPORT::Basis::globalAxes()};
+    FEM::SUPPORT::Basis m_allowedRotationAxes{FEM::SUPPORT::Basis::globalAxes()};
 
   public:
     Node() = default;
@@ -44,8 +46,8 @@ namespace FEM::BEAM {
     {}
 
     // Gram-Schmidt orthonormalized; throws std::invalid_argument for zero or dependent vectors.
-    void setAllowedMotionDirections(std::vector<std::array<double, 3>> directions);
-    void setAllowedRotationAxes(std::vector<std::array<double, 3>> axes);
+    void setAllowedMotionDirections(const FEM::SUPPORT::Basis& directions);
+    void setAllowedRotationAxes(const FEM::SUPPORT::Basis& axes);
     // Shortcuts for supports along the global axes: true = free in that axis.
     void setMovable(const std::array<bool, 3>& isMovable);
     void setRotatable(const std::array<bool, 3>& isRotatable);
@@ -59,10 +61,13 @@ namespace FEM::BEAM {
     const std::array<double, 3>& getLocation() const {return m_location;}
     const std::array<double, 3>& getDisplacement() const {return m_displacement;}
     const std::array<double, 3>& getRotation() const {return m_rotation;}
-    const std::vector<std::array<double, 3>>& getAllowedMotionDirections() const {return m_allowedMotionDirections;}
-    const std::vector<std::array<double, 3>>& getAllowedRotationAxes() const {return m_allowedRotationAxes;}
+    const FEM::SUPPORT::Basis& getAllowedMotionDirections() const {return m_allowedMotionDirections;}
+    const FEM::SUPPORT::Basis& getAllowedRotationAxes() const {return m_allowedRotationAxes;}
     // True when some translation or rotation is restrained.
     bool isSupported() const { return m_allowedMotionDirections.size() < 3 || m_allowedRotationAxes.size() < 3; }
   };
+
+  // Nodes are copied with every snapshot: no heap allocation per node.
+  static_assert(std::is_trivially_copyable_v<Node>);
 
 } // namespace FEM::BEAM end

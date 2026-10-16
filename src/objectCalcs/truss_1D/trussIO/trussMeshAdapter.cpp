@@ -81,7 +81,7 @@ namespace FEM::TRUSS::ADAPTER {
       if (!node.isSupported()) continue;
       // The axes outside the allowed subspace; an inclined support also stores its basis.
       const auto& movable = node.getMovable();
-      auto allowedMotion = node.hasInclinedSupport() ? node.getAllowedMotionDirections() : std::vector<std::array<double, 3>>{};
+      auto allowedMotion = node.hasInclinedSupport() ? node.getAllowedMotionDirections().toVector() : std::vector<std::array<double, 3>>{};
       model.constraints.push_back(anaf::IO::NodeConstraint{i, {!movable[0], !movable[1], !movable[2]}, std::move(allowedMotion), {}, {}});
     }
     std::size_t harmonicSkipped = 0;

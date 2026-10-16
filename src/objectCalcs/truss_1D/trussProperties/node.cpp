@@ -21,7 +21,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <utility>
 
 namespace FEM::TRUSS {
 
@@ -39,9 +38,8 @@ namespace FEM::TRUSS {
 
   // Gram-Schmidt orthonormalization: the directions become an orthonormal basis of the
   // subspace (line, plane or space) the node may move in.
-  void Node::setAllowedMotionDirections(std::vector<std::array<double, 3>> directions) {
-    auto orthonormalBasis = FEM::SUPPORT::orthonormalize(std::move(directions));
-    m_allowedMotionDirections = std::move(orthonormalBasis);
+  void Node::setAllowedMotionDirections(const FEM::SUPPORT::Basis& directions) {
+    m_allowedMotionDirections = FEM::SUPPORT::orthonormalize(directions);
     for (std::size_t axis = 0; axis < m_isMovable.size(); ++axis) {
       std::array<double, 3> unit{};
       unit[axis] = 1.0;

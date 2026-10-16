@@ -17,6 +17,7 @@
 
 #include "supportBasis.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
@@ -29,7 +30,26 @@ namespace FEM::SUPPORT {
     }
   } // namespace end
 
-  std::array<double, 3> componentOutside(std::array<double, 3> direction, const std::vector<std::array<double, 3>>& basis) {
+  Basis::Basis(const std::initializer_list<std::array<double, 3>> vectors) :
+    Basis(std::span<const std::array<double, 3>>(vectors.begin(), vectors.size()))
+  {}
+
+  Basis::Basis(const std::span<const std::array<double, 3>> vectors) {
+    if (vectors.size() > m_vectors.size()) throw std::invalid_argument("A 3D node can have at most three independent motion directions");
+    std::ranges::copy(vectors, m_vectors.begin());
+    m_count = static_cast<std::uint8_t>(vectors.size());
+  }
+
+  void Basis::push_back(const std::array<double, 3>& vector) {
+    if (m_count == m_vectors.size()) throw std::invalid_argument("A 3D node can have at most three independent motion directions");
+    m_vectors[m_count++] = vector;
+  }
+
+  bool operator==(const Basis& a, const Basis& b) {
+    return std::ranges::equal(a, b);
+  }
+
+  std::array<double, 3> componentOutside(std::array<double, 3> direction, const Basis& basis) {
     for (const auto& b : basis) {
       const double projection = dot(direction, b);
       for (std::size_t axis = 0; axis < 3; ++axis) direction[axis] -= projection * b[axis];
@@ -37,9 +57,8 @@ namespace FEM::SUPPORT {
     return direction;
   }
 
-  std::vector<std::array<double, 3>> orthonormalize(std::vector<std::array<double, 3>> directions) {
-    if (directions.size() > 3) throw std::invalid_argument("A 3D node can have at most three independent motion directions");
-    std::vector<std::array<double, 3>> basis;
+  Basis orthonormalize(const Basis& directions) {
+    Basis basis;
     for (const auto& direction : directions) {
       const double length = std::sqrt(dot(direction, direction));
       const auto residual = componentOutside(direction, basis);
@@ -52,9 +71,9 @@ namespace FEM::SUPPORT {
     return basis;
   }
 
-  std::vector<std::array<double, 3>> orthogonalComplement(const std::vector<std::array<double, 3>>& basis) {
-    std::vector<std::array<double, 3>> span = basis;
-    std::vector<std::array<double, 3>> complement;
+  Basis orthogonalComplement(const Basis& basis) {
+    Basis span = basis;
+    Basis complement;
     while (span.size() < 3) {
       // The global axis with the largest part outside the span gives the best-conditioned vector.
       std::array<double, 3> best{};

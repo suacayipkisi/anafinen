@@ -20,6 +20,7 @@
 #include <beam/beamTypes/beamLibrary.hpp>
 #include <guiMaterials/iPanel.hpp>
 #include <panels/dynamicAnalysisInputs.hpp>
+#include <objectCalcs/common/supportBasis.hpp>
 
 #include <array>
 #include <cstdint>
@@ -49,9 +50,9 @@ namespace anaf::GUI {
       std::array<std::array<double, 3>, 3> vectors{{{0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {0.0, 0.0, 1.0}}};
 
       // Allowed directions, or nothing (with error set) for zero / dependent vectors.
-      std::optional<std::vector<std::array<double, 3>>> allowedBasis(std::string& error) const;
+      std::optional<FEM::SUPPORT::Basis> allowedBasis(std::string& error) const;
       // Shows a node's basis: global axes when it is one, inclined vectors otherwise.
-      void load(const std::vector<std::array<double, 3>>& allowed);
+      void load(const FEM::SUPPORT::Basis& allowed);
       void setGlobal(bool fixAll);
     };
 
@@ -96,7 +97,7 @@ namespace anaf::GUI {
     // withLoads false (dynamic load kind): supports only.
     void renderSupportsAndLoads(std::uint32_t node, bool withLoads);
     // Inputs of one group; returns its allowed basis or nothing when the input is invalid.
-    std::optional<std::vector<std::array<double, 3>>> renderSupportGroup(const char* id, const char* axisNames, SupportInput& input);
+    std::optional<FEM::SUPPORT::Basis> renderSupportGroup(const char* id, const char* axisNames, SupportInput& input);
     void renderElements(std::uint32_t element);
     void renderReleaseInputs();
     void renderElementLoads(std::uint32_t element);

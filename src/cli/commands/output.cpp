@@ -35,7 +35,7 @@ namespace anaf::CLI::OUTPUT {
     }
 
     // Global axes outside the span of an allowed (orthonormal) basis, i.e. the held ones.
-    std::vector<std::size_t> heldAxes(const std::vector<std::array<double, 3>>& allowed) {
+    std::vector<std::size_t> heldAxes(const FEM::SUPPORT::Basis& allowed) {
       std::vector<std::size_t> held;
       for (std::size_t axis = 0; axis < 3; ++axis) {
         std::array<double, 3> unit{};
@@ -47,7 +47,7 @@ namespace anaf::CLI::OUTPUT {
 
     // Appends the held DOFs of one basis ("ux,uz") or an inclined note; returns false when the
     // basis is inclined.
-    bool appendHeld(std::string& text, const std::vector<std::array<double, 3>>& allowed, const std::string_view prefix) {
+    bool appendHeld(std::string& text, const FEM::SUPPORT::Basis& allowed, const std::string_view prefix) {
       if (!std::ranges::all_of(allowed, isGlobalAxis)) return false;
       for (const auto axis : heldAxes(allowed)) {
         text += std::format("{}{}{}", text.empty() ? "" : ",", prefix, static_cast<char>('x' + axis));

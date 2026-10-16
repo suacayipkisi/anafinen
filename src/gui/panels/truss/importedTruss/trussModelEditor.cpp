@@ -37,6 +37,7 @@
 #include <expected>
 #include <format>
 #include <memory>
+#include <span>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -120,7 +121,7 @@ namespace anaf::GUI {
     }
   }
 
-  void TrussModelEditor::setSupportVectors(const std::vector<std::array<double, 3>>& vectors) {
+  void TrussModelEditor::setSupportVectors(const FEM::SUPPORT::Basis& vectors) {
     if (vectors.empty() || vectors.size() > 3) return;
     m_supportVectorCount = static_cast<int>(vectors.size());
     for (std::size_t i = 0; i < vectors.size(); ++i) m_supportVectors[i] = vectors[i];
@@ -478,13 +479,13 @@ namespace anaf::GUI {
     m_supportInclined = supportType == 1;
 
     // Allowed motion of the inclined support, or the error that keeps Apply disabled.
-    std::vector<std::array<double, 3>> allowed;
+    FEM::SUPPORT::Basis allowed;
     std::string inclinedError;
     if (m_supportInclined) {
       renderInclinedSupportInputs();
       try {
-        const auto basis = FEM::SUPPORT::orthonormalize(
-          {m_supportVectors.begin(), m_supportVectors.begin() + m_supportVectorCount});
+        const auto basis = FEM::SUPPORT::orthonormalize(FEM::SUPPORT::Basis(
+          std::span<const std::array<double, 3>>(m_supportVectors.data(), static_cast<std::size_t>(m_supportVectorCount))));
         allowed = m_vectorsRestrained ? FEM::SUPPORT::orthogonalComplement(basis) : basis;
       } catch (const std::invalid_argument&) {
         inclinedError = "The vectors must be non-zero and linearly independent.";
@@ -567,8 +568,8 @@ namespace anaf::GUI {
     if (restrained != m_vectorsRestrained) {
       // Switch the meaning without changing the support: the vectors become their complement.
       try {
-        const auto basis = FEM::SUPPORT::orthonormalize(
-          {m_supportVectors.begin(), m_supportVectors.begin() + m_supportVectorCount});
+        const auto basis = FEM::SUPPORT::orthonormalize(FEM::SUPPORT::Basis(
+          std::span<const std::array<double, 3>>(m_supportVectors.data(), static_cast<std::size_t>(m_supportVectorCount))));
         if (basis.size() < 3) setSupportVectors(FEM::SUPPORT::orthogonalComplement(basis));
       } catch (const std::invalid_argument&) {
         // Invalid input: keep the vectors as typed.

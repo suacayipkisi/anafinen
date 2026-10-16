@@ -86,7 +86,7 @@ namespace anaf::GUI {
                        std::clamp(1.5f - std::abs(4.0f * t - 1.0f), 0.0f, 1.0f), 1.0f);
     }
 
-    bool alongGlobalAxes(const std::vector<std::array<double, 3>>& basis) {
+    bool alongGlobalAxes(const FEM::SUPPORT::Basis& basis) {
       return std::ranges::all_of(basis, [](const std::array<double, 3>& v) { return std::ranges::count(v, 0.0) == 2; });
     }
 
@@ -108,7 +108,7 @@ namespace anaf::GUI {
 
     // Inclined / skewed support at pos (red): a plane the node slides on as a translucent square
     // with outline, or a line it moves along as a double arrow. symbol sets the size.
-    void addInclinedSupport(ViewportRenderer& renderer, const glm::vec3& pos, const std::vector<std::array<double, 3>>& directions,
+    void addInclinedSupport(ViewportRenderer& renderer, const glm::vec3& pos, const FEM::SUPPORT::Basis& directions,
                             const float symbol) {
       const glm::vec4 supportColor(1.0f, 0.22f, 0.22f, 1.0f);
       const glm::vec4 supportFill(1.0f, 0.22f, 0.22f, 0.28f);
@@ -145,7 +145,7 @@ namespace anaf::GUI {
     //   free motion:  a wire cube around the node when a rotation is fixed
     // Allowed rotation axes of a hinge (one or two axes) are drawn as cyan axles through the node.
     void addSupportSymbol(ViewportRenderer& renderer, BeamSceneRenderer& spheres, const glm::vec3& pos,
-                          const std::vector<std::array<double, 3>>& motion, const std::vector<std::array<double, 3>>* rotation,
+                          const FEM::SUPPORT::Basis& motion, const FEM::SUPPORT::Basis* rotation,
                           const glm::vec3& memberDirection, const float symbol) {
       const std::size_t rotationCount = rotation ? rotation->size() : 3;
       if (motion.size() == 3 && rotationCount == 3) return;
@@ -297,8 +297,8 @@ namespace anaf::GUI {
     // complement of the allowed basis, gets its own marker pointing at the node. A translation is
     // a red cone from the -c side, a rotation an amber double cone from the +c side, so both fit
     // on one axis. c is signed so its largest component is positive (global axes stay +X / +Y / +Z).
-    void addDofRestraints(ViewportRenderer& renderer, const glm::vec3& pos, const std::vector<std::array<double, 3>>& motion,
-                          const std::vector<std::array<double, 3>>* rotation, const float symbol) {
+    void addDofRestraints(ViewportRenderer& renderer, const glm::vec3& pos, const FEM::SUPPORT::Basis& motion,
+                          const FEM::SUPPORT::Basis* rotation, const float symbol) {
       const glm::vec4 translationColor(1.0f, 0.25f, 0.25f, 1.0f);
       const glm::vec4 rotationColor(1.0f, 0.75f, 0.2f, 1.0f);
       const float length = 0.8f * symbol, radius = 0.22f * symbol;

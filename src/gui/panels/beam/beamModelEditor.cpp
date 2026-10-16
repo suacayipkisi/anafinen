@@ -40,6 +40,7 @@
 #include <exception>
 #include <format>
 #include <memory>
+#include <span>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -89,14 +90,14 @@ namespace anaf::GUI {
     }
 
     // True when the global axis lies in the span of an orthonormal basis.
-    bool axisFree(const std::vector<std::array<double, 3>>& basis, const std::size_t axis) {
+    bool axisFree(const FEM::SUPPORT::Basis& basis, const std::size_t axis) {
       std::array<double, 3> unit{};
       unit[axis] = 1.0;
       const auto rest = FEM::SUPPORT::componentOutside(unit, basis);
       return std::sqrt(rest[0] * rest[0] + rest[1] * rest[1] + rest[2] * rest[2]) <= 1e-12;
     }
 
-    bool alongGlobalAxes(const std::vector<std::array<double, 3>>& basis) {
+    bool alongGlobalAxes(const FEM::SUPPORT::Basis& basis) {
       return std::ranges::all_of(basis, [](const std::array<double, 3>& v) { return std::ranges::count(v, 0.0) == 2; });
     }
 
@@ -119,9 +120,9 @@ namespace anaf::GUI {
 
   } // namespace end
 
-  std::optional<std::vector<std::array<double, 3>>> BeamModelEditor::SupportInput::allowedBasis(std::string& error) const {
+  std::optional<FEM::SUPPORT::Basis> BeamModelEditor::SupportInput::allowedBasis(std::string& error) const {
     if (!inclined) {
-      std::vector<std::array<double, 3>> allowed;
+      FEM::SUPPORT::Basis allowed;
       for (std::size_t axis = 0; axis < 3; ++axis) {
         if (fixed[axis]) continue;
         std::array<double, 3> unit{};
@@ -131,7 +132,7 @@ namespace anaf::GUI {
       return allowed;
     }
     try {
-      const auto basis = FEM::SUPPORT::orthonormalize({vectors.begin(), vectors.begin() + vectorCount});
+      const auto basis = FEM::SUPPORT::orthonormalize(FEM::SUPPORT::Basis(std::span<const std::array<double, 3>>(vectors.data(), static_cast<std::size_t>(vectorCount))));
       return vectorsRestrained ? FEM::SUPPORT::orthogonalComplement(basis) : basis;
     } catch (const std::exception&) {
       error = "The vectors must be non-zero and linearly independent.";
@@ -139,7 +140,7 @@ namespace anaf::GUI {
     }
   }
 
-  void BeamModelEditor::SupportInput::load(const std::vector<std::array<double, 3>>& allowed) {
+  void BeamModelEditor::SupportInput::load(const FEM::SUPPORT::Basis& allowed) {
     inclined = !alongGlobalAxes(allowed);
     for (std::size_t axis = 0; axis < 3; ++axis) fixed[axis] = !axisFree(allowed, axis);
     if (!inclined) return;
@@ -400,7 +401,7 @@ namespace anaf::GUI {
     }
   }
 
-  std::optional<std::vector<std::array<double, 3>>> BeamModelEditor::renderSupportGroup(const char* id, const char* axisNames, SupportInput& input) {
+  std::optional<FEM::SUPPORT::Basis> BeamModelEditor::renderSupportGroup(const char* id, const char* axisNames, SupportInput& input) {
     ImGui::PushID(id);
     int mode = input.inclined ? 1 : 0;
     ImGui::RadioButton("Global axes", &mode, 0);

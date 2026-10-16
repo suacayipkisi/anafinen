@@ -19,13 +19,12 @@
 #include <objectCalcs/common/supportBasis.hpp>
 
 #include <cstddef>
-#include <utility>
 
 namespace FEM::BEAM {
 
   namespace {
-    std::vector<std::array<double, 3>> axesOf(const std::array<bool, 3>& isFree) {
-      std::vector<std::array<double, 3>> axes;
+    FEM::SUPPORT::Basis axesOf(const std::array<bool, 3>& isFree) {
+      FEM::SUPPORT::Basis axes;
       for (std::size_t axis = 0; axis < 3; ++axis) {
         if (!isFree[axis]) continue;
         std::array<double, 3> unit{};
@@ -36,12 +35,12 @@ namespace FEM::BEAM {
     }
   } // namespace end
 
-  void Node::setAllowedMotionDirections(std::vector<std::array<double, 3>> directions) {
-    m_allowedMotionDirections = FEM::SUPPORT::orthonormalize(std::move(directions));
+  void Node::setAllowedMotionDirections(const FEM::SUPPORT::Basis& directions) {
+    m_allowedMotionDirections = FEM::SUPPORT::orthonormalize(directions);
   }
 
-  void Node::setAllowedRotationAxes(std::vector<std::array<double, 3>> axes) {
-    m_allowedRotationAxes = FEM::SUPPORT::orthonormalize(std::move(axes));
+  void Node::setAllowedRotationAxes(const FEM::SUPPORT::Basis& axes) {
+    m_allowedRotationAxes = FEM::SUPPORT::orthonormalize(axes);
   }
 
   void Node::setMovable(const std::array<bool, 3>& isMovable) {

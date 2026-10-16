@@ -83,14 +83,14 @@ namespace FEM::BEAM::ADAPTER {
       return std::ranges::equal(da, db, close);
     }
 
-    bool axisFree(const std::vector<std::array<double, 3>>& basis, const std::size_t axis) {
+    bool axisFree(const FEM::SUPPORT::Basis& basis, const std::size_t axis) {
       std::array<double, 3> unit{};
       unit[axis] = 1.0;
       const auto rest = FEM::SUPPORT::componentOutside(unit, basis);
       return std::sqrt(rest[0] * rest[0] + rest[1] * rest[1] + rest[2] * rest[2]) <= 1e-12;
     }
 
-    bool alongGlobalAxes(const std::vector<std::array<double, 3>>& basis) {
+    bool alongGlobalAxes(const FEM::SUPPORT::Basis& basis) {
       return std::ranges::all_of(basis, [](const std::array<double, 3>& v) { return std::ranges::count(v, 0.0) == 2; });
     }
 
@@ -210,7 +210,7 @@ namespace FEM::BEAM::ADAPTER {
         constraint.fixed[axis] = !axisFree(motion, axis);
         constraint.fixedRotation[axis] = !axisFree(rotation, axis);
       }
-      if (!alongGlobalAxes(motion)) constraint.allowedMotion = motion;
+      if (!alongGlobalAxes(motion)) constraint.allowedMotion = motion.toVector();
       if (!alongGlobalAxes(rotation)) {
         model.warnings.push_back(std::format("node {}: the inclined rotation support is written as fixed about every global axis "
                                              "outside its span (files keep rotational fixity per global axis only)", i));

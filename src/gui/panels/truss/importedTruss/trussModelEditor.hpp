@@ -19,6 +19,7 @@
 
 #include <guiMaterials/iPanel.hpp>
 #include <panels/dynamicAnalysisInputs.hpp>
+#include <objectCalcs/common/supportBasis.hpp>
 #include <truss_1D/trussTypes/trussLibrary.hpp>
 
 #include <array>
@@ -81,7 +82,7 @@ namespace anaf::GUI {
     // withLoads false (dynamic load kind): supports only.
     void renderSupportsAndLoads(std::uint32_t selectedNode, bool withLoads);
     void renderInclinedSupportInputs();
-    void setSupportVectors(const std::vector<std::array<double, 3>>& vectors);
+    void setSupportVectors(const FEM::SUPPORT::Basis& vectors);
     void renderSolve();
     // Import File... / Clear Model, shown for both load kinds.
     void renderModelButtons();

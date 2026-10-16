@@ -17,9 +17,11 @@
 
 #pragma once
 
+#include <objectCalcs/common/supportBasis.hpp>
+
 #include <array>
 #include <cstdint>
-#include <vector>
+#include <type_traits>
 
 namespace FEM::TRUSS {
 
@@ -30,7 +32,7 @@ namespace FEM::TRUSS {
     std::array<bool, 3> m_isMovable{true, true, true};
     std::array<double, 3> m_location{};
     std::array<double, 3> m_displacement{};
-    std::vector<std::array<double, 3>> m_allowedMotionDirections{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+    FEM::SUPPORT::Basis m_allowedMotionDirections{FEM::SUPPORT::Basis::globalAxes()};
     
   public:
     Node() = default;
@@ -50,7 +52,7 @@ namespace FEM::TRUSS {
 
     inline void setLocation(const std::array<double, 3> location) {m_location = location;}
     inline void setDisplacements(std::array<double, 3> displacementOfNode) {m_displacement = displacementOfNode;}
-    void setAllowedMotionDirections(std::vector<std::array<double, 3>> directions);
+    void setAllowedMotionDirections(const FEM::SUPPORT::Basis& directions);
 
     std::uint32_t getNodeID() const {return m_nodeID;}
     const std::array<double, 3>& getLocation() const {return m_location;}
@@ -60,7 +62,7 @@ namespace FEM::TRUSS {
 
     const std::array<double, 3>& getDisplacement() const {return m_displacement;}
     const std::array<bool, 3>& getMovable() const {return m_isMovable;}
-    const std::vector<std::array<double, 3>>& getAllowedMotionDirections() const {return m_allowedMotionDirections;}
+    const FEM::SUPPORT::Basis& getAllowedMotionDirections() const {return m_allowedMotionDirections;}
     // True when an allowed direction is not a global axis, i.e. getMovable() alone does not
     // describe the support.
     bool hasInclinedSupport() const;
@@ -68,5 +70,8 @@ namespace FEM::TRUSS {
     // The node is the only place a support is stored: snapshots, the solver and export read it here.
     bool isSupported() const { return m_allowedMotionDirections.size() < 3; }
   };
+
+  // Nodes are copied with every snapshot: no heap allocation per node.
+  static_assert(std::is_trivially_copyable_v<Node>);
 
 } // namespace FEM::TRUSS end
