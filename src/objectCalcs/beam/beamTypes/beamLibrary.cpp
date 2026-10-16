@@ -40,7 +40,6 @@ namespace FEM::BEAM::LIBRARY {
 
   namespace {
 
-    using P = std::array<double, 3>;
     constexpr double pi = std::numbers::pi;
     constexpr double gravityAcceleration = 9.80665;
     constexpr double knToN = 1e3;
@@ -79,7 +78,7 @@ namespace FEM::BEAM::LIBRARY {
       }
 
       std::uint32_t beam(const std::uint32_t a, const std::uint32_t b, const std::string_view section, const std::string_view material,
-                         const P orientation = {}, const E_Formulation formulation = eulerBernoulli) {
+                         const std::array<double, 3> orientation = {}, const E_Formulation formulation = eulerBernoulli) {
         BeamElement element;
         element.node1 = a;
         element.node2 = b;
@@ -93,7 +92,7 @@ namespace FEM::BEAM::LIBRARY {
 
       // Elements through consecutive nodes; returns their indices.
       std::vector<std::uint32_t> chain(const std::vector<std::uint32_t>& nodes, const std::string_view section, const std::string_view material,
-                                       const P orientation = {}, const E_Formulation formulation = eulerBernoulli) {
+                                       const std::array<double, 3> orientation = {}, const E_Formulation formulation = eulerBernoulli) {
         std::vector<std::uint32_t> elements;
         for (std::size_t i = 0; i + 1 < nodes.size(); ++i) elements.push_back(beam(nodes[i], nodes[i + 1], section, material, orientation, formulation));
         return elements;
@@ -112,11 +111,11 @@ namespace FEM::BEAM::LIBRARY {
         mesh.nodes[n].setRotatable({!heldRotation[0], !heldRotation[1], !heldRotation[2]});
       }
       void pin(const std::uint32_t n) { support(n, {true, true, true}, {false, false, false}); }
-      void load(const std::uint32_t n, const P force, const P moment = {}) { mesh.nodalLoads.push_back({n, force, moment}); }
-      void line(const std::uint32_t element, const P value, const E_LoadFrame frame = E_LoadFrame::Global) {
+      void load(const std::uint32_t n, const std::array<double, 3> force, const std::array<double, 3> moment = {}) { mesh.nodalLoads.push_back({n, force, moment}); }
+      void line(const std::uint32_t element, const std::array<double, 3> value, const E_LoadFrame frame = E_LoadFrame::Global) {
         mesh.distributedLoads.push_back({element, value, frame});
       }
-      void line(const std::vector<std::uint32_t>& elements, const P value, const E_LoadFrame frame = E_LoadFrame::Global) {
+      void line(const std::vector<std::uint32_t>& elements, const std::array<double, 3> value, const E_LoadFrame frame = E_LoadFrame::Global) {
         for (const auto e : elements) line(e, value, frame);
       }
 
@@ -189,7 +188,7 @@ namespace FEM::BEAM::LIBRARY {
     }
 
     // Nodes along a straight line from a to b in n segments (both ends included).
-    std::vector<std::uint32_t> line(Draft& d, const P& a, const P& b, const int n) {
+    std::vector<std::uint32_t> line(Draft& d, const std::array<double, 3>& a, const std::array<double, 3>& b, const int n) {
       std::vector<std::uint32_t> nodes;
       for (int i = 0; i <= n; ++i) {
         const double t = static_cast<double>(i) / n;
@@ -924,7 +923,7 @@ namespace FEM::BEAM::LIBRARY {
         for (std::size_t c = 0; c < 4; ++c) d.beam(n[c][k], n[(c + 1) % 4][k], "Box 60x40x3", al7075);
       }
       d.mesh.gravity = {2.0 * gravityAcceleration, -6.0 * gravityAcceleration, 0.0};
-      const auto inertial = [](const double mass) { return P{mass * 2.0 * gravityAcceleration, -mass * 6.0 * gravityAcceleration, 0.0}; };
+      const auto inertial = [](const double mass) { return std::array<double, 3>{mass * 2.0 * gravityAcceleration, -mass * 6.0 * gravityAcceleration, 0.0}; };
       for (std::size_t c = 0; c < 4; ++c) {
         d.load(n[c][1], inertial(40.0));
         d.load(n[c][2], inertial(15.0));
@@ -1218,7 +1217,7 @@ namespace FEM::BEAM::LIBRARY {
     LibraryBeam loaderCrane(const Lists& l) {
       Draft d(l.materials, l.sections);
       const double angle = pi / 12, reach = 4.0;
-      const auto at = [&](const double s) { return P{s * std::cos(angle), 2.0 + s * std::sin(angle), 0.0}; };
+      const auto at = [&](const double s) { return std::array<double, 3>{s * std::cos(angle), 2.0 + s * std::sin(angle), 0.0}; };
       const auto base = d.node(0, 0, 0), lug = d.node(0, 0.8, 0), top = d.node(0, 2.0, 0);
       const auto ram = d.node(at(1.2)[0], at(1.2)[1], 0), mid = d.node(at(2.6)[0], at(2.6)[1], 0), tip = d.node(at(reach)[0], at(reach)[1], 0);
       d.clamp(base);
@@ -1266,7 +1265,7 @@ namespace FEM::BEAM::LIBRARY {
       std::vector<Frame> frame(frames);
       for (int f = 0; f < frames; ++f) {
         const double angle = 2.0 * pi * f / frames, c = std::cos(angle), sn = std::sin(angle);
-        const P radial{c, 0.0, sn};
+        const std::array<double, 3> radial{c, 0.0, sn};
         const auto at = [&](const double s, const double y) { return d.node((aIn + s) * c, y, (bIn + s) * sn); };
         auto& fr = frame[static_cast<std::size_t>(f)];
         for (const double s : standS) fr.stand.push_back(at(s, 2.0 + 0.6 * s));
@@ -1320,9 +1319,8 @@ namespace FEM::BEAM::LIBRARY {
       Draft d(l.materials, l.sections);
       constexpr int nx = 24, nz = 12; // 6 m modules: 144 x 72 m
       const double module = 6.0, floorY = 6.0, bottomY = 15.0, topY = 18.0;
-      using Grid2 = std::vector<std::vector<std::uint32_t>>;
       const auto grid = [&](const int countX, const int countZ, const double y, const double offset) {
-        Grid2 g(static_cast<std::size_t>(countX), std::vector<std::uint32_t>(static_cast<std::size_t>(countZ)));
+        std::vector<std::vector<std::uint32_t>> g(static_cast<std::size_t>(countX), std::vector<std::uint32_t>(static_cast<std::size_t>(countZ)));
         for (int i = 0; i < countX; ++i) {
           for (int j = 0; j < countZ; ++j) g[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = d.node(offset + module * i, y, offset + module * j);
         }
@@ -1331,7 +1329,7 @@ namespace FEM::BEAM::LIBRARY {
       const auto floorGrid = grid(nx + 1, nz + 1, floorY, 0.0);
       const auto bottom = grid(nx + 1, nz + 1, bottomY, 0.0);
       const auto top = grid(nx, nz, topY, module / 2.0);
-      const auto at = [](const Grid2& g, const int i, const int j) { return g[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]; };
+      const auto at = [](const std::vector<std::vector<std::uint32_t>>& g, const int i, const int j) { return g[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]; };
 
       // Departures floor: a grillage on the 12 m column grid, 4 kN/m^2 on the x beams.
       for (int j = 0; j <= nz; ++j) {
@@ -1428,11 +1426,10 @@ namespace FEM::BEAM::LIBRARY {
 
       // Torsion box of a lifting surface: four spar caps (front / rear, upper / lower), a rib at every
       // station, the spar webs and skins as diagonals. thick = the box depth direction.
-      using Corners = std::array<std::uint32_t, 4>; // front upper, front lower, rear upper, rear lower
       // Stations below `heavy` get heavier spar webs (gear and engine loads enter there).
-      const auto liftingBox = [&](const int stations, const auto& frontAt, const auto& chordAt, const auto& depthAt, const P thick,
+      const auto liftingBox = [&](const int stations, const auto& frontAt, const auto& chordAt, const auto& depthAt, const std::array<double, 3> thick,
                                   const auto& capSection, const int heavy = 0) {
-        std::vector<Corners> box;
+        std::vector<std::array<std::uint32_t, 4>> box; // corners: front upper, front lower, rear upper, rear lower
         const Eigen::Vector3d t(thick[0], thick[1], thick[2]);
         for (int i = 0; i <= stations; ++i) {
           const Eigen::Vector3d front = frontAt(i), rear = front + Eigen::Vector3d(chordAt(i), 0.0, 0.0);
@@ -1459,13 +1456,13 @@ namespace FEM::BEAM::LIBRARY {
         }
         return box;
       };
-      const auto linkRoot = [&](const Corners& root) {
+      const auto linkRoot = [&](const std::array<std::uint32_t, 4>& root) {
         for (const auto corner : root) d.beam(corner, nearestFuselageNode(corner), "Box 200x100x6", al7075);
       };
 
       // Wings: 15.1 m semi-span, 25 deg sweep, taper 2.0 -> 1.0 m box chord, 0.8 -> 0.25 m depth, dihedral.
       constexpr int wingStations = 15;
-      std::array<std::vector<Corners>, 2> wings;
+      std::array<std::vector<std::array<std::uint32_t, 4>>, 2> wings;
       for (std::size_t side = 0; side < 2; ++side) {
         const double sign = side == 0 ? 1.0 : -1.0;
         const auto spanAt = [](const int i) { return 1.9 + 15.1 * i / wingStations; };
@@ -1474,7 +1471,7 @@ namespace FEM::BEAM::LIBRARY {
           [&](const int i) { const double z = spanAt(i); return Eigen::Vector3d(15.0 + 0.45 * (z - 1.9), 1.75 + 0.08 * (z - 1.9), sign * z); },
           [](const int i) { return 2.0 - 1.0 * i / wingStations; },
           [](const int i) { return 0.8 - 0.55 * i / wingStations; },
-          P{0, 1, 0},
+          std::array<double, 3>{0, 1, 0},
           [](const int i) { return i < 6 ? "Box 200x100x6" : (i < 11 ? "Box 120x60x4" : "Box 80x40x3"); }, 5);
         linkRoot(wings[side].front());
         for (std::size_t i = 0; i <= 10; ++i) { // fuel in the inner tanks: 3 kN per station on each lower spar cap
@@ -1499,12 +1496,12 @@ namespace FEM::BEAM::LIBRARY {
       for (const double sign : {1.0, -1.0}) {
         linkRoot(liftingBox(
           6, [&](const int i) { const double z = 1.0 + 5.0 * i / 6.0; return Eigen::Vector3d(34.0 + 0.5 * (z - 1.0), centre(34.0), sign * z); },
-          [](const int i) { return 2.0 - 1.1 * i / 6.0; }, [](const int i) { return 0.3 - 0.18 * i / 6.0; }, P{0, 1, 0},
+          [](const int i) { return 2.0 - 1.1 * i / 6.0; }, [](const int i) { return 0.3 - 0.18 * i / 6.0; }, std::array<double, 3>{0, 1, 0},
           [](const int) { return "Box 80x40x3"; }).front());
       }
       linkRoot(liftingBox(
         7, [&](const int i) { const double y = 5.0 + 6.0 * i / 7.0; return Eigen::Vector3d(32.0 + 0.7 * (y - 5.0), y, 0.0); },
-        [](const int i) { return 3.0 - 1.8 * i / 7.0; }, [](const int i) { return 0.35 - 0.23 * i / 7.0; }, P{0, 0, 1},
+        [](const int i) { return 3.0 - 1.8 * i / 7.0; }, [](const int i) { return 0.35 - 0.23 * i / 7.0; }, std::array<double, 3>{0, 0, 1},
         [](const int) { return "Box 80x40x3"; }).front());
 
       // Nose gear under frame 4.

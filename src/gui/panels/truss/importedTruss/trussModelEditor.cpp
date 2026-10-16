@@ -48,18 +48,15 @@ namespace anaf::GUI {
 
   namespace {
 
-    using BRIDGE::GuiCalcBridge;
-    using BRIDGE::MeshData;
-
     constexpr double cm2ToM2 = 1e-4;
 
     // Runs edit on a copy of the active snapshot (an empty one if there is none) under
     // dataMutex and publishes the copy. edit returns false to publish nothing.
     template <typename Edit>
-    bool editModel(GuiCalcBridge& bridge, Edit&& edit) {
+    bool editModel(BRIDGE::GuiCalcBridge& bridge, Edit&& edit) {
       {
         std::lock_guard lock(bridge.dataMutex);
-        auto mesh = bridge.activeMesh ? std::make_shared<MeshData>(*bridge.activeMesh) : std::make_shared<MeshData>();
+        auto mesh = bridge.activeMesh ? std::make_shared<FEM::TRUSS::MeshData>(*bridge.activeMesh) : std::make_shared<FEM::TRUSS::MeshData>();
         if (!edit(*mesh)) return false;
         FEM::TRUSS::dropResults(*mesh);
         bridge.activeMesh = std::move(mesh);
@@ -69,7 +66,7 @@ namespace anaf::GUI {
       return true;
     }
 
-    std::shared_ptr<const MeshData> currentMesh(GuiCalcBridge& bridge) {
+    std::shared_ptr<const FEM::TRUSS::MeshData> currentMesh(BRIDGE::GuiCalcBridge& bridge) {
       std::lock_guard lock(bridge.dataMutex);
       return bridge.activeMesh;
     }
@@ -174,7 +171,7 @@ namespace anaf::GUI {
     ImGui::InputScalarN("##new_node", ImGuiDataType_Double, m_newNode.data(), 3, nullptr, nullptr, "%.4g");
     if (ImGui::Button("Add Node", ImVec2(-FLT_MIN, 0.0f))) {
       std::uint32_t added = 0;
-      editModel(bridge, [&](MeshData& mesh) {
+      editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
         added = static_cast<std::uint32_t>(mesh.trussNodes.size());
         mesh.trussNodes.emplace_back(added, m_newNode[0], m_newNode[1], m_newNode[2]);
         return true;
@@ -205,7 +202,7 @@ namespace anaf::GUI {
     LAYOUT::field("Position [m]");
     ImGui::InputScalarN("##selected_node", ImGuiDataType_Double, m_nodePosition.data(), 3, nullptr, nullptr, "%.4g");
     if (ImGui::Button("Move Node", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
-      const bool moved = editModel(bridge, [&](MeshData& mesh) {
+      const bool moved = editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
         mesh.trussNodes[selectedNode].setLocation(m_nodePosition);
         return true;
@@ -214,7 +211,7 @@ namespace anaf::GUI {
     }
     ImGui::SameLine();
     if (ImGui::Button("Delete Node", ImVec2(-FLT_MIN, 0.0f))) {
-      const bool deleted = editModel(bridge, [&](MeshData& mesh) {
+      const bool deleted = editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
         FEM::TRUSS::deleteNode(mesh, selectedNode);
         return true;
@@ -251,7 +248,7 @@ namespace anaf::GUI {
     ImGui::InputScalar("##bar_b", ImGuiDataType_U32, &m_barNodeB);
 
     // Assigns the chosen material and area; false (with a status) if either is unusable.
-    const auto assign = [&](BRIDGE::RenderElement& element) {
+    const auto assign = [&](FEM::TRUSS::RenderElement& element) {
       const auto index = bridge.findMaterialIndex(m_materialID); // caller holds dataMutex
       if (!index || !(m_areaCm2 > 0.0)) return false;
       element.materialID = *index;
@@ -262,7 +259,7 @@ namespace anaf::GUI {
 
     if (ImGui::Button("Add Bar", ImVec2(-FLT_MIN, 0.0f))) {
       std::string error;
-      const bool added = editModel(bridge, [&](MeshData& mesh) {
+      const bool added = editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
         const auto count = mesh.trussNodes.size();
         const auto a = m_barNodeA, b = m_barNodeB;
         if (a >= count || b >= count) {
@@ -279,14 +276,14 @@ namespace anaf::GUI {
           error = std::format("nodes {} and {} are at the same position", a, b);
           return false;
         }
-        const bool duplicate = std::ranges::any_of(mesh.trussElements, [&](const BRIDGE::RenderElement& element) {
+        const bool duplicate = std::ranges::any_of(mesh.trussElements, [&](const FEM::TRUSS::RenderElement& element) {
           return !element.isWireframe && ((element.node1 == a && element.node2 == b) || (element.node1 == b && element.node2 == a));
         });
         if (duplicate) {
           error = std::format("a bar between nodes {} and {} already exists", a, b);
           return false;
         }
-        BRIDGE::RenderElement element{a, b, 0.0f, false, 0u, 0.0, false};
+        FEM::TRUSS::RenderElement element{a, b, 0.0f, false, 0u, 0.0, false};
         if (!assign(element)) {
           error = "choose a material and an area greater than 0";
           return false;
@@ -337,7 +334,7 @@ namespace anaf::GUI {
     ImGui::BeginDisabled(m_selectedBar == noSelection);
     if (ImGui::Button("Apply to Selected", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
       const auto bar = m_selectedBar;
-      const bool applied = editModel(bridge, [&](MeshData& edited) {
+      const bool applied = editModel(bridge, [&](FEM::TRUSS::MeshData& edited) {
         return bar < edited.trussElements.size() && assign(edited.trussElements[bar]);
       });
       if (applied) setStatus(std::format("Bar {} updated", bar), false);
@@ -346,7 +343,7 @@ namespace anaf::GUI {
     ImGui::SameLine();
     if (ImGui::Button("Delete Bar", ImVec2(-FLT_MIN, 0.0f))) {
       const auto bar = m_selectedBar;
-      const bool deleted = editModel(bridge, [&](MeshData& edited) {
+      const bool deleted = editModel(bridge, [&](FEM::TRUSS::MeshData& edited) {
         if (bar >= edited.trussElements.size()) return false;
         edited.trussElements.erase(edited.trussElements.begin() + static_cast<std::ptrdiff_t>(bar));
         return true;
@@ -388,7 +385,7 @@ namespace anaf::GUI {
     ImGui::BeginDisabled(bars == 0 && (wireframe == 0 || !m_includeWireframe));
     if (ImGui::Button("Apply to Whole Model", ImVec2(-FLT_MIN, 0.0f))) {
       std::size_t changed = 0;
-      const bool applied = editModel(bridge, [&](MeshData& edited) {
+      const bool applied = editModel(bridge, [&](FEM::TRUSS::MeshData& edited) {
         const auto index = bridge.findMaterialIndex(m_wholeMaterialID); // editModel holds dataMutex
         if (!index || !(m_wholeAreaCm2 > 0.0)) return false;
         for (auto& element : edited.trussElements) {
@@ -516,7 +513,7 @@ namespace anaf::GUI {
 
     ImGui::BeginDisabled(!inclinedError.empty());
     if (ImGui::Button("Apply Support", ImVec2(-FLT_MIN, 0.0f))) {
-      const bool applied = editModel(bridge, [&](MeshData& mesh) {
+      const bool applied = editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
         auto& node = mesh.trussNodes[selectedNode];
         if (!m_supportInclined) {
@@ -541,7 +538,7 @@ namespace anaf::GUI {
     LAYOUT::field("Force [N]");
     ImGui::InputScalarN("##editor_force", ImGuiDataType_Double, m_force.data(), 3, nullptr, nullptr, "%.4g");
     const auto setLoad = [&](const std::array<double, 3> force) {
-      return editModel(bridge, [&](MeshData& mesh) {
+      return editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
         std::erase_if(mesh.appliedForces, [&](const FEM::TRUSS::ForceApplied& applied) {
           return applied.getAppliedNode() == selectedNode;
@@ -611,7 +608,7 @@ namespace anaf::GUI {
       ImGui::BeginDisabled(!mesh);
       if (LAYOUT::primaryButton("Run Solver for Truss##editor")) {
         m_status.clear();
-        TRUSS_WORKER::startSolve(bridge, [mesh]() -> std::expected<std::shared_ptr<const MeshData>, std::string> {
+        TRUSS_WORKER::startSolve(bridge, [mesh]() -> std::expected<std::shared_ptr<const FEM::TRUSS::MeshData>, std::string> {
           return mesh;
         });
       }

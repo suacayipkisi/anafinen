@@ -31,9 +31,8 @@
 namespace anaf::MATERIAL {
 
   namespace {
-    using nlohmann::json;
 
-    double requireNumber(const json& entry, const char* key) {
+    double requireNumber(const nlohmann::json& entry, const char* key) {
       const auto it = entry.find(key);
       if (it == entry.end() || !it->is_number()) throw std::runtime_error(std::format("'{}' is missing or not a number", key));
       return it->get<double>();
@@ -41,7 +40,7 @@ namespace anaf::MATERIAL {
 
     constexpr int currentSchemaVersion = 1;
 
-    Material parseMaterial(const json& entry, const bool isBuiltin) {
+    Material parseMaterial(const nlohmann::json& entry, const bool isBuiltin) {
       if (!entry.is_object()) throw std::runtime_error("entry is not an object");
 
       std::uint32_t materialID = 0;
@@ -76,10 +75,10 @@ namespace anaf::MATERIAL {
       std::ifstream file(path);
       if (!file) return std::unexpected(std::format("cannot open '{}'", anaf::IO::pathToUtf8(path)));
 
-      json root;
+      nlohmann::json root;
       try {
-        root = json::parse(file);
-      } catch (const json::exception& exception) {
+        root = nlohmann::json::parse(file);
+      } catch (const nlohmann::json::exception& exception) {
         return std::unexpected(std::format("'{}': {}", anaf::IO::pathToUtf8(path), exception.what()));
       }
 
@@ -155,7 +154,7 @@ namespace anaf::MATERIAL {
   }
 
   std::expected<void, std::string> saveUserMaterialFile(const std::filesystem::path& path, const std::span<const Material> materials) {
-    json list = json::array();
+    nlohmann::json list = nlohmann::json::array();
     for (const auto& material : materials) {
       if (material.getIsBuiltin()) continue;
       list.push_back({
@@ -170,11 +169,11 @@ namespace anaf::MATERIAL {
         {"ductility", material.getDuctility()}
       });
     }
-    const json root = {{"schemaVersion", currentSchemaVersion}, {"materials", std::move(list)}};
+    const nlohmann::json root = {{"schemaVersion", currentSchemaVersion}, {"materials", std::move(list)}};
     std::string text;
     try {
       text = root.dump(2);
-    } catch (const json::exception& exception) { // invalid UTF-8 in a name
+    } catch (const nlohmann::json::exception& exception) { // invalid UTF-8 in a name
       return std::unexpected(std::format("cannot encode the materials: {}", exception.what()));
     }
 

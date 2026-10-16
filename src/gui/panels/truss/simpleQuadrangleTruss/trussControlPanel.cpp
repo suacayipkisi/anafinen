@@ -56,21 +56,19 @@ namespace anaf::GUI {
       return true;
     }
 
-    using Supports = std::map<std::uint32_t, std::array<bool, 3>>;
-
     // The panel's supports on a generated grid (ids outside the grid are ignored).
-    void applySupports(BRIDGE::MeshData& mesh, const Supports& supports) {
+    void applySupports(FEM::TRUSS::MeshData& mesh, const std::map<std::uint32_t, std::array<bool, 3>>& supports) {
       for (const auto& [id, fixed] : supports) {
         if (id < mesh.trussNodes.size()) mesh.trussNodes[id].setMovable({!fixed[0], !fixed[1], !fixed[2]});
       }
     }
 
     // Republishes the active grid with the panel's current loads and supports.
-    void publishInputs(BRIDGE::GuiCalcBridge& bridge, const std::vector<FEM::TRUSS::ForceApplied>& forces, const Supports& supports) {
+    void publishInputs(BRIDGE::GuiCalcBridge& bridge, const std::vector<FEM::TRUSS::ForceApplied>& forces, const std::map<std::uint32_t, std::array<bool, 3>>& supports) {
       {
         std::lock_guard lock(bridge.dataMutex);
         if (!bridge.activeMesh) return;
-        auto updated = std::make_shared<BRIDGE::MeshData>(*bridge.activeMesh);
+        auto updated = std::make_shared<FEM::TRUSS::MeshData>(*bridge.activeMesh);
         updated->appliedForces = forces;
         for (auto& node : updated->trussNodes) node.setMovable({true, true, true});
         applySupports(*updated, supports);
@@ -96,7 +94,7 @@ namespace anaf::GUI {
   }
 
   void TrussControlPanel::renderSummary(BRIDGE::GuiCalcBridge& bridge) {
-    std::shared_ptr<const BRIDGE::MeshData> mesh;
+    std::shared_ptr<const FEM::TRUSS::MeshData> mesh;
     {
       std::lock_guard lock(bridge.dataMutex);
       mesh = bridge.activeMesh;
@@ -195,7 +193,7 @@ namespace anaf::GUI {
             bridge.isGeneratingPreview = false;
             return;
           }
-          auto newMesh = std::make_shared<BRIDGE::MeshData>(std::move(*built));
+          auto newMesh = std::make_shared<FEM::TRUSS::MeshData>(std::move(*built));
           newMesh->appliedForces = appliedForces;
           applySupports(*newMesh, supports);
 
@@ -286,12 +284,12 @@ namespace anaf::GUI {
       TRUSS_WORKER::startSolve(bridge,
         [cubeNumX = m_cubeNumX, cubeNumY = m_cubeNumY, cubeNumZ = m_cubeNumZ, cubeEdgeLength = m_cubeEdgeLength,
          crossSectionalArea = m_crossSectionalArea, type = materialIndex,
-         forcesToApply = m_appliedForces, supports = m_supports]() -> std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string> {
+         forcesToApply = m_appliedForces, supports = m_supports]() -> std::expected<std::shared_ptr<const FEM::TRUSS::MeshData>, std::string> {
           auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
           if (!built) return std::unexpected(built.error());
           built->appliedForces = forcesToApply;
           applySupports(*built, supports);
-          return std::make_shared<const BRIDGE::MeshData>(std::move(*built));
+          return std::make_shared<const FEM::TRUSS::MeshData>(std::move(*built));
         });
     }
   }

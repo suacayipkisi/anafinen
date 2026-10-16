@@ -39,9 +39,6 @@ namespace FEM::TRUSS::LIBRARY {
 
   namespace {
 
-    using Point = std::array<double, 3>;
-    using anaf::IO::MeshModel;
-
     // Must match the built-in names in assets/bridge/materialProperties.json (checked by the tests).
     struct MaterialRef {
       std::string_view name;
@@ -66,10 +63,10 @@ namespace FEM::TRUSS::LIBRARY {
 
     // A 3D truss being built: nodes, bars with their own section, supports, nodal loads.
     struct Draft {
-      std::vector<Point> nodes;
+      std::vector<std::array<double, 3>> nodes;
       std::vector<Bar> bars;
       std::map<std::uint32_t, std::array<bool, 3>> supports;
-      std::map<std::uint32_t, Point> loads;
+      std::map<std::uint32_t, std::array<double, 3>> loads;
 
       std::uint32_t node(const double x, const double y, const double z) {
         nodes.push_back({x, y, z});
@@ -83,13 +80,13 @@ namespace FEM::TRUSS::LIBRARY {
         for (std::size_t axis = 0; axis < 3; ++axis) fixed[axis] = fixed[axis] || dofs[axis];
       }
       void pin(const std::uint32_t n) { fix(n, {true, true, true}); }
-      void load(const std::uint32_t n, const Point force) {
+      void load(const std::uint32_t n, const std::array<double, 3> force) {
         auto& total = loads[n];
         for (std::size_t axis = 0; axis < 3; ++axis) total[axis] += force[axis];
       }
     };
 
-    MeshModel toModel(Draft draft, const MaterialRef material, std::string title) {
+    anaf::IO::MeshModel toModel(Draft draft, const MaterialRef material, std::string title) {
       // One bar per node pair; where two generators add the same bar the larger section wins.
       std::ranges::sort(draft.bars, [](const Bar& l, const Bar& r) {
         return std::tie(l.a, l.b, r.area) < std::tie(r.a, r.b, l.area);
@@ -97,7 +94,7 @@ namespace FEM::TRUSS::LIBRARY {
       const auto duplicates = std::ranges::unique(draft.bars, [](const Bar& l, const Bar& r) { return l.a == r.a && l.b == r.b; });
       draft.bars.erase(duplicates.begin(), duplicates.end());
 
-      MeshModel model;
+      anaf::IO::MeshModel model;
       model.title = std::move(title);
       model.nodes.reserve(draft.nodes.size());
       for (std::size_t i = 0; i < draft.nodes.size(); ++i) {
@@ -551,7 +548,7 @@ namespace FEM::TRUSS::LIBRARY {
       constexpr int frequency = 3;
       const double phi = std::numbers::phi;
       // Icosahedron with a vertex on +y (rotated about x), so the dome has a crown node.
-      std::vector<Point> ico{{-1, phi, 0}, {1, phi, 0}, {-1, -phi, 0}, {1, -phi, 0}, {0, -1, phi}, {0, 1, phi},
+      std::vector<std::array<double, 3>> ico{{-1, phi, 0}, {1, phi, 0}, {-1, -phi, 0}, {1, -phi, 0}, {0, -1, phi}, {0, 1, phi},
                              {0, -1, -phi}, {0, 1, -phi}, {phi, 0, -1}, {phi, 0, 1}, {-phi, 0, -1}, {-phi, 0, 1}};
       const double tilt = std::atan2(1.0, phi); // brings (1, phi, 0) onto the y axis
       for (auto& v : ico) {
@@ -565,8 +562,8 @@ namespace FEM::TRUSS::LIBRARY {
 
       // Subdivide every face, project onto the sphere, merge shared points.
       std::map<std::array<long long, 3>, std::uint32_t> indexOf;
-      std::vector<Point> points;
-      const auto vertex = [&](Point p) {
+      std::vector<std::array<double, 3>> points;
+      const auto vertex = [&](std::array<double, 3> p) {
         const double norm = std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
         for (auto& c : p) c = c / norm * radius;
         const std::array<long long, 3> key{std::llround(p[0] * 1e6), std::llround(p[1] * 1e6), std::llround(p[2] * 1e6)};
@@ -576,9 +573,9 @@ namespace FEM::TRUSS::LIBRARY {
       };
       std::vector<std::array<std::uint32_t, 3>> triangles;
       for (const auto& f : faces) {
-        const Point& a = ico[static_cast<std::size_t>(f[0])];
-        const Point& b = ico[static_cast<std::size_t>(f[1])];
-        const Point& c = ico[static_cast<std::size_t>(f[2])];
+        const std::array<double, 3>& a = ico[static_cast<std::size_t>(f[0])];
+        const std::array<double, 3>& b = ico[static_cast<std::size_t>(f[1])];
+        const std::array<double, 3>& c = ico[static_cast<std::size_t>(f[2])];
         const auto at = [&](const int i, const int j) {
           const int k = frequency - i - j;
           return vertex({(i * a[0] + j * b[0] + k * c[0]) / frequency, (i * a[1] + j * b[1] + k * c[1]) / frequency,
@@ -708,8 +705,8 @@ namespace FEM::TRUSS::LIBRARY {
       constexpr double span = 315.0, rise = 133.0, side = 7.4;
       constexpr std::uint32_t bays = 60;
       const double lean = 22.0 * pi / 180.0;
-      const Point up{0.0, std::cos(lean), -std::sin(lean)};
-      const Point out{0.0, std::sin(lean), std::cos(lean)};
+      const std::array<double, 3> up{0.0, std::cos(lean), -std::sin(lean)};
+      const std::array<double, 3> out{0.0, std::sin(lean), std::cos(lean)};
       const double r = side / std::sqrt(3.0);
       Draft d;
       std::vector<std::array<std::uint32_t, 3>> st;
@@ -953,7 +950,7 @@ namespace FEM::TRUSS::LIBRARY {
     enum class E_Brace { Rising, Falling, WarrenRising, WarrenFalling, Cross };
 
     struct BoxGirder {
-      std::vector<std::array<Point, 4>> stations;
+      std::vector<std::array<std::array<double, 3>, 4>> stations;
       std::array<E_Brace, 4> faces{};
       double chordArea{};  // cm^2, corner to corner along the girder
       double frameArea{};  // cm^2, station frames (bulkheads, ribs, interplane struts)
@@ -1004,7 +1001,7 @@ namespace FEM::TRUSS::LIBRARY {
         const double t = std::max(0.0, (x - 1.8) / (5.9 - 1.8));
         const double half = 0.375 + (0.075 - 0.375) * t;
         const double bottom = 0.55 * t, top = 1.15 - 0.2 * t;
-        g.stations.push_back({Point{x, bottom, -half}, Point{x, top, -half}, Point{x, top, half}, Point{x, bottom, half}});
+        g.stations.push_back({std::array<double, 3>{x, bottom, -half}, std::array<double, 3>{x, top, -half}, std::array<double, 3>{x, top, half}, std::array<double, 3>{x, bottom, half}});
       }
       g.faces = {E_Brace::WarrenRising, E_Brace::WarrenRising, E_Brace::WarrenFalling, E_Brace::WarrenRising}; // sides mirrored
       g.chordArea = 0.94; // 1" x 0.049" tube
@@ -1075,7 +1072,7 @@ namespace FEM::TRUSS::LIBRARY {
       BoxGirder g;
       for (std::uint32_t s = 0; s <= bays; ++s) {
         const double z = semiSpan * s / bays;
-        g.stations.push_back({Point{0.4, 0.0, z}, Point{0.4, 0.19, z}, Point{1.2, 0.15, z}, Point{1.2, 0.02, z}});
+        g.stations.push_back({std::array<double, 3>{0.4, 0.0, z}, std::array<double, 3>{0.4, 0.19, z}, std::array<double, 3>{1.2, 0.15, z}, std::array<double, 3>{1.2, 0.02, z}});
       }
       g.faces = {E_Brace::WarrenRising, E_Brace::Cross, E_Brace::WarrenFalling, E_Brace::Cross};
       g.chordArea = 4.0;
@@ -1127,8 +1124,8 @@ namespace FEM::TRUSS::LIBRARY {
       constexpr double chord = 1.5, gap = 1.5, stagger = 0.3;
       BoxGirder g;
       for (const double z : zs) {
-        g.stations.push_back({Point{0.3 + stagger, 0.0, z}, Point{0.3, gap, z}, Point{0.3 + 0.6 * chord, gap, z},
-                              Point{0.3 + stagger + 0.6 * chord, 0.0, z}});
+        g.stations.push_back({std::array<double, 3>{0.3 + stagger, 0.0, z}, std::array<double, 3>{0.3, gap, z}, std::array<double, 3>{0.3 + 0.6 * chord, gap, z},
+                              std::array<double, 3>{0.3 + stagger + 0.6 * chord, 0.0, z}});
       }
       g.faces = {E_Brace::Rising, E_Brace::Cross, E_Brace::Falling, E_Brace::Cross};
       g.chordArea = 6.0; // spars
@@ -1354,8 +1351,8 @@ namespace FEM::TRUSS::LIBRARY {
         const double e = eta(z);
         const double width = 3.2 - 2.4 * e, front = 0.85 - 0.6 * e, rear = 0.7 * front;
         const auto [x, y] = frontSpar(z);
-        g.stations.push_back({Point{x, y - front / 2, z}, Point{x, y + front / 2, z}, Point{x + width, y + rear / 2, z},
-                              Point{x + width, y - rear / 2, z}});
+        g.stations.push_back({std::array<double, 3>{x, y - front / 2, z}, std::array<double, 3>{x, y + front / 2, z}, std::array<double, 3>{x + width, y + rear / 2, z},
+                              std::array<double, 3>{x + width, y - rear / 2, z}});
       }
       g.faces = {E_Brace::WarrenRising, E_Brace::Cross, E_Brace::WarrenRising, E_Brace::Cross};
       g.chordAreaOf = [&](const std::size_t s) { return 400.0 * (1.0 - 0.6 * eta(0.5 * (zs[s] + zs[s + 1]))); };

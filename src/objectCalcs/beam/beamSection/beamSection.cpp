@@ -128,11 +128,9 @@ namespace FEM::BEAM {
     bool positive(const double v) { return std::isfinite(v) && v > 0.0; }
     bool nonNegative(const double v) { return std::isfinite(v) && v >= 0.0; }
 
-    using Loop = std::vector<std::array<double, 2>>;
-
     // Arc points {y, z} around (cy, cz) from angle a0 to a1 (radians, angle measured in the
     // (z, y) plane from +z towards +y), both ends included.
-    void arc(Loop& loop, const double cy, const double cz, const double r, const double a0, const double a1, const int segmentsPerQuarter) {
+    void arc(std::vector<std::array<double, 2>>& loop, const double cy, const double cz, const double r, const double a0, const double a1, const int segmentsPerQuarter) {
       if (r <= 0.0) {
         loop.push_back({cy, cz});
         return;
@@ -145,10 +143,10 @@ namespace FEM::BEAM {
     }
 
     // Counter-clockwise rounded rectangle in the (z, y) plane.
-    Loop roundedRectangleLoop(const double height, const double width, const double r, const int segmentsPerQuarter) {
+    std::vector<std::array<double, 2>> roundedRectangleLoop(const double height, const double width, const double r, const int segmentsPerQuarter) {
       const double y = height / 2.0 - r;
       const double z = width / 2.0 - r;
-      Loop loop;
+      std::vector<std::array<double, 2>> loop;
       arc(loop, -y, z, r, -pi / 2.0, 0.0, segmentsPerQuarter);       // bottom right
       arc(loop, y, z, r, 0.0, pi / 2.0, segmentsPerQuarter);         // top right
       arc(loop, y, -z, r, pi / 2.0, pi, segmentsPerQuarter);         // top left
@@ -156,8 +154,8 @@ namespace FEM::BEAM {
       return loop;
     }
 
-    Loop circleLoop(const double radius, const int segmentsPerQuarter) {
-      Loop loop;
+    std::vector<std::array<double, 2>> circleLoop(const double radius, const int segmentsPerQuarter) {
+      std::vector<std::array<double, 2>> loop;
       const int segments = 4 * segmentsPerQuarter;
       for (int i = 0; i < segments; ++i) {
         const double a = 2.0 * pi * static_cast<double>(i) / static_cast<double>(segments);
@@ -166,7 +164,7 @@ namespace FEM::BEAM {
       return loop;
     }
 
-    Loop reversed(Loop loop) {
+    std::vector<std::array<double, 2>> reversed(std::vector<std::array<double, 2>> loop) {
       std::ranges::reverse(loop);
       return loop;
     }
@@ -314,15 +312,15 @@ namespace FEM::BEAM {
   std::vector<std::vector<std::array<double, 2>>> sectionOutline(const SectionShape& shape, const int segmentsPerQuarter) {
     const int n = std::max(1, segmentsPerQuarter);
     return std::visit(Overloaded{
-      [](const GeneralSection&) { return std::vector<Loop>{}; },
-      [&](const RectangleSection& s) { return std::vector<Loop>{roundedRectangleLoop(s.height, s.width, 0.0, n)}; },
-      [&](const CircleSection& s) { return std::vector<Loop>{circleLoop(s.diameter / 2.0, n)}; },
+      [](const GeneralSection&) { return std::vector<std::vector<std::array<double, 2>>>{}; },
+      [&](const RectangleSection& s) { return std::vector<std::vector<std::array<double, 2>>>{roundedRectangleLoop(s.height, s.width, 0.0, n)}; },
+      [&](const CircleSection& s) { return std::vector<std::vector<std::array<double, 2>>>{circleLoop(s.diameter / 2.0, n)}; },
       [&](const PipeSection& s) {
-        return std::vector<Loop>{circleLoop(s.outerDiameter / 2.0, n), reversed(circleLoop(s.outerDiameter / 2.0 - s.wallThickness, n))};
+        return std::vector<std::vector<std::array<double, 2>>>{circleLoop(s.outerDiameter / 2.0, n), reversed(circleLoop(s.outerDiameter / 2.0 - s.wallThickness, n))};
       },
       [&](const BoxSection& s) {
         const double t = s.wallThickness;
-        return std::vector<Loop>{
+        return std::vector<std::vector<std::array<double, 2>>>{
           roundedRectangleLoop(s.height, s.width, s.outerCornerRadius, n),
           reversed(roundedRectangleLoop(s.height - 2.0 * t, s.width - 2.0 * t, s.innerCornerRadius, n)),
         };
@@ -333,7 +331,7 @@ namespace FEM::BEAM {
         const double w2 = s.webThickness / 2.0;
         const double tf = s.flangeThickness;
         const double r = s.rootRadius;
-        Loop loop{{-h2, -b2}, {-h2, b2}, {-h2 + tf, b2}};
+        std::vector<std::array<double, 2>> loop{{-h2, -b2}, {-h2, b2}, {-h2 + tf, b2}};
         arc(loop, -h2 + tf + r, w2 + r, r, -pi / 2.0, -pi, n); // bottom right fillet (concave)
         arc(loop, h2 - tf - r, w2 + r, r, pi, pi / 2.0, n);    // top right
         loop.push_back({h2 - tf, b2});
@@ -343,7 +341,7 @@ namespace FEM::BEAM {
         arc(loop, h2 - tf - r, -w2 - r, r, pi / 2.0, 0.0, n);  // top left
         arc(loop, -h2 + tf + r, -w2 - r, r, 0.0, -pi / 2.0, n); // bottom left
         loop.push_back({-h2 + tf, -b2});
-        return std::vector<Loop>{loop};
+        return std::vector<std::vector<std::array<double, 2>>>{loop};
       },
     }, shape);
   }

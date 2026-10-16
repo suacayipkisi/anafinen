@@ -575,7 +575,7 @@ namespace anaf::GUI {
 
     // Without coloring (or results) the elements keep the color of an unsolved model.
     const auto coloring = m_display->coloring;
-    const auto elementColor = [&](const BRIDGE::RenderElement& element) -> glm::vec4 {
+    const auto elementColor = [&](const FEM::TRUSS::RenderElement& element) -> glm::vec4 {
       if (coloring == E_ElementColoring::Stress && maxStress > 1e-9) {
         return jet(std::sqrt(std::clamp(std::abs(static_cast<double>(element.stress)) / maxStress, 0.0, 1.0)));
       }
@@ -1301,11 +1301,10 @@ namespace anaf::GUI {
       };
 
       std::vector<Legend> legends;
-      using enum E_ElementColoring;
-      if (m_display->coloring == Displacement || m_display->showNodes()) {
+      if (m_display->coloring == E_ElementColoring::Displacement || m_display->showNodes()) {
         legends.push_back({"displacement", &SETTINGS::settings().displacementLegend, "Displacement", "[mm]", m_cachedMaxDisp * 1000.0, false});
       }
-      if (m_display->coloring == Stress) {
+      if (m_display->coloring == E_ElementColoring::Stress) {
         // Truss colors use sqrt(|stress| / max) (buildTrussScene), beams are linear in von Mises.
         const bool beam = m_currentBeamMesh != nullptr;
         legends.push_back({"stress", &SETTINGS::settings().stressLegend, beam ? "von Mises" : "|Axial stress|", "[MPa]",

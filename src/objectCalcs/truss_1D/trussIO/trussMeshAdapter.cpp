@@ -32,10 +32,8 @@
 
 namespace FEM::TRUSS::ADAPTER {
 
-  using namespace anaf::IO;
-
-  MeshModel toMeshModel(const FEM::TRUSS::MeshData& mesh, const std::span<const anaf::MATERIAL::Material> materials) {
-    MeshModel model;
+  anaf::IO::MeshModel toMeshModel(const FEM::TRUSS::MeshData& mesh, const std::span<const anaf::MATERIAL::Material> materials) {
+    anaf::IO::MeshModel model;
     model.title = "anafinen truss";
 
     std::unordered_map<std::uint32_t, std::uint32_t> indexById;
@@ -51,7 +49,7 @@ namespace FEM::TRUSS::ADAPTER {
       return it->second;
     };
 
-    auto& bars = model.blockFor(E_ElementType::Line2);
+    auto& bars = model.blockFor(anaf::IO::E_ElementType::Line2);
     std::vector<double> material, area, stress;
     std::map<std::uint32_t, std::vector<std::uint32_t>> elementsByMaterial;
     for (std::size_t e = 0; e < mesh.trussElements.size(); ++e) {
@@ -65,14 +63,14 @@ namespace FEM::TRUSS::ADAPTER {
       area.push_back(element.crossSectionArea);
       stress.push_back(static_cast<double>(element.stress));
     }
-    model.elementAttributes[Attribute::materialId] = std::move(material);
-    model.elementAttributes[Attribute::crossSectionArea] = std::move(area);
+    model.elementAttributes[anaf::IO::Attribute::materialId] = std::move(material);
+    model.elementAttributes[anaf::IO::Attribute::crossSectionArea] = std::move(area);
 
     for (auto& [materialIndex, members] : elementsByMaterial) {
       if (materialIndex >= materials.size()) continue; // no name known: only MaterialID is written
-      EntitySet set;
+      anaf::IO::EntitySet set;
       set.name = std::string(materialSetPrefix) + std::string(materials[materialIndex].getMaterialType());
-      set.kind = E_SetKind::Element;
+      set.kind = anaf::IO::E_SetKind::Element;
       set.dimension = 1;
       set.members = std::move(members);
       model.sets.push_back(std::move(set));
@@ -84,7 +82,7 @@ namespace FEM::TRUSS::ADAPTER {
       // The axes outside the allowed subspace; an inclined support also stores its basis.
       const auto& movable = node.getMovable();
       auto allowedMotion = node.hasInclinedSupport() ? node.getAllowedMotionDirections() : std::vector<std::array<double, 3>>{};
-      model.constraints.push_back(NodeConstraint{i, {!movable[0], !movable[1], !movable[2]}, std::move(allowedMotion), {}, {}});
+      model.constraints.push_back(anaf::IO::NodeConstraint{i, {!movable[0], !movable[1], !movable[2]}, std::move(allowedMotion), {}, {}});
     }
     std::size_t harmonicSkipped = 0;
     for (const auto& force : mesh.appliedForces) {
@@ -97,14 +95,14 @@ namespace FEM::TRUSS::ADAPTER {
       std::string amplitude;
       if (const auto* tabular = force.getTabular()) {
         amplitude = std::format("TabularForce{}", model.amplitudes.size());
-        model.amplitudes.push_back(Amplitude{amplitude, tabular->times, tabular->factors});
+        model.amplitudes.push_back(anaf::IO::Amplitude{amplitude, tabular->times, tabular->factors});
       }
-      model.loads.push_back(NodalLoad{it->second, force.getForce(), std::move(amplitude), {}});
+      model.loads.push_back(anaf::IO::NodalLoad{it->second, force.getForce(), std::move(amplitude), {}});
     }
     if (harmonicSkipped > 0) anaf::LOG::warn("{} harmonic loads cannot be written to a mesh file yet and were left out", harmonicSkipped);
 
     if (mesh.hasResults) {
-      Field displacement{FieldName::displacement, E_FieldLocation::Node, 3, {0.0}, {}, E_StepKind::Time, {}};
+      anaf::IO::Field displacement{anaf::IO::FieldName::displacement, anaf::IO::E_FieldLocation::Node, 3, {0.0}, {}, anaf::IO::E_StepKind::Time, {}};
       std::vector<double> values;
       values.reserve(mesh.trussNodes.size() * 3);
       for (const auto& node : mesh.trussNodes) {
@@ -113,19 +111,19 @@ namespace FEM::TRUSS::ADAPTER {
       }
       displacement.steps.push_back(std::move(values));
       model.fields.push_back(std::move(displacement));
-      model.fields.push_back(Field{FieldName::stress, E_FieldLocation::Element, 1, {0.0}, {std::move(stress)}, E_StepKind::Time, {}});
+      model.fields.push_back(anaf::IO::Field{anaf::IO::FieldName::stress, anaf::IO::E_FieldLocation::Element, 1, {0.0}, {std::move(stress)}, anaf::IO::E_StepKind::Time, {}});
     }
     return model;
   }
 
-  ImportedTruss toMeshData(const MeshModel& model, const std::span<const anaf::MATERIAL::Material> materials) {
+  ImportedTruss toMeshData(const anaf::IO::MeshModel& model, const std::span<const anaf::MATERIAL::Material> materials) {
     ImportedTruss result;
     result.mesh = std::make_shared<FEM::TRUSS::MeshData>();
     auto& mesh = *result.mesh;
 
-    const Field* displacement = model.findField(FieldName::displacement, E_FieldLocation::Node);
+    const anaf::IO::Field* displacement = model.findField(anaf::IO::FieldName::displacement, anaf::IO::E_FieldLocation::Node);
     if (displacement && (displacement->components != 3 || displacement->steps.empty())) displacement = nullptr;
-    const Field* stress = model.findField(FieldName::stress, E_FieldLocation::Element);
+    const anaf::IO::Field* stress = model.findField(anaf::IO::FieldName::stress, anaf::IO::E_FieldLocation::Element);
     if (stress && (stress->components != 1 || stress->steps.empty())) stress = nullptr;
     mesh.hasResults = displacement || stress;
 
@@ -144,13 +142,13 @@ namespace FEM::TRUSS::ADAPTER {
       const auto it = model.elementAttributes.find(name);
       return it == model.elementAttributes.end() ? nullptr : &it->second;
     };
-    const auto* material = attribute(Attribute::materialId);
-    const auto* area = attribute(Attribute::crossSectionArea);
+    const auto* material = attribute(anaf::IO::Attribute::materialId);
+    const auto* area = attribute(anaf::IO::Attribute::crossSectionArea);
 
     // Material by name wins over the MaterialID index (see materialSetPrefix).
     std::vector<std::optional<std::uint32_t>> materialByName(model.elementCount());
     for (const auto& set : model.sets) {
-      if (set.kind != E_SetKind::Element || !set.name.starts_with(materialSetPrefix)) continue;
+      if (set.kind != anaf::IO::E_SetKind::Element || !set.name.starts_with(materialSetPrefix)) continue;
       const std::string_view name = std::string_view(set.name).substr(materialSetPrefix.size());
       const auto found = std::ranges::find_if(materials, [&](const anaf::MATERIAL::Material& candidate) {
         return anaf::MATERIAL::sameMaterialName(candidate.getMaterialType(), name);
@@ -172,7 +170,7 @@ namespace FEM::TRUSS::ADAPTER {
     std::set<std::pair<std::uint32_t, std::uint32_t>> wireframeEdges;
     std::size_t global = 0;
     for (const auto& block : model.blocks) {
-      const auto& info = elementInfo(block.type);
+      const auto& info = anaf::IO::elementInfo(block.type);
       const auto n = static_cast<std::size_t>(info.nodeCount);
       for (std::size_t e = 0; e < block.size(); ++e, ++global) {
         const std::uint32_t* nodes = &block.connectivity[e * n];
@@ -198,7 +196,7 @@ namespace FEM::TRUSS::ADAPTER {
             mesh.trussElements.push_back({nodes[info.edges[k]], nodes[info.edges[k + 1]], s, exceeded, materialId,
                                           area ? (*area)[global] : 0.0, false});
           }
-          block.type == E_ElementType::Line2 ? ++bars : ++splitQuadratic;
+          block.type == anaf::IO::E_ElementType::Line2 ? ++bars : ++splitQuadratic;
           continue;
         }
         ++wireframeElements;
@@ -227,7 +225,7 @@ namespace FEM::TRUSS::ADAPTER {
         mesh.appliedForces.emplace_back(load.node, load.force);
         continue;
       }
-      const Amplitude* amplitude = model.findAmplitude(load.amplitude);
+      const anaf::IO::Amplitude* amplitude = model.findAmplitude(load.amplitude);
       if (amplitude == nullptr) {
         result.notes.push_back(std::format("warning: node {}: amplitude '{}' not found; the load is taken as constant", load.node, load.amplitude));
         mesh.appliedForces.emplace_back(load.node, load.force);

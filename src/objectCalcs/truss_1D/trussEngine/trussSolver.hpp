@@ -43,7 +43,6 @@ namespace FEM::TRUSS {
   };
 
   // Progress of a running solve, 0..1.
-  using ProgressCallback = std::function<void(float)>;
 
   // Static solve of a truss snapshot (generated, built-in, imported or entered by hand):
   // stiffness, self weight, supports (u = T q, inclined ones included), displacements,
@@ -55,7 +54,7 @@ namespace FEM::TRUSS {
     const MeshData& mesh,
     std::span<const anaf::MATERIAL::Material> materials,
     std::stop_token st = {},
-    const ProgressCallback& progress = {}
+    const std::function<void(float)>& progress = {}
   );
 
   struct DynamicResult {

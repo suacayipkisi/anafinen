@@ -54,10 +54,6 @@ namespace anaf::IO::formats {
 
   namespace {
 
-    using detail::Cursor;
-    using detail::ParseFailure;
-    using Point = std::array<double, 3>;
-
     constexpr std::string_view sidecarSuffix = ".anafFields";
     constexpr std::string_view sidecarMagic = "ANAFINEN_SIDECAR";
     constexpr int sidecarVersion = 3;
@@ -75,12 +71,12 @@ namespace anaf::IO::formats {
     // Uniform grid hash for "same position within tolerance" lookups (O(1) per query).
     class PointIndex {
     public:
-      PointIndex(const std::vector<Point>& points, const double tolerance) : m_points(points), m_tolerance(tolerance), m_cell(tolerance * 2.0) {
+      PointIndex(const std::vector<std::array<double, 3>>& points, const double tolerance) : m_points(points), m_tolerance(tolerance), m_cell(tolerance * 2.0) {
         m_grid.reserve(points.size());
         for (std::size_t i = 0; i < points.size(); ++i) m_grid[key(cellOf(points[i]))].push_back(static_cast<std::uint32_t>(i));
       }
 
-      std::optional<std::uint32_t> nearest(const Point& p) const {
+      std::optional<std::uint32_t> nearest(const std::array<double, 3>& p) const {
         const auto c = cellOf(p);
         std::optional<std::uint32_t> best;
         double bestDistance = m_tolerance;
@@ -104,7 +100,7 @@ namespace anaf::IO::formats {
       }
 
     private:
-      std::array<std::int64_t, 3> cellOf(const Point& p) const {
+      std::array<std::int64_t, 3> cellOf(const std::array<double, 3>& p) const {
         return {static_cast<std::int64_t>(std::floor(p[0] / m_cell)), static_cast<std::int64_t>(std::floor(p[1] / m_cell)),
                 static_cast<std::int64_t>(std::floor(p[2] / m_cell))};
       }
@@ -116,25 +112,25 @@ namespace anaf::IO::formats {
         return h;
       }
 
-      const std::vector<Point>& m_points;
+      const std::vector<std::array<double, 3>>& m_points;
       double m_tolerance;
       double m_cell;
       std::unordered_map<std::uint64_t, std::vector<std::uint32_t>> m_grid;
     };
 
-    std::vector<Point> nodePositions(const MeshModel& model) {
-      std::vector<Point> points(model.nodes.size());
+    std::vector<std::array<double, 3>> nodePositions(const MeshModel& model) {
+      std::vector<std::array<double, 3>> points(model.nodes.size());
       for (std::size_t i = 0; i < model.nodes.size(); ++i) points[i] = model.nodes[i].position;
       return points;
     }
 
-    std::vector<Point> elementCentroids(const MeshModel& model) {
-      std::vector<Point> centroids;
+    std::vector<std::array<double, 3>> elementCentroids(const MeshModel& model) {
+      std::vector<std::array<double, 3>> centroids;
       centroids.reserve(model.elementCount());
       for (const auto& block : model.blocks) {
         const int count = elementInfo(block.type).nodeCount;
         for (std::size_t e = 0; e < block.size(); ++e) {
-          Point c{};
+          std::array<double, 3> c{};
           for (int k = 0; k < count; ++k) {
             const auto& p = model.nodes[block.connectivity[e * count + k]].position;
             for (int a = 0; a < 3; ++a) c[a] += p[a] / count;
@@ -145,9 +141,9 @@ namespace anaf::IO::formats {
       return centroids;
     }
 
-    double matchTolerance(const std::vector<Point>& points) {
-      Point lo{std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()};
-      Point hi{std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
+    double matchTolerance(const std::vector<std::array<double, 3>>& points) {
+      std::array<double, 3> lo{std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()};
+      std::array<double, 3> hi{std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
       for (const auto& p : points) {
         for (int a = 0; a < 3; ++a) {
           lo[a] = std::min(lo[a], p[a]);
@@ -227,14 +223,14 @@ namespace anaf::IO::formats {
     // ------------------------------------------------------------ sidecar read
 
     // Versions 2 and 3 (see the file header for the differences).
-    void readSidecarV2(Cursor& cursor, MeshModel& model, const int version) {
-      if (cursor.token() != "UNIT") throw ParseFailure("sidecar: UNIT expected");
+    void readSidecarV2(detail::Cursor& cursor, MeshModel& model, const int version) {
+      if (cursor.token() != "UNIT") throw detail::ParseFailure("sidecar: UNIT expected");
       cursor.line();
-      if (cursor.token() != "NODES") throw ParseFailure("sidecar: NODES expected");
+      if (cursor.token() != "NODES") throw detail::ParseFailure("sidecar: NODES expected");
       const auto nodeCount = cursor.number<std::size_t>();
-      std::vector<Point> sideNodes(nodeCount);
+      std::vector<std::array<double, 3>> sideNodes(nodeCount);
       for (auto& p : sideNodes) p = {cursor.number<double>(), cursor.number<double>(), cursor.number<double>()};
-      if (cursor.token() != "ELEMENTS") throw ParseFailure("sidecar: ELEMENTS expected");
+      if (cursor.token() != "ELEMENTS") throw detail::ParseFailure("sidecar: ELEMENTS expected");
       const auto elementCount = cursor.number<std::size_t>();
       std::vector<std::vector<std::size_t>> sideElements(elementCount);
       for (auto& nodes : sideElements) {
@@ -284,7 +280,7 @@ namespace anaf::IO::formats {
           GlobalArray global;
           global.components = cursor.number<int>();
           const auto tuples = cursor.number<std::size_t>();
-          if (global.components < 1) throw ParseFailure("sidecar: invalid GLOBAL component count");
+          if (global.components < 1) throw detail::ParseFailure("sidecar: invalid GLOBAL component count");
           cursor.skipSpace();
           global.name = std::string(cursor.line());
           global.values.resize(tuples * static_cast<std::size_t>(global.components));
@@ -292,7 +288,7 @@ namespace anaf::IO::formats {
           model.globalData.push_back(std::move(global));
           continue;
         }
-        if (keyword != "FIELD") throw ParseFailure("sidecar: FIELD expected, got '" + std::string(keyword) + "'");
+        if (keyword != "FIELD") throw detail::ParseFailure("sidecar: FIELD expected, got '" + std::string(keyword) + "'");
         Field field;
         const bool onNodes = cursor.token() == "N";
         field.location = onNodes ? E_FieldLocation::Node : E_FieldLocation::Element;
@@ -301,14 +297,14 @@ namespace anaf::IO::formats {
         cursor.skipSpace();
         field.name = std::string(cursor.line());
         if (version >= 3) {
-          if (cursor.token() != "KIND") throw ParseFailure("sidecar: KIND expected");
+          if (cursor.token() != "KIND") throw detail::ParseFailure("sidecar: KIND expected");
           const auto kind = stepKindFromName(cursor.token());
-          if (!kind) throw ParseFailure("sidecar: unknown step kind");
+          if (!kind) throw detail::ParseFailure("sidecar: unknown step kind");
           field.stepKind = *kind;
           if (cursor.number<int>() != 0) {
             field.stepLabels.resize(steps);
             for (auto& label : field.stepLabels) {
-              if (cursor.token() != "LABEL") throw ParseFailure("sidecar: LABEL expected");
+              if (cursor.token() != "LABEL") throw detail::ParseFailure("sidecar: LABEL expected");
               // One separating space after the keyword; the rest of the line is the label.
               auto rest = cursor.line();
               if (!rest.empty() && rest.front() == ' ') rest.remove_prefix(1);
@@ -320,7 +316,7 @@ namespace anaf::IO::formats {
         const std::size_t entities = onNodes ? model.nodes.size() : model.elementCount();
         const auto& map = onNodes ? nodeMap : elementMap;
         for (std::size_t s = 0; s < steps; ++s) {
-          if (cursor.token() != "TIME") throw ParseFailure("sidecar: TIME expected");
+          if (cursor.token() != "TIME") throw detail::ParseFailure("sidecar: TIME expected");
           field.times.push_back(cursor.number<double>());
           std::vector<double> values(entities * static_cast<std::size_t>(field.components), 0.0);
           for (std::size_t r = 0; r < rows; ++r) {
@@ -337,7 +333,7 @@ namespace anaf::IO::formats {
 
     // Version 1 (anafinen <= 0.1.2): "NODES n / x y z dx dy dz" and
     // "ELEMENTS m / mx my mz materialID area stress", matched by position.
-    void readSidecarV1(Cursor& cursor, MeshModel& model) {
+    void readSidecarV1(detail::Cursor& cursor, MeshModel& model) {
       const auto modelNodes = nodePositions(model);
       const auto modelCentroids = elementCentroids(model);
       const double tolerance = matchTolerance(modelNodes);
@@ -355,7 +351,7 @@ namespace anaf::IO::formats {
         }
         const auto count = cursor.number<std::size_t>();
         for (std::size_t i = 0; i < count; ++i) {
-          const Point p{cursor.number<double>(), cursor.number<double>(), cursor.number<double>()};
+          const std::array<double, 3> p{cursor.number<double>(), cursor.number<double>(), cursor.number<double>()};
           const double a = cursor.number<double>(), b = cursor.number<double>(), c = cursor.number<double>();
           if (keyword == "NODES") {
             if (const auto n = nodeIndex.nearest(p)) {
@@ -387,12 +383,12 @@ namespace anaf::IO::formats {
 
     void readSidecar(const std::filesystem::path& path, MeshModel& model) {
       const std::string content = detail::readWholeFile(path);
-      Cursor cursor(content);
+      detail::Cursor cursor(content);
       const auto first = cursor.peekToken();
       if (first == sidecarMagic) {
         cursor.token();
         const int version = cursor.number<int>();
-        if (version > sidecarVersion) throw ParseFailure(std::format("sidecar version {} is newer than supported ({})", version, sidecarVersion));
+        if (version > sidecarVersion) throw detail::ParseFailure(std::format("sidecar version {} is newer than supported ({})", version, sidecarVersion));
         readSidecarV2(cursor, model, version);
       } else {
         readSidecarV1(cursor, model);
@@ -509,7 +505,6 @@ namespace anaf::IO::formats {
         model.sets.push_back(std::move(set));
       }
     }
-
 
   }
 

@@ -44,7 +44,6 @@ namespace FEM::BEAM {
   };
 
   // Progress of a running solve, 0..1.
-  using ProgressCallback = std::function<void(float)>;
 
   // Linear static solve of a beam model: Euler-Bernoulli and Timoshenko elements (chosen per
   // element), supports as allowed motion / rotation bases (inclined ones included), nodal
@@ -62,7 +61,7 @@ namespace FEM::BEAM {
     std::span<const anaf::MATERIAL::Material> materials,
     std::span<const BeamSection> sections,
     std::stop_token st = {},
-    const ProgressCallback& progress = {}
+    const std::function<void(float)>& progress = {}
   );
 
 } // namespace FEM::BEAM end

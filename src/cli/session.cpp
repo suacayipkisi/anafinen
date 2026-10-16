@@ -44,22 +44,22 @@ namespace anaf::CLI {
 
   E_ModelKind modelKind(const Session& session) {
     switch (session.bridge.objectType.load()) {
-      case BRIDGE::TrussSqpt:
-      case BRIDGE::TrussImportedOrEntered:
+      case BRIDGE::E_ObjectType::TrussSqpt:
+      case BRIDGE::E_ObjectType::TrussImportedOrEntered:
         return E_ModelKind::Truss;
-      case BRIDGE::BeamFrame:
+      case BRIDGE::E_ObjectType::BeamFrame:
         return E_ModelKind::Beam;
       default:
         return E_ModelKind::None;
     }
   }
 
-  std::shared_ptr<const BRIDGE::MeshData> trussMesh(Session& session) {
+  std::shared_ptr<const FEM::TRUSS::MeshData> trussMesh(Session& session) {
     std::lock_guard lock(session.bridge.dataMutex);
     return session.bridge.activeMesh;
   }
 
-  std::shared_ptr<const BRIDGE::BeamMeshData> beamMesh(Session& session) {
+  std::shared_ptr<const FEM::BEAM::MeshData> beamMesh(Session& session) {
     std::lock_guard lock(session.bridge.dataMutex);
     return session.bridge.activeBeamMesh;
   }

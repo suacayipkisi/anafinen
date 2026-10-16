@@ -33,7 +33,7 @@ namespace anaf::IO {
     return m_jobs.size();
   }
 
-  void IoService::submit(Job job) {
+  void IoService::submit(std::function<void(std::stop_token)> job) {
     {
       std::lock_guard lock(m_mutex);
       m_jobs.push_back(std::move(job));
@@ -43,7 +43,7 @@ namespace anaf::IO {
 
   void IoService::run(const std::stop_token stop) {
     while (true) {
-      Job job;
+      std::function<void(std::stop_token)> job;
       {
         std::unique_lock lock(m_mutex);
         m_wakeUp.wait(lock, stop, [this] { return !m_jobs.empty(); });

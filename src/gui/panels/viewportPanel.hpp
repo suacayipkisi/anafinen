@@ -67,8 +67,8 @@ namespace anaf::GUI{
 
     Truss1DGuiProperties m_truss1dGuiProp{};
 
-    std::shared_ptr<const anaf::BRIDGE::MeshData> m_currentMesh{nullptr};
-    std::shared_ptr<const anaf::BRIDGE::BeamMeshData> m_currentBeamMesh{nullptr};
+    std::shared_ptr<const FEM::TRUSS::MeshData> m_currentMesh{nullptr};
+    std::shared_ptr<const FEM::BEAM::MeshData> m_currentBeamMesh{nullptr};
     double m_deformScale{1.0}; // bridge.deformScale, read together with the snapshot
     double m_cachedMaxStress{0.0};
     double m_cachedMaxDisp{0.0};
@@ -105,7 +105,7 @@ namespace anaf::GUI{
     };
     std::vector<BeamDrawElement> m_beamElements;
     int m_lineMesh{-1};
-    std::shared_ptr<const anaf::BRIDGE::BeamMeshData> m_stationsMesh; // what m_beamElements was built from
+    std::shared_ptr<const FEM::BEAM::MeshData> m_stationsMesh; // what m_beamElements was built from
     double m_stationsScale{-1.0}; // deformation scale of the drawn shape
     bool m_lodActive{false};          // many elements: far ones as boxes / cylinders / lines
     glm::mat4 m_lodMatrix{0.0f};      // camera of the last level-of-detail pass

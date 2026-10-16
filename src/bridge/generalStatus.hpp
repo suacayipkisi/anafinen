@@ -36,7 +36,7 @@
 #include <vector>
 
 namespace anaf::BRIDGE {
-  enum E_ObjectType {
+  enum class E_ObjectType {
     TrussSqpt,
     TrussImportedOrEntered,
     BeamFrame,
@@ -56,11 +56,6 @@ namespace anaf::BRIDGE {
 
   std::string_view getLoadKindName(E_LoadKind kind);
 
-  // The model types live in the FEM core (anaf_core), so a CLI can use them without the GUI bridge.
-  using RenderElement = FEM::TRUSS::RenderElement;
-  using MeshData = FEM::TRUSS::MeshData;
-  using BeamMeshData = FEM::BEAM::MeshData;
-
   struct GuiCalcBridge {
     std::atomic<bool> isRunning{false};
     std::atomic<bool> isGeneratingPreview{false};
@@ -69,17 +64,17 @@ namespace anaf::BRIDGE {
     std::mutex dataMutex;
     std::jthread workerThread;
 
-    std::atomic<E_ObjectType> objectType{NoType};
+    std::atomic<E_ObjectType> objectType{E_ObjectType::NoType};
     // Set by the analysis selector; resetModel() keeps it.
     std::atomic<E_LoadKind> loadKind{E_LoadKind::Constant};
     // Bumped by resetModel(). A worker takes it before it starts and publishes its snapshot
     // only if it is unchanged (checked under dataMutex), so a solve or preview that was still
     // running when the model was reset never brings the old model back.
     std::atomic<std::uint64_t> modelGeneration{0};
-    std::shared_ptr<const MeshData> activeMesh{nullptr};
+    std::shared_ptr<const FEM::TRUSS::MeshData> activeMesh{nullptr};
     // The beam / frame model (object type BeamFrame), published like activeMesh: immutable
     // snapshots swapped under dataMutex, dataVersion bumped. Only one of the two is set.
-    std::shared_ptr<const BeamMeshData> activeBeamMesh{nullptr};
+    std::shared_ptr<const FEM::BEAM::MeshData> activeBeamMesh{nullptr};
     std::atomic<bool> isValid{false};
     std::atomic<double> energyDiff{0.0};
     // View setting, not part of the model: the viewport draws location + displacement * deformScale.
@@ -158,5 +153,4 @@ namespace anaf::BRIDGE {
   GuiCalcBridge& buildBridge();
 
 } // namespace anaf::BRIDGE end
-
 

@@ -36,12 +36,10 @@ namespace anaf::GUI {
 
   namespace {
 
-    using anaf::IO::E_FileFormat;
-
     struct ExportChoice {
       const char* label;
       const char* description;
-      E_FileFormat format;
+      anaf::IO::E_FileFormat format;
       const char* extension;
       anaf::IO::E_MshVersion mshVersion;
       anaf::IO::E_VtkLegacyVersion vtkVersion;
@@ -50,19 +48,19 @@ namespace anaf::GUI {
     };
 
     constexpr std::array<ExportChoice, 7> exportChoices{{
-      {"Gmsh MSH 4.1", "Current Gmsh format: mesh, physical groups, all result steps.", E_FileFormat::Msh, ".msh",
+      {"Gmsh MSH 4.1", "Current Gmsh format: mesh, physical groups, all result steps.", anaf::IO::E_FileFormat::Msh, ".msh",
        anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, true, false},
-      {"Gmsh MSH 2.2", "Legacy Gmsh format, read by most other solvers.", E_FileFormat::Msh, ".msh",
+      {"Gmsh MSH 2.2", "Legacy Gmsh format, read by most other solvers.", anaf::IO::E_FileFormat::Msh, ".msh",
        anaf::IO::E_MshVersion::V2_2, anaf::IO::E_VtkLegacyVersion::V5_1, true, false},
-      {"VTK XML (.vtu)", "ParaView's modern format (one time step; modes and load cases as arrays).", E_FileFormat::Vtu, ".vtu",
+      {"VTK XML (.vtu)", "ParaView's modern format (one time step; modes and load cases as arrays).", anaf::IO::E_FileFormat::Vtu, ".vtu",
        anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, true, true},
-      {"ParaView collection (.pvd)", "Time series for ParaView: .pvd plus one .vtu per time step in a folder.", E_FileFormat::Pvd, ".pvd",
+      {"ParaView collection (.pvd)", "Time series for ParaView: .pvd plus one .vtu per time step in a folder.", anaf::IO::E_FileFormat::Pvd, ".pvd",
        anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, true, true},
-      {"VTK Legacy 5.1 (.vtk)", "Legacy VTK for VTK >= 9 / ParaView >= 5.10 (one result step).", E_FileFormat::VtkLegacy, ".vtk",
+      {"VTK Legacy 5.1 (.vtk)", "Legacy VTK for VTK >= 9 / ParaView >= 5.10 (one result step).", anaf::IO::E_FileFormat::VtkLegacy, ".vtk",
        anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, true, false},
-      {"VTK Legacy 4.2 (.vtk)", "Legacy VTK readable by every VTK / ParaView version.", E_FileFormat::VtkLegacy, ".vtk",
+      {"VTK Legacy 4.2 (.vtk)", "Legacy VTK readable by every VTK / ParaView version.", anaf::IO::E_FileFormat::VtkLegacy, ".vtk",
        anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V4_2, true, false},
-      {"STEP (.step)", "CAD geometry (bars as edges); other data in a .anafFields sidecar.", E_FileFormat::Step, ".step",
+      {"STEP (.step)", "CAD geometry (bars as edges); other data in a .anafFields sidecar.", anaf::IO::E_FileFormat::Step, ".step",
        anaf::IO::E_MshVersion::V4_1, anaf::IO::E_VtkLegacyVersion::V5_1, false, false},
     }};
 
@@ -84,7 +82,7 @@ namespace anaf::GUI {
 
     bool isCad(const std::filesystem::path& path) {
       const auto format = anaf::IO::detectFormat(path);
-      return format == E_FileFormat::Step || format == E_FileFormat::Iges || format == E_FileFormat::Brep;
+      return format == anaf::IO::E_FileFormat::Step || format == anaf::IO::E_FileFormat::Iges || format == anaf::IO::E_FileFormat::Brep;
     }
 
     // Built-in models are never overwritten: nothing may be written into the library folder
@@ -214,8 +212,8 @@ namespace anaf::GUI {
     }
 
     auto& bridge = BRIDGE::buildBridge();
-    std::shared_ptr<const BRIDGE::MeshData> mesh;
-    std::shared_ptr<const BRIDGE::BeamMeshData> beamMesh;
+    std::shared_ptr<const FEM::TRUSS::MeshData> mesh;
+    std::shared_ptr<const FEM::BEAM::MeshData> beamMesh;
     std::vector<anaf::MATERIAL::Material> materials; // names for the snapshot's material indices
     std::vector<FEM::BEAM::BeamSection> sections;
     {

@@ -54,7 +54,7 @@ namespace anaf::GUI {
           }
           ImGui::EndCombo();
         }
-        if (m_trussType == SimpleQuadranglePrism) {
+        if (m_trussType == E_TrussTypes::SimpleQuadranglePrism) {
           ImGui::TextWrapped("Generated grid truss. Importing a file switches to Imported / Self-Built.");
         } else {
           ImGui::TextWrapped("Import a mesh / CAD file or build the truss node by node.");

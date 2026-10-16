@@ -31,11 +31,11 @@ namespace anaf::BRIDGE {
 
   std::string_view getObjectTypeName(E_ObjectType obj) {
     switch (obj) {
-      case TrussSqpt:
+      case E_ObjectType::TrussSqpt:
         return "truss_SQPT";
-      case TrussImportedOrEntered:
+      case E_ObjectType::TrussImportedOrEntered:
         return "truss_imported_or_entered";
-      case BeamFrame:
+      case E_ObjectType::BeamFrame:
         return "beam_frame";
       default:
         return "no_type";
@@ -187,7 +187,7 @@ namespace anaf::BRIDGE {
       }
 
       const bool usedByMesh = (activeMesh && std::ranges::any_of(
-        activeMesh->trussElements, [i = *index](const RenderElement& element) { return element.materialID == i; }))
+        activeMesh->trussElements, [i = *index](const FEM::TRUSS::RenderElement& element) { return element.materialID == i; }))
         || (activeBeamMesh && std::ranges::any_of(
         activeBeamMesh->elements, [i = *index](const FEM::BEAM::BeamElement& element) { return element.materialID == i; }));
       if (usedByMesh) {
@@ -198,9 +198,9 @@ namespace anaf::BRIDGE {
 
       // Keep the active mesh pointing at the same materials after the shift.
       meshShifted = activeMesh && std::ranges::any_of(
-        activeMesh->trussElements, [i = *index](const RenderElement& element) { return element.materialID > i; });
+        activeMesh->trussElements, [i = *index](const FEM::TRUSS::RenderElement& element) { return element.materialID > i; });
       if (meshShifted) {
-        auto shifted = std::make_shared<MeshData>(*activeMesh);
+        auto shifted = std::make_shared<FEM::TRUSS::MeshData>(*activeMesh);
         for (auto& element : shifted->trussElements) {
           if (element.materialID > *index) --element.materialID;
         }
@@ -208,7 +208,7 @@ namespace anaf::BRIDGE {
       }
       if (activeBeamMesh && std::ranges::any_of(
             activeBeamMesh->elements, [i = *index](const FEM::BEAM::BeamElement& element) { return element.materialID > i; })) {
-        auto shifted = std::make_shared<BeamMeshData>(*activeBeamMesh);
+        auto shifted = std::make_shared<FEM::BEAM::MeshData>(*activeBeamMesh);
         for (auto& element : shifted->elements) {
           if (element.materialID > *index) --element.materialID;
         }
@@ -334,7 +334,7 @@ namespace anaf::BRIDGE {
       allSections.erase(allSections.begin() + *index);
       const auto above = [i = *index](const FEM::BEAM::BeamElement& element) { return element.sectionID > i; };
       if (activeBeamMesh && std::ranges::any_of(activeBeamMesh->elements, above)) {
-        auto shifted = std::make_shared<BeamMeshData>(*activeBeamMesh);
+        auto shifted = std::make_shared<FEM::BEAM::MeshData>(*activeBeamMesh);
         for (auto& element : shifted->elements) {
           if (element.sectionID > *index) --element.sectionID;
         }

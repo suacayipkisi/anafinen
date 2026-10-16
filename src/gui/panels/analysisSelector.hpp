@@ -33,7 +33,7 @@ namespace anaf::GUI {
   };
 
   // Combo order: the value is the row in AnalysisSelector::trussTypes.
-  enum E_TrussTypes {
+  enum class E_TrussTypes {
     NodeEntered,
     SimpleQuadranglePrism
   };
@@ -46,7 +46,7 @@ namespace anaf::GUI {
     static constexpr std::array<std::string_view, 2> loadKinds{"Constant Load (Static)", "Dynamic Load (not available yet)"};
 
     E_StructureFamily m_family{E_StructureFamily::Truss};
-    E_TrussTypes m_trussType{NodeEntered}; // imported / self-built is offered first
+    E_TrussTypes m_trussType{E_TrussTypes::NodeEntered}; // imported / self-built is offered first
     BRIDGE::E_LoadKind m_loadKind{BRIDGE::E_LoadKind::Constant};
 
   public:

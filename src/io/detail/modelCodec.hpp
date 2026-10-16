@@ -99,13 +99,12 @@ namespace anaf::IO::detail {
   };
 
   // Chooses the step of a Time field in model.fields; nullptr leaves the field out.
-  using StepPicker = std::function<const std::vector<double>*(const Field&)>;
 
   // Arrays of model.fields followed by `encoded` (encodeModelData() output). Time fields use
   // `pick` when given, otherwise selectStep(timeStep). `time` replaces the TimeValue derived
   // from the fields (the .pvd writer passes the time of each file).
   FlatData flattenSteps(const MeshModel& model, const std::vector<Field>& encoded, int timeStep,
-                        const StepPicker& pick = {}, std::optional<double> time = std::nullopt);
+                        const std::function<const std::vector<double>*(const Field&)>& pick = {}, std::optional<double> time = std::nullopt);
 
   // Inverse of flattenSteps() for a freshly read model, before decodeModelData(): groups the
   // "<name>_<Kind>_NNN" arrays back into one field, consumes the matching "_Values" globals

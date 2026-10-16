@@ -25,39 +25,38 @@
 namespace FEM::BEAM {
 
   namespace {
-    using Point = std::array<double, 2>; // {y, z}; the plane used below is (u, v) = (z, y)
 
-    double u(const Point& p) { return p[1]; }
-    double v(const Point& p) { return p[0]; }
+    double u(const std::array<double, 2>& p) { return p[1]; }
+    double v(const std::array<double, 2>& p) { return p[0]; }
 
     // Twice the signed area of (a, b, c) in the (z, y) plane; > 0 counter-clockwise.
-    double cross(const Point& a, const Point& b, const Point& c) {
+    double cross(const std::array<double, 2>& a, const std::array<double, 2>& b, const std::array<double, 2>& c) {
       return (u(b) - u(a)) * (v(c) - v(a)) - (v(b) - v(a)) * (u(c) - u(a));
     }
 
-    bool samePoint(const Point& a, const Point& b) { return a[0] == b[0] && a[1] == b[1]; }
+    bool samePoint(const std::array<double, 2>& a, const std::array<double, 2>& b) { return a[0] == b[0] && a[1] == b[1]; }
 
     // Proper intersection of segments ab and cd (shared end points do not count).
-    bool segmentsCross(const Point& a, const Point& b, const Point& c, const Point& d) {
+    bool segmentsCross(const std::array<double, 2>& a, const std::array<double, 2>& b, const std::array<double, 2>& c, const std::array<double, 2>& d) {
       if (samePoint(a, c) || samePoint(a, d) || samePoint(b, c) || samePoint(b, d)) return false;
       const double d1 = cross(a, b, c), d2 = cross(a, b, d), d3 = cross(c, d, a), d4 = cross(c, d, b);
       return ((d1 > 0.0) != (d2 > 0.0)) && ((d3 > 0.0) != (d4 > 0.0)) && d1 != 0.0 && d2 != 0.0 && d3 != 0.0 && d4 != 0.0;
     }
 
-    bool insideTriangle(const Point& p, const Point& a, const Point& b, const Point& c) {
+    bool insideTriangle(const std::array<double, 2>& p, const std::array<double, 2>& a, const std::array<double, 2>& b, const std::array<double, 2>& c) {
       return cross(a, b, p) >= 0.0 && cross(b, c, p) >= 0.0 && cross(c, a, p) >= 0.0;
     }
 
     // Joins hole (clockwise) into polygon (counter-clockwise) through the polygon vertex closest
     // to the hole's rightmost vertex whose connecting segment crosses no edge of the polygon,
     // of this hole or of the holes still to come.
-    void bridgeHole(std::vector<Point>& polygon, const std::vector<Point>& hole, const std::vector<std::vector<Point>>& others) {
+    void bridgeHole(std::vector<std::array<double, 2>>& polygon, const std::vector<std::array<double, 2>>& hole, const std::vector<std::vector<std::array<double, 2>>>& others) {
       std::size_t m = 0;
       for (std::size_t i = 1; i < hole.size(); ++i) {
         if (u(hole[i]) > u(hole[m])) m = i;
       }
-      const Point& from = hole[m];
-      const auto crossesAny = [&](const Point& to, const std::vector<Point>& loop) {
+      const std::array<double, 2>& from = hole[m];
+      const auto crossesAny = [&](const std::array<double, 2>& to, const std::vector<std::array<double, 2>>& loop) {
         for (std::size_t i = 0; i < loop.size(); ++i) {
           if (segmentsCross(from, to, loop[i], loop[(i + 1) % loop.size()])) return true;
         }
@@ -77,7 +76,7 @@ namespace FEM::BEAM {
         }
       }
       if (best == polygon.size()) return; // no visible vertex (cannot happen for valid shapes)
-      std::vector<Point> merged(polygon.begin(), polygon.begin() + static_cast<std::ptrdiff_t>(best) + 1);
+      std::vector<std::array<double, 2>> merged(polygon.begin(), polygon.begin() + static_cast<std::ptrdiff_t>(best) + 1);
       for (std::size_t k = 0; k <= hole.size(); ++k) merged.push_back(hole[(m + k) % hole.size()]);
       merged.insert(merged.end(), polygon.begin() + static_cast<std::ptrdiff_t>(best), polygon.end());
       polygon = std::move(merged);
@@ -91,7 +90,7 @@ namespace FEM::BEAM {
 
     // Drop repeated consecutive points (zero-radius arcs repeat corners).
     for (auto& loop : loops) {
-      std::vector<Point> clean;
+      std::vector<std::array<double, 2>> clean;
       for (const auto& p : loop) {
         if (clean.empty() || !samePoint(clean.back(), p)) clean.push_back(p);
       }
@@ -99,10 +98,10 @@ namespace FEM::BEAM {
       loop = std::move(clean);
     }
 
-    std::vector<Point> polygon = loops.front();
-    std::vector<std::vector<Point>> holes(loops.begin() + 1, loops.end());
+    std::vector<std::array<double, 2>> polygon = loops.front();
+    std::vector<std::vector<std::array<double, 2>>> holes(loops.begin() + 1, loops.end());
     std::ranges::sort(holes, [](const auto& a, const auto& b) {
-      const auto maxU = [](const std::vector<Point>& loop) {
+      const auto maxU = [](const std::vector<std::array<double, 2>>& loop) {
         double best = -std::numeric_limits<double>::infinity();
         for (const auto& p : loop) best = std::max(best, u(p));
         return best;
@@ -110,7 +109,7 @@ namespace FEM::BEAM {
       return maxU(a) > maxU(b);
     });
     for (std::size_t h = 0; h < holes.size(); ++h) {
-      const std::vector<std::vector<Point>> rest(holes.begin() + static_cast<std::ptrdiff_t>(h) + 1, holes.end());
+      const std::vector<std::vector<std::array<double, 2>>> rest(holes.begin() + static_cast<std::ptrdiff_t>(h) + 1, holes.end());
       bridgeHole(polygon, holes[h], rest);
     }
 
@@ -127,7 +126,7 @@ namespace FEM::BEAM {
       const std::size_t n = remaining.size();
       for (std::size_t i = 0; i < n; ++i) {
         const auto ia = remaining[(i + n - 1) % n], ib = remaining[i], ic = remaining[(i + 1) % n];
-        const Point &a = polygon[ia], &b = polygon[ib], &c = polygon[ic];
+        const std::array<double, 2> &a = polygon[ia], &b = polygon[ib], &c = polygon[ic];
         const double turn = cross(a, b, c);
         if (turn <= 0.0) {
           if (turn == 0.0 && (samePoint(a, b) || samePoint(b, c))) { // degenerate: drop the vertex
@@ -139,7 +138,7 @@ namespace FEM::BEAM {
         }
         bool ear = true;
         for (const auto k : remaining) {
-          const Point& p = polygon[k];
+          const std::array<double, 2>& p = polygon[k];
           if (k == ia || k == ib || k == ic || samePoint(p, a) || samePoint(p, b) || samePoint(p, c)) continue;
           if (insideTriangle(p, a, b, c)) {
             ear = false;

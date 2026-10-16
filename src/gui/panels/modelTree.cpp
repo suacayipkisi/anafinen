@@ -45,7 +45,7 @@ namespace anaf::GUI {
 
   void ModelTree::renderMeshTree(anaf::BRIDGE::GuiCalcBridge& bridge) {
     // Snapshots are immutable: copying the pointer under the lock is enough (no deep copy per frame).
-    std::shared_ptr<const BRIDGE::MeshData> meshData;
+    std::shared_ptr<const FEM::TRUSS::MeshData> meshData;
     {
       std::lock_guard lock(bridge.dataMutex);
       meshData = bridge.activeMesh;
@@ -146,7 +146,7 @@ namespace anaf::GUI {
   }
 
   void ModelTree::renderBeamTree(anaf::BRIDGE::GuiCalcBridge& bridge) {
-    std::shared_ptr<const BRIDGE::BeamMeshData> mesh;
+    std::shared_ptr<const FEM::BEAM::MeshData> mesh;
     {
       std::lock_guard lock(bridge.dataMutex);
       mesh = bridge.activeBeamMesh;

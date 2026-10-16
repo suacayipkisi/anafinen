@@ -67,8 +67,8 @@ namespace anaf::CLI {
   // The kind of the active model, from the bridge's object type.
   E_ModelKind modelKind(const Session& session);
 
-  std::shared_ptr<const BRIDGE::MeshData> trussMesh(Session& session);
-  std::shared_ptr<const BRIDGE::BeamMeshData> beamMesh(Session& session);
+  std::shared_ptr<const FEM::TRUSS::MeshData> trussMesh(Session& session);
+  std::shared_ptr<const FEM::BEAM::MeshData> beamMesh(Session& session);
 
   // Index of a material in bridge.allMaterials: "#<index>" or a name (ASCII case ignored).
   std::expected<std::uint32_t, std::string> findMaterial(Session& session, std::string_view token);
@@ -88,7 +88,7 @@ namespace anaf::CLI {
     if (bridge.isRunning) return std::unexpected("a solve is running");
     {
       std::lock_guard lock(bridge.dataMutex);
-      auto mesh = bridge.activeMesh ? std::make_shared<BRIDGE::MeshData>(*bridge.activeMesh) : std::make_shared<BRIDGE::MeshData>();
+      auto mesh = bridge.activeMesh ? std::make_shared<FEM::TRUSS::MeshData>(*bridge.activeMesh) : std::make_shared<FEM::TRUSS::MeshData>();
       if (CommandResult edited = edit(*mesh); !edited) return edited;
       FEM::TRUSS::dropResults(*mesh);
       bridge.activeMesh = std::move(mesh);
@@ -106,8 +106,8 @@ namespace anaf::CLI {
     if (bridge.isRunning) return std::unexpected("a solve is running");
     {
       std::lock_guard lock(bridge.dataMutex);
-      auto mesh = bridge.activeBeamMesh ? std::make_shared<BRIDGE::BeamMeshData>(*bridge.activeBeamMesh)
-                                        : std::make_shared<BRIDGE::BeamMeshData>();
+      auto mesh = bridge.activeBeamMesh ? std::make_shared<FEM::BEAM::MeshData>(*bridge.activeBeamMesh)
+                                        : std::make_shared<FEM::BEAM::MeshData>();
       if (CommandResult edited = edit(*mesh); !edited) return edited;
       FEM::BEAM::dropResults(*mesh);
       bridge.activeBeamMesh = std::move(mesh);

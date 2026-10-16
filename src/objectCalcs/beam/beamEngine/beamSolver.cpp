@@ -196,7 +196,7 @@ namespace FEM::BEAM {
     const std::span<const anaf::MATERIAL::Material> materials,
     const std::span<const BeamSection> sections,
     const std::stop_token st,
-    const ProgressCallback& progress
+    const std::function<void(float)>& progress
   ) {
     const auto report = [&](const float fraction) {
       if (progress) progress(fraction);

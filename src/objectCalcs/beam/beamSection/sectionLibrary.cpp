@@ -30,26 +30,25 @@
 namespace FEM::BEAM {
 
   namespace {
-    using nlohmann::json;
     constexpr int currentSchemaVersion = 1;
 
     template <class... Ts> struct Overloaded : Ts... { using Ts::operator()...; };
 
-    double number(const json& entry, const char* key) {
+    double number(const nlohmann::json& entry, const char* key) {
       const auto it = entry.find(key);
       if (it == entry.end() || !it->is_number()) throw std::runtime_error(std::format("'{}' is missing or not a number", key));
       return it->get<double>();
     }
 
     // Optional values (corner and root radii) default to 0.
-    double optionalNumber(const json& entry, const char* key) {
+    double optionalNumber(const nlohmann::json& entry, const char* key) {
       const auto it = entry.find(key);
       if (it == entry.end()) return 0.0;
       if (!it->is_number()) throw std::runtime_error(std::format("'{}' is not a number", key));
       return it->get<double>();
     }
 
-    SectionShape parseShape(const json& entry) {
+    SectionShape parseShape(const nlohmann::json& entry) {
       const auto it = entry.find("shape");
       if (it == entry.end() || !it->is_string()) throw std::runtime_error("'shape' is missing or not a string");
       const auto key = it->get<std::string>();
@@ -71,8 +70,8 @@ namespace FEM::BEAM {
       throw std::runtime_error(std::format("unknown shape '{}'", key));
     }
 
-    json shapeToJson(const SectionShape& shape) {
-      json entry = {{"shape", shapeKey(shape)}};
+    nlohmann::json shapeToJson(const SectionShape& shape) {
+      nlohmann::json entry = {{"shape", shapeKey(shape)}};
       std::visit(Overloaded{
         [&](const GeneralSection& s) {
           entry["area"] = s.values.area;
@@ -114,10 +113,10 @@ namespace FEM::BEAM {
       std::ifstream file(path);
       if (!file) return std::unexpected(std::format("cannot open '{}'", where));
 
-      json root;
+      nlohmann::json root;
       try {
-        root = json::parse(file);
-      } catch (const json::exception& exception) {
+        root = nlohmann::json::parse(file);
+      } catch (const nlohmann::json::exception& exception) {
         return std::unexpected(std::format("'{}': {}", where, exception.what()));
       }
       const auto list = root.find("sections");
@@ -189,18 +188,18 @@ namespace FEM::BEAM {
   }
 
   std::expected<void, std::string> saveUserSectionFile(const std::filesystem::path& path, const std::span<const BeamSection> sections) {
-    json list = json::array();
+    nlohmann::json list = nlohmann::json::array();
     for (const auto& section : sections) {
       if (section.getIsBuiltin()) continue;
-      json entry = shapeToJson(section.getShape());
+      nlohmann::json entry = shapeToJson(section.getShape());
       entry["name"] = section.getName();
       list.push_back(std::move(entry));
     }
-    const json root = {{"schemaVersion", currentSchemaVersion}, {"units", {{"length", "m"}}}, {"sections", std::move(list)}};
+    const nlohmann::json root = {{"schemaVersion", currentSchemaVersion}, {"units", {{"length", "m"}}}, {"sections", std::move(list)}};
     std::string text;
     try {
       text = root.dump(2);
-    } catch (const json::exception& exception) { // invalid UTF-8 in a name
+    } catch (const nlohmann::json::exception& exception) { // invalid UTF-8 in a name
       return std::unexpected(std::format("cannot encode the sections: {}", exception.what()));
     }
 

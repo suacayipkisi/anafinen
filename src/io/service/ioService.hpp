@@ -124,13 +124,12 @@ namespace anaf::IO {
     std::size_t queuedJobs() const;
 
   private:
-    using Job = std::function<void(std::stop_token)>;
-    void submit(Job job);
+    void submit(std::function<void(std::stop_token)> job);
     void run(std::stop_token stop);
 
     mutable std::mutex m_mutex;
     std::condition_variable_any m_wakeUp;
-    std::deque<Job> m_jobs;
+    std::deque<std::function<void(std::stop_token)>> m_jobs;
     std::jthread m_worker; // declared last: joins before the queue is destroyed
   };
 

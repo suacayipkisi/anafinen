@@ -8,3 +8,7 @@ Thank you for your interest in contributing to the project.
 - **Commit messages:** [Conventional Commits](https://www.conventionalcommits.org/) with an optional `Phase:` trailer; see "Commit messages" in the [README](../README.md#commit-messages).
 
 All contributions merged into this repository will be subject to the terms of our CLA, allowing the project maintainer to re-license the codebase if needed.
+
+## Which Parts of the Codebase Requires Contributing or Review
+- [anaf::IO] Almost all of that module written with AI and currently I'm reviewing but I need help.
+- [anaf::GUI] Half parts of rendering the model written by AI and currently I'm reviewing but I need help because of not enough experience in openGL.

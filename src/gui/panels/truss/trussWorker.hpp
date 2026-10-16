@@ -43,13 +43,12 @@ namespace anaf::GUI::TRUSS_WORKER {
 
   // The model to solve, made on the worker thread (building a large generated grid on the
   // GUI thread would stall the frame loop). An error stops the job with that message.
-  using ModelSource = std::function<std::expected<std::shared_ptr<const BRIDGE::MeshData>, std::string>()>;
 
   // The one solve path of every truss panel: runs FEM::TRUSS::solveStatic() on
   // bridge.workerThread with a copy of the material list taken now (supports and loads are in
   // the snapshot), and publishes
   // the result snapshot unless the model was reset meanwhile (modelGeneration).
   // Call from the GUI thread.
-  void startSolve(BRIDGE::GuiCalcBridge& bridge, ModelSource source);
+  void startSolve(BRIDGE::GuiCalcBridge& bridge, std::function<std::expected<std::shared_ptr<const FEM::TRUSS::MeshData>, std::string>()> source);
 
 } // namespace anaf::GUI::TRUSS_WORKER end

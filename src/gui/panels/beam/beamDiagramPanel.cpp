@@ -60,7 +60,7 @@ namespace anaf::GUI {
     m_dockPending = false;
   }
 
-  void BeamDiagramPanel::rebuild(const std::shared_ptr<const BRIDGE::BeamMeshData>& mesh, const std::uint32_t element) {
+  void BeamDiagramPanel::rebuild(const std::shared_ptr<const FEM::BEAM::MeshData>& mesh, const std::uint32_t element) {
     m_mesh = mesh;
     m_element = element;
     m_states.clear();
@@ -184,7 +184,7 @@ namespace anaf::GUI {
     if (m_dockPending) dockUnderModelTree();
 
     auto& bridge = BRIDGE::buildBridge();
-    std::shared_ptr<const BRIDGE::BeamMeshData> mesh;
+    std::shared_ptr<const FEM::BEAM::MeshData> mesh;
     std::uint32_t selected = noSelection;
     {
       std::lock_guard lock(bridge.dataMutex);

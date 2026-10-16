@@ -235,7 +235,7 @@ namespace anaf::CLI::HANDLERS {
     auto built = FEM::TRUSS::buildSimpleTruss(cubes, edge, area, materialIndex);
     if (!built) return std::unexpected(built.error());
     session.bridge.resetModel(BRIDGE::E_ObjectType::TrussImportedOrEntered);
-    const auto mesh = std::make_shared<BRIDGE::MeshData>(std::move(*built));
+    const auto mesh = std::make_shared<FEM::TRUSS::MeshData>(std::move(*built));
     {
       std::lock_guard lock(session.bridge.dataMutex);
       session.bridge.activeMesh = mesh;

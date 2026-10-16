@@ -171,7 +171,7 @@ namespace anaf::GUI {
       // Only a change of type resets: selecting the current type again just reopens its panel.
       // The load kind only changes what the editors show, so it never resets the model.
       panels.selector->onTrussSelected = [panels](E_TrussTypes type, anaf::BRIDGE::E_LoadKind loadKind) {
-        const auto objectType = type == SimpleQuadranglePrism
+        const auto objectType = type == E_TrussTypes::SimpleQuadranglePrism
           ? anaf::BRIDGE::E_ObjectType::TrussSqpt
           : anaf::BRIDGE::E_ObjectType::TrussImportedOrEntered;
         auto& bridge = anaf::BRIDGE::buildBridge();
@@ -182,8 +182,8 @@ namespace anaf::GUI {
           panels.control->resetState();
           panels.editor->resetState();
         }
-        panels.control->isOpen = (type == SimpleQuadranglePrism);
-        panels.editor->isOpen = (type == NodeEntered);
+        panels.control->isOpen = (type == E_TrussTypes::SimpleQuadranglePrism);
+        panels.editor->isOpen = (type == E_TrussTypes::NodeEntered);
         panels.tree->isOpen = true;
         closeBeamPanels(panels);
       };

@@ -32,9 +32,6 @@ namespace anaf::IO::ARRAY {
 
   namespace {
 
-    using detail::H5Handle;
-    using Code = ArrayError::E_Code;
-
     static_assert(std::is_same_v<hid_t, std::int64_t>, "ArrayFile stores hid_t as std::int64_t (HDF5 >= 1.10)");
 
     constexpr const char* sparseEncodingKey = "encoding-type";
@@ -59,14 +56,14 @@ namespace anaf::IO::ARRAY {
       return 0;
     }
 
-    ArrayError makeError(const Code code, std::string message) { return {code, std::move(message)}; }
+    ArrayError makeError(const ArrayError::E_Code code, std::string message) { return {code, std::move(message)}; }
 
     // Wraps the current HDF5 error stack (innermost call first) and clears it.
     ArrayError backendError(const std::string_view what) {
       std::string stack;
       H5Ewalk2(H5E_DEFAULT, H5E_WALK_DOWNWARD, collectError, &stack);
       H5Eclear2(H5E_DEFAULT);
-      return makeError(Code::BackendError, stack.empty() ? std::string(what) : std::format("{} ({})", what, stack));
+      return makeError(ArrayError::E_Code::BackendError, stack.empty() ? std::string(what) : std::format("{} ({})", what, stack));
     }
 
     // "a/b/c" for an object path, "/" for the root; empty for an invalid path ("a//b", "..").
@@ -106,8 +103,8 @@ namespace anaf::IO::ARRAY {
     }
 
     // Link creation properties: missing parent groups are created, names are UTF-8.
-    H5Handle linkCreateList() {
-      H5Handle lcpl = detail::h5Plist(H5Pcreate(H5P_LINK_CREATE));
+    detail::H5Handle linkCreateList() {
+      detail::H5Handle lcpl = detail::h5Plist(H5Pcreate(H5P_LINK_CREATE));
       if (lcpl) {
         H5Pset_create_intermediate_group(lcpl.get(), 1);
         H5Pset_char_encoding(lcpl.get(), H5T_CSET_UTF8);
@@ -115,8 +112,8 @@ namespace anaf::IO::ARRAY {
       return lcpl;
     }
 
-    H5Handle complexType(const hid_t part, const std::size_t partSize) {
-      H5Handle type = detail::h5Type(H5Tcreate(H5T_COMPOUND, 2 * partSize));
+    detail::H5Handle complexType(const hid_t part, const std::size_t partSize) {
+      detail::H5Handle type = detail::h5Type(H5Tcreate(H5T_COMPOUND, 2 * partSize));
       if (type) {
         H5Tinsert(type.get(), "r", 0, part);
         H5Tinsert(type.get(), "i", partSize, part);
@@ -125,7 +122,7 @@ namespace anaf::IO::ARRAY {
     }
 
     // In-memory (native) type of a scalar; files use the same type, as h5py does.
-    H5Handle memoryType(const E_ScalarType type) {
+    detail::H5Handle memoryType(const E_ScalarType type) {
       switch (type) {
         case E_ScalarType::Float32: return detail::h5Type(H5Tcopy(H5T_NATIVE_FLOAT));
         case E_ScalarType::Float64: return detail::h5Type(H5Tcopy(H5T_NATIVE_DOUBLE));
@@ -204,19 +201,19 @@ namespace anaf::IO::ARRAY {
                               const std::span<const std::uint64_t> shape, const WriteOptions& options) {
       const std::vector<hsize_t> dims(shape.begin(), shape.end());
       const std::uint64_t count = elementCount(shape).value_or(0);
-      H5Handle space = detail::h5Space(dims.empty() ? H5Screate(H5S_SCALAR)
+      detail::H5Handle space = detail::h5Space(dims.empty() ? H5Screate(H5S_SCALAR)
                                                     : H5Screate_simple(static_cast<int>(dims.size()), dims.data(), nullptr));
-      H5Handle memType = memoryType(type);
-      H5Handle lcpl = linkCreateList();
-      H5Handle dcpl = detail::h5Plist(H5Pcreate(H5P_DATASET_CREATE));
+      detail::H5Handle memType = memoryType(type);
+      detail::H5Handle lcpl = linkCreateList();
+      detail::H5Handle dcpl = detail::h5Plist(H5Pcreate(H5P_DATASET_CREATE));
       if (!space || !memType || !lcpl || !dcpl) return std::unexpected(backendError("cannot prepare dataset '" + name + "'"));
 
       if (options.deflateLevel < 0 || options.deflateLevel > 9) {
-        return std::unexpected(makeError(Code::InvalidData, std::format("deflate level {} is outside 0..9", options.deflateLevel)));
+        return std::unexpected(makeError(ArrayError::E_Code::InvalidData, std::format("deflate level {} is outside 0..9", options.deflateLevel)));
       }
       if (options.deflateLevel > 0 && !dims.empty() && count > 0) {
         if (H5Zfilter_avail(H5Z_FILTER_DEFLATE) <= 0) {
-          return std::unexpected(makeError(Code::BackendError, "this HDF5 build has no deflate (zlib) filter"));
+          return std::unexpected(makeError(ArrayError::E_Code::BackendError, "this HDF5 build has no deflate (zlib) filter"));
         }
         const auto chunk = chunkShape(dims, H5Tget_size(memType.get()));
         if (H5Pset_chunk(dcpl.get(), static_cast<int>(chunk.size()), chunk.data()) < 0 ||
@@ -225,7 +222,7 @@ namespace anaf::IO::ARRAY {
         }
       }
 
-      H5Handle dataset = detail::h5Dataset(
+      detail::H5Handle dataset = detail::h5Dataset(
         H5Dcreate2(location, name.c_str(), memType.get(), space.get(), lcpl.get(), dcpl.get(), H5P_DEFAULT));
       if (!dataset) return std::unexpected(backendError("cannot create dataset '" + name + "'"));
       if (count > 0 && H5Dwrite(dataset.get(), memType.get(), H5S_ALL, H5S_ALL, H5P_DEFAULT, values) < 0) {
@@ -243,8 +240,8 @@ namespace anaf::IO::ARRAY {
       // Numeric scalars and vectors share one path: element type, dimensions, data pointer.
       const auto writeNumeric = [&](const hid_t nativeType, const void* data, const std::size_t count, const bool isVector) -> Result<void> {
         const hsize_t dim = count;
-        H5Handle space = detail::h5Space(isVector ? H5Screate_simple(1, &dim, nullptr) : H5Screate(H5S_SCALAR));
-        H5Handle attribute = detail::h5Attribute(H5Acreate2(object, key.c_str(), nativeType, space.get(), H5P_DEFAULT, H5P_DEFAULT));
+        detail::H5Handle space = detail::h5Space(isVector ? H5Screate_simple(1, &dim, nullptr) : H5Screate(H5S_SCALAR));
+        detail::H5Handle attribute = detail::h5Attribute(H5Acreate2(object, key.c_str(), nativeType, space.get(), H5P_DEFAULT, H5P_DEFAULT));
         if (!attribute) return std::unexpected(backendError("cannot create attribute '" + key + "'"));
         if (count > 0 && H5Awrite(attribute.get(), nativeType, data) < 0) {
           return std::unexpected(backendError("cannot write attribute '" + key + "'"));
@@ -258,12 +255,12 @@ namespace anaf::IO::ARRAY {
       if (const auto* list = std::get_if<std::vector<double>>(&value)) return writeNumeric(H5T_NATIVE_DOUBLE, list->data(), list->size(), true);
 
       const auto& text = std::get<std::string>(value);
-      H5Handle type = detail::h5Type(H5Tcopy(H5T_C_S1));
+      detail::H5Handle type = detail::h5Type(H5Tcopy(H5T_C_S1));
       if (!type || H5Tset_size(type.get(), H5T_VARIABLE) < 0 || H5Tset_cset(type.get(), H5T_CSET_UTF8) < 0) {
         return std::unexpected(backendError("cannot create string type"));
       }
-      H5Handle space = detail::h5Space(H5Screate(H5S_SCALAR));
-      H5Handle attribute = detail::h5Attribute(H5Acreate2(object, key.c_str(), type.get(), space.get(), H5P_DEFAULT, H5P_DEFAULT));
+      detail::H5Handle space = detail::h5Space(H5Screate(H5S_SCALAR));
+      detail::H5Handle attribute = detail::h5Attribute(H5Acreate2(object, key.c_str(), type.get(), space.get(), H5P_DEFAULT, H5P_DEFAULT));
       const char* data = text.c_str();
       if (!attribute || H5Awrite(attribute.get(), type.get(), static_cast<const void*>(&data)) < 0) {
         return std::unexpected(backendError("cannot write attribute '" + key + "'"));
@@ -274,11 +271,11 @@ namespace anaf::IO::ARRAY {
     Result<AttributeValue> readAttributeFrom(const hid_t object, const std::string& key) {
       if (H5Aexists(object, key.c_str()) <= 0) {
         H5Eclear2(H5E_DEFAULT);
-        return std::unexpected(makeError(Code::NotFound, "no attribute '" + key + "'"));
+        return std::unexpected(makeError(ArrayError::E_Code::NotFound, "no attribute '" + key + "'"));
       }
-      H5Handle attribute = detail::h5Attribute(H5Aopen(object, key.c_str(), H5P_DEFAULT));
-      H5Handle type = detail::h5Type(attribute ? H5Aget_type(attribute.get()) : H5I_INVALID_HID);
-      H5Handle space = detail::h5Space(attribute ? H5Aget_space(attribute.get()) : H5I_INVALID_HID);
+      detail::H5Handle attribute = detail::h5Attribute(H5Aopen(object, key.c_str(), H5P_DEFAULT));
+      detail::H5Handle type = detail::h5Type(attribute ? H5Aget_type(attribute.get()) : H5I_INVALID_HID);
+      detail::H5Handle space = detail::h5Space(attribute ? H5Aget_space(attribute.get()) : H5I_INVALID_HID);
       if (!attribute || !type || !space) return std::unexpected(backendError("cannot open attribute '" + key + "'"));
 
       const int rank = H5Sget_simple_extent_ndims(space.get());
@@ -288,9 +285,9 @@ namespace anaf::IO::ARRAY {
 
       switch (H5Tget_class(type.get())) {
         case H5T_STRING: {
-          if (rank != 0) return std::unexpected(makeError(Code::TypeMismatch, "attribute '" + key + "' is a string array"));
+          if (rank != 0) return std::unexpected(makeError(ArrayError::E_Code::TypeMismatch, "attribute '" + key + "' is a string array"));
           if (H5Tis_variable_str(type.get()) > 0) {
-            H5Handle memType = detail::h5Type(H5Tcopy(H5T_C_S1));
+            detail::H5Handle memType = detail::h5Type(H5Tcopy(H5T_C_S1));
             H5Tset_size(memType.get(), H5T_VARIABLE);
             H5Tset_cset(memType.get(), H5Tget_cset(type.get()));
             char* data = nullptr;
@@ -326,20 +323,20 @@ namespace anaf::IO::ARRAY {
           return values;
         }
         default:
-          return std::unexpected(makeError(Code::TypeMismatch, "attribute '" + key + "' has an unsupported type"));
+          return std::unexpected(makeError(ArrayError::E_Code::TypeMismatch, "attribute '" + key + "' has an unsupported type"));
       }
     }
 
     // Opens an existing object; NotFound when the path does not exist.
-    Result<H5Handle> openObject(const hid_t file, const std::string& path) {
-      if (!linkExists(file, path)) return std::unexpected(makeError(Code::NotFound, "no object at '" + path + "'"));
-      H5Handle object = detail::h5Object(H5Oopen(file, path.c_str(), H5P_DEFAULT));
+    Result<detail::H5Handle> openObject(const hid_t file, const std::string& path) {
+      if (!linkExists(file, path)) return std::unexpected(makeError(ArrayError::E_Code::NotFound, "no object at '" + path + "'"));
+      detail::H5Handle object = detail::h5Object(H5Oopen(file, path.c_str(), H5P_DEFAULT));
       if (!object) return std::unexpected(backendError("cannot open '" + path + "'"));
       return object;
     }
 
     Result<std::vector<std::uint64_t>> datasetShape(const hid_t dataset) {
-      H5Handle space = detail::h5Space(H5Dget_space(dataset));
+      detail::H5Handle space = detail::h5Space(H5Dget_space(dataset));
       const int rank = space ? H5Sget_simple_extent_ndims(space.get()) : -1;
       if (rank < 0) return std::unexpected(backendError("cannot read dataset shape"));
       std::vector<hsize_t> dims(static_cast<std::size_t>(rank));
@@ -350,14 +347,14 @@ namespace anaf::IO::ARRAY {
     }
 
     std::optional<E_ScalarType> datasetScalar(const hid_t dataset) {
-      H5Handle type = detail::h5Type(H5Dget_type(dataset));
+      detail::H5Handle type = detail::h5Type(H5Dget_type(dataset));
       return type ? classify(type.get()) : std::nullopt;
     }
 
     Result<void> checkReadable(const std::optional<E_ScalarType> stored, const E_ScalarType requested, const std::string& path) {
-      if (!stored) return std::unexpected(makeError(Code::TypeMismatch, "'" + path + "' has an unsupported element type"));
+      if (!stored) return std::unexpected(makeError(ArrayError::E_Code::TypeMismatch, "'" + path + "' has an unsupported element type"));
       if (!canReadAs(*stored, requested)) {
-        return std::unexpected(makeError(Code::TypeMismatch, std::format("'{}' holds {}, cannot read it as {}", path,
+        return std::unexpected(makeError(ArrayError::E_Code::TypeMismatch, std::format("'{}' holds {}, cannot read it as {}", path,
                                                                          scalarTypeName(*stored), scalarTypeName(requested))));
       }
       return {};
@@ -365,11 +362,11 @@ namespace anaf::IO::ARRAY {
 
     // Reads a whole dataset with the given memory type; its element count must equal `count`.
     Result<void> readDataset(const hid_t dataset, const hid_t memType, void* values, const std::uint64_t count, const std::string& path) {
-      H5Handle space = detail::h5Space(H5Dget_space(dataset));
+      detail::H5Handle space = detail::h5Space(H5Dget_space(dataset));
       const hssize_t points = space ? H5Sget_simple_extent_npoints(space.get()) : -1;
       if (points < 0) return std::unexpected(backendError("cannot read '" + path + "'"));
       if (static_cast<std::uint64_t>(points) != count) {
-        return std::unexpected(makeError(Code::ShapeMismatch, std::format("'{}' holds {} values, expected {}", path, points, count)));
+        return std::unexpected(makeError(ArrayError::E_Code::ShapeMismatch, std::format("'{}' holds {} values, expected {}", path, points, count)));
       }
       if (count > 0 && H5Dread(dataset, memType, H5S_ALL, H5S_ALL, H5P_DEFAULT, values) < 0) {
         return std::unexpected(backendError("cannot read '" + path + "'"));
@@ -461,12 +458,12 @@ namespace anaf::IO::ARRAY {
     const std::string name = pathToUtf8(path);
     std::error_code error;
     if (!std::filesystem::is_regular_file(path, error)) {
-      return std::unexpected(makeError(Code::FileNotFound, "no file '" + name + "'"));
+      return std::unexpected(makeError(ArrayError::E_Code::FileNotFound, "no file '" + name + "'"));
     }
     auto lock = lockHdf5();
     if (H5Fis_accessible(name.c_str(), H5P_DEFAULT) <= 0) {
       H5Eclear2(H5E_DEFAULT);
-      return std::unexpected(makeError(Code::InvalidFile, "'" + name + "' is not an HDF5 file"));
+      return std::unexpected(makeError(ArrayError::E_Code::InvalidFile, "'" + name + "' is not an HDF5 file"));
     }
     const bool writable = access == E_Access::ReadWrite;
     const hid_t file = H5Fopen(name.c_str(), writable ? H5F_ACC_RDWR : H5F_ACC_RDONLY, H5P_DEFAULT);
@@ -481,11 +478,11 @@ namespace anaf::IO::ARRAY {
     // Common checks of every call: an open file, a valid path and, for writes, write access.
     Result<std::string> checkCall(const std::int64_t file, const bool writable, const std::string_view path,
                                   const bool forWrite, const bool rootAllowed) {
-      if (file < 0) return std::unexpected(makeError(Code::InvalidData, "the file is closed"));
-      if (forWrite && !writable) return std::unexpected(makeError(Code::ReadOnly, "the file is open read-only"));
+      if (file < 0) return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "the file is closed"));
+      if (forWrite && !writable) return std::unexpected(makeError(ArrayError::E_Code::ReadOnly, "the file is open read-only"));
       std::string name = normalizePath(path);
       if (name.empty() || (!rootAllowed && name == "/")) {
-        return std::unexpected(makeError(Code::InvalidData, std::format("invalid object path '{}'", path)));
+        return std::unexpected(makeError(ArrayError::E_Code::InvalidData, std::format("invalid object path '{}'", path)));
       }
       return name;
     }
@@ -493,7 +490,7 @@ namespace anaf::IO::ARRAY {
     // Write target: removed when it exists and overwriting is allowed.
     Result<void> prepareTarget(const hid_t file, const std::string& name, const WriteOptions& options) {
       if (!linkExists(file, name)) return {};
-      if (!options.overwrite) return std::unexpected(makeError(Code::AlreadyExists, "'" + name + "' already exists"));
+      if (!options.overwrite) return std::unexpected(makeError(ArrayError::E_Code::AlreadyExists, "'" + name + "' already exists"));
       if (H5Ldelete(file, name.c_str(), H5P_DEFAULT) < 0) return std::unexpected(backendError("cannot replace '" + name + "'"));
       return {};
     }
@@ -533,15 +530,15 @@ namespace anaf::IO::ARRAY {
     auto shape = readAttributeFrom(object->get(), sparseShapeKey);
     const auto* dims = shape ? std::get_if<std::vector<std::int64_t>>(&*shape) : nullptr;
     if (!dims || dims->size() != 2 || (*dims)[0] < 0 || (*dims)[1] < 0) {
-      return std::unexpected(makeError(Code::InvalidData, "sparse matrix '" + *name + "' has no valid 'shape' attribute"));
+      return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "sparse matrix '" + *name + "' has no valid 'shape' attribute"));
     }
     result.shape = {static_cast<std::uint64_t>((*dims)[0]), static_cast<std::uint64_t>((*dims)[1])};
     if (H5Lexists(object->get(), "data", H5P_DEFAULT) <= 0) {
       H5Eclear2(H5E_DEFAULT);
-      return std::unexpected(makeError(Code::InvalidData, "sparse matrix '" + *name + "' has no 'data' dataset"));
+      return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "sparse matrix '" + *name + "' has no 'data' dataset"));
     }
-    H5Handle data = detail::h5Dataset(H5Dopen2(object->get(), "data", H5P_DEFAULT));
-    H5Handle space = detail::h5Space(data ? H5Dget_space(data.get()) : H5I_INVALID_HID);
+    detail::H5Handle data = detail::h5Dataset(H5Dopen2(object->get(), "data", H5P_DEFAULT));
+    detail::H5Handle space = detail::h5Space(data ? H5Dget_space(data.get()) : H5I_INVALID_HID);
     const hssize_t points = space ? H5Sget_simple_extent_npoints(space.get()) : -1;
     if (points < 0) return std::unexpected(backendError("cannot open '" + *name + "/data'"));
     result.scalar = datasetScalar(data.get());
@@ -579,11 +576,11 @@ namespace anaf::IO::ARRAY {
     if (linkExists(m_file, *name)) {
       auto object = openObject(m_file, *name);
       if (!object) return std::unexpected(std::move(object.error()));
-      if (H5Iget_type(object->get()) != H5I_GROUP) return std::unexpected(makeError(Code::AlreadyExists, "'" + *name + "' is not a group"));
+      if (H5Iget_type(object->get()) != H5I_GROUP) return std::unexpected(makeError(ArrayError::E_Code::AlreadyExists, "'" + *name + "' is not a group"));
       return {};
     }
-    H5Handle lcpl = linkCreateList();
-    H5Handle created = detail::h5Group(H5Gcreate2(m_file, name->c_str(), lcpl.get(), H5P_DEFAULT, H5P_DEFAULT));
+    detail::H5Handle lcpl = linkCreateList();
+    detail::H5Handle created = detail::h5Group(H5Gcreate2(m_file, name->c_str(), lcpl.get(), H5P_DEFAULT, H5P_DEFAULT));
     if (!created) return std::unexpected(backendError("cannot create group '" + *name + "'"));
     return {};
   }
@@ -592,13 +589,13 @@ namespace anaf::IO::ARRAY {
     auto lock = lockHdf5();
     const auto name = checkCall(m_file, m_writable, path, true, false);
     if (!name) return std::unexpected(name.error());
-    if (!linkExists(m_file, *name)) return std::unexpected(makeError(Code::NotFound, "no object at '" + *name + "'"));
+    if (!linkExists(m_file, *name)) return std::unexpected(makeError(ArrayError::E_Code::NotFound, "no object at '" + *name + "'"));
     if (H5Ldelete(m_file, name->c_str(), H5P_DEFAULT) < 0) return std::unexpected(backendError("cannot remove '" + *name + "'"));
     return {};
   }
 
   ArrayError ArrayFile::kindError(const std::string_view path, const std::string_view expected) {
-    return makeError(Code::KindMismatch, std::format("'{}' is not {}", path, expected));
+    return makeError(ArrayError::E_Code::KindMismatch, std::format("'{}' is not {}", path, expected));
   }
 
   // ---------------------------------------------------------------- dense
@@ -610,9 +607,9 @@ namespace anaf::IO::ARRAY {
     const auto name = checkCall(m_file, m_writable, path, true, false);
     if (!name) return std::unexpected(name.error());
     const auto expected = elementCount(shape);
-    if (!expected) return std::unexpected(makeError(Code::InvalidData, "shape of '" + *name + "' overflows"));
+    if (!expected) return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "shape of '" + *name + "' overflows"));
     if (*expected != count) {
-      return std::unexpected(makeError(Code::ShapeMismatch, std::format("'{}': {} values for a shape of {} elements", *name, count, *expected)));
+      return std::unexpected(makeError(ArrayError::E_Code::ShapeMismatch, std::format("'{}': {} values for a shape of {} elements", *name, count, *expected)));
     }
     if (auto prepared = prepareTarget(m_file, *name, options); !prepared) return prepared;
     return writeDataset(m_file, *name, type, values, shape, options);
@@ -636,8 +633,8 @@ namespace anaf::IO::ARRAY {
     auto lock = lockHdf5();
     const auto name = checkCall(m_file, m_writable, path, false, false);
     if (!name) return std::unexpected(name.error());
-    H5Handle dataset = detail::h5Dataset(H5Dopen2(m_file, name->c_str(), H5P_DEFAULT));
-    H5Handle memType = memoryType(requested);
+    detail::H5Handle dataset = detail::h5Dataset(H5Dopen2(m_file, name->c_str(), H5P_DEFAULT));
+    detail::H5Handle memType = memoryType(requested);
     if (!dataset || !memType) return std::unexpected(backendError("cannot open '" + *name + "'"));
     return readDataset(dataset.get(), memType.get(), values, count, *name);
   }
@@ -653,15 +650,15 @@ namespace anaf::IO::ARRAY {
     if (!name) return std::unexpected(name.error());
     if (rows > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
         cols > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
-      return std::unexpected(makeError(Code::InvalidData, "sparse matrix '" + *name + "' is too large"));
+      return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "sparse matrix '" + *name + "' is too large"));
     }
     if (const auto problem = validateCompressed(rows, cols, layout, count, indices, pointers)) {
-      return std::unexpected(makeError(Code::InvalidData, "sparse matrix '" + *name + "': " + *problem));
+      return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "sparse matrix '" + *name + "': " + *problem));
     }
     if (auto prepared = prepareTarget(m_file, *name, options); !prepared) return prepared;
 
-    H5Handle lcpl = linkCreateList();
-    H5Handle group = detail::h5Group(H5Gcreate2(m_file, name->c_str(), lcpl.get(), H5P_DEFAULT, H5P_DEFAULT));
+    detail::H5Handle lcpl = linkCreateList();
+    detail::H5Handle group = detail::h5Group(H5Gcreate2(m_file, name->c_str(), lcpl.get(), H5P_DEFAULT, H5P_DEFAULT));
     if (!group) return std::unexpected(backendError("cannot create group '" + *name + "'"));
 
     const std::uint64_t nonZeroShape[] = {count};
@@ -684,25 +681,25 @@ namespace anaf::IO::ARRAY {
     if (!name) return std::unexpected(name.error());
     if (auto readable = checkReadable(found.scalar, requested, *name); !readable) return readable;
 
-    H5Handle group = detail::h5Group(H5Gopen2(m_file, name->c_str(), H5P_DEFAULT));
+    detail::H5Handle group = detail::h5Group(H5Gopen2(m_file, name->c_str(), H5P_DEFAULT));
     if (!group) return std::unexpected(backendError("cannot open '" + *name + "'"));
     const auto readPart = [&](const char* part, const hid_t memType, void* buffer, const std::uint64_t count) -> Result<void> {
       const std::string partPath = *name + "/" + part;
       if (H5Lexists(group.get(), part, H5P_DEFAULT) <= 0) {
         H5Eclear2(H5E_DEFAULT);
-        return std::unexpected(makeError(Code::InvalidData, "sparse matrix '" + *name + "' has no '" + part + "' dataset"));
+        return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "sparse matrix '" + *name + "' has no '" + part + "' dataset"));
       }
-      H5Handle dataset = detail::h5Dataset(H5Dopen2(group.get(), part, H5P_DEFAULT));
+      detail::H5Handle dataset = detail::h5Dataset(H5Dopen2(group.get(), part, H5P_DEFAULT));
       if (!dataset) return std::unexpected(backendError("cannot open '" + partPath + "'"));
       if (std::string_view(part) != "data") {
-        H5Handle type = detail::h5Type(H5Dget_type(dataset.get()));
+        detail::H5Handle type = detail::h5Type(H5Dget_type(dataset.get()));
         if (!type || H5Tget_class(type.get()) != H5T_INTEGER) {
-          return std::unexpected(makeError(Code::InvalidData, "'" + partPath + "' is not an integer array"));
+          return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "'" + partPath + "' is not an integer array"));
         }
       }
       if (auto read = readDataset(dataset.get(), memType, buffer, count, partPath); !read) {
         auto error = std::move(read.error());
-        if (error.code == Code::ShapeMismatch) error.code = Code::InvalidData;
+        if (error.code == ArrayError::E_Code::ShapeMismatch) error.code = ArrayError::E_Code::InvalidData;
         return std::unexpected(std::move(error));
       }
       return {};
@@ -711,13 +708,13 @@ namespace anaf::IO::ARRAY {
     const std::uint64_t outer = found.layout == E_SparseLayout::Csc ? found.shape[1] : found.shape[0];
     indices.resize(found.nonZeros);
     pointers.resize(outer + 1);
-    H5Handle memType = memoryType(requested);
+    detail::H5Handle memType = memoryType(requested);
     if (auto read = readPart("data", memType.get(), values, found.nonZeros); !read) return read;
     if (auto read = readPart("indices", H5T_NATIVE_INT64, indices.data(), indices.size()); !read) return read;
     if (auto read = readPart("indptr", H5T_NATIVE_INT64, pointers.data(), pointers.size()); !read) return read;
 
     if (const auto problem = validateCompressed(found.shape[0], found.shape[1], found.layout, found.nonZeros, indices, pointers)) {
-      return std::unexpected(makeError(Code::InvalidData, "sparse matrix '" + *name + "': " + *problem));
+      return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "sparse matrix '" + *name + "': " + *problem));
     }
     return {};
   }
@@ -728,7 +725,7 @@ namespace anaf::IO::ARRAY {
     auto lock = lockHdf5();
     const auto name = checkCall(m_file, m_writable, path, true, true);
     if (!name) return std::unexpected(name.error());
-    if (key.empty()) return std::unexpected(makeError(Code::InvalidData, "empty attribute name"));
+    if (key.empty()) return std::unexpected(makeError(ArrayError::E_Code::InvalidData, "empty attribute name"));
     auto object = openObject(m_file, *name);
     if (!object) return std::unexpected(std::move(object.error()));
     return writeAttributeTo(object->get(), std::string(key), value);

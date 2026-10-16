@@ -168,7 +168,7 @@ namespace FEM::TRUSS {
     const MeshData& mesh,
     const std::span<const anaf::MATERIAL::Material> materials,
     const std::stop_token st,
-    const ProgressCallback& progress
+    const std::function<void(float)>& progress
   ) {
     const auto report = [&](const float fraction) {
       if (progress) progress(fraction);

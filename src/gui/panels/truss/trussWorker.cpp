@@ -29,7 +29,7 @@
 
 namespace anaf::GUI::TRUSS_WORKER {
 
-  void startSolve(BRIDGE::GuiCalcBridge& bridge, ModelSource source) {
+  void startSolve(BRIDGE::GuiCalcBridge& bridge, std::function<std::expected<std::shared_ptr<const FEM::TRUSS::MeshData>, std::string>()> source) {
     // Join first: a worker that is still finishing clears isRunning on exit.
     bridge.joinWorker();
     std::vector<MATERIAL::Material> materials;

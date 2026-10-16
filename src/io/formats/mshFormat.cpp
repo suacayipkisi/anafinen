@@ -69,9 +69,6 @@ namespace anaf::IO::formats {
 
   namespace {
 
-    using detail::Cursor;
-    using detail::ParseFailure;
-
     // Map key used instead of std::pair<int, int>. Gmsh keeps its physical names in a
     // std::map<std::pair<int, int>, std::string>; the same instantiation here would be exported
     // from the executable and interpose libgmsh's own copy. With a Gmsh SDK built by an older
@@ -144,7 +141,7 @@ namespace anaf::IO::formats {
           const auto token = m_cursor.token();
           if (token.empty()) break;
           checkCancel(m_context);
-          if (token.front() != '$') throw ParseFailure("MSH: section header expected, got '" + std::string(token.substr(0, 40)) + "'");
+          if (token.front() != '$') throw detail::ParseFailure("MSH: section header expected, got '" + std::string(token.substr(0, 40)) + "'");
           const std::string section(token.substr(1));
           m_cursor.line();
           if (section == "MeshFormat") readFormat();
@@ -159,7 +156,7 @@ namespace anaf::IO::formats {
           else if (section == "AnafData") readAnafData();
           else skipSection(section);
         }
-        if (!m_sawNodes) throw ParseFailure("MSH: no $Nodes section");
+        if (!m_sawNodes) throw detail::ParseFailure("MSH: no $Nodes section");
         finishSets();
         finishFields();
         applyAnafData();
@@ -189,7 +186,7 @@ namespace anaf::IO::formats {
       void expectEnd(const std::string& section) {
         const auto token = m_cursor.token();
         if (token != "$End" + section && token != "$END" + section) {
-          throw ParseFailure("MSH: $End" + section + " expected, got '" + std::string(token.substr(0, 40)) + "'");
+          throw detail::ParseFailure("MSH: $End" + section + " expected, got '" + std::string(token.substr(0, 40)) + "'");
         }
       }
 
@@ -197,7 +194,7 @@ namespace anaf::IO::formats {
         const std::string end = "\n$End" + section;
         const auto data = m_cursor.data();
         const auto at = data.find(end, m_cursor.position() > 0 ? m_cursor.position() - 1 : 0);
-        if (at == std::string_view::npos) throw ParseFailure("MSH: unterminated section $" + section);
+        if (at == std::string_view::npos) throw detail::ParseFailure("MSH: unterminated section $" + section);
         m_cursor.seek(at + end.size());
         m_cursor.line();
       }
@@ -208,16 +205,16 @@ namespace anaf::IO::formats {
         m_version = m_cursor.number<double>();
         m_binary = m_cursor.number<int>() == 1;
         const int dataSize = m_cursor.number<int>();
-        if (dataSize != 8) throw ParseFailure(std::format("MSH: data size {} not supported (8 expected)", dataSize));
-        if (m_version < 2.0 || m_version >= 5.0) throw ParseFailure(std::format("MSH: version {} not supported", m_version));
-        if (m_binary && m_version < 4.1 && m_version >= 4.0) throw ParseFailure("MSH: binary 4.0 is not supported (use 4.1 or 2.2)");
+        if (dataSize != 8) throw detail::ParseFailure(std::format("MSH: data size {} not supported (8 expected)", dataSize));
+        if (m_version < 2.0 || m_version >= 5.0) throw detail::ParseFailure(std::format("MSH: version {} not supported", m_version));
+        if (m_binary && m_version < 4.1 && m_version >= 4.0) throw detail::ParseFailure("MSH: binary 4.0 is not supported (use 4.1 or 2.2)");
         m_cursor.line();
         if (m_binary) {
           const auto marker = m_cursor.bytes(4);
           std::int32_t one;
           std::memcpy(&one, marker.data(), 4);
           if (one != 1) {
-            if (detail::byteSwap(one) != 1) throw ParseFailure("MSH: invalid binary endianness marker");
+            if (detail::byteSwap(one) != 1) throw detail::ParseFailure("MSH: invalid binary endianness marker");
             m_bigEndian = std::endian::native == std::endian::little;
           }
           m_cursor.skipLineBreak();
@@ -261,7 +258,7 @@ namespace anaf::IO::formats {
 
       void addNode(const std::uint64_t tag, const std::array<double, 3>& position) {
         const auto index = static_cast<std::uint32_t>(m_model.nodes.size());
-        if (!m_nodeIndex.emplace(tag, index).second) throw ParseFailure(std::format("MSH: duplicate node tag {}", tag));
+        if (!m_nodeIndex.emplace(tag, index).second) throw detail::ParseFailure(std::format("MSH: duplicate node tag {}", tag));
         m_model.nodes.push_back(Node{tag, position});
       }
 
@@ -347,7 +344,7 @@ namespace anaf::IO::formats {
 
       std::uint32_t nodeIndexOf(const std::uint64_t tag) const {
         const auto it = m_nodeIndex.find(tag);
-        if (it == m_nodeIndex.end()) throw ParseFailure(std::format("MSH: element references unknown node {}", tag));
+        if (it == m_nodeIndex.end()) throw detail::ParseFailure(std::format("MSH: element references unknown node {}", tag));
         return it->second;
       }
 
@@ -362,7 +359,7 @@ namespace anaf::IO::formats {
         ElementLocation location;
         if (const auto existing = m_elementByTag.find(tag); existing != m_elementByTag.end()) {
           if (m_model.blocks[existing->second.block].type != *type) {
-            throw ParseFailure(std::format("MSH: element tag {} used for two different element types", tag));
+            throw detail::ParseFailure(std::format("MSH: element tag {} used for two different element types", tag));
           }
           location = existing->second; // MSH 2 lists an element once per physical group
         } else {
@@ -428,8 +425,8 @@ namespace anaf::IO::formats {
             const int following = raw<std::int32_t>();
             const int tagCount = raw<std::int32_t>();
             const auto n = gmshNodeCount(type);
-            if (!n) throw ParseFailure(std::format("MSH: element type {} is not supported in binary files", type));
-            if (following <= 0) throw ParseFailure("MSH: invalid binary element block");
+            if (!n) throw detail::ParseFailure(std::format("MSH: element type {} is not supported in binary files", type));
+            if (following <= 0) throw detail::ParseFailure("MSH: invalid binary element block");
             nodes.resize(static_cast<std::size_t>(*n));
             for (int e = 0; e < following; ++e) {
               const auto tag = static_cast<std::uint64_t>(raw<std::int32_t>());
@@ -470,7 +467,7 @@ namespace anaf::IO::formats {
           const auto count = sizeValue();
           const auto n = gmshNodeCount(type);
           if (!n) {
-            if (binary()) throw ParseFailure(std::format("MSH: element type {} is not supported in binary files", type));
+            if (binary()) throw detail::ParseFailure(std::format("MSH: element type {} is not supported in binary files", type));
             m_cursor.line();
             for (std::uint64_t e = 0; e < count; ++e) m_cursor.line();
             m_skippedTypes[type] += count;
@@ -513,11 +510,11 @@ namespace anaf::IO::formats {
         for (auto& r : reals) r = m_cursor.number<double>();
         std::vector<long long> integers(m_cursor.number<std::size_t>());
         for (auto& i : integers) i = m_cursor.number<long long>();
-        if (integers.size() < 3) throw ParseFailure("MSH: $" + section + " needs at least 3 integer tags");
+        if (integers.size() < 3) throw detail::ParseFailure("MSH: $" + section + " needs at least 3 integer tags");
         const int step = static_cast<int>(integers[0]);
         const int components = static_cast<int>(integers[1]);
         const auto count = static_cast<std::size_t>(integers[2]);
-        if (components < 1) throw ParseFailure("MSH: invalid component count in $" + section);
+        if (components < 1) throw detail::ParseFailure("MSH: invalid component count in $" + section);
 
         const std::string name = strings.empty() ? std::string("unnamed") : strings[0];
         auto [it, inserted] = m_fields.try_emplace({name, static_cast<int>(location)});
@@ -568,7 +565,7 @@ namespace anaf::IO::formats {
             GlobalArray global;
             global.components = m_cursor.number<int>();
             const auto tuples = m_cursor.number<std::size_t>();
-            if (global.components < 1) throw ParseFailure("MSH: invalid component count in $AnafData");
+            if (global.components < 1) throw detail::ParseFailure("MSH: invalid component count in $AnafData");
             global.name = quotedLine(true);
             global.values.resize(tuples * static_cast<std::size_t>(global.components));
             for (auto& v : global.values) v = m_cursor.number<double>();
@@ -589,7 +586,7 @@ namespace anaf::IO::formats {
             }
             m_stepInfo[{name, static_cast<int>(onNodes ? E_FieldLocation::Node : E_FieldLocation::Element)}] = std::move(info);
           } else {
-            throw ParseFailure("MSH: unknown $AnafData record '" + std::string(kind) + "'");
+            throw detail::ParseFailure("MSH: unknown $AnafData record '" + std::string(kind) + "'");
           }
         }
         expectEnd("AnafData");
@@ -690,7 +687,7 @@ namespace anaf::IO::formats {
         }
       }
 
-      Cursor m_cursor;
+      detail::Cursor m_cursor;
       const IoContext& m_context;
       MeshModel m_model;
       double m_version{2.2};

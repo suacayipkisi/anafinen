@@ -37,7 +37,6 @@
 namespace anaf::GUI {
 
   namespace {
-    using namespace FEM::BEAM;
 
     constexpr double mmToM = 1e-3;
     constexpr double cm2ToM2 = 1e-4;
@@ -56,9 +55,9 @@ namespace anaf::GUI {
 
     // Outline in a canvas of the given size: local z to the right, local y up, i.e. looking
     // from node 1 towards node 2 (z x y points back at the viewer = -x).
-    void drawSection(const char* id, const SectionShape& shape, const ImVec2 size) {
+    void drawSection(const char* id, const FEM::BEAM::SectionShape& shape, const ImVec2 size) {
       ImGui::BeginChild(id, size, true);
-      const auto loops = sectionOutline(shape, 12);
+      const auto loops = FEM::BEAM::sectionOutline(shape, 12);
       if (loops.empty()) {
         ImGui::TextDisabled("No shape: the properties are entered directly.");
         ImGui::EndChild();
@@ -98,8 +97,8 @@ namespace anaf::GUI {
       ImGui::EndChild();
     }
 
-    void propertyLines(const SectionShape& shape) {
-      const auto p = computeProperties(shape, poisson);
+    void propertyLines(const FEM::BEAM::SectionShape& shape) {
+      const auto p = FEM::BEAM::computeProperties(shape, poisson);
       ImGui::Text("A   = %.4g cm^2", p.area / cm2ToM2);
       ImGui::Text("Iy  = %.5g cm^4  (about local y)", p.secondMomentY / cm4ToM4);
       ImGui::Text("Iz  = %.5g cm^4  (about local z)", p.secondMomentZ / cm4ToM4);
@@ -108,16 +107,16 @@ namespace anaf::GUI {
       ImGui::TextDisabled("Shear areas for v = 0.3; the solve uses each material's v.");
     }
 
-    std::optional<SectionShape> draftShape(const int shape, const double height, const double width, const double diameter,
+    std::optional<FEM::BEAM::SectionShape> draftShape(const int shape, const double height, const double width, const double diameter,
                                            const double thickness, const double flangeThickness, const double outerRadius,
-                                           const double innerRadius, const SectionProperties& general) {
+                                           const double innerRadius, const FEM::BEAM::SectionProperties& general) {
       switch (shape) {
-        case 0: return GeneralSection{general};
-        case 1: return RectangleSection{height * mmToM, width * mmToM};
-        case 2: return CircleSection{diameter * mmToM};
-        case 3: return PipeSection{diameter * mmToM, thickness * mmToM};
-        case 4: return BoxSection{height * mmToM, width * mmToM, thickness * mmToM, outerRadius * mmToM, innerRadius * mmToM};
-        case 5: return ISection{height * mmToM, width * mmToM, thickness * mmToM, flangeThickness * mmToM, outerRadius * mmToM};
+        case 0: return FEM::BEAM::GeneralSection{general};
+        case 1: return FEM::BEAM::RectangleSection{height * mmToM, width * mmToM};
+        case 2: return FEM::BEAM::CircleSection{diameter * mmToM};
+        case 3: return FEM::BEAM::PipeSection{diameter * mmToM, thickness * mmToM};
+        case 4: return FEM::BEAM::BoxSection{height * mmToM, width * mmToM, thickness * mmToM, outerRadius * mmToM, innerRadius * mmToM};
+        case 5: return FEM::BEAM::ISection{height * mmToM, width * mmToM, thickness * mmToM, flangeThickness * mmToM, outerRadius * mmToM};
         default: return std::nullopt;
       }
     }
@@ -195,7 +194,7 @@ namespace anaf::GUI {
         while (clipper.Step()) {
           for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
             const auto& section = bridge.allSections[rows[static_cast<std::size_t>(row)]];
-            const auto p = computeProperties(section.getShape(), poisson);
+            const auto p = FEM::BEAM::computeProperties(section.getShape(), poisson);
             ImGui::PushID(static_cast<int>(section.getSectionID()));
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -232,7 +231,7 @@ namespace anaf::GUI {
 
   void SectionHandler::renderSelected() {
     auto& bridge = BRIDGE::buildBridge();
-    std::optional<BeamSection> selected;
+    std::optional<FEM::BEAM::BeamSection> selected;
     {
       std::lock_guard lock(bridge.dataMutex);
       if (const auto index = bridge.findSectionIndex(m_selectedID)) selected = bridge.allSections[*index];
@@ -293,10 +292,10 @@ namespace anaf::GUI {
         break;
     }
 
-    const SectionProperties general{d.area * cm2ToM2, d.secondMomentY * cm4ToM4, d.secondMomentZ * cm4ToM4, d.torsionConstant * cm4ToM4,
+    const FEM::BEAM::SectionProperties general{d.area * cm2ToM2, d.secondMomentY * cm4ToM4, d.secondMomentZ * cm4ToM4, d.torsionConstant * cm4ToM4,
                                     d.shearAreaY * cm2ToM2, d.shearAreaZ * cm2ToM2};
     const auto shape = draftShape(d.shape, d.height, d.width, d.diameter, d.thickness, d.flangeThickness, d.outerRadius, d.innerRadius, general);
-    const auto valid = shape ? validateShape(*shape) : std::expected<void, std::string>(std::unexpect, "unknown shape");
+    const auto valid = shape ? FEM::BEAM::validateShape(*shape) : std::expected<void, std::string>(std::unexpect, "unknown shape");
     if (!valid) {
       ImGui::TextColored(THEME::theme().bad, "%s", valid.error().c_str());
     } else {
@@ -305,7 +304,7 @@ namespace anaf::GUI {
     }
     ImGui::BeginDisabled(!valid);
     if (ImGui::Button("Add Section", ImVec2(-FLT_MIN, 0.0f))) {
-      const auto added = bridge.addUserSection(BeamSection{std::string(d.name.data()), *shape});
+      const auto added = bridge.addUserSection(FEM::BEAM::BeamSection{std::string(d.name.data()), *shape});
       if (added) {
         m_selectedID = *added;
         setStatus(std::format("Section '{}' added", d.name.data()), false);

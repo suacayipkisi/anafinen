@@ -68,7 +68,7 @@ namespace anaf::CLI::HANDLERS {
       return best;
     }
 
-    void trussSummary(Session& session, const BRIDGE::MeshData& mesh) {
+    void trussSummary(Session& session, const FEM::TRUSS::MeshData& mesh) {
       const auto& nodes = mesh.trussNodes;
       const auto& elements = mesh.trussElements;
       if (!nodes.empty()) {
@@ -86,7 +86,7 @@ namespace anaf::CLI::HANDLERS {
       }
     }
 
-    void beamSummary(Session& session, const BRIDGE::BeamMeshData& mesh) {
+    void beamSummary(Session& session, const FEM::BEAM::MeshData& mesh) {
       const auto& nodes = mesh.nodes;
       const auto& elements = mesh.elements;
       if (!nodes.empty()) {

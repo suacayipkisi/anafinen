@@ -30,7 +30,7 @@
 
 namespace anaf::GUI::BEAM_WORKER {
 
-  void startSolve(BRIDGE::GuiCalcBridge& bridge, std::shared_ptr<const BRIDGE::BeamMeshData> mesh) {
+  void startSolve(BRIDGE::GuiCalcBridge& bridge, std::shared_ptr<const FEM::BEAM::MeshData> mesh) {
     if (!mesh) return;
     bridge.joinWorker(); // a worker that is still finishing clears isRunning on exit
     std::vector<MATERIAL::Material> materials;

@@ -51,8 +51,6 @@ namespace anaf::IO::detail {
     constexpr std::string_view elementTagName = "ElementTag";
     constexpr std::string_view entityTagName = "EntityTag";
 
-    using Direction = std::array<double, 3>;
-
     Field makeField(std::string name, const E_FieldLocation location, const int components, std::vector<double> values) {
       Field field;
       field.name = std::move(name);
@@ -79,12 +77,12 @@ namespace anaf::IO::detail {
       return std::nullopt;
     }
 
-    double dot(const Direction& a, const Direction& b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+    double dot(const std::array<double, 3>& a, const std::array<double, 3>& b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
     // Orthonormal basis of the directions left free by `fixedDirections` (Gram-Schmidt).
-    std::vector<Direction> freeBasisFromFixed(const std::vector<Direction>& fixedDirections) {
+    std::vector<std::array<double, 3>> freeBasisFromFixed(const std::vector<std::array<double, 3>>& fixedDirections) {
       constexpr double tolerance = 1e-12;
-      std::vector<Direction> fixedBasis;
+      std::vector<std::array<double, 3>> fixedBasis;
       for (auto direction : fixedDirections) {
         for (const auto& basis : fixedBasis) {
           const double projection = dot(direction, basis);
@@ -96,9 +94,9 @@ namespace anaf::IO::detail {
           fixedBasis.push_back(direction);
         }
       }
-      std::vector<Direction> freeBasis;
+      std::vector<std::array<double, 3>> freeBasis;
       for (int axis = 0; axis < 3 && freeBasis.size() + fixedBasis.size() < 3; ++axis) {
-        Direction residual{};
+        std::array<double, 3> residual{};
         residual[axis] = 1.0;
         for (const auto* group : {&fixedBasis, &freeBasis}) {
           for (const auto& basis : *group) {
@@ -118,10 +116,10 @@ namespace anaf::IO::detail {
     // True when `allowedMotion` is exactly the axis-aligned basis implied by `fixed`.
     bool isAxisAligned(const NodeConstraint& constraint) {
       if (constraint.allowedMotion.empty()) return true;
-      std::vector<Direction> expected;
+      std::vector<std::array<double, 3>> expected;
       for (int axis = 0; axis < 3; ++axis) {
         if (!constraint.fixed[axis]) {
-          Direction d{};
+          std::array<double, 3> d{};
           d[axis] = 1.0;
           expected.push_back(d);
         }
@@ -165,7 +163,7 @@ namespace anaf::IO::detail {
   }
 
   FlatData flattenSteps(const MeshModel& model, const std::vector<Field>& encoded, const int timeStep,
-                        const StepPicker& pick, const std::optional<double> time) {
+                        const std::function<const std::vector<double>*(const Field&)>& pick, const std::optional<double> time) {
     FlatData out;
     out.globals = model.globalData;
     for (auto& global : encodeModelGlobals(model)) out.globals.push_back(std::move(global));
@@ -295,7 +293,7 @@ namespace anaf::IO::detail {
           if (directions.empty()) {
             for (int axis = 0; axis < 3; ++axis) {
               if (!constraint.fixed[axis]) {
-                Direction d{};
+                std::array<double, 3> d{};
                 d[axis] = 1.0;
                 directions.push_back(d);
               }
@@ -512,7 +510,7 @@ namespace anaf::IO::detail {
       for (std::uint32_t n = 0; n < nodeTotal; ++n) {
         const double rankValue = stride == 10 ? values[n * 10] : (ranks && n < ranks->size() ? (*ranks)[n] : 3.0);
         const int rank = std::clamp(static_cast<int>(std::lround(rankValue)), 0, 3);
-        std::vector<Direction> directions;
+        std::vector<std::array<double, 3>> directions;
         for (int i = 0; i < rank; ++i) {
           const double* d = &values[n * stride + offset + i * 3];
           directions.push_back({d[0], d[1], d[2]});
@@ -523,7 +521,7 @@ namespace anaf::IO::detail {
         constraint.allowedMotion = std::move(directions);
         // Keep `fixed` consistent: an axis is fixed when it lies outside the free span.
         for (int axis = 0; axis < 3; ++axis) {
-          Direction residual{};
+          std::array<double, 3> residual{};
           residual[axis] = 1.0;
           for (const auto& basis : constraint.allowedMotion) {
             const double projection = dot(residual, basis);
@@ -548,13 +546,13 @@ namespace anaf::IO::detail {
     }
 
     // Legacy "FixityDirection_*" vectors list fixed directions per node.
-    std::vector<std::vector<Direction>> fixedDirections;
+    std::vector<std::vector<std::array<double, 3>>> fixedDirections;
     for (auto it = model.fields.begin(); it != model.fields.end();) {
       if (it->location == E_FieldLocation::Node && it->components == 3 && it->name.starts_with("FixityDirection_") && sized(*it, nodeTotal)) {
         if (fixedDirections.empty()) fixedDirections.resize(nodeTotal);
         const auto& values = it->steps.back();
         for (std::size_t n = 0; n < nodeTotal; ++n) {
-          const Direction d{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
+          const std::array<double, 3> d{values[n * 3], values[n * 3 + 1], values[n * 3 + 2]};
           if (d[0] != 0.0 || d[1] != 0.0 || d[2] != 0.0) fixedDirections[n].push_back(d);
         }
         it = model.fields.erase(it);
@@ -568,7 +566,7 @@ namespace anaf::IO::detail {
       auto directions = fixedDirections[n];
       for (int axis = 0; axis < 3; ++axis) {
         if (constraint.fixed[axis]) {
-          Direction d{};
+          std::array<double, 3> d{};
           d[axis] = 1.0;
           directions.push_back(d);
         }

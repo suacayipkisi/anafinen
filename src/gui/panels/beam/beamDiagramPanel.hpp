@@ -39,7 +39,7 @@ namespace anaf::GUI {
     static constexpr int sampleCount = 61;
 
     // Samples of the element shown, rebuilt when the snapshot or the element changes.
-    std::shared_ptr<const BRIDGE::BeamMeshData> m_mesh;
+    std::shared_ptr<const FEM::BEAM::MeshData> m_mesh;
     std::uint32_t m_element{noSelection};
     std::vector<FEM::BEAM::SectionState> m_states;
     std::vector<std::optional<FEM::BEAM::SectionStress>> m_stresses;
@@ -51,7 +51,7 @@ namespace anaf::GUI {
     int m_lastFrame{-10};     // last ImGui frame drawn; a gap means the panel was closed
 
     void dockUnderModelTree();
-    void rebuild(const std::shared_ptr<const BRIDGE::BeamMeshData>& mesh, std::uint32_t element);
+    void rebuild(const std::shared_ptr<const FEM::BEAM::MeshData>& mesh, std::uint32_t element);
     void renderPlot();
     void renderTable();
 

@@ -79,13 +79,12 @@ namespace anaf::IO::ARRAY {
   } // namespace cholmodDetail end
 
   inline Result<void> write(ArrayFile& file, const std::string_view path, const cholmod_sparse& matrix, const WriteOptions& options = {}) {
-    using cholmodDetail::error;
-    if (!matrix.packed) return std::unexpected(error(ArrayError::E_Code::InvalidData, path, "unpacked cholmod_sparse is not supported"));
+    if (!matrix.packed) return std::unexpected(cholmodDetail::error(ArrayError::E_Code::InvalidData, path, "unpacked cholmod_sparse is not supported"));
     if (matrix.dtype != CHOLMOD_DOUBLE || (matrix.xtype != CHOLMOD_REAL && matrix.xtype != CHOLMOD_COMPLEX)) {
-      return std::unexpected(error(ArrayError::E_Code::TypeMismatch, path, "only double real / complex (interleaved) matrices are supported"));
+      return std::unexpected(cholmodDetail::error(ArrayError::E_Code::TypeMismatch, path, "only double real / complex (interleaved) matrices are supported"));
     }
     if (matrix.itype != CHOLMOD_INT && matrix.itype != CHOLMOD_LONG) {
-      return std::unexpected(error(ArrayError::E_Code::TypeMismatch, path, "unsupported CHOLMOD index type"));
+      return std::unexpected(cholmodDetail::error(ArrayError::E_Code::TypeMismatch, path, "unsupported CHOLMOD index type"));
     }
     const bool wide = matrix.itype == CHOLMOD_LONG;
     const auto pointers = wide ? cholmodDetail::widen<std::int64_t>(matrix.p, matrix.ncol + 1) : cholmodDetail::widen<int>(matrix.p, matrix.ncol + 1);
@@ -110,9 +109,8 @@ namespace anaf::IO::ARRAY {
   }
 
   inline Result<void> write(ArrayFile& file, const std::string_view path, const cholmod_dense& matrix, const WriteOptions& options = {}) {
-    using cholmodDetail::error;
     if (matrix.dtype != CHOLMOD_DOUBLE || (matrix.xtype != CHOLMOD_REAL && matrix.xtype != CHOLMOD_COMPLEX)) {
-      return std::unexpected(error(ArrayError::E_Code::TypeMismatch, path, "only double real / complex (interleaved) matrices are supported"));
+      return std::unexpected(cholmodDetail::error(ArrayError::E_Code::TypeMismatch, path, "only double real / complex (interleaved) matrices are supported"));
     }
     const std::uint64_t shape[] = {matrix.nrow, matrix.ncol};
     // Column-major with leading dimension d -> row-major.

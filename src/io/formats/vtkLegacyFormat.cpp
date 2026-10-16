@@ -43,9 +43,6 @@ namespace anaf::IO::formats {
 
   namespace {
 
-    using detail::Cursor;
-    using detail::ParseFailure;
-
     void checkCancel(const IoContext& context) {
       if (context.cancelled()) throw detail::CancelledFailure();
     }
@@ -90,11 +87,11 @@ namespace anaf::IO::formats {
     }
 
     template <typename Out>
-    std::vector<Out> readArray(Cursor& cursor, const std::size_t count, const std::string& type, const bool binary) {
+    std::vector<Out> readArray(detail::Cursor& cursor, const std::size_t count, const std::string& type, const bool binary) {
       std::vector<Out> values(count);
       if (binary) {
         const std::size_t size = typeSize(type);
-        if (size == 0) throw ParseFailure("unsupported binary data type '" + type + "'");
+        if (size == 0) throw detail::ParseFailure("unsupported binary data type '" + type + "'");
         // The keyword line (including its line break) has been consumed: raw data starts here.
         const auto raw = cursor.bytes(count * size);
         for (std::size_t i = 0; i < count; ++i) {
@@ -116,14 +113,14 @@ namespace anaf::IO::formats {
     }
 
     // Keyword arguments up to the end of the keyword line.
-    std::vector<std::string> lineArguments(Cursor& cursor) {
+    std::vector<std::string> lineArguments(detail::Cursor& cursor) {
       std::vector<std::string> args;
-      Cursor line(cursor.line());
+      detail::Cursor line(cursor.line());
       for (auto token = line.token(); !token.empty(); token = line.token()) args.emplace_back(token);
       return args;
     }
 
-    void skipMetadata(Cursor& cursor) {
+    void skipMetadata(detail::Cursor& cursor) {
       // METADATA is followed by INFORMATION / COMPONENT_NAMES blocks, terminated by an empty line.
       cursor.line();
       while (!cursor.atEnd()) {
@@ -137,33 +134,33 @@ namespace anaf::IO::formats {
       std::vector<std::vector<std::int64_t>> cells;
     };
 
-    CellList readCellList(Cursor& cursor, const std::vector<std::string>& args, const bool binary, const bool offsetsLayout) {
-      if (args.size() < 2) throw ParseFailure("malformed cell list header");
+    CellList readCellList(detail::Cursor& cursor, const std::vector<std::string>& args, const bool binary, const bool offsetsLayout) {
+      if (args.size() < 2) throw detail::ParseFailure("malformed cell list header");
       CellList list;
       if (offsetsLayout) {
-        const auto offsetCount = Cursor::parseNumber<std::size_t>(args[0]);
-        const auto connectivitySize = Cursor::parseNumber<std::size_t>(args[1]);
-        if (upper(cursor.token()) != "OFFSETS") throw ParseFailure("OFFSETS expected");
+        const auto offsetCount = detail::Cursor::parseNumber<std::size_t>(args[0]);
+        const auto connectivitySize = detail::Cursor::parseNumber<std::size_t>(args[1]);
+        if (upper(cursor.token()) != "OFFSETS") throw detail::ParseFailure("OFFSETS expected");
         const auto offsetType = lineArguments(cursor);
         const auto offsets = readArray<std::int64_t>(cursor, offsetCount, offsetType.empty() ? "vtktypeint64" : offsetType[0], binary);
-        if (upper(cursor.token()) != "CONNECTIVITY") throw ParseFailure("CONNECTIVITY expected");
+        if (upper(cursor.token()) != "CONNECTIVITY") throw detail::ParseFailure("CONNECTIVITY expected");
         const auto connectivityType = lineArguments(cursor);
         const auto connectivity = readArray<std::int64_t>(cursor, connectivitySize, connectivityType.empty() ? "vtktypeint64" : connectivityType[0], binary);
         for (std::size_t c = 0; c + 1 < offsets.size(); ++c) {
           if (offsets[c] < 0 || offsets[c + 1] < offsets[c] || static_cast<std::size_t>(offsets[c + 1]) > connectivity.size()) {
-            throw ParseFailure("invalid cell offsets");
+            throw detail::ParseFailure("invalid cell offsets");
           }
           list.cells.emplace_back(connectivity.begin() + offsets[c], connectivity.begin() + offsets[c + 1]);
         }
       } else {
-        const auto cellCount = Cursor::parseNumber<std::size_t>(args[0]);
-        const auto totalSize = Cursor::parseNumber<std::size_t>(args[1]);
+        const auto cellCount = detail::Cursor::parseNumber<std::size_t>(args[0]);
+        const auto totalSize = detail::Cursor::parseNumber<std::size_t>(args[1]);
         const auto flat = readArray<std::int64_t>(cursor, totalSize, "int", binary);
         std::size_t pos = 0;
         for (std::size_t c = 0; c < cellCount; ++c) {
-          if (pos >= flat.size()) throw ParseFailure("cell list shorter than declared");
+          if (pos >= flat.size()) throw detail::ParseFailure("cell list shorter than declared");
           const auto n = static_cast<std::size_t>(flat[pos++]);
-          if (pos + n > flat.size()) throw ParseFailure("cell list shorter than declared");
+          if (pos + n > flat.size()) throw detail::ParseFailure("cell list shorter than declared");
           list.cells.emplace_back(flat.begin() + static_cast<std::ptrdiff_t>(pos), flat.begin() + static_cast<std::ptrdiff_t>(pos + n));
           pos += n;
         }
@@ -182,27 +179,27 @@ namespace anaf::IO::formats {
 
   MeshModel readVtkLegacy(const std::filesystem::path& path, const ReadOptions&, const IoContext& context) {
     const std::string content = detail::readWholeFile(path);
-    Cursor cursor(content);
+    detail::Cursor cursor(content);
     context.progress(0.05f, "parsing header");
 
     const auto header = cursor.line();
     const auto versionPos = header.find("Version");
     if (header.find("vtk") == std::string_view::npos || versionPos == std::string_view::npos) {
-      throw ParseFailure("not a legacy VTK file (missing '# vtk DataFile Version' header)");
+      throw detail::ParseFailure("not a legacy VTK file (missing '# vtk DataFile Version' header)");
     }
-    const double version = Cursor::parseNumber<double>(Cursor(header.substr(versionPos + 7)).token());
+    const double version = detail::Cursor::parseNumber<double>(detail::Cursor(header.substr(versionPos + 7)).token());
     const bool offsetsLayout = version >= 5.0;
 
     MeshModel model;
     model.title = std::string(cursor.line());
     const std::string encoding = upper(cursor.token());
-    if (encoding != "ASCII" && encoding != "BINARY") throw ParseFailure("expected ASCII or BINARY, got '" + encoding + "'");
+    if (encoding != "ASCII" && encoding != "BINARY") throw detail::ParseFailure("expected ASCII or BINARY, got '" + encoding + "'");
     const bool binary = encoding == "BINARY";
 
-    if (upper(cursor.token()) != "DATASET") throw ParseFailure("DATASET expected");
+    if (upper(cursor.token()) != "DATASET") throw detail::ParseFailure("DATASET expected");
     const std::string dataset = upper(cursor.token());
     if (dataset != "UNSTRUCTURED_GRID" && dataset != "POLYDATA") {
-      throw ParseFailure("dataset '" + dataset + "' is not supported (UNSTRUCTURED_GRID or POLYDATA expected)");
+      throw detail::ParseFailure("dataset '" + dataset + "' is not supported (UNSTRUCTURED_GRID or POLYDATA expected)");
     }
     const bool polydata = dataset == "POLYDATA";
 
@@ -229,8 +226,8 @@ namespace anaf::IO::formats {
 
       if (keyword == "POINTS") {
         const auto args = lineArguments(cursor);
-        if (args.size() < 2) throw ParseFailure("malformed POINTS header");
-        pointCount = Cursor::parseNumber<std::size_t>(args[0]);
+        if (args.size() < 2) throw detail::ParseFailure("malformed POINTS header");
+        pointCount = detail::Cursor::parseNumber<std::size_t>(args[0]);
         const auto coords = readArray<double>(cursor, pointCount * 3, args[1], binary);
         model.nodes.resize(pointCount);
         for (std::size_t i = 0; i < pointCount; ++i) {
@@ -242,7 +239,7 @@ namespace anaf::IO::formats {
         context.progress(0.5f, "cells");
       } else if (keyword == "CELL_TYPES") {
         const auto args = lineArguments(cursor);
-        const auto count = Cursor::parseNumber<std::size_t>(args.at(0));
+        const auto count = detail::Cursor::parseNumber<std::size_t>(args.at(0));
         const auto types = readArray<std::int64_t>(cursor, count, "int", binary);
         cellTypes.assign(types.begin(), types.end());
       } else if (keyword == "VERTICES" || keyword == "LINES" || keyword == "POLYGONS" || keyword == "TRIANGLE_STRIPS") {
@@ -250,13 +247,13 @@ namespace anaf::IO::formats {
         polySections.emplace_back(implied, readCellList(cursor, lineArguments(cursor), binary, offsetsLayout));
       } else if (keyword == "POINT_DATA" || keyword == "CELL_DATA") {
         const auto args = lineArguments(cursor);
-        attributeCount = Cursor::parseNumber<std::size_t>(args.at(0));
+        attributeCount = detail::Cursor::parseNumber<std::size_t>(args.at(0));
         onPoints = keyword == "POINT_DATA";
         inAttributes = true;
       } else if (keyword == "SCALARS") {
         const auto args = lineArguments(cursor);
-        if (args.size() < 2) throw ParseFailure("malformed SCALARS header");
-        const int components = args.size() >= 3 ? Cursor::parseNumber<int>(args[2]) : 1;
+        if (args.size() < 2) throw detail::ParseFailure("malformed SCALARS header");
+        const int components = args.size() >= 3 ? detail::Cursor::parseNumber<int>(args[2]) : 1;
         if (upper(cursor.peekToken()) == "LOOKUP_TABLE") {
           cursor.token();
           cursor.line();
@@ -264,19 +261,19 @@ namespace anaf::IO::formats {
         readAttribute(args[0], components, args[1]);
       } else if (keyword == "COLOR_SCALARS") {
         const auto args = lineArguments(cursor);
-        const int components = Cursor::parseNumber<int>(args.at(1));
+        const int components = detail::Cursor::parseNumber<int>(args.at(1));
         readAttribute(args.at(0), components, binary ? "unsigned_char" : "float");
       } else if (keyword == "LOOKUP_TABLE") {
         // Standalone color table: 4 values (RGBA) per entry; not model data.
         const auto args = lineArguments(cursor);
-        const auto entries = Cursor::parseNumber<std::size_t>(args.at(1));
+        const auto entries = detail::Cursor::parseNumber<std::size_t>(args.at(1));
         readArray<double>(cursor, entries * 4, binary ? "unsigned_char" : "float", binary);
       } else if (keyword == "VECTORS" || keyword == "NORMALS") {
         const auto args = lineArguments(cursor);
         readAttribute(args.at(0), 3, args.at(1));
       } else if (keyword == "TEXTURE_COORDINATES") {
         const auto args = lineArguments(cursor);
-        readAttribute(args.at(0), Cursor::parseNumber<int>(args.at(1)), args.at(2));
+        readAttribute(args.at(0), detail::Cursor::parseNumber<int>(args.at(1)), args.at(2));
       } else if (keyword == "TENSORS" || keyword == "TENSORS6") {
         const auto args = lineArguments(cursor);
         readAttribute(args.at(0), keyword == "TENSORS" ? 9 : 6, args.at(1));
@@ -285,7 +282,7 @@ namespace anaf::IO::formats {
         readAttribute(args.at(0), 1, args.at(1));
       } else if (keyword == "FIELD") {
         const auto args = lineArguments(cursor);
-        const auto arrays = Cursor::parseNumber<std::size_t>(args.at(1));
+        const auto arrays = detail::Cursor::parseNumber<std::size_t>(args.at(1));
         for (std::size_t a = 0; a < arrays; ++a) {
           const std::string arrayName(cursor.token());
           if (upper(arrayName) == "NULL_ARRAY") continue;
@@ -295,9 +292,9 @@ namespace anaf::IO::formats {
             continue;
           }
           const auto header2 = lineArguments(cursor);
-          if (header2.size() < 3) throw ParseFailure("malformed FIELD array header");
-          const int components = Cursor::parseNumber<int>(header2[0]);
-          const auto tuples = Cursor::parseNumber<std::size_t>(header2[1]);
+          if (header2.size() < 3) throw detail::ParseFailure("malformed FIELD array header");
+          const int components = detail::Cursor::parseNumber<int>(header2[0]);
+          const auto tuples = detail::Cursor::parseNumber<std::size_t>(header2[1]);
           auto values = readArray<double>(cursor, tuples * static_cast<std::size_t>(components), header2[2], binary);
           // Dataset-level FIELD arrays (before POINT_DATA / CELL_DATA) are not attached to entities.
           if (!inAttributes) {
@@ -309,7 +306,7 @@ namespace anaf::IO::formats {
       } else if (keyword == "METADATA") {
         skipMetadata(cursor);
       } else {
-        throw ParseFailure("unexpected keyword '" + std::string(keywordView) + "'");
+        throw detail::ParseFailure("unexpected keyword '" + std::string(keywordView) + "'");
       }
     }
 
@@ -322,7 +319,7 @@ namespace anaf::IO::formats {
       }
     } else {
       if (cellTypes.size() != cells.cells.size()) {
-        throw ParseFailure(std::format("{} cells but {} cell types", cells.cells.size(), cellTypes.size()));
+        throw detail::ParseFailure(std::format("{} cells but {} cell types", cells.cells.size(), cellTypes.size()));
       }
       for (std::size_t c = 0; c < cells.cells.size(); ++c) collector.addCell(cellTypes[c], cells.cells[c], fileCell++);
     }

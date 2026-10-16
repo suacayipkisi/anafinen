@@ -40,15 +40,15 @@ namespace anaf::CLI::HANDLERS {
 
     constexpr std::array<double, 3> defaultGravity{0.0, -9.80665, 0.0};
 
-    std::vector<FEM::TRUSS::Node>& nodeList(BRIDGE::MeshData& mesh) { return mesh.trussNodes; }
-    std::vector<FEM::BEAM::Node>& nodeList(BRIDGE::BeamMeshData& mesh) { return mesh.nodes; }
-    const std::vector<FEM::TRUSS::Node>& nodeList(const BRIDGE::MeshData& mesh) { return mesh.trussNodes; }
-    const std::vector<FEM::BEAM::Node>& nodeList(const BRIDGE::BeamMeshData& mesh) { return mesh.nodes; }
-    std::size_t elementCount(const BRIDGE::MeshData& mesh) { return mesh.trussElements.size(); }
-    std::size_t elementCount(const BRIDGE::BeamMeshData& mesh) { return mesh.elements.size(); }
+    std::vector<FEM::TRUSS::Node>& nodeList(FEM::TRUSS::MeshData& mesh) { return mesh.trussNodes; }
+    std::vector<FEM::BEAM::Node>& nodeList(FEM::BEAM::MeshData& mesh) { return mesh.nodes; }
+    const std::vector<FEM::TRUSS::Node>& nodeList(const FEM::TRUSS::MeshData& mesh) { return mesh.trussNodes; }
+    const std::vector<FEM::BEAM::Node>& nodeList(const FEM::BEAM::MeshData& mesh) { return mesh.nodes; }
+    std::size_t elementCount(const FEM::TRUSS::MeshData& mesh) { return mesh.trussElements.size(); }
+    std::size_t elementCount(const FEM::BEAM::MeshData& mesh) { return mesh.elements.size(); }
 
-    void removeNode(BRIDGE::MeshData& mesh, const std::uint32_t k) { FEM::TRUSS::deleteNode(mesh, k); }
-    void removeNode(BRIDGE::BeamMeshData& mesh, const std::uint32_t k) { FEM::BEAM::deleteNode(mesh, k); }
+    void removeNode(FEM::TRUSS::MeshData& mesh, const std::uint32_t k) { FEM::TRUSS::deleteNode(mesh, k); }
+    void removeNode(FEM::BEAM::MeshData& mesh, const std::uint32_t k) { FEM::BEAM::deleteNode(mesh, k); }
 
     CommandResult noModel() {
       return std::unexpected("no model: start one with -new truss|beam, -generate, -library load or -import");
@@ -58,8 +58,8 @@ namespace anaf::CLI::HANDLERS {
     template <typename Edit>
     CommandResult editActive(Session& session, Edit&& edit) {
       switch (modelKind(session)) {
-        case E_ModelKind::Truss: return editTruss(session, [&](BRIDGE::MeshData& mesh) { return edit(mesh); });
-        case E_ModelKind::Beam: return editBeam(session, [&](BRIDGE::BeamMeshData& mesh) { return edit(mesh); });
+        case E_ModelKind::Truss: return editTruss(session, [&](FEM::TRUSS::MeshData& mesh) { return edit(mesh); });
+        case E_ModelKind::Beam: return editBeam(session, [&](FEM::BEAM::MeshData& mesh) { return edit(mesh); });
         default: return noModel();
       }
     }
@@ -70,18 +70,18 @@ namespace anaf::CLI::HANDLERS {
       switch (modelKind(session)) {
         case E_ModelKind::Truss: {
           const auto mesh = trussMesh(session);
-          return show(mesh ? *mesh : BRIDGE::MeshData{});
+          return show(mesh ? *mesh : FEM::TRUSS::MeshData{});
         }
         case E_ModelKind::Beam: {
           const auto mesh = beamMesh(session);
-          return show(mesh ? *mesh : BRIDGE::BeamMeshData{});
+          return show(mesh ? *mesh : FEM::BEAM::MeshData{});
         }
         default: return noModel();
       }
     }
 
     template <typename Mesh>
-    constexpr bool isBeam = std::is_same_v<std::remove_cvref_t<Mesh>, BRIDGE::BeamMeshData>;
+    constexpr bool isBeam = std::is_same_v<std::remove_cvref_t<Mesh>, FEM::BEAM::MeshData>;
 
     std::expected<std::vector<std::array<double, 3>>, std::string> parsePoints(const Arguments args) {
       if (args.empty() || args.size() % 3 != 0) return std::unexpected("give the coordinates as <x> <y> <z> (groups of three)");
@@ -133,7 +133,7 @@ namespace anaf::CLI::HANDLERS {
     }
 
     // The orientation vector must not be parallel to the element (zero = default rule).
-    CommandResult checkOrientation(const BRIDGE::BeamMeshData& mesh, const FEM::BEAM::BeamElement& element) {
+    CommandResult checkOrientation(const FEM::BEAM::MeshData& mesh, const FEM::BEAM::BeamElement& element) {
       const auto& v = element.orientation;
       if (OUTPUT::norm(v) == 0.0) return {};
       const auto& p1 = mesh.nodes[element.node1].getLocation();
@@ -353,7 +353,7 @@ namespace anaf::CLI::HANDLERS {
         if constexpr (isBeam<decltype(mesh)>) {
           FEM::BEAM::removeElements(mesh, [&](const FEM::BEAM::BeamElement&) { return drop[index++]; });
         } else {
-          std::erase_if(mesh.trussElements, [&](const BRIDGE::RenderElement&) { return drop[index++]; });
+          std::erase_if(mesh.trussElements, [&](const FEM::TRUSS::RenderElement&) { return drop[index++]; });
         }
         session.out << std::format("removed {} element{}; the later ids moved down\n", ids->size(), ids->size() == 1 ? "" : "s");
         return {};
@@ -542,7 +542,7 @@ namespace anaf::CLI::HANDLERS {
         value[i] = *number;
       }
       const auto frame = args.size() == 6 && args[5] == "local" ? FEM::BEAM::E_LoadFrame::Local : FEM::BEAM::E_LoadFrame::Global;
-      return editBeam(session, [&](BRIDGE::BeamMeshData& mesh) -> CommandResult {
+      return editBeam(session, [&](FEM::BEAM::MeshData& mesh) -> CommandResult {
         const auto ids = parseIdList(args[1], mesh.elements.size(), "element");
         if (!ids) return std::unexpected(ids.error());
         for (const auto id : *ids) mesh.distributedLoads.push_back({.element = id, .value = value, .frame = frame});
@@ -600,7 +600,7 @@ namespace anaf::CLI::HANDLERS {
     } else {
       return std::unexpected("usage: -gravity [<gx> <gy> <gz> | off]");
     }
-    return editBeam(session, [&](BRIDGE::BeamMeshData& mesh) -> CommandResult {
+    return editBeam(session, [&](FEM::BEAM::MeshData& mesh) -> CommandResult {
       mesh.gravity = value;
       session.out << std::format("gravity {} m/s^2{}\n", OUTPUT::vector3(value), OUTPUT::norm(value) == 0.0 ? " (no self weight)" : "");
       return {};
@@ -615,7 +615,7 @@ namespace anaf::CLI::HANDLERS {
     if (!bits) return std::unexpected(bits.error());
     const bool atNode1 = args[1] != "2";
     const bool atNode2 = args[1] != "1";
-    return editBeam(session, [&](BRIDGE::BeamMeshData& mesh) -> CommandResult {
+    return editBeam(session, [&](FEM::BEAM::MeshData& mesh) -> CommandResult {
       const auto ids = parseIdList(args[0], mesh.elements.size(), "element");
       if (!ids) return std::unexpected(ids.error());
       for (const auto id : *ids) {
@@ -636,7 +636,7 @@ namespace anaf::CLI::HANDLERS {
     if (args.size() != 2) return std::unexpected("usage: -formulation <elements> eb|timoshenko");
     const auto chosen = OUTPUT::parseFormulation(args[1]);
     if (!chosen) return std::unexpected(chosen.error());
-    return editBeam(session, [&](BRIDGE::BeamMeshData& mesh) -> CommandResult {
+    return editBeam(session, [&](FEM::BEAM::MeshData& mesh) -> CommandResult {
       const auto ids = parseIdList(args[0], mesh.elements.size(), "element");
       if (!ids) return std::unexpected(ids.error());
       for (const auto id : *ids) mesh.elements[id].formulation = *chosen;

@@ -50,8 +50,6 @@ namespace anaf::IO::formats {
 
   namespace {
 
-    using detail::ParseFailure;
-
     // ------------------------------------------------------------ minimal XML tree
 
     struct XmlElement {
@@ -152,7 +150,7 @@ namespace anaf::IO::formats {
 
       std::size_t find(std::string_view token) const {
         const auto at = m_data.find(token, m_pos);
-        if (at == std::string_view::npos) throw ParseFailure("malformed XML: missing '" + std::string(token) + "'");
+        if (at == std::string_view::npos) throw detail::ParseFailure("malformed XML: missing '" + std::string(token) + "'");
         return at;
       }
 
@@ -166,14 +164,14 @@ namespace anaf::IO::formats {
       }
 
       XmlElement parseElement() {
-        if (m_pos >= m_data.size() || m_data[m_pos] != '<') throw ParseFailure("malformed XML: '<' expected");
+        if (m_pos >= m_data.size() || m_data[m_pos] != '<') throw detail::ParseFailure("malformed XML: '<' expected");
         ++m_pos;
         XmlElement element;
         element.name = parseName();
         // Attributes.
         while (true) {
           skipSpace();
-          if (m_pos >= m_data.size()) throw ParseFailure("malformed XML: unterminated tag");
+          if (m_pos >= m_data.size()) throw detail::ParseFailure("malformed XML: unterminated tag");
           if (m_data[m_pos] == '/') {
             m_pos = find(">") + 1;
             return element; // self-closing
@@ -184,13 +182,13 @@ namespace anaf::IO::formats {
           }
           const std::string key = parseName();
           skipSpace();
-          if (m_pos >= m_data.size() || m_data[m_pos] != '=') throw ParseFailure("malformed XML attribute '" + key + "'");
+          if (m_pos >= m_data.size() || m_data[m_pos] != '=') throw detail::ParseFailure("malformed XML attribute '" + key + "'");
           ++m_pos;
           skipSpace();
           const char quote = m_data[m_pos];
-          if (quote != '"' && quote != '\'') throw ParseFailure("malformed XML attribute value");
+          if (quote != '"' && quote != '\'') throw detail::ParseFailure("malformed XML attribute value");
           const auto end = m_data.find(quote, m_pos + 1);
-          if (end == std::string_view::npos) throw ParseFailure("unterminated XML attribute value");
+          if (end == std::string_view::npos) throw detail::ParseFailure("unterminated XML attribute value");
           element.attributes[key] = decodeEntities(m_data.substr(m_pos + 1, end - m_pos - 1));
           m_pos = end + 1;
         }
@@ -199,7 +197,7 @@ namespace anaf::IO::formats {
           // Raw appended data may contain any byte, including '<': stop XML parsing here.
           m_appendedEncoding = element.attribute("encoding", "raw");
           const auto marker = m_data.find('_', m_pos);
-          if (marker == std::string_view::npos) throw ParseFailure("AppendedData without '_' marker");
+          if (marker == std::string_view::npos) throw detail::ParseFailure("AppendedData without '_' marker");
           m_appendedStart = marker + 1;
           m_pos = m_data.size();
           return element;
@@ -208,7 +206,7 @@ namespace anaf::IO::formats {
         // Content: child elements and character data.
         while (true) {
           const auto next = m_data.find('<', m_pos);
-          if (next == std::string_view::npos) throw ParseFailure("malformed XML: missing end tag for " + element.name);
+          if (next == std::string_view::npos) throw detail::ParseFailure("malformed XML: missing end tag for " + element.name);
           if (next > m_pos) element.textPieces.push_back(m_data.substr(m_pos, next - m_pos));
           m_pos = next;
           if (m_data.substr(m_pos, 4) == "<!--") {
@@ -245,7 +243,7 @@ namespace anaf::IO::formats {
       if (type == "Int16" || type == "UInt16") return 2;
       if (type == "Int32" || type == "UInt32" || type == "Float32") return 4;
       if (type == "Int64" || type == "UInt64" || type == "Float64") return 8;
-      throw ParseFailure("unsupported DataArray type '" + type + "'");
+      throw detail::ParseFailure("unsupported DataArray type '" + type + "'");
     }
 
     double scalarAt(const char* raw, const std::string& type, const bool big) {
@@ -269,7 +267,7 @@ namespace anaf::IO::formats {
 
     std::uint64_t headerWord(const std::string_view bytes, const std::size_t index, const Layout& layout) {
       const std::size_t at = index * layout.headerSize;
-      if (at + layout.headerSize > bytes.size()) throw ParseFailure("truncated binary header");
+      if (at + layout.headerSize > bytes.size()) throw detail::ParseFailure("truncated binary header");
       return layout.headerSize == 8 ? detail::loadValue<std::uint64_t>(bytes.data() + at, layout.bigEndian)
                                     : detail::loadValue<std::uint32_t>(bytes.data() + at, layout.bigEndian);
     }
@@ -300,7 +298,7 @@ namespace anaf::IO::formats {
     std::string decodeBinaryPayload(const std::string_view source, const bool base64, const Layout& layout) {
       auto available = [&](const std::size_t bytes) -> std::string {
         if (base64) return base64AtLeast(source, bytes);
-        if (bytes > source.size()) throw ParseFailure("truncated binary array");
+        if (bytes > source.size()) throw detail::ParseFailure("truncated binary array");
         return std::string(source.substr(0, bytes));
       };
 
@@ -308,7 +306,7 @@ namespace anaf::IO::formats {
         const std::string head = available(layout.headerSize);
         const std::uint64_t length = headerWord(head, 0, layout);
         const std::string all = available(layout.headerSize + length);
-        if (all.size() < layout.headerSize + length) throw ParseFailure("truncated binary array");
+        if (all.size() < layout.headerSize + length) throw detail::ParseFailure("truncated binary array");
         return all.substr(layout.headerSize, length);
       }
 
@@ -325,7 +323,7 @@ namespace anaf::IO::formats {
       // For base64 the decoder flushes at padding, so a header and data encoded separately
       // (VTK's convention) decode the same as one joint base64 string.
       const std::string all = available(headerBytes + compressedTotal);
-      if (all.size() < headerBytes + compressedTotal) throw ParseFailure("truncated compressed array");
+      if (all.size() < headerBytes + compressedTotal) throw detail::ParseFailure("truncated compressed array");
       const std::string compressed = all.substr(headerBytes, compressedTotal);
 
       std::string out;
@@ -338,7 +336,7 @@ namespace anaf::IO::formats {
         uLongf length = static_cast<uLongf>(expected);
         const int status = uncompress(reinterpret_cast<Bytef*>(block.data()), &length,
                                       reinterpret_cast<const Bytef*>(compressed.data() + pos), static_cast<uLong>(compressedSize));
-        if (status != Z_OK) throw ParseFailure("zlib decompression failed");
+        if (status != Z_OK) throw detail::ParseFailure("zlib decompression failed");
         out.append(block.data(), length);
         pos += compressedSize;
       }
@@ -369,10 +367,10 @@ namespace anaf::IO::formats {
           payload = decodeBinaryPayload(array.text(), true, layout);
         } else if (format == "appended") {
           const auto offset = detail::Cursor::parseNumber<std::size_t>(array.attribute("offset", "0"));
-          if (offset > layout.appended.size()) throw ParseFailure("appended offset beyond the data section");
+          if (offset > layout.appended.size()) throw detail::ParseFailure("appended offset beyond the data section");
           payload = decodeBinaryPayload(layout.appended.substr(offset), layout.appendedBase64, layout);
         } else {
-          throw ParseFailure("unsupported DataArray format '" + format + "'");
+          throw detail::ParseFailure("unsupported DataArray format '" + format + "'");
         }
         const std::size_t size = scalarSize(type);
         const std::size_t count = payload.size() / size;
@@ -383,7 +381,7 @@ namespace anaf::IO::formats {
         }
       }
       if (expectedCount != 0 && values.size() != expectedCount) {
-        throw ParseFailure(std::format("DataArray '{}' has {} values, {} expected", array.attribute("Name"), values.size(), expectedCount));
+        throw detail::ParseFailure(std::format("DataArray '{}' has {} values, {} expected", array.attribute("Name"), values.size(), expectedCount));
       }
       return values;
     }
@@ -402,17 +400,17 @@ namespace anaf::IO::formats {
     const std::string content = detail::readWholeFile(path);
     XmlParser parser(content);
     const XmlElement root = parser.parseDocument();
-    if (root.name != "VTKFile") throw ParseFailure("not a VTK XML file (root element is '" + root.name + "')");
-    if (root.attribute("type") == "Collection") throw ParseFailure("this is a ParaView collection: read it as .pvd");
+    if (root.name != "VTKFile") throw detail::ParseFailure("not a VTK XML file (root element is '" + root.name + "')");
+    if (root.attribute("type") == "Collection") throw detail::ParseFailure("this is a ParaView collection: read it as .pvd");
     if (root.attribute("type") != "UnstructuredGrid") {
-      throw ParseFailure("VTK XML type '" + root.attribute("type") + "' is not supported (UnstructuredGrid expected)");
+      throw detail::ParseFailure("VTK XML type '" + root.attribute("type") + "' is not supported (UnstructuredGrid expected)");
     }
     Layout layout;
     layout.bigEndian = root.attribute("byte_order", "LittleEndian") == "BigEndian";
     layout.headerSize = root.attribute("header_type", "UInt32") == "UInt64" ? 8 : 4;
     const std::string compressor = root.attribute("compressor");
     if (!compressor.empty() && compressor != "vtkZLibDataCompressor") {
-      throw ParseFailure("compressor '" + compressor + "' is not supported (only vtkZLibDataCompressor)");
+      throw detail::ParseFailure("compressor '" + compressor + "' is not supported (only vtkZLibDataCompressor)");
     }
     layout.zlib = !compressor.empty();
     if (parser.appendedStart() != std::string_view::npos) {
@@ -421,7 +419,7 @@ namespace anaf::IO::formats {
     }
 
     const XmlElement* grid = root.child("UnstructuredGrid");
-    if (!grid) throw ParseFailure("UnstructuredGrid element missing");
+    if (!grid) throw detail::ParseFailure("UnstructuredGrid element missing");
 
     MeshModel model;
     if (const XmlElement* fieldData = grid->child("FieldData")) {
@@ -452,7 +450,7 @@ namespace anaf::IO::formats {
       if (points > 0) {
         const XmlElement* pointsElement = piece.child("Points");
         const XmlElement* coordsArray = pointsElement ? pointsElement->child("DataArray") : nullptr;
-        if (!coordsArray) throw ParseFailure("Points/DataArray missing");
+        if (!coordsArray) throw detail::ParseFailure("Points/DataArray missing");
         const auto coords = readDataArray<double>(*coordsArray, layout, points * 3);
         for (std::size_t i = 0; i < points; ++i) {
           model.nodes.push_back(Node{pointOffset + i + 1, {coords[i * 3], coords[i * 3 + 1], coords[i * 3 + 2]}});
@@ -463,7 +461,7 @@ namespace anaf::IO::formats {
         const auto* connectivityArray = findArray(cells, "connectivity");
         const auto* offsetsArray = findArray(cells, "offsets");
         const auto* typesArray = findArray(cells, "types");
-        if (!connectivityArray || !offsetsArray || !typesArray) throw ParseFailure("Cells arrays missing");
+        if (!connectivityArray || !offsetsArray || !typesArray) throw detail::ParseFailure("Cells arrays missing");
         const auto pieceOffsets = readDataArray<std::int64_t>(*offsetsArray, layout, cellCount);
         const auto pieceConnectivity = readDataArray<std::int64_t>(*connectivityArray, layout, 0);
         const auto pieceTypes = readDataArray<std::int64_t>(*typesArray, layout, cellCount);
@@ -503,7 +501,7 @@ namespace anaf::IO::formats {
     std::int64_t begin = 0;
     for (std::size_t c = 0; c < types.size(); ++c) {
       const std::int64_t end = offsets[c];
-      if (end < begin || static_cast<std::size_t>(end) > connectivity.size()) throw ParseFailure("invalid cell offsets");
+      if (end < begin || static_cast<std::size_t>(end) > connectivity.size()) throw detail::ParseFailure("invalid cell offsets");
       collector.addCell(static_cast<int>(types[c]), std::span<const std::int64_t>(connectivity.data() + begin, static_cast<std::size_t>(end - begin)), c);
       begin = end;
     }
@@ -757,9 +755,9 @@ namespace anaf::IO::formats {
     const std::string content = detail::readWholeFile(path);
     XmlParser parser(content);
     const XmlElement root = parser.parseDocument();
-    if (root.name != "VTKFile" || root.attribute("type") != "Collection") throw ParseFailure("not a ParaView collection (.pvd)");
+    if (root.name != "VTKFile" || root.attribute("type") != "Collection") throw detail::ParseFailure("not a ParaView collection (.pvd)");
     const XmlElement* collection = root.child("Collection");
-    if (!collection) throw ParseFailure("Collection element missing");
+    if (!collection) throw detail::ParseFailure("Collection element missing");
 
     struct Entry { double time; std::filesystem::path file; };
     std::vector<Entry> entries;
@@ -774,7 +772,7 @@ namespace anaf::IO::formats {
       if (file.is_relative()) file = path.parent_path() / file;
       entries.push_back(Entry{detail::Cursor::parseNumber<double>(dataSet.attribute("timestep", "0")), std::move(file)});
     }
-    if (entries.empty()) throw ParseFailure("the collection lists no data sets");
+    if (entries.empty()) throw detail::ParseFailure("the collection lists no data sets");
     std::ranges::stable_sort(entries, {}, &Entry::time);
 
     MeshModel model;
@@ -787,7 +785,7 @@ namespace anaf::IO::formats {
                                           static_cast<float>(k + 1) / static_cast<float>(entries.size()),
                                           std::format("step {} of {}", k + 1, entries.size()));
       if (entries[k].file.extension() != ".vtu") {
-        throw ParseFailure("collection entry '" + pathToUtf8(entries[k].file) + "' is not a .vtu file");
+        throw detail::ParseFailure("collection entry '" + pathToUtf8(entries[k].file) + "' is not a .vtu file");
       }
       MeshModel step = readVtu(entries[k].file, options, stepContext);
       if (k == 0) {
@@ -807,7 +805,7 @@ namespace anaf::IO::formats {
         continue;
       }
       if (step.nodes.size() != model.nodes.size() || step.elementCount() != model.elementCount()) {
-        throw ParseFailure(std::format("collection step {} has a different mesh ({} nodes, {} elements; {} / {} expected)",
+        throw detail::ParseFailure(std::format("collection step {} has a different mesh ({} nodes, {} elements; {} / {} expected)",
           k + 1, step.nodes.size(), step.elementCount(), model.nodes.size(), model.elementCount()));
       }
       model.warnings.insert(model.warnings.end(), step.warnings.begin(), step.warnings.end());
