@@ -24,7 +24,13 @@
 
 namespace FEM::TRUSS {
 
-  std::vector<Eigen::Triplet<double>> assembleMass(
+  std::vector<Eigen::Triplet<double>> assembleMassConsistent(
+    const std::vector<TrussElement1D>& elements,
+    std::span<const anaf::MATERIAL::Material> allMaterials,
+    const std::size_t allNodesSize
+  );
+
+  std::vector<Eigen::Triplet<double>> assembleMassLumped(
     const std::vector<TrussElement1D>& elements,
     std::span<const anaf::MATERIAL::Material> allMaterials,
     const std::size_t allNodesSize
