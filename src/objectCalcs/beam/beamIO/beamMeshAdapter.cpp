@@ -246,6 +246,7 @@ namespace FEM::BEAM::ADAPTER {
   std::expected<ImportedBeam, std::string> toMeshData(const anaf::IO::MeshModel& model, const std::span<const anaf::MATERIAL::Material> materials,
                                                       const std::span<const BeamSection> sections) {
     if (materials.empty()) return std::unexpected("the material list is empty");
+    if (const auto problems = model.validate(); !problems.empty()) return std::unexpected("the model is inconsistent: " + problems.front());
     ImportedBeam result;
     result.mesh = std::make_shared<MeshData>();
     auto& mesh = *result.mesh;

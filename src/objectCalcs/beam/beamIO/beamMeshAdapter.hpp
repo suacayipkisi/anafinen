@@ -72,7 +72,8 @@ namespace FEM::BEAM::ADAPTER {
   // File -> model. Only Line2 elements become beams (other elements are reported and
   // skipped). Every beam needs a section: its shape (SectionShape) or at least A, Iy, Iz and J.
   // Results are read when the file has Displacement and BeamSectionForce; the stresses are
-  // computed again from them.
+  // computed again from them. A model that fails MeshModel::validate() is an error (readMesh()
+  // already checks it; a model built in code may not be).
   std::expected<ImportedBeam, std::string> toMeshData(const anaf::IO::MeshModel& model,
                                                       std::span<const anaf::MATERIAL::Material> materials,
                                                       std::span<const BeamSection> sections);

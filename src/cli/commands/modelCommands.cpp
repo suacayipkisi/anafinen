@@ -90,16 +90,17 @@ namespace anaf::CLI::HANDLERS {
       }
 
       auto truss = FEM::TRUSS::ADAPTER::toMeshData(*model, materials);
+      if (!truss) return std::unexpected(std::format("'{}' is not a usable truss model: {}", IO::pathToUtf8(path), truss.error()));
       bridge.resetModel(BRIDGE::E_ObjectType::TrussImportedOrEntered);
       {
         std::lock_guard lock(bridge.dataMutex);
-        bridge.activeMesh = truss.mesh;
+        bridge.activeMesh = truss->mesh;
       }
       bridge.dataVersion.fetch_add(1, std::memory_order_release);
       for (const auto& warning : model->warnings) session.out << "  warning: " << warning << '\n';
-      printNotes(session, truss.notes);
-      session.out << std::format("truss model: {} nodes, {} elements{}\n", truss.mesh->trussNodes.size(), truss.mesh->trussElements.size(),
-                                 truss.mesh->hasResults ? ", with results" : "");
+      printNotes(session, truss->notes);
+      session.out << std::format("truss model: {} nodes, {} elements{}\n", truss->mesh->trussNodes.size(), truss->mesh->trussElements.size(),
+                                 truss->mesh->hasResults ? ", with results" : "");
       return {};
     }
 

@@ -193,8 +193,9 @@ namespace anaf::GUI {
           imported.beam = std::move(*beam);
         } else {
           auto truss = FEM::TRUSS::ADAPTER::toMeshData(*model, materials);
-          for (const auto& warning : model->warnings) truss.notes.push_back("warning: " + warning);
-          imported.truss = std::move(truss);
+          if (!truss) return std::unexpected(anaf::IO::IoError{anaf::IO::IoError::E_Code::InvalidModel, "truss model: " + truss.error()});
+          for (const auto& warning : model->warnings) truss->notes.push_back("warning: " + warning);
+          imported.truss = std::move(*truss);
         }
         return imported;
       });

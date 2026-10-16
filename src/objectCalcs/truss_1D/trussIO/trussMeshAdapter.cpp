@@ -116,7 +116,9 @@ namespace FEM::TRUSS::ADAPTER {
     return model;
   }
 
-  ImportedTruss toMeshData(const anaf::IO::MeshModel& model, const std::span<const anaf::MATERIAL::Material> materials) {
+  std::expected<ImportedTruss, std::string> toMeshData(const anaf::IO::MeshModel& model,
+                                                       const std::span<const anaf::MATERIAL::Material> materials) {
+    if (const auto problems = model.validate(); !problems.empty()) return std::unexpected("the model is inconsistent: " + problems.front());
     ImportedTruss result;
     result.mesh = std::make_shared<FEM::TRUSS::MeshData>();
     auto& mesh = *result.mesh;

@@ -24,6 +24,7 @@
 #include <io/model/meshModel.hpp>
 #include <material/properties.hpp>
 
+#include <expected>
 #include <memory>
 #include <span>
 #include <string>
@@ -54,6 +55,9 @@ namespace FEM::TRUSS::ADAPTER {
   // Bar materials: "Material:<name>" sets are matched by name (case-insensitive); an unknown
   // name or index falls back to material 0 with a note. Files without these sets
   // (anafinen <= 0.1.2) use the MaterialID index, which matches the built-in order.
-  ImportedTruss toMeshData(const anaf::IO::MeshModel& model, std::span<const anaf::MATERIAL::Material> materials);
+  // A model that fails MeshModel::validate() is an error (readMesh() already checks it; a
+  // model built in code may not be).
+  std::expected<ImportedTruss, std::string> toMeshData(const anaf::IO::MeshModel& model,
+                                                       std::span<const anaf::MATERIAL::Material> materials);
 
 } // namespace FEM::TRUSS::ADAPTER end
