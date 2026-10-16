@@ -35,8 +35,8 @@ namespace anaf::GUI {
   };
 
   inline std::deque<LogEntry> g_uiLogs; // deque: dropping the oldest line at the limit is O(1)
-  inline std::uint32_t g_uiLogMaxNum{10000}; // edited as ImGuiDataType_U32 in the console
-  inline std::mutex g_logMutex;
+  inline std::mutex g_logMutex; // guards g_uiLogs and g_uiLogMaxNum (sinks run on worker threads)
+  inline std::uint32_t g_uiLogMaxNum{10000}; // the console edits a copy and writes it back under g_logMutex
 
   // anaf::LOG callback, installed in main() before the GUI exists so startup lines are kept.
   inline void anafUILogSink(anaf::LOG::E_Level level, std::string_view message) {

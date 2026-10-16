@@ -62,7 +62,18 @@ namespace anaf::IO::ARRAY {
       const bool csr = stored.layout == E_SparseLayout::Csr;
       const std::size_t nrow = csr ? stored.cols : stored.rows;
       const std::size_t ncol = csr ? stored.rows : stored.cols;
-      cholmod_sparse* matrix = cholmod_allocate_sparse(nrow, ncol, stored.values.size(), 0, 1, csr ? 0 : stype, xtype, &common);
+      // The sorted flag must match the file: CHOLMOD trusts it (a file written from an unsorted
+      // cholmod_sparse, or by another program, may have unsorted or repeated row indices).
+      bool sorted = true;
+      for (std::size_t outer = 0; outer + 1 < stored.pointers.size() && sorted; ++outer) {
+        for (auto k = stored.pointers[outer] + 1; k < stored.pointers[outer + 1]; ++k) {
+          if (stored.indices[static_cast<std::size_t>(k)] <= stored.indices[static_cast<std::size_t>(k) - 1]) {
+            sorted = false;
+            break;
+          }
+        }
+      }
+      cholmod_sparse* matrix = cholmod_allocate_sparse(nrow, ncol, stored.values.size(), sorted ? 1 : 0, 1, csr ? 0 : stype, xtype, &common);
       if (!matrix) return std::unexpected(error(ArrayError::E_Code::BackendError, path, "cholmod_allocate_sparse failed"));
       std::copy(stored.pointers.begin(), stored.pointers.end(), static_cast<int*>(matrix->p));
       std::copy(stored.indices.begin(), stored.indices.end(), static_cast<int*>(matrix->i));

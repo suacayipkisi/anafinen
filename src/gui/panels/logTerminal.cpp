@@ -82,7 +82,16 @@ namespace anaf::GUI {
 
     ImGui::SameLine();
     ImGui::SetNextItemWidth(inputWidth);
-    ImGui::InputScalar("##output_num", ImGuiDataType_U32, &g_uiLogMaxNum);
+    // The sinks read the limit under g_logMutex on worker threads: edit a copy, write it back locked.
+    std::uint32_t maxLines = 0;
+    {
+      std::lock_guard<std::mutex> lock(g_logMutex);
+      maxLines = g_uiLogMaxNum;
+    }
+    if (ImGui::InputScalar("##output_num", ImGuiDataType_U32, &maxLines)) {
+      std::lock_guard<std::mutex> lock(g_logMutex);
+      g_uiLogMaxNum = maxLines;
+    }
 
     ImGui::Separator();
     

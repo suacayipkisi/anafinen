@@ -48,6 +48,10 @@ namespace anaf::BRIDGE {
 
   void GuiCalcBridge::resetModel(const E_ObjectType type) {
     modelGeneration.fetch_add(1, std::memory_order_acq_rel);
+    // No join: a factorization (CHOLMOD / LDLT) cannot be interrupted and joining would freeze
+    // the GUI. The old worker works on its own copies of the mesh, materials and sections and
+    // publishes only while modelGeneration is unchanged (checked under dataMutex), so clearing
+    // the flags now is safe; the next job joins it first (joinWorker()).
     if (workerThread.joinable()) workerThread.request_stop();
     isRunning = false;
     isGeneratingPreview = false;
