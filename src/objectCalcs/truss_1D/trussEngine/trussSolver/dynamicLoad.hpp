@@ -17,6 +17,75 @@
 
 #pragma once
 
+#include "trussEngine/trussSolver/reducedDofs.hpp"
+#include "trussProperties/appliedForce.hpp"
+#include "trussProperties/element.hpp"
+#include "trussProperties/node.hpp"
+#include <log/anaf_info.hpp>
+
+#include <Eigen/Core>
+#include <Eigen/SparseCore>
+#include <span>
+#include <expected>
+
 namespace FEM::TRUSS {
+
+  // nodes stores mode shape values as displacement
+
+  class ModeShape {
+  private:
+    double m_thisNaturalFrequency;
+    std::span<Node> m_allNodes;
+  public:
+    ModeShape (double naturalFrequency, std::span<Node> allNodes){
+      m_thisNaturalFrequency = naturalFrequency;
+      m_allNodes = allNodes;
+    }
+
+    double getNatrualFrequency() const {return m_thisNaturalFrequency;}
+    const std::span<Node> getModeShapeValues() const {return m_allNodes;}
+  };
+
+  class TrussDynamicContainer {
+  private:
+    std::span<ForceApplied> m_forceVec; // must be harmonic
+    std::span<Node> m_allNodes;
+    std::span<ModeShape> m_allModeShapes;
+    std::span<TrussElement1D> m_allElements;
+
+    // One gravity for the self-weight nodal loads and the self-weight stress term (m/s^2).
+    Eigen::Vector3d m_gravity{0.0, -9.80665, 0.0};
+
+    ReducedDofs m_dofs;
+    Eigen::SparseMatrix<double> m_reducedStiffness;
+    Eigen::SparseMatrix<double> m_reducedMass;
+  public:
+    void set(
+      std::span<ForceApplied> forceVec,
+      std::span<Node> allNodes,
+      std::span<TrussElement1D> allElements
+    ) {
+      m_forceVec = forceVec;
+      m_allNodes = allNodes;
+      m_allElements = allElements;
+    }
+
+    // Builds the support reduction of the nodes given to set() and the reduced stiffness.
+    void setStiffness(
+      const std::vector<TrussElement1D>& elements,
+      std::span<const anaf::MATERIAL::Material> allMaterials
+    );
+
+    void setMass(
+      const std::vector<TrussElement1D>& elements,
+      std::span<const anaf::MATERIAL::Material> allMaterials
+    );
+
+    inline void setGravity(const Eigen::Vector3d& gravity) {m_gravity = gravity;}
+    inline const Eigen::Vector3d& getGravity() const {return m_gravity;}
+
+    std::expected<void, std::string> calculateModeShapes(std::stop_token stopToken = {}, unsigned int expectedModeShapeNum = 1);
+    inline const ModeShape& getModeShape(unsigned int shapeNum) const {return m_allModeShapes[shapeNum];}
+  };
 
 }// namespace FEM::TRUSS end

@@ -57,8 +57,17 @@ namespace FEM::TRUSS {
     const std::function<void(float)>& progress = {}
   );
 
-  struct DynamicResult {
+  struct ModalAnalysisResult {
+    std::shared_ptr<MeshData> mesh;
     
   };
 
-} // namespace FEM::TRUSS end
+  std::expected<ModalAnalysisResult, std::string> solveModalAnalysis(
+    const MeshData& mesh,
+    std::span<const anaf::MATERIAL::Material> materials,
+    std::stop_token st = {},
+    const std::function<void(float)>& progress = {}
+  );
+  
+
+} // namespace FEM::TRUSS end 

@@ -14,9 +14,22 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "dynamicLoad.hpp"
+#include "trussEngine/trussSolver/assembleStiffness.hpp"
+#include <log/anaf_info.hpp>
 
 namespace FEM::TRUSS {
 
+  void TrussDynamicContainer::setStiffness(
+    const std::vector<TrussElement1D>& elements,
+    std::span<const anaf::MATERIAL::Material> allMaterials
+  ){
+    m_dofs = ReducedDofs(m_allNodes);
+    if (m_dofs.inclinedNodes() > 0) anaf::LOG::info("Inclined supports on {} nodes", m_dofs.inclinedNodes());
+    m_reducedStiffness = assembleStiffness(elements, allMaterials, m_allNodes.size(), m_dofs);
+  } 
+  
+  
 }// namespace FEM::TRUSS end
 

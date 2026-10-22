@@ -20,12 +20,13 @@
 #include <trussProperties/element.hpp>
 #include <trussProperties/node.hpp>
 #include <trussEngine/trussSolver/reducedDofs.hpp>
+#include <trussProperties/appliedForce.hpp>
 
 #include <material/properties.hpp>
 
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
-#include <array>
+
 #include <expected>
 #include <span>
 #include <stop_token>

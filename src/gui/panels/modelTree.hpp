@@ -30,8 +30,8 @@ namespace anaf::GUI {
   private:
     // Filtered rows of the snapshot shown last, rebuilt only when the snapshot changes; the
     // lists are drawn with ImGuiListClipper, so only the visible rows cost anything.
-    std::shared_ptr<const FEM::TRUSS::MeshData> m_indexedMesh;
-    std::vector<std::uint32_t> m_supportedNodes;   // node indices with a support
+    std::shared_ptr<const FEM::TRUSS::MeshData> m_indexedTrussMesh;
+    std::vector<std::uint32_t> m_supportedTrussNodes;   // node indices with a support
     std::vector<std::uint32_t> m_overstressedBars; // bar indices with |stress| > yield
     std::shared_ptr<const FEM::BEAM::MeshData> m_indexedBeamMesh;
     std::vector<std::uint32_t> m_supportedBeamNodes;
@@ -39,7 +39,7 @@ namespace anaf::GUI {
 
     // Boundary conditions, overstressed bars and nodal displacements of the active snapshot.
     // Every object type publishes the same MeshData, so one tree serves all of them.
-    void renderMeshTree(anaf::BRIDGE::GuiCalcBridge& bridge);
+    void renderTrussTree(anaf::BRIDGE::GuiCalcBridge& bridge);
     // Supports, loads, element stresses and nodal results of the beam snapshot.
     void renderBeamTree(anaf::BRIDGE::GuiCalcBridge& bridge);
   public:

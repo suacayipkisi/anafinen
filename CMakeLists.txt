@@ -83,6 +83,7 @@ set(ANAF_CORE_SOURCES
     src/objectCalcs/truss_1D/trussEngine/trussSolver/reducedDofs.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/assembleMass.cpp
     src/objectCalcs/truss_1D/trussEngine/trussSolver/deformationUnderConstForce.cpp
+    src/objectCalcs/truss_1D/trussEngine/trussSolver/dynamicLoad.cpp
     src/solvers/direct/solver_cholmod.cpp
     src/solvers/direct/solver_simplicial.cpp
     src/solvers/direct/mechanism.cpp

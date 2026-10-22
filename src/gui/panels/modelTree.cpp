@@ -43,20 +43,20 @@ namespace anaf::GUI {
     }
   } // namespace end
 
-  void ModelTree::renderMeshTree(anaf::BRIDGE::GuiCalcBridge& bridge) {
+  void ModelTree::renderTrussTree(anaf::BRIDGE::GuiCalcBridge& bridge) {
     // Snapshots are immutable: copying the pointer under the lock is enough (no deep copy per frame).
     std::shared_ptr<const FEM::TRUSS::MeshData> meshData;
     {
       std::lock_guard lock(bridge.dataMutex);
       meshData = bridge.activeMesh;
     }
-    if (meshData != m_indexedMesh) {
-      m_indexedMesh = meshData;
-      m_supportedNodes.clear();
+    if (meshData != m_indexedTrussMesh) {
+      m_indexedTrussMesh = meshData;
+      m_supportedTrussNodes.clear();
       m_overstressedBars.clear();
       if (meshData) {
         for (std::uint32_t i = 0; i < meshData->trussNodes.size(); ++i) {
-          if (meshData->trussNodes[i].isSupported()) m_supportedNodes.push_back(i);
+          if (meshData->trussNodes[i].isSupported()) m_supportedTrussNodes.push_back(i);
         }
         for (std::uint32_t e = 0; e < meshData->trussElements.size(); ++e) {
           if (meshData->trussElements[e].isStressExceeded) m_overstressedBars.push_back(e);
@@ -66,12 +66,12 @@ namespace anaf::GUI {
 
     if (ImGui::TreeNode("Boundary Conditions (fix and forces)")) {
       ImGui::Text("Applied Fixity");
-      if (m_supportedNodes.empty()) {
+      if (m_supportedTrussNodes.empty()) {
         ImGui::TextDisabled("No fixed DOFs yet...");
-      } else {
+       } else {
         ImGui::BeginChild("Applied Fixity List", ImVec2(0, 110), true);
-        clippedRows(m_supportedNodes.size(), [&](const std::size_t row) {
-          const auto& node = meshData->trussNodes[m_supportedNodes[row]];
+        clippedRows(m_supportedTrussNodes.size(), [&](const std::size_t row) {
+          const auto& node = meshData->trussNodes[m_supportedTrussNodes[row]];
           if (node.hasInclinedSupport()) {
             const auto& allowed = node.getAllowedMotionDirections();
             ImGui::Text("Node %u: inclined, moves %s", node.getNodeID(),
@@ -259,7 +259,7 @@ namespace anaf::GUI {
 
     if (ImGui::TreeNode(rootLabel.c_str())) {
       if (latestType == anaf::BRIDGE::E_ObjectType::BeamFrame) renderBeamTree(bridge);
-      else if (latestType != anaf::BRIDGE::E_ObjectType::NoType) renderMeshTree(bridge);
+      else if (latestType != anaf::BRIDGE::E_ObjectType::NoType) renderTrussTree(bridge);
       ImGui::TreePop();
     }
     ImGui::End();

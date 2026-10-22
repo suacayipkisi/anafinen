@@ -28,3 +28,5 @@ build-containers/
 
 # Locally built release packages (kept on disk, never pushed)
 package/early-release-packages/
+
+self_notes.md

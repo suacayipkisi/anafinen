@@ -31,7 +31,7 @@ namespace FEM::TRUSS {
 
     std::array<bool, 3> m_isMovable{true, true, true};
     std::array<double, 3> m_location{};
-    std::array<double, 3> m_displacement{};
+    std::array<double, 3> m_displacement{}; // in modal analysis this is not exactly (meter)
     FEM::SUPPORT::Basis m_allowedMotionDirections{FEM::SUPPORT::Basis::globalAxes()};
     
   public:
@@ -61,7 +61,7 @@ namespace FEM::TRUSS {
     double getLocX() const {return m_location[0];}
     double getLocY() const {return m_location[1];}
     double getLocZ() const {return m_location[2];}
-
+    
     const std::array<double, 3>& getDisplacement() const {return m_displacement;}
     const std::array<bool, 3>& getMovable() const {return m_isMovable;}
     const FEM::SUPPORT::Basis& getAllowedMotionDirections() const {return m_allowedMotionDirections;}
@@ -72,6 +72,7 @@ namespace FEM::TRUSS {
     // The node is the only place a support is stored: snapshots, the solver and export read it here.
     bool isSupported() const { return m_allowedMotionDirections.size() < 3; }
   };
+  
 
   // Nodes are copied with every snapshot: no heap allocation per node.
   static_assert(std::is_trivially_copyable_v<Node>);
