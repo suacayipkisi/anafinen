@@ -186,7 +186,9 @@ add_executable(anafinen ${ANAFINEN_SOURCES})
 # Embed the application icon into the .exe (Explorer, taskbar, shortcuts); the window icon
 # itself is set at run time from assets/icons/anafinen.png.
 if(WIN32)
-    target_sources(anafinen PRIVATE src/anafinen.rc)
+    set(RC_FILE "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc")
+    file(WRITE "${RC_FILE}" "IDI_ICON1 ICON \"${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen. ico\"\n")
+    target_sources(anafinen PRIVATE "${RC_FILE}")
 endif()
 
 # GUI subsystem on Windows: no console window opens with the application. Debug keeps the console
