@@ -187,7 +187,7 @@ add_executable(anafinen ${ANAFINEN_SOURCES})
 # itself is set at run time from assets/icons/anafinen.png.
 if(WIN32)
     set(RC_FILE "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc")
-    file(WRITE "${RC_FILE}" "IDI_ICON1 ICON \"${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen. ico\"\n")
+    file(WRITE "${RC_FILE}" "IDI_ICON1 ICON \"${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/anafinen.ico\"\n")
     target_sources(anafinen PRIVATE "${RC_FILE}")
 endif()
 
