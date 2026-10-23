@@ -17,7 +17,7 @@
 
 #include "output.hpp"
 
-#include <objectCalcs/common/supportBasis.hpp>
+#include <common/supportBasis.hpp>
 
 #include <algorithm>
 #include <cctype>

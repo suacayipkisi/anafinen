@@ -23,7 +23,7 @@
 #include <bridge/generalStatus.hpp>
 #include <guiMaterials/theme.hpp>
 #include <guiMaterials/userSettings.hpp>
-#include <objectCalcs/common/supportBasis.hpp>
+#include <common/supportBasis.hpp>
 
 #include "imgui.h"
 #include "viewportRenderer.hpp"

@@ -19,7 +19,7 @@
 
 #include <guiMaterials/iPanel.hpp>
 #include <panels/dynamicAnalysisInputs.hpp>
-#include <objectCalcs/common/supportBasis.hpp>
+#include <common/supportBasis.hpp>
 #include <truss_1D/trussTypes/trussLibrary.hpp>
 
 #include <array>

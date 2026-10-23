@@ -23,7 +23,7 @@
 #include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
 #include <truss_1D/trussProperties/meshEdit.hpp>
-#include <objectCalcs/common/supportBasis.hpp>
+#include <common/supportBasis.hpp>
 #include <panels/editorLayout.hpp>
 #include <panels/truss/materialCombo.hpp>
 #include <panels/truss/trussWorker.hpp>

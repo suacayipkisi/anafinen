@@ -16,7 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "node.hpp"
-#include <objectCalcs/common/supportBasis.hpp>
+#include <common/supportBasis.hpp>
 
 #include <cstddef>
 

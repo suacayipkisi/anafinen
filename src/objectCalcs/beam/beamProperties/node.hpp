@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <objectCalcs/common/supportBasis.hpp>
+#include <common/supportBasis.hpp>
 
 #include <array>
 #include <cstdint>

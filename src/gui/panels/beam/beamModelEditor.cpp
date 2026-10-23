@@ -24,7 +24,7 @@
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
-#include <objectCalcs/common/supportBasis.hpp>
+#include <common/supportBasis.hpp>
 #include <panels/beam/beamWorker.hpp>
 #include <panels/beam/sectionCombo.hpp>
 #include <panels/editorLayout.hpp>

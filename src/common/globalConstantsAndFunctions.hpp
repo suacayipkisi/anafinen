@@ -37,6 +37,7 @@ namespace FUNCTIONS {
     DIAMETER
   };
   
+  // returns area of the given circle
   // check is return equal zero
   inline double areaOfCircle(const double val, CIRCLE radius_diameter) {
     switch (radius_diameter) {
@@ -49,6 +50,7 @@ namespace FUNCTIONS {
     }
   }
   
+  // returns cırcumference of given circle
   // check is return equal zero
   inline double circumferenceOfCircle(const double val, CIRCLE radius_diameter) {
     switch (radius_diameter) {
@@ -60,4 +62,6 @@ namespace FUNCTIONS {
       return 0.0;
     }
   }
+  
+  
 } // namespace FUNCTIONS end

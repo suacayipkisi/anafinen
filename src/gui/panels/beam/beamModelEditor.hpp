@@ -20,7 +20,7 @@
 #include <beam/beamTypes/beamLibrary.hpp>
 #include <guiMaterials/iPanel.hpp>
 #include <panels/dynamicAnalysisInputs.hpp>
-#include <objectCalcs/common/supportBasis.hpp>
+#include <common/supportBasis.hpp>
 
 #include <array>
 #include <cstdint>

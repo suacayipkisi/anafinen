@@ -21,7 +21,7 @@
 #include <beam/beamEngine/beamStress.hpp>
 #include <beam/beamSection/sectionLibrary.hpp>
 #include <material/materialLibrary.hpp>
-#include <objectCalcs/common/supportBasis.hpp>
+#include <common/supportBasis.hpp>
 
 #include <algorithm>
 #include <array>

@@ -66,14 +66,27 @@ target_link_libraries(anaf_io
         project_warnings_and_optimizations
 )
 
+set(ANAF_COMMON_SOURCES
+    src/common/supportBasis.cpp
+    src/common/numericalMethods/error.cpp
+    src/common/numericalMethods/rootsOfEquation.cpp
+)
+
+add_library(anaf_common STATIC ${ANAF_COMMON_SOURCES})
+target_include_directories(anaf_common PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+)
+target_link_libraries(anaf_common
+    PRIVATE
+        project_warnings_and_optimizations
+)
+
 set(ANAF_CORE_SOURCES
     src/log/anaf_info.cpp
     src/directory/getExecutableDirectory.cpp
     src/platform/systemInfo.cpp
     src/material/materialLibrary.cpp
-    src/numericalMethods/error.cpp
-    src/numericalMethods/rootsOfEquation.cpp
-    src/objectCalcs/common/supportBasis.cpp
     src/objectCalcs/truss_1D/trussProperties/node.cpp
     src/objectCalcs/truss_1D/trussProperties/meshEdit.cpp
     src/objectCalcs/truss_1D/trussIO/trussMeshAdapter.cpp
@@ -130,6 +143,7 @@ if(WIN32)
 endif()
 
 target_link_libraries(anaf_core PUBLIC
+    anaf_common
     anaf_io
     Eigen3::Eigen
     project_warnings_and_optimizations
