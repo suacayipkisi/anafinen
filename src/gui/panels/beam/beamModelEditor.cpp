@@ -47,13 +47,15 @@
 #include <utility>
 #include <vector>
 
+#include "common/globalConstantsAndFunctions.hpp"
+
 namespace anaf::GUI {
 
   namespace {
 
     constexpr std::array<const char*, 2> formulations{"Euler-Bernoulli", "Timoshenko"};
     constexpr std::array<const char*, 2> loadFrames{"Global axes", "Local axes"};
-    constexpr std::array<double, 3> standardGravity{0.0, -9.80665, 0.0};
+    constexpr auto standardGravity = CONSTANTS::g_gravity;
 
     const char* formulationShort(const FEM::BEAM::E_Formulation formulation) {
       return formulation == FEM::BEAM::E_Formulation::Timoshenko ? "TI" : "EB";

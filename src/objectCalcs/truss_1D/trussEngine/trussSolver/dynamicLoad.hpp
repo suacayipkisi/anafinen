@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "common/globalConstantsAndFunctions.hpp"
 #include "trussEngine/trussSolver/reducedDofs.hpp"
 #include "trussProperties/appliedForce.hpp"
 #include "trussProperties/element.hpp"
@@ -54,7 +55,7 @@ namespace FEM::TRUSS {
     std::span<TrussElement1D> m_allElements;
 
     // One gravity for the self-weight nodal loads and the self-weight stress term (m/s^2).
-    Eigen::Vector3d m_gravity{0.0, -9.80665, 0.0};
+    std::array<double, 3> m_gravity{CONSTANTS::g_gravity};
 
     ReducedDofs m_dofs;
     Eigen::SparseMatrix<double> m_reducedStiffness;
@@ -71,18 +72,13 @@ namespace FEM::TRUSS {
     }
 
     // Builds the support reduction of the nodes given to set() and the reduced stiffness.
-    void setStiffness(
+    void setStiffnessANDMass(
       const std::vector<TrussElement1D>& elements,
       std::span<const anaf::MATERIAL::Material> allMaterials
     );
 
-    void setMass(
-      const std::vector<TrussElement1D>& elements,
-      std::span<const anaf::MATERIAL::Material> allMaterials
-    );
-
-    inline void setGravity(const Eigen::Vector3d& gravity) {m_gravity = gravity;}
-    inline const Eigen::Vector3d& getGravity() const {return m_gravity;}
+    inline void setGravity(const std::array<double, 3>& gravity) {m_gravity = gravity;}
+    inline const std::array<double, 3>& getGravity() const {return m_gravity;}
 
     std::expected<void, std::string> calculateModeShapes(std::stop_token stopToken = {}, unsigned int expectedModeShapeNum = 1);
     inline const ModeShape& getModeShape(unsigned int shapeNum) const {return m_allModeShapes[shapeNum];}

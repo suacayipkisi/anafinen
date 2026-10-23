@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "common/globalConstantsAndFunctions.hpp"
 #include <trussProperties/element.hpp>
 #include <trussProperties/node.hpp>
 #include <trussEngine/trussSolver/reducedDofs.hpp>
@@ -48,7 +49,7 @@ namespace FEM::TRUSS {
     std::span<TrussElement1D> m_allElements;
 
     // One gravity for the self-weight nodal loads and the self-weight stress term (m/s^2).
-    Eigen::Vector3d m_gravity{0.0, -9.80665, 0.0};
+    std::array<double, 3> m_gravity{CONSTANTS::g_gravity};
 
     // Support reduction of the nodes and the reduced stiffness (setStiffness()); the matrix is
     // released after the solve.
@@ -71,8 +72,8 @@ namespace FEM::TRUSS {
       std::span<const anaf::MATERIAL::Material> allMaterials
     );
 
-    inline void setGravity(const Eigen::Vector3d& gravity) {m_gravity = gravity;}
-    inline const Eigen::Vector3d& getGravity() const {return m_gravity;}
+    inline void setGravity(const std::array<double, 3>& gravity) {m_gravity = gravity;}
+    inline const std::array<double, 3>& getGravity() const {return m_gravity;}
 
     void considerWeight(
       const std::vector<TrussElement1D>& elements,

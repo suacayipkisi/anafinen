@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "common/globalConstantsAndFunctions.hpp"
 #include "element.hpp"
 #include "loads.hpp"
 #include "node.hpp"
@@ -35,7 +36,7 @@ namespace FEM::BEAM {
     std::vector<DistributedLoad> distributedLoads;
     // Self weight: density * area * gravity per unit length on every element.
     // A zero vector switches it off.
-    std::array<double, 3> gravity{0.0, -9.80665, 0.0};
+    std::array<double, 3> gravity{CONSTANTS::g_gravity};
     bool hasResults{false};
   };
 

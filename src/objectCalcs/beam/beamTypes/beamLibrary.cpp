@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "beamLibrary.hpp"
+#include "common/globalConstantsAndFunctions.hpp"
 
 #include <beam/beamEngine/beamSolver.hpp>
 #include <beam/beamIO/beamMeshAdapter.hpp>
@@ -40,8 +41,8 @@ namespace FEM::BEAM::LIBRARY {
 
   namespace {
 
-    constexpr double pi = std::numbers::pi;
-    constexpr double gravityAcceleration = 9.80665;
+    constexpr double pi = CONSTANTS::g_pi;
+    constexpr double gravityAcceleration = CONSTANTS::g_gravityAcceleration;
     constexpr double knToN = 1e3;
 
     // Built-in material names (assets/bridge/materialProperties.json).

@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "trussLibrary.hpp"
+#include "common/globalConstantsAndFunctions.hpp"
 
 #include <io/core/pathUtf8.hpp>
 #include <io/meshIo.hpp>
@@ -53,7 +54,8 @@ namespace FEM::TRUSS::LIBRARY {
 
     constexpr double cm2ToM2 = 1e-4; // cm^2 -> m^2
     constexpr double knToN = 1e3;   // kN -> N
-    constexpr double pi = std::numbers::pi;
+    constexpr double pi = CONSTANTS::g_pi;
+    constexpr double gravityAcceleration = CONSTANTS::g_gravityAcceleration;
 
     struct Bar {
       std::uint32_t a{};
@@ -1159,7 +1161,7 @@ namespace FEM::TRUSS::LIBRARY {
       for (const auto& bar : d.bars) {
         const auto& a = d.nodes[bar.a];
         const auto& b = d.nodes[bar.b];
-        weight += density * 9.80665 * bar.area * std::hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+        weight += density * gravityAcceleration * bar.area * std::hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
       }
       return weight;
     }
@@ -1232,7 +1234,7 @@ namespace FEM::TRUSS::LIBRARY {
         }
         for (const auto n : upper) d.load(n, {0.0, ringLift[k] / static_cast<double>(upper.size()), 0.0});
       }
-      constexpr double engineCar = 2.5 * 9.80665 * knToN, controlCar = 4.0 * 9.80665 * knToN;
+      constexpr double engineCar = 2.5 * gravityAcceleration * knToN, controlCar = 4.0 * gravityAcceleration * knToN;
       for (const auto& [k, j] : {std::pair{5u, 3u}, {5u, 13u}, {10u, 3u}, {10u, 13u}, {15u, 0u}}) d.load(ring[k][j], {0.0, -engineCar, 0.0});
       d.load(ring[2][0], {0.0, -controlCar / 2.0, 0.0});
       d.load(ring[3][0], {0.0, -controlCar / 2.0, 0.0});
@@ -1297,7 +1299,7 @@ namespace FEM::TRUSS::LIBRARY {
       }
       // 3 g pull-up: nose turret 400 kg, tail turret 500 kg, five crew of 100 kg in the cockpit
       // and fuselage, 2000 kg of bombs in the bay (stations 10..18), 10 kN tail download.
-      constexpr double g3 = 3.0 * 9.80665 / 1000.0 * knToN; // N per kg at 3 g
+      constexpr double g3 = 3.0 * gravityAcceleration / 1000.0 * knToN; // N per kg at 3 g
       for (const auto n : st[0]) d.load(n, {0.0, -400.0 * g3 / around, 0.0});
       for (const auto n : st[stations - 1]) d.load(n, {0.0, -500.0 * g3 / around, 0.0});
       const auto bottom = [&](const std::uint32_t k, const double limit) {
@@ -1371,7 +1373,7 @@ namespace FEM::TRUSS::LIBRARY {
         const std::size_t outboard = s < leftBody ? s - 1 : s + 1;
         for (const auto n : st[s]) d.bar(engine, n, 40.0);
         for (const auto n : st[outboard]) d.bar(engine, n, 40.0);
-        d.load(engine, {-25.0 * knToN, -3.5 * 9.80665 * knToN, 0.0});
+        d.load(engine, {-25.0 * knToN, -3.5 * gravityAcceleration * knToN, 0.0});
       }
       // 1 g cruise: 370 kN lift per outer wing in a Schrenk distribution (taper 0.3), 60 / 40 %
       // on the front / rear spar top; 6 t of fuel per wing on the lower corners out to 10 m.
@@ -1392,7 +1394,7 @@ namespace FEM::TRUSS::LIBRARY {
         d.load(st[s][2], {0.0, 0.4 * lift, 0.0});
         if (eta(zs[s]) > 0.0 && std::abs(zs[s]) <= 10.0) tanks.push_back(s);
       }
-      const double fuel = 2.0 * 6.0 * 9.80665 * knToN / (2.0 * static_cast<double>(tanks.size()));
+      const double fuel = 2.0 * 6.0 * gravityAcceleration * knToN / (2.0 * static_cast<double>(tanks.size()));
       for (const auto s : tanks) {
         d.load(st[s][0], {0.0, -fuel, 0.0});
         d.load(st[s][3], {0.0, -fuel, 0.0});

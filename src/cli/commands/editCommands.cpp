@@ -35,11 +35,13 @@
 #include <type_traits>
 #include <vector>
 
+#include "common/globalConstantsAndFunctions.hpp"
+
 namespace anaf::CLI::HANDLERS {
 
   namespace {
 
-    constexpr std::array<double, 3> defaultGravity{0.0, -9.80665, 0.0};
+    constexpr auto defaultGravity = CONSTANTS::g_gravity;
 
     std::vector<FEM::TRUSS::Node>& nodeList(FEM::TRUSS::MeshData& mesh) { return mesh.trussNodes; }
     std::vector<FEM::BEAM::Node>& nodeList(FEM::BEAM::MeshData& mesh) { return mesh.nodes; }

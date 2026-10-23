@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "sectionStress.hpp"
+#include "common/globalConstantsAndFunctions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -24,7 +25,7 @@
 namespace FEM::BEAM {
 
   namespace {
-    constexpr double pi = std::numbers::pi;
+    constexpr double pi = CONSTANTS::g_pi;
 
     template <class... Ts>
     struct Overloaded : Ts... {

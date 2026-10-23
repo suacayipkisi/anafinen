@@ -181,8 +181,9 @@ namespace FEM::TRUSS {
       const auto& material = materials[element.getEleProperties()];
       const double length = element.getEleLength();
       const double stress = elongation / length * material.getElasticityModulus();
+      const Eigen::Vector3d g(m_gravity[0], m_gravity[1], m_gravity[2]);
       const double gravityStress = 0.5 * material.getDensity() * length
-        * std::abs(m_gravity.dot(axis));
+        * std::abs(g.dot(axis));
       // Sign convention: tension > 0, compression < 0. The self-weight term raises the
       // magnitude in the direction of the FE result, so |stress| is the same envelope as before.
       // An explicit comparison instead of std::copysign: -ffast-math does not keep the sign of
