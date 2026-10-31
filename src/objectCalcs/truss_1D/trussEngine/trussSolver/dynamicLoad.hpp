@@ -49,7 +49,7 @@ namespace FEM::TRUSS {
 
   class TrussDynamicContainer {
   private:
-    std::span<ForceApplied> m_forceVec; // must be harmonic
+    std::span<ForceApplied> m_forceVec;
     std::span<Node> m_allNodes;
     std::span<ModeShape> m_allModeShapes;
     std::span<TrussElement1D> m_allElements;

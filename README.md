@@ -101,6 +101,7 @@ This is an educational project; the theory follows these books:
 - K.-J. Bathe, *Finite Element Procedures*, 1996
 - G. H. Golub, C. F. Van Loan, *Matrix Computations*, 4th ed.
 - S. S. Rao, *Mechanical Vibrations*, 5th ed.
+- S. C. Chapra, R. P. Canale, *Numerical Methods for Engineers*, 7th ed.
 
 ## AI Assistance
 

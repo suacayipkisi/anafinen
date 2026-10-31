@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <omp.h>
+#include <optional>
 
 #include "log/anaf_info.hpp"
 #include "gui/gui.hpp"
@@ -26,6 +27,7 @@
 
 #include "bridge/generalStatus.hpp"
 #include "directory/getExecutableDirectory.hpp"
+#include "test/test.hpp"
 
 #ifdef _WIN32
 extern "C" {
@@ -54,7 +56,18 @@ int main() {
 
   anaf::GUI::TRUSS_WORKER::configureOpenMPForWorker();
   anaf::LOG::info("OpenMP thread limit set to {} of {} available threads", omp_get_max_threads(), omp_get_num_procs());
-
+  
+  // for tests that I want to make and run before gui init
+  // those tests are not for testing is program working, instead looking for did I implement this function well
+  std::optional<bool> testResult =  anaf::TEST::test();
+  if(testResult && *testResult == true) {
+    anaf::LOG::success("Test Succesful");
+  } else if (testResult && *testResult == false) {
+    anaf::LOG::info("No Test");
+  } else {
+    anaf::LOG::warn("Test Failed");
+  }
+  
   const int guiStatus = anaf::GUI::initgui();
 
   anaf::LOG::core("Anafinen is closing.");

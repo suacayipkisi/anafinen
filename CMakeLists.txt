@@ -70,6 +70,8 @@ set(ANAF_COMMON_SOURCES
     src/common/supportBasis.cpp
     src/common/numericalMethods/error.cpp
     src/common/numericalMethods/rootsOfEquation.cpp
+    src/common/numericalMethods/matrixSolvers/naiveGaussElimination.cpp
+    src/common/test/test.cpp
 )
 
 add_library(anaf_common STATIC ${ANAF_COMMON_SOURCES})
@@ -78,6 +80,8 @@ target_include_directories(anaf_common PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common
 )
 target_link_libraries(anaf_common
+    PUBLIC
+        Eigen3::Eigen
     PRIVATE
         project_warnings_and_optimizations
 )
