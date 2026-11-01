@@ -42,11 +42,11 @@ Dates are estimates; ANAFINEN is a one-person project next to university studies
 | # | Stage | Contents | Estimate |
 | --- | --- | --- | --- |
 | 1 | Linear statics | Trusses, beams / frames, hinges, section library | ✅ Done (v0.2.x) |
-| 2 | Modal analysis | Mass matrices, natural frequencies, mode shapes | November 2026 |
-| 3 | Linear buckling and thermal loads | Buckling loads and modes, thermal loads | Spring 2027 |
-| 4 | Frequency response and random vibration | Harmonic response, PSD / random vibration | Spring 2027 |
-| 5 | 3D solid elements | Tet and hex elements, STEP → Gmsh → solve | Early summer 2027 |
-| 6 | Nastran interoperability | `.bdf` import / export, comparison with MYSTRAN; semi-rigid joints | Summer 2027 |
+| 2 | 3D solid elements (linear statics) | Tet4 / tet10 and hex8 / hex20 elements, STEP → Gmsh → solve, pressure and body loads, 3D stresses (von Mises, principal), stress recovery, contour plots | Winter 2026–27 |
+| 3 | Modal analysis | Element-independent mass matrices (truss, beam, solid), natural frequencies, mode shapes | Spring 2027 |
+| 4 | Linear buckling and thermal loads | Buckling loads and modes, thermal loads | Spring 2027 |
+| 5 | Frequency response and random vibration | Harmonic response, PSD / random vibration | Early summer 2027 |
+| 6 | Nastran interoperability | `.bdf` import / export (incl. solid cards), comparison with MYSTRAN; semi-rigid joints | Summer 2027 |
 | 7 | Flutter (strip theory) | Theodorsen strip theory, p-k method, Goland wing | Fall 2027 |
 | 8 | 3D aerodynamics | VLM and DLM | no date |
 | 9 | State-space export | State-space matrices for control design | no date |
