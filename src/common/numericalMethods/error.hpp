@@ -15,7 +15,6 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-
 #pragma once
 
 // Error definitions of iterative methods (Chapra & Canale, Numerical Methods for Engineers, ch. 3).

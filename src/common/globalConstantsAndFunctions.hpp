@@ -27,6 +27,7 @@ namespace CONSTANTS {
   inline constexpr double g_gravityAcceleration = 9.80665;
 
   inline constexpr double g_pi = std::numbers::pi;
+  inline constexpr double g_eulerNum = std::numbers::e;
 
 } // namespace CONSTANTS end
 

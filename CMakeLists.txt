@@ -71,6 +71,7 @@ set(ANAF_COMMON_SOURCES
     src/common/numericalMethods/error.cpp
     src/common/numericalMethods/rootsOfEquation.cpp
     src/common/numericalMethods/matrixSolvers/naiveGaussElimination.cpp
+    src/common/numericalMethods/fourier/discreteFourierTransform.cpp
     src/common/test/test.cpp
 )
 
