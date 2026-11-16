@@ -37,6 +37,7 @@
 #include <bridge/generalStatus.hpp>
 #include <log/anaf_info.hpp>
 #include <panels/editorLayout.hpp>
+#include <panels/propertyGrid.hpp>
 #include <panels/truss/materialCombo.hpp>
 #include <panels/truss/trussWorker.hpp>
 #include <truss_1D/trussTypes/simpleQuadranglePrismTrussCreate.hpp>
@@ -120,25 +121,25 @@ namespace anaf::GUI {
   }
 
   void TrussControlPanel::renderGridTab(BRIDGE::GuiCalcBridge& bridge) {
-    ImGui::SeparatorText("Grid");
-    LAYOUT::field("Cells X");
-    ImGui::InputScalar("##cube_x", ImGuiDataType_U32, &m_cubeNumX);
-    LAYOUT::field("Cells Y");
-    ImGui::InputScalar("##cube_y", ImGuiDataType_U32, &m_cubeNumY);
-    LAYOUT::field("Cells Z");
-    ImGui::InputScalar("##cube_z", ImGuiDataType_U32, &m_cubeNumZ);
-    LAYOUT::field("Edge [m]");
-    ImGui::InputDouble("##edge_length", &m_cubeEdgeLength, 0.0, 0.0, "%.2f");
-    ImGui::SetItemTooltip("Edge length of one cell (element length)");
-
-    ImGui::SeparatorText("Material & Section");
-    LAYOUT::field("Material");
-    materialCombo(bridge, "##Material TypeCombo", m_materialID);
-    if (ImGui::Button("Open Material Handler", ImVec2(-FLT_MIN, 0.0f)) && onOpenMaterialHandler) {
-      onOpenMaterialHandler();
+    if (PROPERTY::begin("##sqpt_grid", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      if (PROPERTY::group("Grid")) {
+        PROPERTY::row("Cells X");
+        ImGui::InputScalar("##cube_x", ImGuiDataType_U32, &m_cubeNumX);
+        PROPERTY::row("Cells Y");
+        ImGui::InputScalar("##cube_y", ImGuiDataType_U32, &m_cubeNumY);
+        PROPERTY::row("Cells Z");
+        ImGui::InputScalar("##cube_z", ImGuiDataType_U32, &m_cubeNumZ);
+        PROPERTY::inputDouble("Edge length", &m_cubeEdgeLength, "m", "%.2f", "Edge length of one cell (element length).");
+      }
+      if (PROPERTY::group("Material & Section")) {
+        PROPERTY::row("Material");
+        materialCombo(bridge, "##Material TypeCombo", m_materialID);
+        PROPERTY::row("Library");
+        if (ImGui::Button("Materials...##sqpt", ImVec2(-FLT_MIN, 0.0f)) && onOpenMaterialHandler) onOpenMaterialHandler();
+        PROPERTY::inputDouble("Area A", &m_crossSectionalArea, "cm\u00b2", "%.3f", "Cross-section area of every bar.");
+      }
+      PROPERTY::end();
     }
-    LAYOUT::field("Area [cm^2]");
-    ImGui::InputDouble("##cross_area", &m_crossSectionalArea, 0.0, 0.0, "%.3f");
 
     ImGui::Spacing();
     std::uint32_t materialIndex{};
@@ -222,9 +223,6 @@ namespace anaf::GUI {
       m_forceNodeId = currentSelectedNode;
     }
 
-    LAYOUT::field("Node");
-    ImGui::InputScalar("##force_node", ImGuiDataType_U32, &m_forceNodeId);
-    ImGui::SetItemTooltip("Click a node in the viewport or type its id");
 
     // Panel members, not statics: resetState() clears them when the object type changes.
     if (m_lastFixNode != currentSelectedNode) {
@@ -232,16 +230,22 @@ namespace anaf::GUI {
       m_fixed = it != m_supports.end() ? it->second : std::array<bool, 3>{false, false, false};
       m_lastFixNode = currentSelectedNode;
     }
-    ImGui::SeparatorText("Support");
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Fix");
-    ImGui::SameLine(ImGui::GetFontSize() * 7.0f);
-    ImGui::Checkbox("X##fix_x", &m_fixed[0]);
-    ImGui::SameLine();
-    ImGui::Checkbox("Y##fix_y", &m_fixed[1]);
-    ImGui::SameLine();
-    ImGui::Checkbox("Z##fix_z", &m_fixed[2]);
-    if (ImGui::Button("Apply Fixity", ImVec2(-FLT_MIN, 0.0f))) {
+    bool supportOpen = false;
+    if (PROPERTY::begin("##sqpt_support", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      PROPERTY::row("Node", "Click a node in the viewport or type its id.");
+      ImGui::InputScalar("##force_node", ImGuiDataType_U32, &m_forceNodeId);
+      supportOpen = PROPERTY::group("Support");
+      if (supportOpen) {
+        PROPERTY::row("Fixed");
+        ImGui::Checkbox("X##fix_x", &m_fixed[0]);
+        ImGui::SameLine();
+        ImGui::Checkbox("Y##fix_y", &m_fixed[1]);
+        ImGui::SameLine();
+        ImGui::Checkbox("Z##fix_z", &m_fixed[2]);
+      }
+      PROPERTY::end();
+    }
+    if (supportOpen && ImGui::Button("Apply Fixity", ImVec2(-FLT_MIN, 0.0f))) {
       if (m_fixed[0] || m_fixed[1] || m_fixed[2]) m_supports[m_forceNodeId] = m_fixed;
       else m_supports.erase(m_forceNodeId);
       publishInputs(bridge, m_appliedForces, m_supports);
@@ -249,9 +253,14 @@ namespace anaf::GUI {
 
     // Static loads only; a dynamic analysis keeps them in the inputs but does not show them.
     if (dynamic) return;
-    ImGui::SeparatorText("Nodal Load");
-    LAYOUT::field("Force [N]");
-    ImGui::InputScalarN("##force", ImGuiDataType_Double, m_forceVector.data(), 3, nullptr, nullptr, "%.4g");
+    ImGui::Spacing();
+    bool loadOpen = false;
+    if (PROPERTY::begin("##sqpt_nodal_load", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      loadOpen = PROPERTY::group("Nodal Load");
+      if (loadOpen) PROPERTY::inputVector3("Force", m_forceVector.data(), "N", "%.4g", "Global axes.");
+      PROPERTY::end();
+    }
+    if (!loadOpen) return;
     if (ImGui::Button("Apply Load to Node", ImVec2(-FLT_MIN, 0.0f))) {
       m_appliedForces.erase(
         std::remove_if(m_appliedForces.begin(), m_appliedForces.end(),

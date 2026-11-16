@@ -25,6 +25,7 @@
 #include <truss_1D/trussProperties/meshEdit.hpp>
 #include <common/supportBasis.hpp>
 #include <panels/editorLayout.hpp>
+#include <panels/propertyGrid.hpp>
 #include <panels/truss/materialCombo.hpp>
 #include <panels/truss/trussWorker.hpp>
 
@@ -165,11 +166,13 @@ namespace anaf::GUI {
   }
 
   void TrussModelEditor::renderNodes(const std::uint32_t selectedNode) {
-    if (!ImGui::CollapsingHeader("Nodes", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (!PROPERTY::header("Nodes")) return;
     auto& bridge = BRIDGE::buildBridge();
 
-    LAYOUT::field("New [m]");
-    ImGui::InputScalarN("##new_node", ImGuiDataType_Double, m_newNode.data(), 3, nullptr, nullptr, "%.4g");
+    if (PROPERTY::begin("##truss_new_node", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      PROPERTY::inputVector3("New node", m_newNode.data(), "m");
+      PROPERTY::end();
+    }
     if (ImGui::Button("Add Node", ImVec2(-FLT_MIN, 0.0f))) {
       std::uint32_t added = 0;
       editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
@@ -186,22 +189,23 @@ namespace anaf::GUI {
 
     ImGui::Spacing();
     std::uint32_t typed = selectedNode;
-    LAYOUT::field("Selected");
-    if (ImGui::InputScalar("##selected_node_id", ImGuiDataType_U32, &typed, nullptr, nullptr, nullptr, ImGuiInputTextFlags_EnterReturnsTrue)) {
-      {
-        std::lock_guard lock(bridge.dataMutex);
-        const bool exists = bridge.activeMesh && typed < bridge.activeMesh->trussNodes.size();
-        bridge.selectedNodeId = exists ? typed : noSelection;
+    if (PROPERTY::begin("##truss_selected_node", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      PROPERTY::row("Selected node", "Type an id and press Enter, or click a node in the viewport.");
+      if (ImGui::InputScalar("##selected_node_id", ImGuiDataType_U32, &typed, nullptr, nullptr, nullptr, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        {
+          std::lock_guard lock(bridge.dataMutex);
+          const bool exists = bridge.activeMesh && typed < bridge.activeMesh->trussNodes.size();
+          bridge.selectedNodeId = exists ? typed : noSelection;
+        }
+        bridge.dataVersion.fetch_add(1, std::memory_order_release); // redraw the highlight
       }
-      bridge.dataVersion.fetch_add(1, std::memory_order_release); // redraw the highlight
+      if (selectedNode != noSelection) PROPERTY::inputVector3("Position", m_nodePosition.data(), "m");
+      PROPERTY::end();
     }
     if (selectedNode == noSelection) {
       ImGui::TextDisabled("Click a node in the viewport (Nodes toolbar toggle on) or type its id.");
       return;
     }
-
-    LAYOUT::field("Position [m]");
-    ImGui::InputScalarN("##selected_node", ImGuiDataType_Double, m_nodePosition.data(), 3, nullptr, nullptr, "%.4g");
     if (ImGui::Button("Move Node", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
       const bool moved = editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
@@ -230,23 +234,31 @@ namespace anaf::GUI {
   }
 
   void TrussModelEditor::renderBars() {
-    if (!ImGui::CollapsingHeader("Bars", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (!PROPERTY::header("Bars")) return;
     auto& bridge = BRIDGE::buildBridge();
 
-    ImGui::TextDisabled("Used by Add Bar and Apply to Selected.");
-    LAYOUT::field("Material");
-    materialCombo(bridge, "##editor_bar_material", m_materialID);
-    if (ImGui::Button("Open Material Handler", ImVec2(-FLT_MIN, 0.0f)) && onOpenMaterialHandler) onOpenMaterialHandler();
-    LAYOUT::field("Area [cm^2]");
-    ImGui::InputDouble("##editor_bar_area", &m_areaCm2, 0.0, 0.0, "%.4g");
-    if (m_areaCm2 < 0.0) m_areaCm2 = 0.0;
+    if (PROPERTY::begin("##truss_bar_properties", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      if (PROPERTY::group("Properties")) {
+        PROPERTY::row("Material", "Used by Add Bar and Apply to Selected.");
+        materialCombo(bridge, "##editor_bar_material", m_materialID);
+        PROPERTY::row("Library");
+        if (ImGui::Button("Materials...##truss", ImVec2(-FLT_MIN, 0.0f)) && onOpenMaterialHandler) onOpenMaterialHandler();
+        PROPERTY::inputDouble("Area A", &m_areaCm2, "cm\u00b2", "%.4g", "Cross-section area; used by Add Bar and Apply to Selected.");
+        if (m_areaCm2 < 0.0) m_areaCm2 = 0.0;
+      }
+      PROPERTY::end();
+    }
 
-    LAYOUT::field("Node A - B");
-    ImGui::SetNextItemWidth(LAYOUT::splitWidth(2));
-    ImGui::InputScalar("##bar_a", ImGuiDataType_U32, &m_barNodeA);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputScalar("##bar_b", ImGuiDataType_U32, &m_barNodeB);
+    ImGui::SeparatorText("Add / Edit");
+    if (PROPERTY::begin("##truss_bar_nodes", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      PROPERTY::row("Nodes A - B", "Ids of the two end nodes; after Add, A takes B for the next bar of a chain.");
+      ImGui::SetNextItemWidth(LAYOUT::splitWidth(2));
+      ImGui::InputScalar("##bar_a", ImGuiDataType_U32, &m_barNodeA);
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(-FLT_MIN);
+      ImGui::InputScalar("##bar_b", ImGuiDataType_U32, &m_barNodeB);
+      PROPERTY::end();
+    }
 
     // Assigns the chosen material and area; false (with a status) if either is unusable.
     const auto assign = [&](FEM::TRUSS::RenderElement& element) {
@@ -319,7 +331,7 @@ namespace anaf::GUI {
           } else {
             const auto material = element.materialID < bridge.allMaterials.size()
               ? std::string(bridge.allMaterials[element.materialID].getMaterialType()) : std::string("?");
-            label = std::format("{}: {} - {}  {}  {:.4g} cm^2", index, element.node1, element.node2, material,
+            label = std::format("{}: {} - {}  {}  {:.4g} cm\u00b2", index, element.node1, element.node2, material,
                                 element.crossSectionArea / cm2ToM2);
           }
           ImGui::PushID(row);
@@ -358,7 +370,7 @@ namespace anaf::GUI {
   }
 
   void TrussModelEditor::renderWholeModel() {
-    if (!ImGui::CollapsingHeader("Whole Model")) return;
+    if (!PROPERTY::header("Whole Model", false)) return;
     auto& bridge = BRIDGE::buildBridge();
     const auto mesh = currentMesh(bridge);
 
@@ -373,14 +385,16 @@ namespace anaf::GUI {
     ImGui::TextDisabled("One material and cross-section on every bar at once (e.g. after importing a file without "
                         "sections). Single bars can still be changed under Bars.");
     ImGui::PopTextWrapPos();
-    LAYOUT::field("Material");
-    materialCombo(bridge, "##editor_whole_material", m_wholeMaterialID);
-    LAYOUT::field("Area [cm^2]");
-    ImGui::InputDouble("##editor_whole_area", &m_wholeAreaCm2, 0.0, 0.0, "%.4g");
-    if (m_wholeAreaCm2 < 0.0) m_wholeAreaCm2 = 0.0;
-    if (wireframe > 0) {
-      ImGui::Checkbox(std::format("Also turn the {} wireframe edges into bars##editor_include_wireframe", wireframe).c_str(),
-                      &m_includeWireframe);
+    if (PROPERTY::begin("##truss_whole_model", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      PROPERTY::row("Material");
+      materialCombo(bridge, "##editor_whole_material", m_wholeMaterialID);
+      PROPERTY::inputDouble("Area A", &m_wholeAreaCm2, "cm\u00b2", "%.4g");
+      if (m_wholeAreaCm2 < 0.0) m_wholeAreaCm2 = 0.0;
+      if (wireframe > 0) {
+        PROPERTY::row("Wireframe edges", "Also turn the wireframe edges of an imported surface mesh into bars.");
+        ImGui::Checkbox(std::format("Make {} into bars##editor_include_wireframe", wireframe).c_str(), &m_includeWireframe);
+      }
+      PROPERTY::end();
     }
 
     ImGui::BeginDisabled(bars == 0 && (wireframe == 0 || !m_includeWireframe));
@@ -426,7 +440,7 @@ namespace anaf::GUI {
   }
 
   void TrussModelEditor::renderLibrary() {
-    if (!ImGui::CollapsingHeader("Built-in Models")) return;
+    if (!PROPERTY::header("Built-in Models", false)) return;
     if (!m_libraryRead) readLibrary();
     if (m_library.empty()) {
       ImGui::TextDisabled("%s", m_libraryError.empty() ? "No built-in models" : m_libraryError.c_str());
@@ -465,24 +479,44 @@ namespace anaf::GUI {
   }
 
   void TrussModelEditor::renderSupportsAndLoads(const std::uint32_t selectedNode, const bool withLoads) {
+    // ### keeps one ID (open state) for both labels.
+    if (!PROPERTY::header(withLoads ? "Supports & Nodal Loads###truss_supports" : "Supports###truss_supports")) return;
     if (selectedNode == noSelection) {
       ImGui::TextDisabled("Click a node in the viewport (or type its id in the Model tab).");
       return;
     }
     auto& bridge = BRIDGE::buildBridge();
-    ImGui::SeparatorText(std::format("Support of Node {}", selectedNode).c_str());
+    ImGui::Text("Node %u", selectedNode);
 
-    int supportType = m_supportInclined ? 1 : 0;
-    ImGui::RadioButton("Global axes##editor_support_axes", &supportType, 0);
-    ImGui::SameLine();
-    ImGui::RadioButton("Inclined / skewed##editor_support_inclined", &supportType, 1);
-    m_supportInclined = supportType == 1;
+    bool supportOpen = false;
+    if (PROPERTY::begin("##truss_support", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      supportOpen = PROPERTY::group("Support");
+      if (supportOpen) {
+        int supportType = m_supportInclined ? 1 : 0;
+        PROPERTY::row("Directions", "Global axes: fix single global directions.\nInclined: give the directions as vectors (skewed support).");
+        ImGui::RadioButton("Global axes##editor_support_axes", &supportType, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("Inclined##editor_support_inclined", &supportType, 1);
+        m_supportInclined = supportType == 1;
+        if (m_supportInclined) {
+          renderInclinedSupportInputs();
+        } else {
+          PROPERTY::row("Fixed");
+          ImGui::Checkbox("X##editor_fix_x", &m_fixed[0]);
+          ImGui::SameLine();
+          ImGui::Checkbox("Y##editor_fix_y", &m_fixed[1]);
+          ImGui::SameLine();
+          ImGui::Checkbox("Z##editor_fix_z", &m_fixed[2]);
+        }
+      }
+      PROPERTY::end();
+    }
 
-    // Allowed motion of the inclined support, or the error that keeps Apply disabled.
+    // Allowed motion of the inclined support, or the error that keeps Apply disabled (also while
+    // the group is folded).
     FEM::SUPPORT::Basis allowed;
     std::string inclinedError;
     if (m_supportInclined) {
-      renderInclinedSupportInputs();
       try {
         const auto basis = FEM::SUPPORT::orthonormalize(FEM::SUPPORT::Basis(
           std::span<const std::array<double, 3>>(m_supportVectors.data(), static_cast<std::size_t>(m_supportVectorCount))));
@@ -495,6 +529,8 @@ namespace anaf::GUI {
       };
       if (!inclinedError.empty()) {
         ImGui::TextColored(THEME::theme().bad, "%s", inclinedError.c_str());
+      } else if (!supportOpen) {
+        // Folded: the description of a valid support stays hidden with its inputs.
       } else if (allowed.empty()) {
         ImGui::TextDisabled("Node is held in every direction (pin).");
       } else if (allowed.size() == 1) {
@@ -504,14 +540,7 @@ namespace anaf::GUI {
       } else {
         ImGui::TextDisabled("Nothing is restrained (free node).");
       }
-    } else {
-      ImGui::Checkbox("Fix X##editor_fix_x", &m_fixed[0]);
-      ImGui::SameLine();
-      ImGui::Checkbox("Fix Y##editor_fix_y", &m_fixed[1]);
-      ImGui::SameLine();
-      ImGui::Checkbox("Fix Z##editor_fix_z", &m_fixed[2]);
     }
-
     ImGui::BeginDisabled(!inclinedError.empty());
     if (ImGui::Button("Apply Support", ImVec2(-FLT_MIN, 0.0f))) {
       const bool applied = editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
@@ -535,9 +564,14 @@ namespace anaf::GUI {
     ImGui::EndDisabled();
     if (!withLoads) return;
 
-    ImGui::SeparatorText("Nodal Load");
-    LAYOUT::field("Force [N]");
-    ImGui::InputScalarN("##editor_force", ImGuiDataType_Double, m_force.data(), 3, nullptr, nullptr, "%.4g");
+    ImGui::Spacing();
+    bool loadOpen = false;
+    if (PROPERTY::begin("##truss_nodal_load", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+      loadOpen = PROPERTY::group("Nodal Load");
+      if (loadOpen) PROPERTY::inputVector3("Force", m_force.data(), "N", "%.4g", "Global axes.");
+      PROPERTY::end();
+    }
+    if (!loadOpen) return;
     const auto setLoad = [&](const std::array<double, 3> force) {
       return editModel(bridge, [&](FEM::TRUSS::MeshData& mesh) {
         if (selectedNode >= mesh.trussNodes.size()) return false;
@@ -560,11 +594,11 @@ namespace anaf::GUI {
 
   void TrussModelEditor::renderInclinedSupportInputs() {
     bool restrained = m_vectorsRestrained;
-    if (ImGui::RadioButton("Restrained directions##editor_support_restrained", restrained)) restrained = true;
+    PROPERTY::row("Vectors give", "Restrained: the support reaction directions (1 = roller on a plane, 2 = guide along a line, "
+                                  "3 = pin).\nAllowed: the line (1) or plane (2) the node may move in.");
+    if (ImGui::RadioButton("Restrained##editor_support_restrained", restrained)) restrained = true;
     ImGui::SameLine();
-    if (ImGui::RadioButton("Allowed motion##editor_support_allowed", !restrained)) restrained = false;
-    ImGui::SetItemTooltip("Restrained: the support reaction directions (1 = roller on a plane, 2 = guide along a line, "
-                          "3 = pin).\nAllowed motion: the line (1) or plane (2) the node may move in.");
+    if (ImGui::RadioButton("Allowed##editor_support_allowed", !restrained)) restrained = false;
     if (restrained != m_vectorsRestrained) {
       // Switch the meaning without changing the support: the vectors become their complement.
       try {
@@ -577,14 +611,14 @@ namespace anaf::GUI {
       m_vectorsRestrained = restrained;
     }
 
-    ImGui::TextUnformatted("Vectors:");
+    PROPERTY::row("Vector count");
     for (int count = 1; count <= 3; ++count) {
-      ImGui::SameLine();
+      if (count > 1) ImGui::SameLine();
       ImGui::RadioButton(std::format("{}##editor_support_count", count).c_str(), &m_supportVectorCount, count);
     }
     for (int i = 0; i < m_supportVectorCount; ++i) {
-      ImGui::InputScalarN(std::format("d{}##editor_support_vector", i + 1).c_str(), ImGuiDataType_Double,
-                          m_supportVectors[static_cast<std::size_t>(i)].data(), 3, nullptr, nullptr, "%.4g");
+      PROPERTY::inputVector3(std::format("d{}", i + 1).c_str(), m_supportVectors[static_cast<std::size_t>(i)].data(), nullptr, "%.4g",
+                             "Direction in global axes (normalized by the solver).");
     }
   }
 

@@ -43,6 +43,11 @@
 //   }
 namespace anaf::GUI::PROPERTY {
 
+  // Grids of the editors docked on the left (truss and beam): label share and a fixed unit column
+  // ("N/m"), so the value columns of the grids in one tab line up.
+  inline constexpr float editorLabelWeight = 0.36f;
+  inline constexpr float editorUnitWidth = 2.4f;
+
   // Section band across the window, outside a grid. Returns whether the section is open. Text
   // after "##" is not shown ("###" keeps one fold state for changing labels).
   bool header(const char* label, bool defaultOpen = true);
