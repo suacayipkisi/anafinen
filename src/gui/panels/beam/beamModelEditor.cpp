@@ -28,6 +28,7 @@
 #include <panels/beam/beamWorker.hpp>
 #include <panels/beam/sectionCombo.hpp>
 #include <panels/editorLayout.hpp>
+#include <panels/propertyGrid.hpp>
 #include <panels/truss/materialCombo.hpp>
 
 #include "beam/beamSection/sectionLibrary.hpp"
@@ -56,6 +57,10 @@ namespace anaf::GUI {
     constexpr std::array<const char*, 2> formulations{"Euler-Bernoulli", "Timoshenko"};
     constexpr std::array<const char*, 2> loadFrames{"Global axes", "Local axes"};
     constexpr auto standardGravity = CONSTANTS::g_gravity;
+    // Property grids of the editor: label share and a fixed unit column ("N/m"), so the value
+    // columns of the grids in one tab line up.
+    constexpr float gridLabelWeight = 0.36f;
+    constexpr float gridUnitWidth = 2.4f;
 
     const char* formulationShort(const FEM::BEAM::E_Formulation formulation) {
       return formulation == FEM::BEAM::E_Formulation::Timoshenko ? "TI" : "EB";
@@ -278,11 +283,13 @@ namespace anaf::GUI {
   }
 
   void BeamModelEditor::renderNodes(const std::uint32_t node) {
-    if (!ImGui::CollapsingHeader("Nodes", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (!PROPERTY::header("Nodes")) return;
     auto& bridge = BRIDGE::buildBridge();
 
-    LAYOUT::field("New [m]");
-    ImGui::InputScalarN("##beam_new_node", ImGuiDataType_Double, m_newNode.data(), 3, nullptr, nullptr, "%.4g");
+    if (PROPERTY::begin("##beam_new_node", gridLabelWeight, gridUnitWidth)) {
+      PROPERTY::inputVector3("New node", m_newNode.data(), "m");
+      PROPERTY::end();
+    }
     if (ImGui::Button("Add Node##beam", ImVec2(-FLT_MIN, 0.0f))) {
       std::uint32_t added = 0;
       editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
@@ -296,17 +303,19 @@ namespace anaf::GUI {
 
     ImGui::Spacing();
     std::uint32_t typed = node;
-    LAYOUT::field("Selected");
-    if (ImGui::InputScalar("##beam_selected_node_id", ImGuiDataType_U32, &typed, nullptr, nullptr, nullptr, ImGuiInputTextFlags_EnterReturnsTrue)) {
-      const auto mesh = currentMesh(bridge);
-      setSelectedNode(bridge, mesh && typed < mesh->nodes.size() ? typed : noSelection);
+    if (PROPERTY::begin("##beam_selected_node", gridLabelWeight, gridUnitWidth)) {
+      PROPERTY::row("Selected node", "Type an id and press Enter, or click a node in the viewport.");
+      if (ImGui::InputScalar("##beam_selected_node_id", ImGuiDataType_U32, &typed, nullptr, nullptr, nullptr, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        const auto mesh = currentMesh(bridge);
+        setSelectedNode(bridge, mesh && typed < mesh->nodes.size() ? typed : noSelection);
+      }
+      if (node != noSelection) PROPERTY::inputVector3("Position", m_nodePosition.data(), "m");
+      PROPERTY::end();
     }
     if (node == noSelection) {
       ImGui::TextDisabled("Click a node in the viewport or type its id.");
       return;
     }
-    LAYOUT::field("Position [m]");
-    ImGui::InputScalarN("##beam_selected_node", ImGuiDataType_Double, m_nodePosition.data(), 3, nullptr, nullptr, "%.4g");
     if (ImGui::Button("Move Node##beam", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
       if (editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
             if (node >= mesh.nodes.size()) return false;
@@ -333,10 +342,7 @@ namespace anaf::GUI {
 
   void BeamModelEditor::renderSupportsAndLoads(const std::uint32_t node, const bool withLoads) {
     // ### keeps one ID (open state) for both labels.
-    if (!ImGui::CollapsingHeader(withLoads ? "Supports & Nodal Loads###beam_supports" : "Supports###beam_supports",
-                                 ImGuiTreeNodeFlags_DefaultOpen)) {
-      return;
-    }
+    if (!PROPERTY::header(withLoads ? "Supports & Nodal Loads###beam_supports" : "Supports###beam_supports")) return;
     if (node == noSelection) {
       ImGui::TextDisabled("Click a node in the viewport (or type its id in the Model tab).");
       return;
@@ -360,10 +366,8 @@ namespace anaf::GUI {
       m_motion.setGlobal(false);
       m_rotation.setGlobal(false);
     }
-    ImGui::SeparatorText("Translation");
-    const auto motion = renderSupportGroup("motion", "U", m_motion);
-    ImGui::SeparatorText("Rotation");
-    const auto rotation = renderSupportGroup("rotation", "R", m_rotation);
+    const auto motion = renderSupportGroup("motion", "Translation", "U", m_motion);
+    const auto rotation = renderSupportGroup("rotation", "Rotation", "R", m_rotation);
 
     ImGui::BeginDisabled(!motion || !rotation);
     if (ImGui::Button("Apply Support##beam", ImVec2(-FLT_MIN, 0.0f))) {
@@ -379,11 +383,17 @@ namespace anaf::GUI {
     ImGui::EndDisabled();
     if (!withLoads) return;
 
-    ImGui::SeparatorText("Nodal Load");
-    LAYOUT::field("Force [N]");
-    ImGui::InputScalarN("##beam_force", ImGuiDataType_Double, m_force.data(), 3, nullptr, nullptr, "%.4g");
-    LAYOUT::field("Moment [N m]");
-    ImGui::InputScalarN("##beam_moment", ImGuiDataType_Double, m_moment.data(), 3, nullptr, nullptr, "%.4g");
+    ImGui::Spacing();
+    bool loadOpen = false;
+    if (PROPERTY::begin("##beam_nodal_load", gridLabelWeight, gridUnitWidth)) {
+      loadOpen = PROPERTY::group("Nodal Load");
+      if (loadOpen) {
+        PROPERTY::inputVector3("Force", m_force.data(), "N", "%.4g", "Global axes.");
+        PROPERTY::inputVector3("Moment", m_moment.data(), "N m", "%.4g", "About the global axes.");
+      }
+      PROPERTY::end();
+    }
+    if (!loadOpen) return;
     const auto setLoad = [&](const std::array<double, 3>& force, const std::array<double, 3>& moment) {
       return editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
         if (node >= mesh.nodes.size()) return false;
@@ -403,78 +413,89 @@ namespace anaf::GUI {
     }
   }
 
-  std::optional<FEM::SUPPORT::Basis> BeamModelEditor::renderSupportGroup(const char* id, const char* axisNames, SupportInput& input) {
+  std::optional<FEM::SUPPORT::Basis> BeamModelEditor::renderSupportGroup(const char* id, const char* title, const char* axisNames,
+                                                                        SupportInput& input) {
     ImGui::PushID(id);
-    int mode = input.inclined ? 1 : 0;
-    ImGui::RadioButton("Global axes", &mode, 0);
-    ImGui::SameLine();
-    ImGui::RadioButton("Inclined / skewed", &mode, 1);
-    if ((mode == 1) != input.inclined) {
-      // Switching keeps the support: the current one is shown in the other mode.
-      std::string ignored;
-      const auto current = input.allowedBasis(ignored);
-      input.inclined = mode == 1;
-      if (current && input.inclined) {
-        const auto shown = input.vectorsRestrained ? FEM::SUPPORT::orthogonalComplement(*current) : *current;
-        if (!shown.empty()) {
-          input.vectorCount = static_cast<int>(shown.size());
-          for (std::size_t i = 0; i < shown.size(); ++i) input.vectors[i] = shown[i];
-        }
-      } else if (current) {
-        for (std::size_t axis = 0; axis < 3; ++axis) input.fixed[axis] = !axisFree(*current, axis);
-      }
-    }
-
-    if (!input.inclined) {
-      ImGui::TextUnformatted("Fix");
-      for (std::size_t axis = 0; axis < 3; ++axis) {
+    bool open = false;
+    if (PROPERTY::begin("##support_grid", gridLabelWeight, gridUnitWidth)) {
+      open = PROPERTY::group(title);
+      if (open) {
+        int mode = input.inclined ? 1 : 0;
+        PROPERTY::row("Directions", "Global axes: fix single global directions.\nInclined: give the directions as vectors (skewed support).");
+        ImGui::RadioButton("Global axes", &mode, 0);
         ImGui::SameLine();
-        ImGui::Checkbox(std::format("{}{}", axisNames, "xyz"[axis]).c_str(), &input.fixed[axis]);
-      }
-    } else {
-      bool restrained = input.vectorsRestrained;
-      if (ImGui::RadioButton("Restrained", restrained)) restrained = true;
-      ImGui::SameLine();
-      if (ImGui::RadioButton("Allowed", !restrained)) restrained = false;
-      ImGui::SetItemTooltip("Restrained: the directions the support holds.\nAllowed: the directions left free.");
-      if (restrained != input.vectorsRestrained) {
-        std::string ignored;
-        if (const auto current = input.allowedBasis(ignored)) {
-          const auto shown = restrained ? FEM::SUPPORT::orthogonalComplement(*current) : *current;
-          if (!shown.empty()) {
-            input.vectorCount = static_cast<int>(shown.size());
-            for (std::size_t i = 0; i < shown.size(); ++i) input.vectors[i] = shown[i];
+        ImGui::RadioButton("Inclined", &mode, 1);
+        if ((mode == 1) != input.inclined) {
+          // Switching keeps the support: the current one is shown in the other mode.
+          std::string ignored;
+          const auto current = input.allowedBasis(ignored);
+          input.inclined = mode == 1;
+          if (current && input.inclined) {
+            const auto shown = input.vectorsRestrained ? FEM::SUPPORT::orthogonalComplement(*current) : *current;
+            if (!shown.empty()) {
+              input.vectorCount = static_cast<int>(shown.size());
+              for (std::size_t i = 0; i < shown.size(); ++i) input.vectors[i] = shown[i];
+            }
+          } else if (current) {
+            for (std::size_t axis = 0; axis < 3; ++axis) input.fixed[axis] = !axisFree(*current, axis);
           }
         }
-        input.vectorsRestrained = restrained;
+
+        if (!input.inclined) {
+          PROPERTY::row("Fixed");
+          for (std::size_t axis = 0; axis < 3; ++axis) {
+            if (axis > 0) ImGui::SameLine();
+            ImGui::Checkbox(std::format("{}{}", axisNames, "xyz"[axis]).c_str(), &input.fixed[axis]);
+          }
+        } else {
+          bool restrained = input.vectorsRestrained;
+          PROPERTY::row("Vectors give", "Restrained: the directions the support holds.\nAllowed: the directions left free.");
+          if (ImGui::RadioButton("Restrained", restrained)) restrained = true;
+          ImGui::SameLine();
+          if (ImGui::RadioButton("Allowed", !restrained)) restrained = false;
+          if (restrained != input.vectorsRestrained) {
+            std::string ignored;
+            if (const auto current = input.allowedBasis(ignored)) {
+              const auto shown = restrained ? FEM::SUPPORT::orthogonalComplement(*current) : *current;
+              if (!shown.empty()) {
+                input.vectorCount = static_cast<int>(shown.size());
+                for (std::size_t i = 0; i < shown.size(); ++i) input.vectors[i] = shown[i];
+              }
+            }
+            input.vectorsRestrained = restrained;
+          }
+          PROPERTY::row("Vector count");
+          for (int count = 1; count <= 3; ++count) {
+            if (count > 1) ImGui::SameLine();
+            ImGui::RadioButton(std::format("{}##count", count).c_str(), &input.vectorCount, count);
+          }
+          for (int i = 0; i < input.vectorCount; ++i) {
+            PROPERTY::inputVector3(std::format("d{}", i + 1).c_str(), input.vectors[static_cast<std::size_t>(i)].data(), nullptr, "%.4g",
+                                   "Direction in global axes (normalized by the solver).");
+          }
+        }
       }
-      ImGui::TextUnformatted("Vectors:");
-      for (int count = 1; count <= 3; ++count) {
-        ImGui::SameLine();
-        ImGui::RadioButton(std::format("{}##count", count).c_str(), &input.vectorCount, count);
-      }
-      for (int i = 0; i < input.vectorCount; ++i) {
-        ImGui::InputScalarN(std::format("d{}", i + 1).c_str(), ImGuiDataType_Double, input.vectors[static_cast<std::size_t>(i)].data(), 3,
-                            nullptr, nullptr, "%.4g");
-      }
+      PROPERTY::end();
     }
 
-    if (input.inclined && std::string_view(id) == "rotation") {
-      ImGui::PushTextWrapPos(0.0f);
-      ImGui::TextDisabled("Solved as given; files store rotation supports per global axis only (export warns).");
-      ImGui::PopTextWrapPos();
-    }
     std::string error;
     const auto allowed = input.allowedBasis(error);
-    if (!allowed) {
-      ImGui::TextColored(THEME::theme().bad, "%s", error.c_str());
-    } else if (input.inclined) {
-      if (allowed->empty()) ImGui::TextDisabled("Held in every direction.");
-      else if (allowed->size() == 3) ImGui::TextDisabled("Free in every direction.");
-      else if (allowed->size() == 1) ImGui::TextDisabled("Free along (%.3f, %.3f, %.3f) only.", (*allowed)[0][0], (*allowed)[0][1], (*allowed)[0][2]);
-      else {
-        const auto normal = FEM::SUPPORT::orthogonalComplement(*allowed)[0];
-        ImGui::TextDisabled("Held along (%.3f, %.3f, %.3f) only.", normal[0], normal[1], normal[2]);
+    if (open) {
+      if (input.inclined && std::string_view(id) == "rotation") {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("Solved as given; files store rotation supports per global axis only (export warns).");
+        ImGui::PopTextWrapPos();
+      }
+      if (!allowed) {
+        ImGui::TextColored(THEME::theme().bad, "%s", error.c_str());
+      } else if (input.inclined) {
+        if (allowed->empty()) ImGui::TextDisabled("Held in every direction.");
+        else if (allowed->size() == 3) ImGui::TextDisabled("Free in every direction.");
+        else if (allowed->size() == 1) ImGui::TextDisabled("Free along (%.3f, %.3f, %.3f) only.", (*allowed)[0][0], (*allowed)[0][1], (*allowed)[0][2]);
+        else {
+          const auto normal = FEM::SUPPORT::orthogonalComplement(*allowed)[0];
+          ImGui::TextDisabled("Held along (%.3f, %.3f, %.3f) only.", normal[0], normal[1], normal[2]);
+        }
       }
     }
     ImGui::PopID();
@@ -482,33 +503,40 @@ namespace anaf::GUI {
   }
 
   void BeamModelEditor::renderElements(const std::uint32_t selected) {
-    if (!ImGui::CollapsingHeader("Elements", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (!PROPERTY::header("Elements")) return;
     auto& bridge = BRIDGE::buildBridge();
 
-    ImGui::TextDisabled("Used by Add Element and Apply to Selected.");
-    LAYOUT::field("Material");
-    materialCombo(bridge, "##beam_element_material", m_materialID);
-    LAYOUT::field("Section");
-    sectionCombo(bridge, "##beam_element_section", m_sectionID);
-    if (ImGui::Button("Materials...##beam", ImVec2(LAYOUT::splitWidth(2), 0.0f)) && onOpenMaterialHandler) onOpenMaterialHandler();
-    ImGui::SameLine();
-    if (ImGui::Button("Sections...##beam", ImVec2(-FLT_MIN, 0.0f)) && onOpenSectionHandler) onOpenSectionHandler();
-    LAYOUT::field("Formulation");
-    ImGui::Combo("##beam_element_formulation", &m_formulation, formulations.data(), static_cast<int>(formulations.size()));
-    LAYOUT::field("Orientation v");
-    ImGui::InputScalarN("##beam_orientation", ImGuiDataType_Double, m_orientation.data(), 3, nullptr, nullptr, "%.3g");
-    ImGui::SetItemTooltip("Vector in the local x-y plane (global axes). 0 0 0 = automatic: local y as close to +Y as\n"
-                          "possible, +X for vertical members. A section's height lies along local y.");
+    if (PROPERTY::begin("##beam_element_properties", gridLabelWeight, gridUnitWidth)) {
+      if (PROPERTY::group("Properties")) {
+        PROPERTY::row("Material", "Used by Add Element and Apply to Selected.");
+        materialCombo(bridge, "##beam_element_material", m_materialID);
+        PROPERTY::row("Section", "Used by Add Element and Apply to Selected.");
+        sectionCombo(bridge, "##beam_element_section", m_sectionID);
+        PROPERTY::row("Libraries");
+        if (ImGui::Button("Materials...##beam", ImVec2(LAYOUT::splitWidth(2), 0.0f)) && onOpenMaterialHandler) onOpenMaterialHandler();
+        ImGui::SameLine();
+        if (ImGui::Button("Sections...##beam", ImVec2(-FLT_MIN, 0.0f)) && onOpenSectionHandler) onOpenSectionHandler();
+        PROPERTY::row("Formulation");
+        ImGui::Combo("##beam_element_formulation", &m_formulation, formulations.data(), static_cast<int>(formulations.size()));
+        PROPERTY::inputVector3("Orientation v", m_orientation.data(), nullptr, "%.3g",
+                               "Vector in the local x-y plane (global axes). 0 0 0 = automatic: local y as close to +Y as\n"
+                               "possible, +X for vertical members. A section's height lies along local y.");
+      }
+      PROPERTY::end();
+    }
 
     renderReleaseInputs();
 
     ImGui::SeparatorText("Add / Edit");
-    LAYOUT::field("Node A - B");
-    ImGui::SetNextItemWidth(LAYOUT::splitWidth(2));
-    ImGui::InputScalar("##beam_node_a", ImGuiDataType_U32, &m_elementNodeA);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputScalar("##beam_node_b", ImGuiDataType_U32, &m_elementNodeB);
+    if (PROPERTY::begin("##beam_element_nodes", gridLabelWeight, gridUnitWidth)) {
+      PROPERTY::row("Nodes A - B", "Ids of the two end nodes; after Add, A takes B for the next element of a chain.");
+      ImGui::SetNextItemWidth(LAYOUT::splitWidth(2));
+      ImGui::InputScalar("##beam_node_a", ImGuiDataType_U32, &m_elementNodeA);
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(-FLT_MIN);
+      ImGui::InputScalar("##beam_node_b", ImGuiDataType_U32, &m_elementNodeB);
+      PROPERTY::end();
+    }
 
     // Writes the chosen properties into element; an error message if they are unusable.
     // Caller holds dataMutex (editModel).
@@ -660,16 +688,20 @@ namespace anaf::GUI {
   }
 
   void BeamModelEditor::renderElementLoads(const std::uint32_t element) {
-    if (!ImGui::CollapsingHeader("Distributed Loads & Self Weight", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (!PROPERTY::header("Distributed Loads & Self Weight")) return;
     auto& bridge = BRIDGE::buildBridge();
     const auto mesh = currentMesh(bridge);
 
     bool selfWeight = !mesh || mesh->gravity != std::array<double, 3>{};
-    if (ImGui::Checkbox("Self weight (density x area x g, -Y)##beam", &selfWeight)) {
-      editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
-        edited.gravity = selfWeight ? standardGravity : std::array<double, 3>{};
-        return true;
-      });
+    if (PROPERTY::begin("##beam_self_weight", gridLabelWeight, gridUnitWidth)) {
+      PROPERTY::row("Self weight", "Density x area x g along -Y, on every element.");
+      if (ImGui::Checkbox("##self_weight", &selfWeight)) {
+        editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+          edited.gravity = selfWeight ? standardGravity : std::array<double, 3>{};
+          return true;
+        });
+      }
+      PROPERTY::end();
     }
 
     if (element == noSelection || !mesh || element >= mesh->elements.size()) {
@@ -686,10 +718,12 @@ namespace anaf::GUI {
     }
     if (onElement == 0) ImGui::TextDisabled("No uniform load on this element.");
 
-    LAYOUT::field("q [N/m]");
-    ImGui::InputScalarN("##beam_q", ImGuiDataType_Double, m_distributed.data(), 3, nullptr, nullptr, "%.4g");
-    LAYOUT::field("Axes");
-    ImGui::Combo("##beam_q_frame", &m_distributedFrame, loadFrames.data(), static_cast<int>(loadFrames.size()));
+    if (PROPERTY::begin("##beam_uniform_load", gridLabelWeight, gridUnitWidth)) {
+      PROPERTY::inputVector3("Uniform load q", m_distributed.data(), "N/m");
+      PROPERTY::row("Axes");
+      ImGui::Combo("##beam_q_frame", &m_distributedFrame, loadFrames.data(), static_cast<int>(loadFrames.size()));
+      PROPERTY::end();
+    }
     if (ImGui::Button("Add Load##beam_q", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
       if (m_distributed == std::array<double, 3>{}) {
         setStatus("Enter a non-zero load", true);
@@ -715,12 +749,15 @@ namespace anaf::GUI {
   }
 
   void BeamModelEditor::renderWholeModel() {
-    if (!ImGui::CollapsingHeader("Whole Model")) return;
+    if (!PROPERTY::header("Whole Model", false)) return;
     auto& bridge = BRIDGE::buildBridge();
     ImGui::TextWrapped("Sets the formulation, or material and section, on every element; single elements can be "
                        "changed afterwards.");
-    LAYOUT::field("Formulation");
-    ImGui::Combo("##beam_whole_formulation", &m_wholeFormulation, formulations.data(), static_cast<int>(formulations.size()));
+    if (PROPERTY::begin("##beam_whole_formulation_grid", gridLabelWeight, gridUnitWidth)) {
+      PROPERTY::row("Formulation");
+      ImGui::Combo("##beam_whole_formulation", &m_wholeFormulation, formulations.data(), static_cast<int>(formulations.size()));
+      PROPERTY::end();
+    }
     if (ImGui::Button("Apply Formulation to All##beam", ImVec2(-FLT_MIN, 0.0f))) {
       if (editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
             if (mesh.elements.empty()) return false;
@@ -731,10 +768,13 @@ namespace anaf::GUI {
       }
     }
     ImGui::Spacing();
-    LAYOUT::field("Material");
-    materialCombo(bridge, "##beam_whole_material", m_wholeMaterialID);
-    LAYOUT::field("Section");
-    sectionCombo(bridge, "##beam_whole_section", m_wholeSectionID);
+    if (PROPERTY::begin("##beam_whole_material_grid", gridLabelWeight, gridUnitWidth)) {
+      PROPERTY::row("Material");
+      materialCombo(bridge, "##beam_whole_material", m_wholeMaterialID);
+      PROPERTY::row("Section");
+      sectionCombo(bridge, "##beam_whole_section", m_wholeSectionID);
+      PROPERTY::end();
+    }
     if (ImGui::Button("Apply Material & Section to All##beam", ImVec2(-FLT_MIN, 0.0f))) {
       const bool ok = editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
         const auto material = bridge.findMaterialIndex(m_wholeMaterialID); // dataMutex held
@@ -813,7 +853,7 @@ namespace anaf::GUI {
   }
 
   void BeamModelEditor::renderLibrary() {
-    if (!ImGui::CollapsingHeader("Built-in Models")) return;
+    if (!PROPERTY::header("Built-in Models", false)) return;
     if (!m_libraryRead) readLibrary();
     if (m_library.empty()) {
       ImGui::TextDisabled("%s", m_libraryError.empty() ? "No built-in models" : m_libraryError.c_str());

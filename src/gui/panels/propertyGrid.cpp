@@ -54,9 +54,47 @@ namespace anaf::GUI::PROPERTY {
       }
     }
 
+    // Band label: the text before "##", vertically centered in the band; colors follow the
+    // disabled alpha like ImGui's own widgets.
+    void drawBandLabel(const ImVec2 min, const float height, const char* label, const bool open) {
+      const THEME::ThemePalette& palette = THEME::theme();
+      const float fontSize = ImGui::GetFontSize();
+      ImDrawList* drawList = ImGui::GetWindowDrawList();
+      const float centerY = std::floor(min.y + height * 0.5f) + 0.5f;
+      drawChevron(drawList, ImVec2(std::floor(min.x + fontSize * 0.45f) + 0.5f, centerY), std::round(fontSize * 0.5f), open,
+                  ImGui::GetColorU32(palette.textDim));
+      drawList->AddText(ImVec2(min.x + fontSize * labelIndent, min.y + (height - fontSize) * 0.5f), ImGui::GetColorU32(palette.text), label,
+                        ImGui::FindRenderedTextEnd(label));
+    }
+
   } // namespace end
 
-  bool begin(const char* id, const float labelWeight) {
+  bool header(const char* label, const bool defaultOpen) {
+    const THEME::ThemePalette& palette = THEME::theme();
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    const ImGuiID id = ImGui::GetID(label);
+    bool open = storage->GetBool(id, defaultOpen);
+
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    const ImVec2 size(std::max(ImGui::GetContentRegionAvail().x, 1.0f), ImGui::GetFrameHeight());
+    ImGui::PushID(label);
+    if (ImGui::InvisibleButton("##header", size)) {
+      open = !open;
+      storage->SetBool(id, open);
+    }
+    const bool hovered = ImGui::IsItemHovered();
+    ImGui::PopID();
+
+    // One step darker than the group rows inside the grids: sections above groups.
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 max(min.x + size.x, min.y + size.y);
+    drawList->AddRectFilled(min, max, ImGui::GetColorU32(THEME::toU32(palette.text, palette.light ? 0.10f : 0.12f)));
+    if (hovered) drawList->AddRectFilled(min, max, ImGui::GetColorU32(THEME::toU32(palette.accent, 0.10f)));
+    drawBandLabel(min, size.y, label, open);
+    return open;
+  }
+
+  bool begin(const char* id, const float labelWeight, const float unitWidth) {
     const THEME::ThemePalette& palette = THEME::theme();
     // Row separators softer than ImGui's table borders; the color is taken in BeginTable.
     ImGui::PushStyleColor(ImGuiCol_TableBorderLight, THEME::mix(palette.panel, palette.border, 0.55f));
@@ -66,7 +104,8 @@ namespace anaf::GUI::PROPERTY {
     if (!visible) return false;
     ImGui::TableSetupColumn("##label", ImGuiTableColumnFlags_WidthStretch, labelWeight);
     ImGui::TableSetupColumn("##value", ImGuiTableColumnFlags_WidthStretch, 1.0f - labelWeight);
-    ImGui::TableSetupColumn("##unit", ImGuiTableColumnFlags_WidthFixed); // fits the widest unit
+    // Without a width the fixed column fits the widest unit.
+    ImGui::TableSetupColumn("##unit", ImGuiTableColumnFlags_WidthFixed, unitWidth > 0.0f ? unitWidth * ImGui::GetFontSize() : 0.0f);
     return true;
   }
 
@@ -94,14 +133,7 @@ namespace anaf::GUI::PROPERTY {
     ImGui::PopStyleColor(2);
     ImGui::PopID();
 
-    const ImVec2 min = ImGui::GetItemRectMin();
-    const float height = ImGui::GetItemRectSize().y;
-    const float fontSize = ImGui::GetFontSize();
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const float centerY = std::floor(min.y + height * 0.5f) + 0.5f;
-    drawChevron(drawList, ImVec2(std::floor(min.x + fontSize * 0.45f) + 0.5f, centerY), std::round(fontSize * 0.5f), open,
-                THEME::toU32(palette.textDim));
-    drawList->AddText(ImVec2(min.x + fontSize * labelIndent, min.y + (height - fontSize) * 0.5f), THEME::toU32(palette.text), label);
+    drawBandLabel(ImGui::GetItemRectMin(), ImGui::GetItemRectSize().y, label, open);
     return open;
   }
 
@@ -130,6 +162,15 @@ namespace anaf::GUI::PROPERTY {
     row(label, tooltip);
     ImGui::PushID(label);
     const bool changed = ImGui::InputDouble("##value", value, 0.0, 0.0, format);
+    ImGui::PopID();
+    if (unit) PROPERTY::unit(unit);
+    return changed;
+  }
+
+  bool inputVector3(const char* label, double* values, const char* unit, const char* format, const char* tooltip) {
+    row(label, tooltip);
+    ImGui::PushID(label);
+    const bool changed = ImGui::InputScalarN("##value", ImGuiDataType_Double, values, 3, nullptr, nullptr, format);
     ImGui::PopID();
     if (unit) PROPERTY::unit(unit);
     return changed;

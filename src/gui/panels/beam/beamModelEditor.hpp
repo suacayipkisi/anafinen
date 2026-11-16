@@ -96,8 +96,9 @@ namespace anaf::GUI {
     void renderNodes(std::uint32_t node);
     // withLoads false (dynamic load kind): supports only.
     void renderSupportsAndLoads(std::uint32_t node, bool withLoads);
-    // Inputs of one group; returns its allowed basis or nothing when the input is invalid.
-    std::optional<FEM::SUPPORT::Basis> renderSupportGroup(const char* id, const char* axisNames, SupportInput& input);
+    // Inputs of one group (a property grid group titled title); returns its allowed basis or
+    // nothing when the input is invalid, also while the group is folded.
+    std::optional<FEM::SUPPORT::Basis> renderSupportGroup(const char* id, const char* title, const char* axisNames, SupportInput& input);
     void renderElements(std::uint32_t element);
     void renderReleaseInputs();
     void renderElementLoads(std::uint32_t element);
