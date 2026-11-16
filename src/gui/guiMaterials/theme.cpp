@@ -69,29 +69,50 @@ namespace anaf::GUI::THEME {
       };
     }
 
-    // CAD-style dark theme (SolidWorks / Fusion feel, own colors): neutral grey surfaces in clear
-    // steps (darker title / tab strip, panel, lighter framed inputs), blue accent, tighter spacing.
-    constexpr ThemePalette professional = [] {
-      ThemePalette p = darkTheme("professional", "Professional", rgb(0x3B8EEA), rgb(0x2A73C9), rgb(0x3482DB), rgb(0x2360A8),
-                                 rgb(0x2E3238));
-      p.paletteColors = true;
-      p.base = rgb(0x1D2025);
-      p.panel = rgb(0x24272C);
-      p.raised = rgb(0x2A2E34);
-      p.input = rgb(0x30343B);
-      p.header = rgb(0x30353C);
-      p.border = rgb(0x3D434C);
-      p.text = rgb(0xD9DDE3);
-      p.textDim = rgb(0x8B929C);
-      p.overlayBorder = rgb(0x3D434C, 0.90f);
-      p.style = ThemeStyle{.rounding = 2.0f,
-                           .frameBorderSize = 1.0f,
-                           .framePadding = ImVec2(5.0f, 3.0f),
-                           .itemSpacing = ImVec2(6.0f, 4.0f),
-                           .scrollbarSize = 12.0f,
-                           .focusedTabOverlineOnly = true};
-      return p;
-    }();
+    // CAD-style light theme (the light grey of CAD programs, own colors): neutral greys without a
+    // blue cast in three clear levels (darker menu / tab strip, panel, white framed inputs and
+    // cards), square corners, hovers in grey; the accent only on selection, focus and checks.
+    constexpr ThemePalette professional{
+      .key = "professional",
+      .name = "Professional",
+      .light = true,
+      .paletteColors = true,
+      .style = ThemeStyle{.rounding = 0.0f,
+                          .frameBorderSize = 1.0f,
+                          .framePadding = ImVec2(5.0f, 3.0f),
+                          .itemSpacing = ImVec2(6.0f, 4.0f),
+                          .scrollbarSize = 12.0f,
+                          .focusedTabOverlineOnly = true,
+                          .neutralHover = true},
+      .base = rgb(0xD6D7D9),
+      .panel = rgb(0xEEEEEF),
+      .raised = rgb(0xF8F8F8),
+      .input = rgb(0xFFFFFF),
+      .header = rgb(0xE2E3E5),
+      .border = rgb(0xB3B5B8),
+      .text = rgb(0x1F2124),
+      .textDim = rgb(0x6B6E73),
+      .accent = rgb(0x1A62AE),
+      .primary = rgb(0x1A62AE),
+      .primaryHovered = rgb(0x2272C4),
+      .primaryActive = rgb(0x15518F),
+      .good = rgb(0x1C7F45),
+      .warn = rgb(0x9E6210),
+      .bad = rgb(0xBF3026),
+      .info = rgb(0x1A62AE),
+      .core = rgb(0x0B7A76),
+      .note = rgb(0x575A5F),
+      .sceneTop = rgb(0xE3E4E6),
+      .sceneBottom = rgb(0xE3E4E6),
+      .grid = rgb(0x50545A),
+      .sceneLabel = rgb(0x1B1D20),
+      .member = rgb(0x4F5A66),
+      .memberNoResult = rgb(0x9A9DA2),
+      .overlayBg = rgb(0xFFFFFF, 0.94f),
+      .overlayBorder = rgb(0xB3B5B8),
+      .overlayText = rgb(0x1F2124),
+      .overlayTextDim = rgb(0x62656A),
+    };
 
     constexpr ThemePalette steelCyan = darkTheme("steel_cyan", "Steel Blue / Cyan", rgb(0x2EA8D6), rgb(0x1C7BA2), rgb(0x2690BB),
                                                  rgb(0x166685), ImVec4(0.12f, 0.14f, 0.17f, 1.0f));
@@ -233,7 +254,7 @@ namespace anaf::GUI::THEME {
       ImGuiStyle& style = ImGui::GetStyle();
       style.ChildRounding = s.rounding;
       style.FrameRounding = s.rounding;
-      style.PopupRounding = s.rounding + 1.0f;
+      style.PopupRounding = s.rounding > 0.0f ? s.rounding + 1.0f : 0.0f; // square themes stay square
       style.ScrollbarRounding = s.rounding;
       style.GrabRounding = s.rounding;
       style.TabRounding = s.rounding;
@@ -331,6 +352,27 @@ namespace anaf::GUI::THEME {
       c[ImGuiCol_DragDropTarget] = p.accent;
       c[ImGuiCol_NavCursor] = p.accent;
       c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.0f, 0.0f, 0.0f, p.light ? 0.30f : 0.55f);
+
+      if (!p.style.neutralHover) return;
+      // Grey steps of the text color over the surface they sit on; the accent stays on selection
+      // (Header), checks, focus, tab overline and grips.
+      const auto step = [&](const ImVec4& surface, const float amount) { return mix(surface, p.text, amount); };
+      c[ImGuiCol_FrameBgHovered] = step(p.input, 0.04f);
+      c[ImGuiCol_FrameBgActive] = p.input;
+      c[ImGuiCol_Button] = step(p.panel, 0.05f);
+      c[ImGuiCol_ButtonHovered] = step(p.panel, 0.10f);
+      c[ImGuiCol_ButtonActive] = step(p.panel, 0.16f);
+      c[ImGuiCol_Header] = withAlpha(p.accent, 0.16f);
+      c[ImGuiCol_HeaderHovered] = step(p.panel, 0.07f);
+      c[ImGuiCol_HeaderActive] = withAlpha(p.accent, 0.24f);
+      c[ImGuiCol_TitleBgActive] = p.base;
+      c[ImGuiCol_TabHovered] = mix(p.base, p.panel, 0.55f);
+      c[ImGuiCol_ScrollbarBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+      c[ImGuiCol_ScrollbarGrab] = step(p.panel, 0.20f);
+      c[ImGuiCol_ScrollbarGrabHovered] = step(p.panel, 0.32f);
+      c[ImGuiCol_ScrollbarGrabActive] = step(p.panel, 0.45f);
+      c[ImGuiCol_TableHeaderBg] = p.header;
+      c[ImGuiCol_TableRowBgAlt] = withAlpha(p.text, 0.025f);
     }
 
   } // namespace

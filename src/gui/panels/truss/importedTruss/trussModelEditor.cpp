@@ -32,6 +32,7 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <array>
 #include <cfloat>
 #include <cmath>
 #include <cstddef>
@@ -156,7 +157,8 @@ namespace anaf::GUI {
       ImGui::Separator();
       if (mesh->hasResults) {
         const bool valid = bridge.isValid.load();
-        ImGui::TextColored(valid ? THEME::theme().good : THEME::theme().warn, "%s", valid ? "Solved, energy check passed" : "Results shown (energy check not passed)");
+        LAYOUT::wrappedColored(valid ? THEME::theme().good : THEME::theme().warn,
+                               valid ? "Solved, energy check passed" : "Results shown (energy check not passed)");
       } else {
         ImGui::TextDisabled("No results yet: run the solver below.");
       }
@@ -169,7 +171,7 @@ namespace anaf::GUI {
     if (!PROPERTY::header("Nodes")) return;
     auto& bridge = BRIDGE::buildBridge();
 
-    if (PROPERTY::begin("##truss_new_node", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+    if (PROPERTY::beginFixed("##truss_new_node")) {
       PROPERTY::inputVector3("New node", m_newNode.data(), "m");
       PROPERTY::end();
     }
@@ -189,9 +191,8 @@ namespace anaf::GUI {
 
     ImGui::Spacing();
     std::uint32_t typed = selectedNode;
-    if (PROPERTY::begin("##truss_selected_node", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
-      PROPERTY::row("Selected node", "Type an id and press Enter, or click a node in the viewport.");
-      if (ImGui::InputScalar("##selected_node_id", ImGuiDataType_U32, &typed, nullptr, nullptr, nullptr, ImGuiInputTextFlags_EnterReturnsTrue)) {
+    if (PROPERTY::beginFixed("##truss_selected_node")) {
+      if (PROPERTY::inputId("Selected node", &typed, noSelection, "Type an id and press Enter, or click a node in the viewport.")) {
         {
           std::lock_guard lock(bridge.dataMutex);
           const bool exists = bridge.activeMesh && typed < bridge.activeMesh->trussNodes.size();
@@ -237,12 +238,12 @@ namespace anaf::GUI {
     if (!PROPERTY::header("Bars")) return;
     auto& bridge = BRIDGE::buildBridge();
 
-    if (PROPERTY::begin("##truss_bar_properties", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+    if (PROPERTY::beginFixed("##truss_bar_properties")) {
       if (PROPERTY::group("Properties")) {
         PROPERTY::row("Material", "Used by Add Bar and Apply to Selected.");
+        PROPERTY::reserveBrowse();
         materialCombo(bridge, "##editor_bar_material", m_materialID);
-        PROPERTY::row("Library");
-        if (ImGui::Button("Materials...##truss", ImVec2(-FLT_MIN, 0.0f)) && onOpenMaterialHandler) onOpenMaterialHandler();
+        if (PROPERTY::browseButton("##truss_materials", "Open the Material Handler") && onOpenMaterialHandler) onOpenMaterialHandler();
         PROPERTY::inputDouble("Area A", &m_areaCm2, "cm\u00b2", "%.4g", "Cross-section area; used by Add Bar and Apply to Selected.");
         if (m_areaCm2 < 0.0) m_areaCm2 = 0.0;
       }
@@ -250,7 +251,7 @@ namespace anaf::GUI {
     }
 
     ImGui::SeparatorText("Add / Edit");
-    if (PROPERTY::begin("##truss_bar_nodes", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+    if (PROPERTY::beginFixed("##truss_bar_nodes")) {
       PROPERTY::row("Nodes A - B", "Ids of the two end nodes; after Add, A takes B for the next bar of a chain.");
       ImGui::SetNextItemWidth(LAYOUT::splitWidth(2));
       ImGui::InputScalar("##bar_a", ImGuiDataType_U32, &m_barNodeA);
@@ -385,7 +386,7 @@ namespace anaf::GUI {
     ImGui::TextDisabled("One material and cross-section on every bar at once (e.g. after importing a file without "
                         "sections). Single bars can still be changed under Bars.");
     ImGui::PopTextWrapPos();
-    if (PROPERTY::begin("##truss_whole_model", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+    if (PROPERTY::beginFixed("##truss_whole_model")) {
       PROPERTY::row("Material");
       materialCombo(bridge, "##editor_whole_material", m_wholeMaterialID);
       PROPERTY::inputDouble("Area A", &m_wholeAreaCm2, "cm\u00b2", "%.4g");
@@ -489,14 +490,13 @@ namespace anaf::GUI {
     ImGui::Text("Node %u", selectedNode);
 
     bool supportOpen = false;
-    if (PROPERTY::begin("##truss_support", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+    if (PROPERTY::beginFixed("##truss_support")) {
       supportOpen = PROPERTY::group("Support");
       if (supportOpen) {
         int supportType = m_supportInclined ? 1 : 0;
         PROPERTY::row("Directions", "Global axes: fix single global directions.\nInclined: give the directions as vectors (skewed support).");
-        ImGui::RadioButton("Global axes##editor_support_axes", &supportType, 0);
-        ImGui::SameLine();
-        ImGui::RadioButton("Inclined##editor_support_inclined", &supportType, 1);
+        constexpr std::array<const char*, 2> directionModes{"Global axes", "Inclined vectors"};
+        ImGui::Combo("##editor_support_mode", &supportType, directionModes.data(), static_cast<int>(directionModes.size()));
         m_supportInclined = supportType == 1;
         if (m_supportInclined) {
           renderInclinedSupportInputs();
@@ -566,7 +566,7 @@ namespace anaf::GUI {
 
     ImGui::Spacing();
     bool loadOpen = false;
-    if (PROPERTY::begin("##truss_nodal_load", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+    if (PROPERTY::beginFixed("##truss_nodal_load")) {
       loadOpen = PROPERTY::group("Nodal Load");
       if (loadOpen) PROPERTY::inputVector3("Force", m_force.data(), "N", "%.4g", "Global axes.");
       PROPERTY::end();

@@ -32,6 +32,7 @@ namespace anaf::GUI {
   class ImGuiLayer {
   public:
     static inline ImFont* g_fontUi = nullptr;
+    static inline ImFont* g_fontUiStrong = nullptr; // Inter SemiBold: section titles; g_fontUi when missing
     static inline ImFont* g_fontConsole = nullptr;
 
     void init(GLFWwindow* window);

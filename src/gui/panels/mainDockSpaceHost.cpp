@@ -178,6 +178,7 @@ namespace anaf::GUI {
     // No window menu button (the triangle left of the tabs): panels open and close from the Panels menu.
     ImGuiDockNodeFlags dockspaceFlags = ImGuiDockNodeFlags_PassthruCentralNode;
     dockspaceFlags |= ImGuiDockNodeFlags_NoWindowMenuButton; // internal flag (imgui_internal.h)
+    dockspaceFlags |= ImGuiDockNodeFlags_NoCloseButton;      // internal; each tab keeps its own close button
     ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), dockspaceFlags);
 
     // Layout initialization: only run when dimensions are valid AND it hasn't run yet
@@ -193,7 +194,7 @@ namespace anaf::GUI {
 
       // 1. Split Left (Full height)
       ImGuiID dockLeftId = ImGui::DockBuilderSplitNode(
-        dockMainId, ImGuiDir_Left, 0.18f, nullptr, &dockMainId);
+        dockMainId, ImGuiDir_Left, 0.21f, nullptr, &dockMainId);
 
       // 2. Split Right (Full height)
       ImGuiID dockRightId = ImGui::DockBuilderSplitNode(

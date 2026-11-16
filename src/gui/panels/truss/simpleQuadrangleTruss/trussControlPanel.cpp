@@ -121,7 +121,7 @@ namespace anaf::GUI {
   }
 
   void TrussControlPanel::renderGridTab(BRIDGE::GuiCalcBridge& bridge) {
-    if (PROPERTY::begin("##sqpt_grid", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+    if (PROPERTY::beginFixed("##sqpt_grid")) {
       if (PROPERTY::group("Grid")) {
         PROPERTY::row("Cells X");
         ImGui::InputScalar("##cube_x", ImGuiDataType_U32, &m_cubeNumX);
@@ -133,9 +133,9 @@ namespace anaf::GUI {
       }
       if (PROPERTY::group("Material & Section")) {
         PROPERTY::row("Material");
+        PROPERTY::reserveBrowse();
         materialCombo(bridge, "##Material TypeCombo", m_materialID);
-        PROPERTY::row("Library");
-        if (ImGui::Button("Materials...##sqpt", ImVec2(-FLT_MIN, 0.0f)) && onOpenMaterialHandler) onOpenMaterialHandler();
+        if (PROPERTY::browseButton("##sqpt_materials", "Open the Material Handler") && onOpenMaterialHandler) onOpenMaterialHandler();
         PROPERTY::inputDouble("Area A", &m_crossSectionalArea, "cm\u00b2", "%.3f", "Cross-section area of every bar.");
       }
       PROPERTY::end();
@@ -231,7 +231,7 @@ namespace anaf::GUI {
       m_lastFixNode = currentSelectedNode;
     }
     bool supportOpen = false;
-    if (PROPERTY::begin("##sqpt_support", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+    if (PROPERTY::beginFixed("##sqpt_support")) {
       PROPERTY::row("Node", "Click a node in the viewport or type its id.");
       ImGui::InputScalar("##force_node", ImGuiDataType_U32, &m_forceNodeId);
       supportOpen = PROPERTY::group("Support");
@@ -255,7 +255,7 @@ namespace anaf::GUI {
     if (dynamic) return;
     ImGui::Spacing();
     bool loadOpen = false;
-    if (PROPERTY::begin("##sqpt_nodal_load", PROPERTY::editorLabelWeight, PROPERTY::editorUnitWidth)) {
+    if (PROPERTY::beginFixed("##sqpt_nodal_load")) {
       loadOpen = PROPERTY::group("Nodal Load");
       if (loadOpen) PROPERTY::inputVector3("Force", m_forceVector.data(), "N", "%.4g", "Global axes.");
       PROPERTY::end();

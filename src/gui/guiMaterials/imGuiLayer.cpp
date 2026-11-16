@@ -87,6 +87,14 @@ namespace anaf::GUI {
       g_fontUi = io.Fonts->AddFontDefault();
     }
 
+    // Same family, one weight heavier, for section titles (property grid headers).
+    const std::filesystem::path strongFontResolved =
+      anaf::DIRECTORY::findAssetPath(std::filesystem::path("fonts") / "Inter" / "ttf" / "Inter-SemiBold.ttf");
+    g_fontUiStrong = g_fontUi;
+    if (!strongFontResolved.empty() && !uiFontResolved.empty()) {
+      g_fontUiStrong = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(strongFontResolved).c_str(), fontSize, &uiFontConfig);
+    }
+
     if (!consoleFontResolved.empty()) {
       g_fontConsole = io.Fonts->AddFontFromFileTTF(anaf::IO::pathToUtf8(consoleFontResolved).c_str(), fontSize, &consoleFontConfig);
     } else {

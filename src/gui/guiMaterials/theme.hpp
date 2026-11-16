@@ -30,7 +30,7 @@
 namespace anaf::GUI::THEME {
 
   enum class E_ThemeId : std::uint8_t {
-    Professional,   // CAD-style dark: neutral surfaces, framed inputs, tighter spacing, blue accent
+    Professional,   // CAD-style light: neutral grey chrome, white framed inputs, square corners, grey hovers
     SteelCyan,      // dark blue-steel surfaces, cyan accent
     GraphiteOrange, // neutral graphite surfaces, orange accent
     ClassicFem,     // dark panels, blue accent, neutral grey viewport (classic FEM pre/post look)
@@ -62,6 +62,9 @@ namespace anaf::GUI::THEME {
     ImVec2 itemSpacing{8.0f, 6.0f};
     float scrollbarSize{10.0f};
     bool focusedTabOverlineOnly{false}; // accent overline on the focused window's tab only (else dimmed on the others)
+    // Hovers and pressed states in grey steps of the text color; the accent only marks selection,
+    // focus and checks (palette themes only).
+    bool neutralHover{false};
   };
 
   struct ThemePalette {

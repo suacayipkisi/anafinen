@@ -1269,7 +1269,7 @@ namespace anaf::GUI {
     const ImU32 cardBorder = THEME::toU32(palette.overlayBorder);
     const ImU32 textColor = THEME::toU32(palette.overlayText);
     const ImU32 textDimColor = THEME::toU32(palette.overlayTextDim);
-    constexpr float cardRounding = 5.0f;
+    const float cardRounding = palette.style.rounding > 0.0f ? 5.0f : 0.0f; // square themes keep square cards
 
     m_overlayRects.clear();
     // Overlay sizes follow the UI font size (designed at 15 px).
