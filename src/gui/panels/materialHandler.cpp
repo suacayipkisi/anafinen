@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "materialHandler.hpp"
+#include "propertyGrid.hpp"
 
 #include <guiMaterials/theme.hpp>
 
@@ -34,17 +35,6 @@ namespace anaf::GUI {
   namespace {
     constexpr double giga = 1.0e9;
     constexpr double mega = 1.0e6;
-
-    void labeledInput(const char* label, const char* id, double* value, const char* format) {
-      ImGui::TableNextRow();
-      ImGui::TableSetColumnIndex(0);
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted(label);
-      ImGui::TableSetColumnIndex(1);
-      ImGui::SetNextItemWidth(-FLT_MIN);
-      ImGui::InputDouble(id, value, 0.0, 0.0, format);
-    }
-
   } // namespace end
 
   void MaterialHandler::setStatus(std::string message, const bool isError) {
@@ -109,7 +99,7 @@ namespace anaf::GUI {
         ImGui::TableSetupColumn("K (GPa)");
         ImGui::TableSetupColumn("Yield (MPa)");
         ImGui::TableSetupColumn("Ultimate (MPa)");
-        ImGui::TableSetupColumn("Density (kg/m3)");
+        ImGui::TableSetupColumn("Density (kg/m\u00b3)");
         ImGui::TableSetupColumn("Poisson");
         ImGui::TableSetupColumn("Ductility (%)");
         ImGui::TableSetupColumn("##actions");
@@ -170,28 +160,25 @@ namespace anaf::GUI {
     ImGui::SeparatorText("Add User Material");
     ImGui::TextDisabled("User materials are saved in your user settings folder. The solver uses E for the axial stiffness.");
 
-    if (ImGui::BeginTable("AddMaterialForm", 2, ImGuiTableFlags_SizingStretchProp)) {
-      ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.45f);
-      ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch, 0.55f);
-
-      ImGui::TableNextRow();
-      ImGui::TableSetColumnIndex(0);
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted("Name");
-      ImGui::TableSetColumnIndex(1);
-      ImGui::SetNextItemWidth(-FLT_MIN);
-      ImGui::InputText("##material_name", m_draft.name.data(), m_draft.name.size());
-
-      labeledInput("Elasticity Modulus E (GPa)", "##material_e", &m_draft.elasticityModulusGPa, "%.3f");
-      labeledInput("Shear Modulus G (GPa)", "##material_g", &m_draft.shearModulusGPa, "%.3f");
-      labeledInput("Bulk Modulus K (GPa)", "##material_k", &m_draft.bulkModulusGPa, "%.3f");
-      labeledInput("Yield Tensile Strength (MPa)", "##material_yield", &m_draft.yieldStrengthMPa, "%.2f");
-      labeledInput("Ultimate Tensile Strength (MPa)", "##material_uts", &m_draft.ultimateStrengthMPa, "%.2f");
-      labeledInput("Density (kg/m3)", "##material_density", &m_draft.density, "%.2f");
-      labeledInput("Poisson's Ratio", "##material_poisson", &m_draft.poissonsRatio, "%.3f");
-      labeledInput("Ductility, elongation at break (%)", "##material_ductility", &m_draft.ductilityPercent, "%.1f");
-
-      ImGui::EndTable();
+    if (PROPERTY::begin("AddMaterialForm", 0.55f)) {
+      if (PROPERTY::group("General")) {
+        PROPERTY::inputText("Name", m_draft.name.data(), m_draft.name.size(), "Unique name; mesh files refer to the material by it.");
+      }
+      if (PROPERTY::group("Elastic")) {
+        PROPERTY::inputDouble("Elasticity modulus E", &m_draft.elasticityModulusGPa, "GPa", "%.3f");
+        PROPERTY::inputDouble("Shear modulus G", &m_draft.shearModulusGPa, "GPa", "%.3f");
+        PROPERTY::inputDouble("Bulk modulus K", &m_draft.bulkModulusGPa, "GPa", "%.3f");
+        PROPERTY::inputDouble("Poisson's ratio", &m_draft.poissonsRatio, nullptr, "%.3f");
+      }
+      if (PROPERTY::group("Strength")) {
+        PROPERTY::inputDouble("Yield tensile strength", &m_draft.yieldStrengthMPa, "MPa", "%.2f");
+        PROPERTY::inputDouble("Ultimate tensile strength", &m_draft.ultimateStrengthMPa, "MPa", "%.2f");
+        PROPERTY::inputDouble("Ductility", &m_draft.ductilityPercent, "%", "%.1f", "Elongation at break.");
+      }
+      if (PROPERTY::group("Physical")) {
+        PROPERTY::inputDouble("Density", &m_draft.density, "kg/m\u00b3", "%.2f");
+      }
+      PROPERTY::end();
     }
 
     if (ImGui::Button("Add Material", ImVec2(-1.0f, 0.0f))) {
