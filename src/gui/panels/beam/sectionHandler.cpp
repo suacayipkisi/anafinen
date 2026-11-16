@@ -18,6 +18,7 @@
 #include "sectionHandler.hpp"
 
 #include <guiMaterials/theme.hpp>
+#include <panels/propertyGrid.hpp>
 
 #include <beam/beamSection/beamSection.hpp>
 #include <bridge/generalStatus.hpp>
@@ -96,14 +97,20 @@ namespace anaf::GUI {
       ImGui::EndChild();
     }
 
-    void propertyLines(const FEM::BEAM::SectionShape& shape) {
+    // Computed properties of a shape as read-only property grid rows.
+    void propertyRows(const char* id, const FEM::BEAM::SectionShape& shape) {
       const auto p = FEM::BEAM::computeProperties(shape, poisson);
-      ImGui::Text("A   = %.4g cm^2", p.area / cm2ToM2);
-      ImGui::Text("Iy  = %.5g cm^4  (about local y)", p.secondMomentY / cm4ToM4);
-      ImGui::Text("Iz  = %.5g cm^4  (about local z)", p.secondMomentZ / cm4ToM4);
-      ImGui::Text("J   = %.4g cm^4", p.torsionConstant / cm4ToM4);
-      ImGui::Text("Asy = %.4g cm^2, Asz = %.4g cm^2", p.shearAreaY / cm2ToM2, p.shearAreaZ / cm2ToM2);
-      ImGui::TextDisabled("Shear areas for v = 0.3; the solve uses each material's v.");
+      if (!PROPERTY::begin(id, 0.55f)) return;
+      if (PROPERTY::group("Properties")) {
+        constexpr const char* shearNote = "For \u03bd = 0.3; the solve uses each material's \u03bd.";
+        PROPERTY::value("Area A", std::format("{:.4g}", p.area / cm2ToM2), "cm\u00b2");
+        PROPERTY::value("Second moment Iy", std::format("{:.5g}", p.secondMomentY / cm4ToM4), "cm\u2074", "About local y.");
+        PROPERTY::value("Second moment Iz", std::format("{:.5g}", p.secondMomentZ / cm4ToM4), "cm\u2074", "About local z.");
+        PROPERTY::value("Torsion constant J", std::format("{:.4g}", p.torsionConstant / cm4ToM4), "cm\u2074");
+        PROPERTY::value("Shear area Asy", std::format("{:.4g}", p.shearAreaY / cm2ToM2), "cm\u00b2", shearNote);
+        PROPERTY::value("Shear area Asz", std::format("{:.4g}", p.shearAreaZ / cm2ToM2), "cm\u00b2", shearNote);
+      }
+      PROPERTY::end();
     }
 
     std::optional<FEM::BEAM::SectionShape> draftShape(const int shape, const double height, const double width, const double diameter,
@@ -118,11 +125,6 @@ namespace anaf::GUI {
         case 5: return FEM::BEAM::ISection{height * mmToM, width * mmToM, thickness * mmToM, flangeThickness * mmToM, outerRadius * mmToM};
         default: return std::nullopt;
       }
-    }
-
-    void inputMm(const char* label, double* value) {
-      ImGui::SetNextItemWidth(140.0f);
-      ImGui::InputDouble(label, value, 0.0, 0.0, "%.4g");
     }
   } // namespace end
 
@@ -182,10 +184,10 @@ namespace anaf::GUI {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Source");
         ImGui::TableSetupColumn("Shape");
-        ImGui::TableSetupColumn("A (cm2)");
-        ImGui::TableSetupColumn("Iy (cm4)");
-        ImGui::TableSetupColumn("Iz (cm4)");
-        ImGui::TableSetupColumn("J (cm4)");
+        ImGui::TableSetupColumn("A (cm\u00b2)");
+        ImGui::TableSetupColumn("Iy (cm\u2074)");
+        ImGui::TableSetupColumn("Iz (cm\u2074)");
+        ImGui::TableSetupColumn("J (cm\u2074)");
         ImGui::TableSetupColumn("##actions");
         ImGui::TableHeadersRow();
         ImGuiListClipper clipper;
@@ -242,54 +244,61 @@ namespace anaf::GUI {
     }
     ImGui::TextUnformatted(selected->getName().c_str());
     drawSection("SelectedSectionCanvas", selected->getShape(), ImVec2(-FLT_MIN, 180.0f));
-    propertyLines(selected->getShape());
+    propertyRows("SelectedSectionProperties", selected->getShape());
   }
 
   void SectionHandler::renderAddForm() {
     auto& bridge = BRIDGE::buildBridge();
     ImGui::SeparatorText("New Section");
     auto& d = m_draft;
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##section_name", "Name", d.name.data(), d.name.size());
-    ImGui::SetNextItemWidth(200.0f);
-    ImGui::Combo("Shape##section_shape", &d.shape, shapeLabels.data(), static_cast<int>(shapeLabels.size()));
-
-    switch (d.shape) {
-      case 0:
-        ImGui::InputDouble("A [cm^2]", &d.area, 0.0, 0.0, "%.4g");
-        ImGui::InputDouble("Iy [cm^4]", &d.secondMomentY, 0.0, 0.0, "%.5g");
-        ImGui::InputDouble("Iz [cm^4]", &d.secondMomentZ, 0.0, 0.0, "%.5g");
-        ImGui::InputDouble("J [cm^4]", &d.torsionConstant, 0.0, 0.0, "%.4g");
-        ImGui::InputDouble("Asy [cm^2]", &d.shearAreaY, 0.0, 0.0, "%.4g");
-        ImGui::InputDouble("Asz [cm^2]", &d.shearAreaZ, 0.0, 0.0, "%.4g");
-        ImGui::TextDisabled("Shear areas 0 = Euler-Bernoulli only. No stresses without a shape.");
-        break;
-      case 1:
-        inputMm("Height h (local y) [mm]", &d.height);
-        inputMm("Width b (local z) [mm]", &d.width);
-        break;
-      case 2:
-        inputMm("Diameter [mm]", &d.diameter);
-        break;
-      case 3:
-        inputMm("Outer diameter [mm]", &d.diameter);
-        inputMm("Wall t [mm]", &d.thickness);
-        break;
-      case 4:
-        inputMm("Height h (local y) [mm]", &d.height);
-        inputMm("Width b (local z) [mm]", &d.width);
-        inputMm("Wall t [mm]", &d.thickness);
-        inputMm("Outer corner radius [mm]", &d.outerRadius);
-        inputMm("Inner corner radius [mm]", &d.innerRadius);
-        break;
-      default:
-        inputMm("Height h (web, local y) [mm]", &d.height);
-        inputMm("Flange width b [mm]", &d.width);
-        inputMm("Web tw [mm]", &d.thickness);
-        inputMm("Flange tf [mm]", &d.flangeThickness);
-        inputMm("Root radius r [mm]", &d.outerRadius);
-        break;
+    if (PROPERTY::begin("NewSectionForm", 0.55f)) {
+      if (PROPERTY::group("General")) {
+        PROPERTY::inputText("Name", d.name.data(), d.name.size(), "Unique name; mesh files refer to the section by it.");
+        PROPERTY::row("Shape");
+        ImGui::Combo("##section_shape", &d.shape, shapeLabels.data(), static_cast<int>(shapeLabels.size()));
+      }
+      if (d.shape == 0) {
+        if (PROPERTY::group("Values")) {
+          PROPERTY::inputDouble("Area A", &d.area, "cm\u00b2", "%.4g");
+          PROPERTY::inputDouble("Second moment Iy", &d.secondMomentY, "cm\u2074", "%.5g", "About local y.");
+          PROPERTY::inputDouble("Second moment Iz", &d.secondMomentZ, "cm\u2074", "%.5g", "About local z.");
+          PROPERTY::inputDouble("Torsion constant J", &d.torsionConstant, "cm\u2074", "%.4g");
+          PROPERTY::inputDouble("Shear area Asy", &d.shearAreaY, "cm\u00b2", "%.4g", "0 = Euler-Bernoulli only.");
+          PROPERTY::inputDouble("Shear area Asz", &d.shearAreaZ, "cm\u00b2", "%.4g", "0 = Euler-Bernoulli only.");
+        }
+      }
+      else if (PROPERTY::group("Dimensions")) {
+        switch (d.shape) {
+          case 1:
+            PROPERTY::inputDouble("Height h", &d.height, "mm", "%.4g", "Along local y.");
+            PROPERTY::inputDouble("Width b", &d.width, "mm", "%.4g", "Along local z.");
+            break;
+          case 2:
+            PROPERTY::inputDouble("Diameter", &d.diameter, "mm", "%.4g");
+            break;
+          case 3:
+            PROPERTY::inputDouble("Outer diameter", &d.diameter, "mm", "%.4g");
+            PROPERTY::inputDouble("Wall t", &d.thickness, "mm", "%.4g");
+            break;
+          case 4:
+            PROPERTY::inputDouble("Height h", &d.height, "mm", "%.4g", "Along local y.");
+            PROPERTY::inputDouble("Width b", &d.width, "mm", "%.4g", "Along local z.");
+            PROPERTY::inputDouble("Wall t", &d.thickness, "mm", "%.4g");
+            PROPERTY::inputDouble("Outer corner radius", &d.outerRadius, "mm", "%.4g");
+            PROPERTY::inputDouble("Inner corner radius", &d.innerRadius, "mm", "%.4g");
+            break;
+          default:
+            PROPERTY::inputDouble("Height h", &d.height, "mm", "%.4g", "Web height, along local y.");
+            PROPERTY::inputDouble("Flange width b", &d.width, "mm", "%.4g");
+            PROPERTY::inputDouble("Web tw", &d.thickness, "mm", "%.4g");
+            PROPERTY::inputDouble("Flange tf", &d.flangeThickness, "mm", "%.4g");
+            PROPERTY::inputDouble("Root radius r", &d.outerRadius, "mm", "%.4g");
+            break;
+        }
+      }
+      PROPERTY::end();
     }
+    if (d.shape == 0) ImGui::TextDisabled("No stresses without a shape.");
 
     const FEM::BEAM::SectionProperties general{d.area * cm2ToM2, d.secondMomentY * cm4ToM4, d.secondMomentZ * cm4ToM4, d.torsionConstant * cm4ToM4,
                                     d.shearAreaY * cm2ToM2, d.shearAreaZ * cm2ToM2};
@@ -299,7 +308,7 @@ namespace anaf::GUI {
       ImGui::TextColored(THEME::theme().bad, "%s", valid.error().c_str());
     } else {
       drawSection("DraftSectionCanvas", *shape, ImVec2(-FLT_MIN, 120.0f));
-      propertyLines(*shape);
+      propertyRows("DraftSectionProperties", *shape);
     }
     ImGui::BeginDisabled(!valid);
     if (ImGui::Button("Add Section", ImVec2(-FLT_MIN, 0.0f))) {
