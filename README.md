@@ -63,7 +63,7 @@ Pre-compiled binary releases for Windows and Linux are available under [GitHub R
 | Platform | File | Quick Run / Install Command |
 | --- | --- | --- |
 | **Windows** (10/11 x64 Portable) | [`anafinen-0.2.1-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-windows-AMD64-alpha.zip) | Extract the `.zip` into a folder you can write to (not `Program Files`) and run `anafinen.exe` (GUI) or `anafinen-cli.exe` (command line). The MSVC runtime is included; no Visual C++ Redistributable is needed. |
-| **Linux** (Fedora / RHEL / RPM-based) | [`anafinen-0.2.1-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-alpha.rpm) | `sudo dnf install ./anafinen-0.2.1-alpha.rpm` |
+| **Linux** (Fedora 45, Latest Only) | [`anafinen-0.2.1-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-alpha.rpm) | `sudo dnf install ./anafinen-0.2.1-alpha.rpm` |
 | **Linux** (Debian / Ubuntu / DEB-based) | [`anafinen-0.2.1-alpha.deb`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-alpha.deb) | `sudo apt install ./anafinen-0.2.1-alpha.deb` |
 | **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.2.1_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.2.1_alpha-1-x86_64.pkg.tar.zst` (needs `gmsh` or `gmsh-bin` from the AUR) |
 
