@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 namespace anaf::GUI {
 
@@ -42,10 +43,18 @@ namespace anaf::GUI {
     Displacement // displacement magnitude (beam: along the element)
   };
 
+  // Standard views of the toolbar (the ViewCube reaches every face, edge and corner view).
+  enum class E_StandardView : std::uint8_t {
+    Front, // looking along -Z
+    Top,   // looking down -Y
+    Right, // looking along -X
+    Iso    // from the +X +Y +Z octant
+  };
+
   // What the viewport draws, written by ViewportToolbar and read by ViewportPanel (GUI thread only).
   struct ViewportDisplayOptions {
     bool showGrid{false};   // procedural x-z ground grid
-    bool showAxes{false};   // 3D X / Y / Z axis lines (the corner gizmo is always drawn)
+    bool showAxes{false};   // 3D X / Y / Z axis lines (the ViewCube and the corner triad are always drawn)
     E_NodeStyle nodeStyle{E_NodeStyle::Square};             // nodes, labels, picking, displacement colorbar
     bool showForces{true};  // applied force and moment arrows, distributed loads
     E_SupportStyle supportStyle{E_SupportStyle::Off};
@@ -55,6 +64,7 @@ namespace anaf::GUI {
 
     bool changed{false};              // set on every toggle; the viewport rebuilds its batches and clears it
     bool resetCameraRequested{false}; // the viewport fits the camera and clears it
+    std::optional<E_StandardView> viewRequested; // the viewport turns the camera to it and clears it
   };
 
   // Own window, docked by MainDockSpaceHost as a fixed-height strip above the viewport.

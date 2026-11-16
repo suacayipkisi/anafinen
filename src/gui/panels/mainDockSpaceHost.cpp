@@ -69,11 +69,49 @@ namespace anaf::GUI {
       }
       ImGui::EndMenu();
     }
-    if (ImGui::MenuItem("Reset Legend Positions")) {
-      for (auto* legend : {&SETTINGS::settings().stressLegend, &SETTINGS::settings().displacementLegend}) *legend = {};
-      SETTINGS::save();
+    if (ImGui::BeginMenu("Viewport")) {
+      SETTINGS::UserSettings& settings = SETTINGS::settings();
+      ImGui::SeparatorText("Background");
+      if (ImGui::MenuItem("Flat (default)", nullptr, !settings.gradientBackground)) {
+        settings.gradientBackground = false;
+        SETTINGS::save();
+      }
+      if (ImGui::MenuItem("Gradient", nullptr, settings.gradientBackground)) {
+        settings.gradientBackground = true;
+        SETTINGS::save();
+      }
+      ImGui::SetItemTooltip("Vertical gradient derived from the theme's viewport color.");
+
+      ImGui::SeparatorText("Result Colors");
+      if (ImGui::MenuItem("Banded (default)", nullptr, settings.bandedResults)) {
+        settings.bandedResults = true;
+        SETTINGS::save();
+      }
+      ImGui::SetItemTooltip("Stress and displacement colors in discrete bands, the legend labels every band boundary.");
+      if (ImGui::MenuItem("Continuous", nullptr, !settings.bandedResults)) {
+        settings.bandedResults = false;
+        SETTINGS::save();
+      }
+      if (ImGui::BeginMenu("Color Bands", settings.bandedResults)) {
+        constexpr std::array<int, 6> bandCounts{6, 8, 9, 10, 12, 16};
+        for (const int bands : bandCounts) {
+          const std::string label = std::to_string(bands) + (bands == 9 ? " (default)" : "");
+          if (ImGui::MenuItem(label.c_str(), nullptr, settings.colorBands == bands)) {
+            settings.colorBands = bands;
+            SETTINGS::save();
+          }
+        }
+        ImGui::EndMenu();
+      }
+
+      ImGui::Separator();
+      if (ImGui::MenuItem("Reset Legend Positions")) {
+        for (auto* legend : {&settings.stressLegend, &settings.displacementLegend}) *legend = {};
+        SETTINGS::save();
+      }
+      ImGui::SetItemTooltip("Put the result legends back into the top-left corner of the viewport, expanded.");
+      ImGui::EndMenu();
     }
-    ImGui::SetItemTooltip("Put the result legends back into the bottom-left corner of the viewport, expanded.");
     ImGui::EndMenu();
   }
 

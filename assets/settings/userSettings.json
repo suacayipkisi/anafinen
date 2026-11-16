@@ -8,6 +8,9 @@
     "showOnStartup": true
   },
   "viewport": {
+    "background": "flat",
+    "resultColors": "banded",
+    "colorBands": 9,
     "legends": {
       "stress": { "collapsed": false, "placed": false, "x": 0.0, "y": 0.0 },
       "displacement": { "collapsed": false, "placed": false, "x": 0.0, "y": 0.0 }

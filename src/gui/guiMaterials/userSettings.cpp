@@ -71,6 +71,20 @@ namespace anaf::GUI::SETTINGS {
       if (it != object.end() && it->is_number()) value = std::clamp(it->get<float>(), minUiFontSize, maxUiFontSize);
     }
 
+    // "key": one of two strings; anything else leaves value unchanged.
+    void readChoice(const nlohmann::json& object, const char* key, const char* whenTrue, const char* whenFalse, bool& value) {
+      const auto it = object.find(key);
+      if (it == object.end() || !it->is_string()) return;
+      const std::string text = it->get<std::string>();
+      if (text == whenTrue) value = true;
+      else if (text == whenFalse) value = false;
+    }
+
+    void readColorBands(const nlohmann::json& object, const char* key, int& value) {
+      const auto it = object.find(key);
+      if (it != object.end() && it->is_number_integer()) value = std::clamp(it->get<int>(), minColorBands, maxColorBands);
+    }
+
     void readLegend(const nlohmann::json& legends, const char* key, LegendSettings& legend) {
       const auto it = legends.find(key);
       if (it == legends.end() || !it->is_object()) return;
@@ -90,6 +104,9 @@ namespace anaf::GUI::SETTINGS {
         readValue(*welcome, "showOnStartup", settings.showWelcomeOnStartup);
       }
       if (const auto viewport = document.find("viewport"); viewport != document.end() && viewport->is_object()) {
+        readChoice(*viewport, "background", "gradient", "flat", settings.gradientBackground);
+        readChoice(*viewport, "resultColors", "banded", "continuous", settings.bandedResults);
+        readColorBands(*viewport, "colorBands", settings.colorBands);
         if (const auto legends = viewport->find("legends"); legends != viewport->end() && legends->is_object()) {
           readLegend(*legends, "stress", settings.stressLegend);
           readLegend(*legends, "displacement", settings.displacementLegend);
@@ -155,7 +172,11 @@ namespace anaf::GUI::SETTINGS {
     g_document["theme"] = current.theme;
     objectAt(g_document, "ui")["fontSize"] = current.uiFontSize;
     objectAt(g_document, "welcome")["showOnStartup"] = current.showWelcomeOnStartup;
-    nlohmann::json& legends = objectAt(objectAt(g_document, "viewport"), "legends");
+    nlohmann::json& viewport = objectAt(g_document, "viewport");
+    viewport["background"] = current.gradientBackground ? "gradient" : "flat";
+    viewport["resultColors"] = current.bandedResults ? "banded" : "continuous";
+    viewport["colorBands"] = current.colorBands;
+    nlohmann::json& legends = objectAt(viewport, "legends");
     legends["stress"] = legendJson(current.stressLegend);
     legends["displacement"] = legendJson(current.displacementLegend);
 

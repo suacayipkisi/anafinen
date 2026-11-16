@@ -26,6 +26,7 @@
 
 #include "imgui.h"
 
+#include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float3.hpp>
 
@@ -74,7 +75,7 @@ namespace anaf::GUI{
     double m_cachedMaxStress{0.0};
     double m_cachedMaxDisp{0.0};
     std::uint32_t m_themeRevision{0}; // THEME::themeRevision() the buffers were built with
-    std::vector<std::array<ImVec2, 2>> m_legendRects; // legend cards drawn last frame (min, max), block picking
+    std::vector<std::array<ImVec2, 2>> m_overlayRects; // legend cards and the ViewCube drawn last frame (min, max), block picking
     bool m_legendDragged{false}; // the active legend header moved, so its release is no click
     std::uint32_t m_selectedNode{noSelection};    // bridge selections, compared every frame so a
     std::uint32_t m_selectedElement{noSelection}; // selection made in a panel redraws the highlight
@@ -100,6 +101,26 @@ namespace anaf::GUI{
       bool operator==(const LabelState&) const = default;
     };
     std::optional<LabelState> m_labelState;
+
+    // Result colors (SETTINGS): discrete bands or the continuous colormap. The batches bake the
+    // colors in, so a change rebuilds them.
+    struct ResultScale {
+      bool banded{true};
+      int bands{9};
+      bool operator==(const ResultScale&) const = default;
+    };
+    ResultScale m_resultScale{};
+
+    // Animated turn to a standard view (ViewCube click, toolbar view buttons): yaw / pitch move
+    // by the shortest angles with an ease-in-out curve.
+    struct ViewTransition {
+      float fromYaw{};
+      float fromPitch{};
+      float deltaYaw{};
+      float deltaPitch{};
+      float progress{}; // 0 .. 1
+    };
+    std::optional<ViewTransition> m_viewTransition;
 
     // Beam scene: every element sampled at stations along it (exact displacement field, values
     // for the coloring), rebuilt when the snapshot changes; the drawn shape (positions and
@@ -141,7 +162,16 @@ namespace anaf::GUI{
     glm::vec3 orbitDirection() const;
     glm::vec3 orbitUp() const;
     float farPlane() const;
+    // Rotation part of the view matrix (world to view, view z toward the eye).
+    glm::mat3 cameraRotation() const;
     void handleCameraInput();
+    void orbitBy(ImVec2 mouseDelta); // turns the camera like a right-button drag
+    // Starts the turn to the view from direction (target to eye). A view straight up or down
+    // keeps referenceYaw (rounded to a quarter turn); without one the current yaw.
+    void snapView(const glm::vec3& direction, std::optional<float> referenceYaw = std::nullopt);
+    void updateViewTransition();
+    // Colormap of a result value t in [0, 1] (t = value / max), the band's center color when banded.
+    glm::vec4 resultColor(double t) const;
     void buildSceneBatches();
     void buildTrussScene();
     void buildBeamStations();

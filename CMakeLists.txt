@@ -190,6 +190,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/beam/sectionHandler.cpp
     src/gui/panels/beam/beamDiagramPanel.cpp
     src/gui/panels/viewportPanel.cpp
+    src/gui/panels/orientationAids.cpp
     src/gui/panels/viewportToolbar.cpp
     src/gui/panels/viewportRenderer.cpp
     src/gui/panels/beamSceneRenderer.cpp

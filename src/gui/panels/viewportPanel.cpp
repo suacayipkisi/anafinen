@@ -26,6 +26,7 @@
 #include <common/supportBasis.hpp>
 
 #include "imgui.h"
+#include "orientationAids.hpp"
 #include "viewportRenderer.hpp"
 
 #include <glm/ext/vector_float3.hpp>
@@ -58,6 +59,7 @@ namespace anaf::GUI {
 
   namespace {
     constexpr float fovY = std::numbers::pi_v<float> / 4.0f; // 45 deg
+    constexpr float viewTransitionSeconds = 0.3f;
     constexpr float minCameraDistance = 1e-3f;
     // Level of detail only for large beam models: below this count every element keeps its real
     // section at any distance.
@@ -438,6 +440,7 @@ namespace anaf::GUI {
     m_rotationYaw = 0.9f;
     m_rotationPitch = -0.7f;
     m_draggingView = false;
+    m_viewTransition.reset();
     updateSceneBounds();
     m_target = m_sceneCenter;
     m_cameraDistance = hasModel() ? m_sceneRadius * 2.2f : 18.0f;
@@ -467,8 +470,49 @@ namespace anaf::GUI {
     return std::max(reach * 2.0f, 10.0f);
   }
 
+  glm::mat3 ViewportPanel::cameraRotation() const {
+    // Same lookAt as getViewProjectionMatrix(), so the overlays stay in sync with the scene.
+    return glm::mat3(glm::lookAt(orbitDirection(), glm::vec3(0.0f), orbitUp()));
+  }
+
+  glm::vec4 ViewportPanel::resultColor(const double t) const {
+    if (!m_resultScale.banded) return jet(t);
+    const int bands = m_resultScale.bands;
+    const int band = std::clamp(static_cast<int>(std::floor(std::clamp(t, 0.0, 1.0) * bands)), 0, bands - 1);
+    return jet((static_cast<double>(band) + 0.5) / static_cast<double>(bands));
+  }
+
+  void ViewportPanel::snapView(const glm::vec3& direction, const std::optional<float> referenceYaw) {
+    const ORIENTATION::OrbitAngles angles = ORIENTATION::anglesForDirection(direction, referenceYaw.value_or(m_rotationYaw));
+    constexpr float fullTurn = 2.0f * std::numbers::pi_v<float>;
+    m_viewTransition = ViewTransition{m_rotationYaw, m_rotationPitch, std::remainder(angles.yaw - m_rotationYaw, fullTurn),
+                                      std::remainder(angles.pitch - m_rotationPitch, fullTurn), 0.0f};
+  }
+
+  void ViewportPanel::updateViewTransition() {
+    if (!m_viewTransition) return;
+    ViewTransition& transition = *m_viewTransition;
+    transition.progress = std::min(1.0f, transition.progress + ImGui::GetIO().DeltaTime / viewTransitionSeconds);
+    const float p = transition.progress;
+    const float eased = p * p * (3.0f - 2.0f * p);
+    constexpr float fullTurn = 2.0f * std::numbers::pi_v<float>;
+    m_rotationYaw = std::remainder(transition.fromYaw + transition.deltaYaw * eased, fullTurn);
+    m_rotationPitch = std::remainder(transition.fromPitch + transition.deltaPitch * eased, fullTurn);
+    if (p >= 1.0f) m_viewTransition.reset();
+  }
+
+  void ViewportPanel::orbitBy(const ImVec2 mouseDelta) {
+    if (mouseDelta.x == 0.0f && mouseDelta.y == 0.0f) return;
+    m_viewTransition.reset();
+    // Upside down, a horizontal drag still turns the view the way the mouse moves.
+    const float yawSign = std::cos(m_rotationPitch) < 0.0f ? -1.0f : 1.0f;
+    m_rotationYaw = std::remainder(m_rotationYaw - yawSign * mouseDelta.x * 0.005f, 2.0f * std::numbers::pi_v<float>);
+    m_rotationPitch = std::remainder(m_rotationPitch - mouseDelta.y * 0.005f, 2.0f * std::numbers::pi_v<float>);
+  }
+
   void ViewportPanel::handleCameraInput() {
     ImGuiIO& io = ImGui::GetIO();
+    updateViewTransition();
 
     if (m_viewportHovered && ImGui::IsKeyPressed(ImGuiKey_R)) {
       resetCamera();
@@ -482,6 +526,7 @@ namespace anaf::GUI {
 
     if (m_viewportHovered && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) {
       m_draggingView = true;
+      m_viewTransition.reset();
     }
 
     if (!ImGui::IsMouseDown(ImGuiMouseButton_Right) && !ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
@@ -501,10 +546,7 @@ namespace anaf::GUI {
           const float panScale = 0.0015f * m_cameraDistance;
           m_target += (-right * delta.x + up * delta.y) * panScale;
         } else {
-          // Upside down, a horizontal drag still turns the view the way the mouse moves.
-          const float yawSign = std::cos(m_rotationPitch) < 0.0f ? -1.0f : 1.0f;
-          m_rotationYaw = std::remainder(m_rotationYaw - yawSign * delta.x * 0.005f, 2.0f * std::numbers::pi_v<float>);
-          m_rotationPitch = std::remainder(m_rotationPitch - delta.y * 0.005f, 2.0f * std::numbers::pi_v<float>);
+          orbitBy(delta);
         }
       }
     }
@@ -578,11 +620,11 @@ namespace anaf::GUI {
     const auto coloring = m_display->coloring;
     const auto elementColor = [&](const FEM::TRUSS::RenderElement& element) -> glm::vec4 {
       if (coloring == E_ElementColoring::Stress && maxStress > 1e-9) {
-        return jet(std::sqrt(std::clamp(std::abs(static_cast<double>(element.stress)) / maxStress, 0.0, 1.0)));
+        return resultColor(std::sqrt(std::clamp(std::abs(static_cast<double>(element.stress)) / maxStress, 0.0, 1.0)));
       }
       if (coloring == E_ElementColoring::Displacement && maxDisp > 0.0) {
         const double mean = 0.5 * (magnitude(mesh.trussNodes[element.node1].getDisplacement()) + magnitude(mesh.trussNodes[element.node2].getDisplacement()));
-        return jet(mean / maxDisp);
+        return resultColor(mean / maxDisp);
       }
       return toGlm(THEME::trussMemberColor(THEME::theme()));
     };
@@ -870,7 +912,7 @@ namespace anaf::GUI {
       }
       for (std::uint32_t id = 0; id < mesh.nodes.size(); ++id) {
         const auto& node = mesh.nodes[id];
-        glm::vec4 color = m_cachedMaxDisp > 0.0 ? jet(magnitude(node.getDisplacement()) / m_cachedMaxDisp) : toGlm(THEME::theme().sceneLabel);
+        glm::vec4 color = m_cachedMaxDisp > 0.0 ? resultColor(magnitude(node.getDisplacement()) / m_cachedMaxDisp) : toGlm(THEME::theme().sceneLabel);
         if (node.isSupported()) color = supportNodeColor;
         const bool selected = id == m_selectedNode;
         if (selected) color = selectedNodeColor;
@@ -1000,14 +1042,33 @@ namespace anaf::GUI {
       const auto& draw = m_beamElements[e];
       if (draw.stations.size() < 2 || draw.fullMesh < 0) continue;
       const bool selected = e == m_selectedElement;
-      const auto color = [&](const std::size_t i) -> glm::vec4 {
-        if (selected) return selectedNodeColor;
+      // Colors at both ends of the piece from station i to station j. Banded colors are one
+      // band per piece (the band of the mean value), so band borders stay sharp instead of
+      // blending across the piece.
+      const auto colors = [&](const std::size_t i, const std::size_t j) -> std::pair<glm::vec4, glm::vec4> {
+        if (selected) return {selectedNodeColor, selectedNodeColor};
+        const std::vector<float>* values = nullptr;
+        double maxValue = 0.0;
         if (coloring == E_ElementColoring::Stress) {
-          if (draw.stress.empty() || maxStress <= 0.0) return draw.stress.empty() && !draw.displacement.empty() ? noResultColor : memberColor;
-          return jet(draw.stress[i] / maxStress);
+          if (draw.stress.empty() || maxStress <= 0.0) {
+            const glm::vec4 plain = draw.stress.empty() && !draw.displacement.empty() ? noResultColor : memberColor;
+            return {plain, plain};
+          }
+          values = &draw.stress;
+          maxValue = maxStress;
+        } else if (coloring == E_ElementColoring::Displacement && !draw.displacement.empty() && maxDisp > 0.0) {
+          values = &draw.displacement;
+          maxValue = maxDisp;
+        } else {
+          return {memberColor, memberColor};
         }
-        if (coloring == E_ElementColoring::Displacement && !draw.displacement.empty() && maxDisp > 0.0) return jet(draw.displacement[i] / maxDisp);
-        return memberColor;
+        const double a = (*values)[i] / maxValue;
+        const double b = (*values)[j] / maxValue;
+        if (m_resultScale.banded) {
+          const glm::vec4 band = resultColor(0.5 * (a + b));
+          return {band, band};
+        }
+        return {jet(a), jet(b)};
       };
       const int entity = -static_cast<int>(e) - 2;
       const std::size_t last = draw.stations.size() - 1;
@@ -1020,13 +1081,15 @@ namespace anaf::GUI {
       }
       if (tier == E_Tier::Full) {
         for (std::size_t i = 0; i < last; ++i) {
+          const auto [color0, color1] = colors(i, i + 1);
           m_beamRenderer->addInstance(draw.fullMesh, {draw.stations[i], draw.stations[i + 1], draw.frameY[i], draw.frameZ[i], draw.frameY[i + 1],
-                                                       draw.frameZ[i + 1], color(i), color(i + 1), entity});
+                                                       draw.frameZ[i + 1], color0, color1, entity});
         }
       } else {
         const int meshIndex = tier == E_Tier::Simple ? draw.simpleMesh : m_lineMesh;
+        const auto [color0, color1] = colors(0, last);
         m_beamRenderer->addInstance(meshIndex, {draw.stations.front(), draw.stations.back(), draw.frameY.front(), draw.frameZ.front(),
-                                                 draw.frameY.back(), draw.frameZ.back(), color(0), color(last), entity});
+                                                 draw.frameY.back(), draw.frameZ.back(), color0, color1, entity});
       }
 
       // End releases of a rotation: a pin through the end along each released bending axis
@@ -1070,6 +1133,21 @@ namespace anaf::GUI {
       m_display->resetCameraRequested = false;
       resetCamera();
     }
+    if (m_display->viewRequested) {
+      // Top keeps the front at the bottom of the screen (yaw 0), like a drawing's plan view.
+      switch (*m_display->viewRequested) {
+        case E_StandardView::Front: snapView(glm::vec3(0.0f, 0.0f, 1.0f)); break;
+        case E_StandardView::Top: snapView(glm::vec3(0.0f, 1.0f, 0.0f), 0.0f); break;
+        case E_StandardView::Right: snapView(glm::vec3(1.0f, 0.0f, 0.0f)); break;
+        case E_StandardView::Iso: snapView(glm::vec3(1.0f, 1.0f, 1.0f)); break;
+      }
+      m_display->viewRequested.reset();
+    }
+    // Banded / continuous result colors (Settings > Viewport) are baked into the batches too.
+    if (const ResultScale scale{SETTINGS::settings().bandedResults, SETTINGS::settings().colorBands}; scale != m_resultScale) {
+      m_resultScale = scale;
+      m_truss1dGuiProp.meshNeedsUpdate = true;
+    }
     // A theme switch rebuilds the buffers, which bake the member colors in.
     if (m_themeRevision != THEME::themeRevision()) {
       m_themeRevision = THEME::themeRevision();
@@ -1110,7 +1188,16 @@ namespace anaf::GUI {
     // Scene color, entity-ID buffer (-1 = nothing picked) and depth.
     const THEME::ThemePalette& palette = THEME::theme();
     m_fbo->clear(palette.sceneBottom.x, palette.sceneBottom.y, palette.sceneBottom.z, 1.0f, -1);
-    m_renderer->renderBackground(toGlm3(palette.sceneTop), toGlm3(palette.sceneBottom));
+    if (SETTINGS::settings().gradientBackground) {
+      // Derived from the theme's flat color, so every preset gets one: lighter at the top, a
+      // little darker at the bottom (the light theme mostly lightens).
+      const ImVec4 white(1.0f, 1.0f, 1.0f, 1.0f);
+      const ImVec4 black(0.0f, 0.0f, 0.0f, 1.0f);
+      m_renderer->renderBackground(toGlm3(THEME::mix(palette.sceneTop, white, palette.light ? 0.6f : 0.18f)),
+                                   toGlm3(THEME::mix(palette.sceneBottom, black, palette.light ? 0.06f : 0.12f)));
+    } else {
+      m_renderer->renderBackground(toGlm3(palette.sceneTop), toGlm3(palette.sceneBottom));
+    }
 
     const glm::mat4 mvp = getViewProjectionMatrix();
     // Level of detail follows the camera: only the instance lists are rebuilt.
@@ -1184,56 +1271,29 @@ namespace anaf::GUI {
     const ImU32 textDimColor = THEME::toU32(palette.overlayTextDim);
     constexpr float cardRounding = 5.0f;
 
-    // View orientation gizmo (top-right corner): 3 axes crossing at a point, rotating in sync with the camera.
+    m_overlayRects.clear();
+    // Overlay sizes follow the UI font size (designed at 15 px).
+    const float unit = ImGui::GetFontSize() / 15.0f;
+    const glm::mat3 viewRotation = cameraRotation();
+
+    // ViewCube (top right, below the FPS monitor): a click turns the camera to that face, edge
+    // or corner view, a drag orbits.
     {
-      constexpr float margin = 16.0f;
-      constexpr float topOffset = 48.0f; // sits below the FPS monitor box
-      constexpr float gizmoRadius = 40.0f;
-      constexpr float gizmoBoxSize = gizmoRadius * 2.0f + 24.0f;
-      constexpr float tipRadius = 8.5f;
+      const float halfSize = std::round(28.0f * unit);
+      const float reach = halfSize * 1.75f; // the cube's item area (ORIENTATION::viewCube)
+      const float fpsBottom = origin.y + 16.0f + ImGui::GetTextLineHeight() + 4.0f;
+      const ImVec2 center(origin.x + size.x - reach - 6.0f, fpsBottom + reach);
+      const ORIENTATION::ViewCubeResult cube = ORIENTATION::viewCube(viewRotation, center, halfSize);
+      m_overlayRects.push_back({cube.rectMin, cube.rectMax});
+      orbitBy(cube.drag);
+      if (cube.snapDirection) snapView(*cube.snapDirection);
+    }
 
-      const ImVec2 gizmoCenter(
-        origin.x + size.x - gizmoBoxSize * 0.5f - margin,
-        origin.y + topOffset + gizmoBoxSize * 0.5f
-      );
-
-      drawList->AddCircleFilled(gizmoCenter, gizmoBoxSize * 0.5f, cardFill);
-      drawList->AddCircle(gizmoCenter, gizmoBoxSize * 0.5f, cardBorder, 0, 1.0f);
-
-      // Rotation-only camera basis; same lookAt formula as getViewProjectionMatrix, so pitch/yaw stay in sync.
-      const glm::mat3 camRot(glm::lookAt(orbitDirection(), glm::vec3(0.0f), orbitUp()));
-
-      // Axis colors are semantic (X red, Y green, Z blue), the same in every theme.
-      struct AxisEnd { glm::vec3 viewDir; ImU32 color; const char* label; bool positive; };
-      std::array<AxisEnd, 6> ends{};
-      const std::array<std::pair<ImU32, const char*>, 3> axisStyle{{
-        {IM_COL32(236, 88, 88, 255), "X"}, {IM_COL32(112, 204, 92, 255), "Y"}, {IM_COL32(84, 140, 240, 255), "Z"}}};
-      for (std::size_t i = 0; i < 3; ++i) {
-        glm::vec3 dir(0.0f);
-        dir[static_cast<glm::length_t>(i)] = 1.0f;
-        const glm::vec3 viewDir = camRot * dir;
-        ends[2 * i] = {viewDir, axisStyle[i].first, axisStyle[i].second, true};
-        ends[2 * i + 1] = {-viewDir, axisStyle[i].first, axisStyle[i].second, false};
-      }
-      // Back to front (view z points out of the screen), so the axes facing the eye are drawn last.
-      std::ranges::sort(ends, {}, [](const AxisEnd& end) { return end.viewDir.z; });
-
-      for (const auto& end : ends) {
-        const ImVec2 tip(gizmoCenter.x + end.viewDir.x * gizmoRadius, gizmoCenter.y - end.viewDir.y * gizmoRadius);
-        if (end.positive) {
-          drawList->AddLine(gizmoCenter, tip, end.color, 2.5f);
-          drawList->AddCircleFilled(tip, tipRadius, end.color);
-          const ImVec2 labelSize = ImGui::CalcTextSize(end.label);
-          drawList->AddText(ImVec2(tip.x - labelSize.x * 0.5f, tip.y - labelSize.y * 0.5f), IM_COL32(16, 18, 22, 255), end.label);
-        } else {
-          // Negative ends: hollow, dimmed markers, so the view can be read from either side.
-          const ImU32 dim = (end.color & 0x00FFFFFFu) | (140u << IM_COL32_A_SHIFT);
-          drawList->AddLine(gizmoCenter, tip, dim, 1.5f);
-          drawList->AddCircleFilled(tip, tipRadius * 0.6f, cardFill);
-          drawList->AddCircle(tip, tipRadius * 0.6f, dim, 0, 1.5f);
-        }
-      }
-      drawList->AddCircleFilled(gizmoCenter, 2.5f, textDimColor);
+    // Axis triad (bottom left), rotating with the camera.
+    {
+      const float length = std::round(26.0f * unit);
+      const float inset = length + 18.0f * unit;
+      ORIENTATION::axisTriad(drawList, viewRotation, ImVec2(origin.x + inset, origin.y + size.y - inset), length);
     }
 
     // Node ID labels are rendered directly in the OpenGL scene pass (see renderSceneOpenGL), not here.
@@ -1273,17 +1333,19 @@ namespace anaf::GUI {
       }
     }
 
-    // Result legends: stacked upwards from the bottom-left corner until the user drags one by its
+    // Result legends: stacked downwards from the top-left corner until the user drags one by its
     // header; a click on the header (without dragging) collapses it to the header alone, a
     // double click puts it back into the corner. State lives in SETTINGS (userSettings.json).
-    m_legendRects.clear();
+    // Banded (default): one block per color band, a label at every band border, the same bands
+    // as the scene colors (resultColor()); continuous: a smooth bar with six labels.
     if (hasModel()) {
-      // Compact cards in a smaller font than the UI (18 px), still readable at a glance.
+      // Compact cards in a smaller font than the UI, still readable at a glance.
       constexpr float fontSize = 13.0f;
-      constexpr float barWidth = 10.0f;
-      constexpr float barHeight = 120.0f;
-      constexpr int colorSteps = 48;
-      constexpr int tickCount = 6; // labels at 0, 1/5, ..., 1 of the bar
+      constexpr float barWidth = 12.0f;
+      constexpr float continuousBarHeight = 120.0f;
+      constexpr int continuousSteps = 48;
+      constexpr int continuousTicks = 6; // labels at 0, 1/5, ..., 1 of the bar
+      constexpr std::size_t maxTicks = SETTINGS::maxColorBands + 1;
       constexpr float padding = 6.0f;
       constexpr float tickLength = 3.0f;
       constexpr float cornerMargin = 12.0f;
@@ -1293,8 +1355,14 @@ namespace anaf::GUI {
       const float arrowSize = lineHeight * 0.55f;
       const float titleIndent = arrowSize + 5.0f; // title starts after the collapse arrow
 
-      auto getJetColor = [](float t) -> ImU32 {
-        const glm::vec4 color = jet(static_cast<double>(t));
+      const bool banded = m_resultScale.banded;
+      const int bands = m_resultScale.bands;
+      const int tickCount = banded ? bands + 1 : continuousTicks;
+      // A band is a little taller than a label line, so neighbouring labels never touch.
+      const float barHeight = banded ? static_cast<float>(bands) * std::round(lineHeight * 1.1f) : continuousBarHeight;
+
+      auto toColor = [](const double t) -> ImU32 {
+        const glm::vec4 color = jet(t);
         return IM_COL32(static_cast<int>(color.r * 255.0f), static_cast<int>(color.g * 255.0f), static_cast<int>(color.b * 255.0f), 255);
       };
 
@@ -1306,7 +1374,7 @@ namespace anaf::GUI {
         double maxValue;
         // The color position is sqrt(value / max) (truss stresses), so the label at bar position t reads max * t^2.
         bool sqrtScale;
-        std::array<std::array<char, 32>, tickCount> labels{};
+        std::array<std::array<char, 32>, maxTicks> labels{};
         ImVec2 size{0.0f, 0.0f};
         float headerHeight{0.0f};
       };
@@ -1343,7 +1411,7 @@ namespace anaf::GUI {
         legend.size = ImVec2(padding * 2.0f + contentWidth, legend.headerHeight + lineHeight * 0.25f + barHeight + lineHeight * 0.5f + padding);
       }
 
-      float stackBottom = origin.y + size.y - cornerMargin;
+      float stackTop = origin.y + cornerMargin;
       for (Legend& legend : legends) {
         SETTINGS::LegendSettings& state = *legend.state;
 
@@ -1352,8 +1420,8 @@ namespace anaf::GUI {
         if (state.placed) {
           cardMin = ImVec2(origin.x + state.x * size.x, origin.y + state.y * size.y);
         } else {
-          cardMin = ImVec2(origin.x + cornerMargin, stackBottom - legend.size.y);
-          stackBottom = cardMin.y - stackGap;
+          cardMin = ImVec2(origin.x + cornerMargin, stackTop);
+          stackTop = cardMin.y + legend.size.y + stackGap;
         }
         const auto clampIntoView = [&](ImVec2 p) {
           p.x = std::clamp(p.x, origin.x, std::max(origin.x, origin.x + size.x - legend.size.x));
@@ -1389,7 +1457,7 @@ namespace anaf::GUI {
         ImGui::PopID();
 
         const ImVec2 cardMax(cardMin.x + legend.size.x, cardMin.y + legend.size.y);
-        m_legendRects.push_back({cardMin, cardMax});
+        m_overlayRects.push_back({cardMin, cardMax});
 
         drawList->AddRectFilled(cardMin, cardMax, cardFill, cardRounding);
         drawList->AddRect(cardMin, cardMax, headerHovered ? THEME::toU32(palette.accent) : cardBorder, cardRounding);
@@ -1415,23 +1483,33 @@ namespace anaf::GUI {
         if (legend.sqrtScale) drawList->AddText(ImVec2(x, y + lineHeight), textDimColor, "sqrt color scale");
 
         const float top = cardMin.y + legend.headerHeight + lineHeight * 0.25f;
-        const float stepHeight = barHeight / static_cast<float>(colorSteps);
-        for (int i = 0; i < colorSteps; ++i) {
-          const float tTop = 1.0f - static_cast<float>(i) / static_cast<float>(colorSteps);
-          const float tBottom = 1.0f - static_cast<float>(i + 1) / static_cast<float>(colorSteps);
-          drawList->AddRectFilledMultiColor(
-            ImVec2(x, top + static_cast<float>(i) * stepHeight),
-            ImVec2(x + barWidth, top + static_cast<float>(i + 1) * stepHeight),
-            getJetColor(tTop), getJetColor(tTop), getJetColor(tBottom), getJetColor(tBottom)
-          );
+        if (banded) {
+          // Highest band on top; a dark hairline between neighbouring bands.
+          const float bandHeight = barHeight / static_cast<float>(bands);
+          for (int b = 0; b < bands; ++b) {
+            const int band = bands - 1 - b;
+            const float bandTop = top + static_cast<float>(b) * bandHeight;
+            drawList->AddRectFilled(ImVec2(x, bandTop), ImVec2(x + barWidth, bandTop + bandHeight),
+                                    toColor((static_cast<double>(band) + 0.5) / static_cast<double>(bands)));
+            if (b > 0) drawList->AddLine(ImVec2(x, bandTop), ImVec2(x + barWidth, bandTop), IM_COL32(0, 0, 0, 110));
+          }
+        } else {
+          const float stepHeight = barHeight / static_cast<float>(continuousSteps);
+          for (int i = 0; i < continuousSteps; ++i) {
+            const double tTop = 1.0 - static_cast<double>(i) / static_cast<double>(continuousSteps);
+            const double tBottom = 1.0 - static_cast<double>(i + 1) / static_cast<double>(continuousSteps);
+            drawList->AddRectFilledMultiColor(ImVec2(x, top + static_cast<float>(i) * stepHeight),
+                                              ImVec2(x + barWidth, top + static_cast<float>(i + 1) * stepHeight),
+                                              toColor(tTop), toColor(tTop), toColor(tBottom), toColor(tBottom));
+          }
         }
         drawList->AddRect(ImVec2(x - 1.0f, top - 1.0f), ImVec2(x + barWidth + 1.0f, top + barHeight + 1.0f), cardBorder);
 
         for (int i = 0; i < tickCount; ++i) {
           const float t = static_cast<float>(i) / static_cast<float>(tickCount - 1);
           const float tickY = top + barHeight * (1.0f - t);
-          // Thin band line across the bar, then the tick and the value to the right.
-          if (i > 0 && i < tickCount - 1) drawList->AddLine(ImVec2(x, tickY), ImVec2(x + barWidth, tickY), IM_COL32(0, 0, 0, 90));
+          // Continuous: a thin line across the bar at every inner label (the bands draw their own).
+          if (!banded && i > 0 && i < tickCount - 1) drawList->AddLine(ImVec2(x, tickY), ImVec2(x + barWidth, tickY), IM_COL32(0, 0, 0, 90));
           drawList->AddLine(ImVec2(x + barWidth + 1.0f, tickY), ImVec2(x + barWidth + 1.0f + tickLength, tickY), textDimColor);
           const bool extreme = i == 0 || i == tickCount - 1;
           drawList->AddText(ImVec2(x + barWidth + tickLength + 4.0f, tickY - lineHeight * 0.5f), extreme ? textColor : textDimColor,
@@ -1469,10 +1547,10 @@ namespace anaf::GUI {
     ImGui::Image(texId, availSize, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
 
     m_viewportHovered = ImGui::IsItemHovered();
-    // The legends (last frame's rectangles) take the mouse: no picking or camera input through them.
+    // The legends and the ViewCube (last frame's rectangles) take the mouse: no picking or camera input through them.
     if (m_viewportHovered) {
       const ImVec2 mouse = ImGui::GetMousePos();
-      for (const auto& [rectMin, rectMax] : m_legendRects) {
+      for (const auto& [rectMin, rectMax] : m_overlayRects) {
         if (mouse.x >= rectMin.x && mouse.x <= rectMax.x && mouse.y >= rectMin.y && mouse.y <= rectMax.y) m_viewportHovered = false;
       }
     }

@@ -33,7 +33,7 @@ namespace anaf::GUI::THEME {
     Professional,   // CAD-style dark: neutral surfaces, framed inputs, tighter spacing, blue accent
     SteelCyan,      // dark blue-steel surfaces, cyan accent
     GraphiteOrange, // neutral graphite surfaces, orange accent
-    ClassicFem,     // dark panels, blue accent, light-to-navy viewport gradient (classic FEM pre/post look)
+    ClassicFem,     // dark panels, blue accent, neutral grey viewport (classic FEM pre/post look)
     MidnightViolet, // deep navy surfaces, violet accent
     EmeraldSlate,   // slate surfaces, emerald accent
     StudioLight,    // light grey surfaces, blue accent, light viewport
@@ -100,7 +100,8 @@ namespace anaf::GUI::THEME {
     ImVec4 core;
     ImVec4 note;
 
-    // Viewport scene: background (top -> bottom gradient; every preset is flat, top = bottom), ground grid,
+    // Viewport scene: background (top -> bottom; every preset is flat, top = bottom, Settings > Viewport >
+    // Background > Gradient derives a gradient from it), ground grid,
     // node labels, unsolved members.
     ImVec4 sceneTop;
     ImVec4 sceneBottom;
@@ -110,7 +111,7 @@ namespace anaf::GUI::THEME {
     ImVec4 memberNoResult; // member without the requested result (e.g. stress on an unsolved model)
     ImVec4 trussMember{0.0f, 0.0f, 0.0f, 0.0f}; // truss bars when they differ from member; alpha 0 = member
 
-    // Viewport overlays: cards behind the gizmo, legends and counters.
+    // Viewport overlays: cards behind the legends and counters.
     ImVec4 overlayBg;
     ImVec4 overlayBorder;
     ImVec4 overlayText;

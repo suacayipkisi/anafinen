@@ -115,6 +115,22 @@ namespace anaf::GUI {
     }
     ImGui::SetItemTooltip("Fit the camera to the model (R)");
     groupSeparator();
+    struct ViewButton {
+      const char* label;
+      ICONS::E_IconId icon;
+      E_StandardView view;
+      const char* tooltip;
+    };
+    constexpr std::array<ViewButton, 4> views{{{"Front", ICONS::E_IconId::ViewFront, E_StandardView::Front, "Front view (looking along -Z)"},
+                                               {"Top", ICONS::E_IconId::ViewTop, E_StandardView::Top, "Top view (looking down -Y)"},
+                                               {"Right", ICONS::E_IconId::ViewRight, E_StandardView::Right, "Right view (looking along -X)"},
+                                               {"Iso", ICONS::E_IconId::ViewIso, E_StandardView::Iso, "Isometric view"}}};
+    for (std::size_t i = 0; i < views.size(); ++i) {
+      if (i > 0) ImGui::SameLine();
+      if (ICONS::iconButton(views[i].label, views[i].icon, false, views[i].label)) options.viewRequested = views[i].view;
+      ImGui::SetItemTooltip("%s", views[i].tooltip);
+    }
+    groupSeparator();
     toggleButton("Grid", ICONS::E_IconId::ViewGrid, options.showGrid, "x-z ground grid");
     ImGui::SameLine();
     toggleButton("Axes", ICONS::E_IconId::ViewAxes, options.showAxes, "X / Y / Z axis lines");

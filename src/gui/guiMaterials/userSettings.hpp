@@ -20,7 +20,7 @@
 #include <filesystem>
 #include <string>
 
-// Per-user GUI settings (theme, UI font size, Welcome panel, viewport legends).
+// Per-user GUI settings (theme, UI font size, Welcome panel, viewport background, result colors and legends).
 //
 //   assets/settings/userSettings.json        defaults, shipped with the build and the packages
 //   <user config>/userSettings.json           the user's values (~/.config/anafinen, %APPDATA%\anafinen)
@@ -30,7 +30,7 @@
 namespace anaf::GUI::SETTINGS {
 
   // One result legend in the viewport. Without a custom position it is stacked in the
-  // bottom-left corner; a dragged legend keeps its header's top-left corner as a fraction of
+  // top-left corner; a dragged legend keeps its header's top-left corner as a fraction of
   // the viewport size, so it stays in place when the viewport is resized.
   struct LegendSettings {
     bool collapsed{false};
@@ -43,10 +43,17 @@ namespace anaf::GUI::SETTINGS {
   inline constexpr float minUiFontSize = 12.0f;
   inline constexpr float maxUiFontSize = 22.0f;
 
+  // Number of discrete color bands of the result colors and legends (banded mode).
+  inline constexpr int minColorBands = 4;
+  inline constexpr int maxColorBands = 16;
+
   struct UserSettings {
     std::string theme{"steel_cyan"}; // THEME::ThemePalette::key
     float uiFontSize{15.0f};
     bool showWelcomeOnStartup{true};
+    bool gradientBackground{false}; // viewport background: flat (default) or a vertical gradient from the theme
+    bool bandedResults{true};       // result colors and legends in discrete bands (else a continuous scale)
+    int colorBands{9};
     LegendSettings stressLegend;
     LegendSettings displacementLegend;
   };
