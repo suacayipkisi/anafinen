@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "support-pin" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <path d="M12 5.5 L21 2.5" stroke="#a7b9cf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="12,5.5 18,16.5 6,16.5" fill="#d3deeb" stroke="#2f3742" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 16.5 H21" stroke="#2f3742" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20.5 L6.5 16.5 M8 20.5 L10.5 16.5 M12 20.5 L14.5 16.5 M16 20.5 L18.5 16.5" stroke="#7a8594" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="12" cy="5.5" r="2.5" fill="#1c74d9" stroke="#2f3742" stroke-width="1.25"/>
+</svg>

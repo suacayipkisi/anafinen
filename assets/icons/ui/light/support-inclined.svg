@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "support-inclined" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <g transform="rotate(-22 12 15)"><polygon points="12,5.5 17.5,14.5 6.5,14.5" fill="#d3deeb" stroke="#2f3742" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.75" cy="16.75" r="2" fill="#ffffff" stroke="#2f3742" stroke-width="1.25"/><circle cx="15.25" cy="16.75" r="2" fill="#ffffff" stroke="#2f3742" stroke-width="1.25"/><path d="M3 19 H21" stroke="#2f3742" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 23 L6.5 19 M8 23 L10.5 19 M12 23 L14.5 19 M16 23 L18.5 19" stroke="#7a8594" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="5.5" r="2.4" fill="#1c74d9" stroke="#2f3742" stroke-width="1.25"/></g>
+</svg>

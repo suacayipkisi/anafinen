@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "release-hinge" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <rect x="1.5" y="11" width="10.5" height="4" rx="0.75" fill="#a7b9cf" stroke="#2f3742" stroke-width="1.25"/>
+  <rect x="12" y="11" width="10.5" height="4" rx="0.75" fill="#d3deeb" stroke="#2f3742" stroke-width="1.25" transform="rotate(-28 12 13)"/>
+  <circle cx="12" cy="13" r="3.4" fill="#ffffff" stroke="#2f3742" stroke-width="1.5"/>
+  <circle cx="12" cy="13" r="1.5" fill="#0e9bad"/>
+</svg>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "panel-tree" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <path d="M6 7 V18.5 H11 M6 12.5 H11" fill="none" stroke="#7a8594" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="2.5" y="2.5" width="7" height="5" rx="1.25" fill="#1c74d9" stroke="#2f3742" stroke-width="1"/>
+  <rect x="11" y="10" width="10.5" height="5" rx="1.25" fill="#1c9a5f" stroke="#2f3742" stroke-width="1"/>
+  <rect x="11" y="16" width="10.5" height="5" rx="1.25" fill="#cc8500" stroke="#2f3742" stroke-width="1"/>
+  <path d="M12.75 12.5 H16 M12.75 18.5 H17.5" stroke="#ffffff" stroke-width="1.25" stroke-opacity="0.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

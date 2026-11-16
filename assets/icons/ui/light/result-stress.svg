@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "result-stress" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <defs><linearGradient id="sig" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#3dd68c"/><stop offset="0.5" stop-color="#f5d33d"/><stop offset="1" stop-color="#f25c54"/></linearGradient></defs>
+  <rect x="7" y="7" width="10" height="10" rx="1" fill="url(#sig)" stroke="#2f3742" stroke-width="1.25"/>
+  <path d="M12 5 V1.75 M12 19 V22.25 M5 12 H1.75 M19 12 H22.25" stroke="#2f3742" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M10.5 3 L12 1.5 L13.5 3 M10.5 21 L12 22.5 L13.5 21 M3 10.5 L1.5 12 L3 13.5 M21 10.5 L22.5 12 L21 13.5" fill="none" stroke="#2f3742" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

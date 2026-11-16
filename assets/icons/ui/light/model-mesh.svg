@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "model-mesh" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <polygon points="12,3 20,7.5 12,12 4,7.5" fill="#d3deeb"/>
+  <polygon points="4,7.5 12,12 12,21 4,16.5" fill="#a7b9cf"/>
+  <polygon points="12,12 20,7.5 20,16.5 12,21" fill="#7f95b1"/>
+  <path d="M8 5.25 L16 9.75 M16 5.25 L8 9.75 M4 7.5 L20 7.5 M4 12 L12 16.5 M8 9.75 V18.75 M4 12 L8 18.75 M8 9.75 L12 16.5 M12 16.5 L20 12 M16 9.75 V18.75 M12 12 L16 18.75 M16 9.75 L20 16.5" stroke="#2f3742" stroke-width="0.6" stroke-opacity="0.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M12 3 L20 7.5 L20 16.5 L12 21 L4 16.5 L4 7.5 Z M4 7.5 L12 12 L20 7.5 M12 12 V21" fill="none" stroke="#2f3742" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

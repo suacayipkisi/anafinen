@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "load-gravity" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <circle cx="12" cy="5.25" r="2.75" fill="none" stroke="#2f3742" stroke-width="1.75"/>
+  <path d="M6.25 9 H17.75 Q18.9 9 19.2 10.1 L21.4 19.6 Q21.7 21 20.3 21 H3.7 Q2.3 21 2.6 19.6 L4.8 10.1 Q5.1 9 6.25 9 Z" fill="#a7b9cf" stroke="#2f3742" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M6.5 11 L5 18.5" stroke="#d3deeb" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M12 11.5 V17.5" stroke="#ffffff" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M9.75 15.5 L12 17.75 L14.25 15.5" fill="none" stroke="#ffffff" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "model-truss" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <path d="M2 17 H22 M7 8 H17 M2 17 L7 8 L12 17 L17 8 L22 17 M7 8 V17 M12 8 V17 M17 8 V17" fill="none" stroke="#a7b9cf" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M2 17 H22 M7 8 H17" fill="none" stroke="#d3deeb" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="2,18 0.5,21 3.5,21" fill="#7a8594" stroke="#7a8594" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="22,18 20.5,21 23.5,21" fill="#7a8594" stroke="#7a8594" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#1c74d9" stroke="#2f3742" stroke-width="0.75"><circle cx="2" cy="17" r="1.4"/><circle cx="7" cy="17" r="1.4"/><circle cx="12" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/><circle cx="22" cy="17" r="1.4"/><circle cx="7" cy="8" r="1.4"/><circle cx="12" cy="8" r="1.4"/><circle cx="17" cy="8" r="1.4"/></g>
+</svg>

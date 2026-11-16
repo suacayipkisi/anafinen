@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "panel-properties" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" fill="#ffffff" stroke="#2f3742" stroke-width="1.5"/><path d="M2.5 7.5 H21.5" stroke="#2f3742" stroke-width="1.25"/><circle cx="5.25" cy="5.5" r="0.8" fill="#d23f37"/><circle cx="7.75" cy="5.5" r="0.8" fill="#cc8500"/><circle cx="10.25" cy="5.5" r="0.8" fill="#1c9a5f"/>
+  <rect x="3.25" y="13" width="17.5" height="3" fill="#cfe3fa"/>
+  <path d="M5 10.5 H9 M5 14.5 H8 M5 18 H9.5" stroke="#7a8594" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M12 10.5 H18.5 M12 18 H17" stroke="#2f3742" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M12 14.5 H18.5" stroke="#1c74d9" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M11 8.5 V19.5" stroke="#7a8594" stroke-width="0.75"/>
+</svg>

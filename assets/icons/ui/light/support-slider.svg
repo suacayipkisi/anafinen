@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Abdurrahman Konuk (professionally known as Ufuk Deniz Konuk) -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- anafinen UI icon "support-slider" (light set, GENERATED from dark/ by package/tools/icon-variants.py) -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="24" height="24" viewBox="0 0 24 24">
+  <path d="M12 9 V2.5" stroke="#a7b9cf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="6.5" y="9" width="11" height="7" rx="1.5" fill="#d3deeb" stroke="#2f3742" stroke-width="1.5"/>
+  <circle cx="12" cy="12.5" r="1.4" fill="#1c74d9"/><path d="M3 16.5 H21" stroke="#2f3742" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20.5 L6.5 16.5 M8 20.5 L10.5 16.5 M12 20.5 L14.5 16.5 M16 20.5 L18.5 16.5" stroke="#7a8594" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M2.5 12.5 H5 M19 12.5 H21.5" stroke="#0e9bad" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M3.75 11 L2.25 12.5 L3.75 14 M20.25 11 L21.75 12.5 L20.25 14" fill="none" stroke="#0e9bad" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
