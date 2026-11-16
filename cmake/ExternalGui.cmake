@@ -83,6 +83,22 @@ if(EXISTS "${IMGUI_DIR}/imgui.cpp")
     )
     target_link_libraries(imgui_suite PUBLIC ${GLAD_TARGET} ${GLFW_TARGET} OpenGL::GL)
     target_compile_definitions(imgui_suite PUBLIC GLFW_INCLUDE_NONE)
+
+    # FreeType rasterizes the UI fonts (hinted, sharper at small sizes than stb_truetype).
+    # Without it ImGui falls back to stb_truetype and the GUI still builds.
+    find_package(Freetype QUIET)
+    if(TARGET Freetype::Freetype)
+        target_sources(imgui_suite PRIVATE ${IMGUI_DIR}/misc/freetype/imgui_freetype.cpp)
+        target_include_directories(imgui_suite SYSTEM PUBLIC ${IMGUI_DIR}/misc/freetype)
+        target_link_libraries(imgui_suite PUBLIC Freetype::Freetype)
+        # PUBLIC: every translation unit that includes imgui.h must see the same definition.
+        target_compile_definitions(imgui_suite PUBLIC IMGUI_ENABLE_FREETYPE)
+        message(STATUS "ImGui font rasterizer: FreeType ${FREETYPE_VERSION_STRING}")
+    else()
+        message(WARNING "FreeType not found: ImGui uses stb_truetype, UI text is softer. "
+                        "Install freetype-devel / libfreetype-dev / freetype2 / vcpkg freetype.")
+    endif()
+
     list(APPEND GUI_DEPENDENCIES imgui_suite)
 else()
     find_package(imgui CONFIG REQUIRED)

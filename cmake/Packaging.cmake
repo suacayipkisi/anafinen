@@ -125,7 +125,7 @@ elseif(UNIX AND NOT APPLE)
             "/usr/share/icons/hicolor/${_size}" "/usr/share/icons/hicolor/${_size}/apps")
     endforeach()
     # AUTOREQPROV adds the shared-library requirements; these name the packages for readers.
-    set(CPACK_RPM_PACKAGE_REQUIRES "hdf5")
+    set(CPACK_RPM_PACKAGE_REQUIRES "hdf5, freetype")
     if(ANAFINEN_HAS_CHOLMOD)
         string(APPEND CPACK_RPM_PACKAGE_REQUIRES ", suitesparse")
     endif()

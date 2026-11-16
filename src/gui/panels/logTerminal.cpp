@@ -32,8 +32,7 @@
 namespace anaf::GUI {
 
   void LogTerminal::onImGuiRender() {
-    ImGui::PushFont(ImGuiLayer::g_fontConsole);
-
+    // The panel (tab, controls, status footer) uses the UI font; only the log lines are monospace.
     ImGui::Begin("Console", &isOpen);
 
     if (ImGui::Button("Clear")) {
@@ -70,7 +69,7 @@ namespace anaf::GUI {
       }
     }
 
-    const float inputWidth = 80.0f;
+    const float inputWidth = ImGui::GetFontSize() * 5.5f;
     const char* labelText = "Max Output";
     const float totalWidth = ImGui::CalcTextSize(labelText).x + ImGui::GetStyle().ItemSpacing.x + inputWidth;
     ImGui::SameLine();
@@ -100,6 +99,8 @@ namespace anaf::GUI {
                       m_wrapLines ? ImGuiWindowFlags_None : ImGuiWindowFlags_HorizontalScrollbar);
     // 0.0f wraps at the right edge of the region, so lines re-wrap when the panel is resized.
     if (m_wrapLines) ImGui::PushTextWrapPos(0.0f);
+    // 0.0f keeps the current UI font size, so the setting scales the log lines too.
+    ImGui::PushFont(ImGuiLayer::g_fontConsole, 0.0f);
     {
       std::lock_guard<std::mutex> lock(g_logMutex);
       const auto drawLine = [](const std::size_t i) {
@@ -142,6 +143,7 @@ namespace anaf::GUI {
         }
       }
     }
+    ImGui::PopFont();
     if (m_wrapLines) ImGui::PopTextWrapPos();
 
     if (ImGui::BeginPopupContextWindow(nullptr, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
@@ -191,8 +193,6 @@ namespace anaf::GUI {
     ImGui::EndChild();
     m_statusBar.render();
     ImGui::End();
-
-    ImGui::PopFont();
   }
 
 } // namespace anaf::GUI end

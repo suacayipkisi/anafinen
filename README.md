@@ -166,8 +166,9 @@ Windows builds use MSVC with vcpkg; a MinGW (cross-)build is not supported.
 GUI and visualization:
 ```cmd
 .\vcpkg install glfw3:x64-windows
+.\vcpkg install freetype:x64-windows
 .\vcpkg install glad:x64-windows
-.\vcpkg install "imgui[core,docking-experimental,glfw-binding,opengl3-binding]:x64-windows" --recurse
+.\vcpkg install "imgui[core,docking-experimental,freetype,glfw-binding,opengl3-binding]:x64-windows" --recurse
 .\vcpkg install implot:x64-windows
 .\vcpkg install imguizmo:x64-windows
 .\vcpkg install libpng:x64-windows
@@ -222,6 +223,7 @@ sudo dnf install -y \
     zlib-devel \
     json-devel \
     hdf5-devel \
+    freetype-devel \
     glm-devel \
     librsvg2-tools \
     ImageMagick \
@@ -231,7 +233,7 @@ sudo dnf install -y \
 #### Libraries Arch-CachyOS
 ```bash
 # Spectra comes from the git submodule (it is not in the official repos); OpenMP is GCC's libgomp (gcc-libs).
-sudo pacman -S glibc gcc-libs eigen suitesparse glfw mesa cmake ninja git glm libpng zlib nlohmann-json hdf5 librsvg zenity
+sudo pacman -S glibc gcc-libs eigen suitesparse glfw mesa cmake ninja git glm libpng zlib nlohmann-json hdf5 freetype2 librsvg zenity
 
 # gmsh comes from the AUR (user-maintained packages): review the PKGBUILD before installing,
 # or use the official Gmsh SDK from gmsh.info as on Windows.
@@ -241,7 +243,7 @@ paru -S gmsh-bin
 #### Libraries Debian-Ubuntu
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev libhdf5-dev librsvg2-bin zenity
+sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev libhdf5-dev libfreetype-dev librsvg2-bin zenity
 ```
 
 ### Clone This Repo

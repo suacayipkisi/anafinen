@@ -18,6 +18,7 @@
 #include "mainDockSpaceHost.hpp"
 #include "viewportToolbar.hpp"
 
+#include <guiMaterials/imGuiLayer.hpp>
 #include <guiMaterials/theme.hpp>
 #include <guiMaterials/userSettings.hpp>
 
@@ -25,6 +26,9 @@
 #include "imgui_internal.h" // DockBuilder API
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <string>
 
 namespace anaf::GUI {
 
@@ -48,6 +52,18 @@ namespace anaf::GUI {
         if (ImGui::MenuItem(THEME::palette(id).name, nullptr, THEME::currentTheme() == id)) {
           THEME::applyTheme(id);
           SETTINGS::settings().theme = THEME::palette(id).key;
+          SETTINGS::save();
+        }
+      }
+      ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("UI Font Size")) {
+      constexpr std::array<float, 6> sizes{13.0f, 14.0f, 15.0f, 16.0f, 17.0f, 18.0f};
+      for (const float size : sizes) {
+        const std::string label = std::to_string(static_cast<int>(size)) + " px" + (size == 15.0f ? " (default)" : "");
+        if (ImGui::MenuItem(label.c_str(), nullptr, SETTINGS::settings().uiFontSize == size)) {
+          ImGuiLayer::setUiFontSize(size);
+          SETTINGS::settings().uiFontSize = size;
           SETTINGS::save();
         }
       }
@@ -121,7 +137,10 @@ namespace anaf::GUI {
     }
 
     ImGuiID dockspaceId = ImGui::GetID("AppMainDockSpace");
-    ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+    // No window menu button (the triangle left of the tabs): panels open and close from the Panels menu.
+    ImGuiDockNodeFlags dockspaceFlags = ImGuiDockNodeFlags_PassthruCentralNode;
+    dockspaceFlags |= ImGuiDockNodeFlags_NoWindowMenuButton; // internal flag (imgui_internal.h)
+    ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), dockspaceFlags);
 
     // Layout initialization: only run when dimensions are valid AND it hasn't run yet
     static bool s_layoutBuilt = false;
@@ -166,6 +185,18 @@ namespace anaf::GUI {
       ImGui::DockBuilderDockWindow("3D Simulation Viewport", dockMainId);
 
       ImGui::DockBuilderFinish(dockspaceId);
+    }
+
+    // The toolbar strip has a fixed height (NoResizeY), so it follows the frame height by hand when
+    // the UI font size or the theme's frame padding changes.
+    if (const ImGuiWindow* toolbar = ImGui::FindWindowByName(ViewportToolbar::windowName); toolbar && toolbar->DockNode) {
+      ImGuiDockNode* node = toolbar->DockNode;
+      const float height = ViewportToolbar::windowHeight();
+      if (node->IsLeafNode() && node->ParentNode && std::abs(node->Size.y - height) > 0.5f) {
+        node->Size.y = height;
+        node->SizeRef.y = height;
+        node->WantLockSizeOnce = true;
+      }
     }
 
     ImGui::End();

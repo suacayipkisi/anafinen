@@ -30,6 +30,7 @@
 namespace anaf::GUI::THEME {
 
   enum class E_ThemeId : std::uint8_t {
+    Professional,   // CAD-style dark: neutral surfaces, framed inputs, tighter spacing, blue accent
     SteelCyan,      // dark blue-steel surfaces, cyan accent
     GraphiteOrange, // neutral graphite surfaces, orange accent
     ClassicFem,     // dark panels, blue accent, light-to-navy viewport gradient (classic FEM pre/post look)
@@ -39,7 +40,8 @@ namespace anaf::GUI::THEME {
     Old,            // the look before themes existed (v0.2.0): grey surfaces, blue marks, flat dark viewport
   };
 
-  inline constexpr std::array<E_ThemeId, 7> allThemes{
+  inline constexpr std::array<E_ThemeId, 8> allThemes{
+    E_ThemeId::Professional,
     E_ThemeId::SteelCyan,
     E_ThemeId::GraphiteOrange,
     E_ThemeId::ClassicFem,
@@ -51,6 +53,17 @@ namespace anaf::GUI::THEME {
     E_ThemeId::Old
   };
 
+  // Sizes that differ between presets; applyTheme() writes them into ImGuiStyle. The other style
+  // values (window padding, popup / child borders, ...) are the same for every preset (ImGuiLayer).
+  struct ThemeStyle {
+    float rounding{3.0f};        // frames, tabs, child windows, scrollbars, grabs; popups one more
+    float frameBorderSize{0.0f}; // 1 draws a border around inputs, combos and buttons
+    ImVec2 framePadding{6.0f, 4.0f};
+    ImVec2 itemSpacing{8.0f, 6.0f};
+    float scrollbarSize{10.0f};
+    bool focusedTabOverlineOnly{false}; // accent overline on the focused window's tab only (else dimmed on the others)
+  };
+
   struct ThemePalette {
     const char* key{""};  // stable id in userSettings.json
     const char* name{""}; // shown in Settings > Theme
@@ -58,6 +71,10 @@ namespace anaf::GUI::THEME {
     // Dark themes take the ImGui colors of v0.2.0 (applyLegacyStyleColors) with the accent on the marks;
     // legacyStyle (theme Old) keeps them without the accent. The light theme derives them from the palette.
     bool legacyStyle{false};
+    // Dark theme whose ImGui colors are derived from the palette, like the light theme's
+    // (no v0.2.0 base): surfaces, frames, tabs and headers all follow the palette below.
+    bool paletteColors{false};
+    ThemeStyle style{};
 
     // Surfaces (in the dark themes from darkest to lightest).
     ImVec4 base;    // menu bar, title bars, inactive tabs
@@ -107,7 +124,8 @@ namespace anaf::GUI::THEME {
   // Theme with this key; SteelCyan for an unknown key.
   E_ThemeId themeFromKey(std::string_view key);
 
-  // Sets the palette and rewrites the ImGui style colors. ImPlot follows ImGui's colors on its own.
+  // Sets the palette and rewrites the ImGui style colors and the preset sizes (ThemeStyle).
+  // ImPlot follows ImGui's colors on its own.
   void applyTheme(E_ThemeId id);
 
   // Bumped by every applyTheme(), so the viewport can rebuild buffers that bake palette colors in.

@@ -20,7 +20,7 @@
 #include <filesystem>
 #include <string>
 
-// Per-user GUI settings (theme, Welcome panel, viewport legends).
+// Per-user GUI settings (theme, UI font size, Welcome panel, viewport legends).
 //
 //   assets/settings/userSettings.json        defaults, shipped with the build and the packages
 //   <user config>/userSettings.json           the user's values (~/.config/anafinen, %APPDATA%\anafinen)
@@ -39,8 +39,13 @@ namespace anaf::GUI::SETTINGS {
     float y{0.0f};
   };
 
+  // UI font size in pixels (style.FontSizeBase); values outside the range are clamped on load.
+  inline constexpr float minUiFontSize = 12.0f;
+  inline constexpr float maxUiFontSize = 22.0f;
+
   struct UserSettings {
     std::string theme{"steel_cyan"}; // THEME::ThemePalette::key
+    float uiFontSize{15.0f};
     bool showWelcomeOnStartup{true};
     LegendSettings stressLegend;
     LegendSettings displacementLegend;

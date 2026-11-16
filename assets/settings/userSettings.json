@@ -1,6 +1,9 @@
 {
   "version": 1,
   "theme": "steel_cyan",
+  "ui": {
+    "fontSize": 15
+  },
   "welcome": {
     "showOnStartup": true
   },

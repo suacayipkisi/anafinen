@@ -66,6 +66,11 @@ namespace anaf::GUI::SETTINGS {
       }
     }
 
+    void readFontSize(const nlohmann::json& object, const char* key, float& value) {
+      const auto it = object.find(key);
+      if (it != object.end() && it->is_number()) value = std::clamp(it->get<float>(), minUiFontSize, maxUiFontSize);
+    }
+
     void readLegend(const nlohmann::json& legends, const char* key, LegendSettings& legend) {
       const auto it = legends.find(key);
       if (it == legends.end() || !it->is_object()) return;
@@ -78,6 +83,9 @@ namespace anaf::GUI::SETTINGS {
     // Applies every valid key of document on top of settings.
     void apply(const nlohmann::json& document, UserSettings& settings) {
       readValue(document, "theme", settings.theme);
+      if (const auto ui = document.find("ui"); ui != document.end() && ui->is_object()) {
+        readFontSize(*ui, "fontSize", settings.uiFontSize);
+      }
       if (const auto welcome = document.find("welcome"); welcome != document.end() && welcome->is_object()) {
         readValue(*welcome, "showOnStartup", settings.showWelcomeOnStartup);
       }
@@ -145,6 +153,7 @@ namespace anaf::GUI::SETTINGS {
 
     g_document["version"] = formatVersion;
     g_document["theme"] = current.theme;
+    objectAt(g_document, "ui")["fontSize"] = current.uiFontSize;
     objectAt(g_document, "welcome")["showOnStartup"] = current.showWelcomeOnStartup;
     nlohmann::json& legends = objectAt(objectAt(g_document, "viewport"), "legends");
     legends["stress"] = legendJson(current.stressLegend);

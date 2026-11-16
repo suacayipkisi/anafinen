@@ -36,6 +36,9 @@ namespace anaf::GUI {
 
     void init(GLFWwindow* window);
 
+    // UI font size in pixels (Settings > UI Font Size), applied from the next frame on.
+    static void setUiFontSize(float size);
+
     void beginFrame();
 
     void endFrame() {

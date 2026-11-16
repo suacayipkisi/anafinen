@@ -69,6 +69,30 @@ namespace anaf::GUI::THEME {
       };
     }
 
+    // CAD-style dark theme (SolidWorks / Fusion feel, own colors): neutral grey surfaces in clear
+    // steps (darker title / tab strip, panel, lighter framed inputs), blue accent, tighter spacing.
+    constexpr ThemePalette professional = [] {
+      ThemePalette p = darkTheme("professional", "Professional", rgb(0x3B8EEA), rgb(0x2A73C9), rgb(0x3482DB), rgb(0x2360A8),
+                                 rgb(0x2E3238));
+      p.paletteColors = true;
+      p.base = rgb(0x1D2025);
+      p.panel = rgb(0x24272C);
+      p.raised = rgb(0x2A2E34);
+      p.input = rgb(0x30343B);
+      p.header = rgb(0x30353C);
+      p.border = rgb(0x3D434C);
+      p.text = rgb(0xD9DDE3);
+      p.textDim = rgb(0x8B929C);
+      p.overlayBorder = rgb(0x3D434C, 0.90f);
+      p.style = ThemeStyle{.rounding = 2.0f,
+                           .frameBorderSize = 1.0f,
+                           .framePadding = ImVec2(5.0f, 3.0f),
+                           .itemSpacing = ImVec2(6.0f, 4.0f),
+                           .scrollbarSize = 12.0f,
+                           .focusedTabOverlineOnly = true};
+      return p;
+    }();
+
     constexpr ThemePalette steelCyan = darkTheme("steel_cyan", "Steel Blue / Cyan", rgb(0x2EA8D6), rgb(0x1C7BA2), rgb(0x2690BB),
                                                  rgb(0x166685), ImVec4(0.12f, 0.14f, 0.17f, 1.0f));
 
@@ -140,7 +164,7 @@ namespace anaf::GUI::THEME {
       .overlayTextDim = rgb(0x5E6875),
     };
 
-    E_ThemeId g_current = E_ThemeId::SteelCyan;
+    E_ThemeId g_current = E_ThemeId::SteelCyan;  // the default theme is still open
     std::uint32_t g_revision = 0;
 
     // ImGuiLayer's colors before the themes, set over ImGui's dark defaults (frames lifted, see below).
@@ -205,14 +229,28 @@ namespace anaf::GUI::THEME {
       c[ImGuiCol_PlotHistogram] = accent;
     }
 
+    void applyStyleSizes(const ThemeStyle& s) {
+      ImGuiStyle& style = ImGui::GetStyle();
+      style.ChildRounding = s.rounding;
+      style.FrameRounding = s.rounding;
+      style.PopupRounding = s.rounding + 1.0f;
+      style.ScrollbarRounding = s.rounding;
+      style.GrabRounding = s.rounding;
+      style.TabRounding = s.rounding;
+      style.FrameBorderSize = s.frameBorderSize;
+      style.FramePadding = s.framePadding;
+      style.ItemSpacing = s.itemSpacing;
+      style.ScrollbarSize = s.scrollbarSize;
+    }
+
     void applyStyleColors(const ThemePalette& p) {
       ImGuiStyle& style = ImGui::GetStyle();
-      if (!p.light) {
+      if (!p.light && !p.paletteColors) {
         applyLegacyStyleColors(style);
         if (!p.legacyStyle) applyAccentMarks(style, p.accent);
         return;
       }
-      // Light theme: every color not set below keeps ImGui's light default of the same brightness.
+      // Palette themes: every color not set below keeps ImGui's default of the same brightness.
       if (p.light) ImGui::StyleColorsLight(&style);
       else ImGui::StyleColorsDark(&style);
       ImVec4* c = style.Colors;
@@ -273,7 +311,7 @@ namespace anaf::GUI::THEME {
       c[ImGuiCol_TabSelectedOverline] = p.accent;
       c[ImGuiCol_TabDimmed] = p.base;
       c[ImGuiCol_TabDimmedSelected] = p.panel;
-      c[ImGuiCol_TabDimmedSelectedOverline] = withAlpha(p.accent, 0.40f);
+      c[ImGuiCol_TabDimmedSelectedOverline] = withAlpha(p.accent, p.style.focusedTabOverlineOnly ? 0.0f : 0.40f);
 
       c[ImGuiCol_DockingPreview] = withAlpha(p.accent, 0.40f);
       c[ImGuiCol_DockingEmptyBg] = p.base;
@@ -299,6 +337,7 @@ namespace anaf::GUI::THEME {
 
   const ThemePalette& palette(const E_ThemeId id) {
     switch (id) {
+      case E_ThemeId::Professional: return professional;
       case E_ThemeId::GraphiteOrange: return graphiteOrange;
       case E_ThemeId::ClassicFem: return classicFem;
       case E_ThemeId::MidnightViolet: return midnightViolet;
@@ -326,6 +365,7 @@ namespace anaf::GUI::THEME {
   void applyTheme(const E_ThemeId id) {
     g_current = id;
     ++g_revision;
+    applyStyleSizes(palette(id).style);
     applyStyleColors(palette(id));
   }
 

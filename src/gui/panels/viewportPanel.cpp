@@ -1450,7 +1450,8 @@ namespace anaf::GUI {
       flags |= ImGuiWindowFlags_NoMove;
     }
 
-    ImGui::Begin("3D Simulation Viewport", &isOpen, flags);
+    // No close button: the viewport is the center of the layout (Panels menu still toggles it).
+    ImGui::Begin("3D Simulation Viewport", nullptr, flags);
 
     const ImVec2 availSize = ImGui::GetContentRegionAvail();
     const ImVec2 origin = ImGui::GetCursorScreenPos();
