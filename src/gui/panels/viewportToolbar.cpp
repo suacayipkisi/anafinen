@@ -19,6 +19,7 @@
 
 #include "imgui.h"
 
+#include <guiMaterials/iconAtlas.hpp>
 #include <guiMaterials/theme.hpp>
 
 #include <algorithm>
@@ -30,36 +31,29 @@
 namespace anaf::GUI {
 
   namespace {
-    constexpr float padding = 6.0f;
+    constexpr float padding = 4.0f;       // window padding of the strip
+    constexpr float buttonPadding = 4.0f; // around each icon, so the buttons are square
 
-    // Hover and press keep the button's color, so only a toggle that is on stands out: a light
-    // accent tint and an accent line along its bottom edge.
-    bool stateButton(const char* label, const bool on) {
-      const THEME::ThemePalette& palette = THEME::theme();
-      const ImVec4 color = on ? THEME::mix(palette.input, palette.accent, 0.20f) : ImGui::GetStyleColorVec4(ImGuiCol_Button);
-      ImGui::PushStyleColor(ImGuiCol_Button, color);
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, color);
-      ImGui::PushStyleColor(ImGuiCol_ButtonActive, color);
-      const bool pressed = ImGui::Button(label);
-      ImGui::PopStyleColor(3);
-      if (on) {
-        const ImVec2 min = ImGui::GetItemRectMin();
-        const ImVec2 max = ImGui::GetItemRectMax();
-        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(min.x, max.y - 2.0f), max, THEME::toU32(palette.accent));
-      }
-      return pressed;
-    }
-    // Button that shows "label: current" and opens a list of choices; true when one was picked.
+    struct Choice {
+      const char* name;
+      ICONS::E_IconId icon;
+    };
+
+    // Icon button showing the current choice; its first choice (Off) shows offIcon unselected.
+    // Opens a list of the choices with their icons; true when one was picked.
     template <typename Enum, std::size_t N>
-    bool choiceButton(const char* label, Enum& value, const std::array<const char*, N>& names, const char* tooltip) {
+    bool choiceButton(const char* label, Enum& value, const std::array<Choice, N>& choices, const ICONS::E_IconId offIcon,
+                      const char* tooltip) {
       const auto index = static_cast<std::size_t>(value);
-      const std::string text = std::string(label) + ": " + names[index] + "##" + label;
-      if (stateButton(text.c_str(), value != Enum{})) ImGui::OpenPopup(label);
-      ImGui::SetItemTooltip("%s", tooltip);
+      const bool on = value != Enum{};
+      const std::string fallback = std::string(label) + ": " + choices[index].name;
+      if (ICONS::iconButton(label, on ? choices[index].icon : offIcon, on, fallback.c_str(), true)) ImGui::OpenPopup(label);
+      ImGui::SetItemTooltip("%s: %s\n%s", label, choices[index].name, tooltip);
       bool picked = false;
       if (ImGui::BeginPopup(label)) {
+        ImGui::TextDisabled("%s", label);
         for (std::size_t i = 0; i < N; ++i) {
-          if (ImGui::Selectable(names[i], i == index)) {
+          if (ICONS::iconSelectable(choices[i].icon, choices[i].name, i == index)) {
             value = static_cast<Enum>(i);
             picked = true;
           }
@@ -68,10 +62,21 @@ namespace anaf::GUI {
       }
       return picked;
     }
+
+    // Thin vertical line between button groups.
+    void groupSeparator() {
+      ImGui::SameLine();
+      const ImVec2 cursor = ImGui::GetCursorScreenPos();
+      const float height = ICONS::toolbarSize() + 2.0f * buttonPadding;
+      ImGui::GetWindowDrawList()->AddLine(ImVec2(cursor.x, cursor.y + 3.0f), ImVec2(cursor.x, cursor.y + height - 3.0f),
+                                          THEME::toU32(THEME::theme().border));
+      ImGui::Dummy(ImVec2(1.0f, height));
+      ImGui::SameLine();
+    }
   } // namespace end
 
   float ViewportToolbar::windowHeight() {
-    return std::max(ImGui::GetFrameHeight() + 2.0f * padding, ImGui::GetStyle().WindowMinSize.y);
+    return std::max(ICONS::toolbarSize() + 2.0f * buttonPadding + 2.0f * padding, ImGui::GetStyle().WindowMinSize.y);
   }
 
   ViewportToolbar::ViewportToolbar(std::shared_ptr<ViewportDisplayOptions> options, const IPanel* viewport) :
@@ -91,41 +96,57 @@ namespace anaf::GUI {
       ImGui::End();
       return;
     }
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(buttonPadding, buttonPadding));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, ImGui::GetStyle().ItemSpacing.y));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f); // flat buttons, also in themes with framed inputs
 
     auto& options = *m_options;
-    const auto toggleButton = [&options](const char* label, bool& value, const char* tooltip) {
-      if (stateButton(label, value)) {
+    const auto toggleButton = [&options](const char* label, const ICONS::E_IconId icon, bool& value, const char* tooltip) {
+      if (ICONS::iconButton(label, icon, value, label)) {
         value = !value;
         options.changed = true;
       }
-      ImGui::SetItemTooltip("%s (%s)", tooltip, value ? "on" : "off");
+      ImGui::SetItemTooltip("%s (%s)\n%s", label, value ? "on" : "off", tooltip);
     };
 
     // Keeps the camera reset accessible without keyboard focus on the viewport.
-    if (stateButton("Reset Camera", false)) {
+    if (ICONS::iconButton("Fit", ICONS::E_IconId::ViewFit, false, "Reset Camera")) {
       options.resetCameraRequested = true;
     }
     ImGui::SetItemTooltip("Fit the camera to the model (R)");
+    groupSeparator();
+    toggleButton("Grid", ICONS::E_IconId::ViewGrid, options.showGrid, "x-z ground grid");
     ImGui::SameLine();
-    toggleButton("Grid", options.showGrid, "x-z ground grid");
+    toggleButton("Axes", ICONS::E_IconId::ViewAxes, options.showAxes, "X / Y / Z axis lines");
+    groupSeparator();
+    constexpr std::array<Choice, 3> nodeStyles{{{"Off", ICONS::E_IconId::DisplayHidden},
+                                                {"Square", ICONS::E_IconId::DisplayNodesSquare},
+                                                {"Sphere", ICONS::E_IconId::DisplayNodesSphere}}};
+    if (choiceButton("Nodes", options.nodeStyle, nodeStyles, ICONS::E_IconId::DisplayNodesSquare,
+                     "Nodes as screen squares or 3D spheres; labels and picking")) {
+      options.changed = true;
+    }
     ImGui::SameLine();
-    toggleButton("Axes", options.showAxes, "X / Y / Z axis lines");
+    toggleButton("Forces", ICONS::E_IconId::DisplayLoads, options.showForces, "Applied forces, moments and distributed loads");
     ImGui::SameLine();
-    constexpr std::array<const char*, 3> nodeStyles{"Off", "Square", "Sphere"};
-    if (choiceButton("Nodes", options.nodeStyle, nodeStyles, "Nodes as screen squares or 3D spheres; labels and picking")) options.changed = true;
-    ImGui::SameLine();
-    toggleButton("Forces", options.showForces, "Applied forces, moments and distributed loads");
-    ImGui::SameLine();
-    constexpr std::array<const char*, 3> supportStyles{"Off", "Symbols", "DOF"};
-    if (choiceButton("Supports", options.supportStyle, supportStyles,
+    constexpr std::array<Choice, 3> supportStyles{{{"Off", ICONS::E_IconId::DisplayHidden},
+                                                   {"Symbols", ICONS::E_IconId::DisplaySupportsSymbols},
+                                                   {"DOF", ICONS::E_IconId::DisplaySupportsDof}}};
+    if (choiceButton("Supports", options.supportStyle, supportStyles, ICONS::E_IconId::DisplaySupportsSymbols,
                      "Symbols: support types (pin, roller, slider, clamp, cyan hinge axles); "
                      "DOF: a red cone per restrained translation, an amber double cone per restrained rotation")) {
       options.changed = true;
     }
-    ImGui::SameLine();
-    constexpr std::array<const char*, 3> colorings{"Off", "Stress", "Displacement"};
-    if (choiceButton("Color", options.coloring, colorings, "Element colors: stress (truss axial, beam von Mises) or displacement")) options.changed = true;
+    groupSeparator();
+    constexpr std::array<Choice, 3> colorings{{{"Off", ICONS::E_IconId::DisplayHidden},
+                                               {"Stress", ICONS::E_IconId::DisplayColorStress},
+                                               {"Displacement", ICONS::E_IconId::DisplayColorDisplacement}}};
+    if (choiceButton("Color", options.coloring, colorings, ICONS::E_IconId::DisplayColorStress,
+                     "Element colors: stress (truss axial, beam von Mises) or displacement")) {
+      options.changed = true;
+    }
 
+    ImGui::PopStyleVar(3);
     ImGui::End();
   }
 

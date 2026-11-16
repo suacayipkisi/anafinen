@@ -37,6 +37,7 @@
 #include <log/anaf_info.hpp>
 
 #include "guiMaterials/framebuffer.hpp"
+#include "guiMaterials/iconAtlas.hpp"
 #include "guiMaterials/imGuiLayer.hpp"
 #include "guiMaterials/iPanel.hpp"
 
@@ -397,6 +398,7 @@ namespace anaf::GUI {
         glClear(GL_COLOR_BUFFER_BIT);
 
         imguiLayer.beginFrame();
+        ICONS::beginFrame(); // drops the icon textures after a scale or dark / light change
 
         panelManager.onImGuiRender();
         imguiLayer.endFrame();
@@ -407,6 +409,7 @@ namespace anaf::GUI {
       auto& calculationBridge = anaf::BRIDGE::buildBridge();
       calculationBridge.workerThread.request_stop();
       calculationBridge.workerThread = std::jthread{};
+      ICONS::release(); // icon textures
     } // GL resources released here, before the context is destroyed
 
     imguiLayer.shutdown();

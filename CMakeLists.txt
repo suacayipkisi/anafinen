@@ -172,6 +172,7 @@ set(ANAFINEN_SOURCES
     src/main.cpp
     src/gui/gui.cpp
     src/gui/guiMaterials/imGuiLayer.cpp
+    src/gui/guiMaterials/iconAtlas.cpp
     src/gui/guiMaterials/theme.cpp
     src/gui/guiMaterials/userSettings.cpp
     src/gui/guiMaterials/framebuffer.cpp
@@ -254,6 +255,8 @@ target_include_directories(anafinen PRIVATE
 
 # Native file chooser (header-only, WTFPL): Windows common dialogs, zenity / kdialog on Linux.
 target_include_directories(anafinen SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/portable-file-dialogs)
+# SVG parser and rasterizer for the UI icons (header-only, zlib license, implemented in iconAtlas.cpp).
+target_include_directories(anafinen SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/nanosvg)
 if(WIN32)
     target_link_libraries(anafinen PRIVATE ole32 comdlg32 shell32 uuid psapi) # psapi: resourceMonitor
 endif()

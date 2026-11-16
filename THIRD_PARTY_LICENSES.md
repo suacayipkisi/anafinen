@@ -63,6 +63,14 @@ This project incorporates and builds upon the following third-party software and
 16. **CascadiaCode Font**
    - See license at [assets/fonts/CascadiaCode/LICENSE.txt](assets/fonts/CascadiaCode/LICENSE.txt)
 
+17. **nanosvg** (vendored headers, `external/nanosvg/`, UI icon rasterizer)
+   - License: zlib License (see [external/nanosvg/LICENSE.txt](external/nanosvg/LICENSE.txt))
+   - Copyright (C) 2013-14 Mikko Mononen
+
+18. **FreeType** (font rasterizer of the UI text, via the system library; `freetype.dll` in the Windows ZIP)
+   - License: FreeType License (FTL); FreeType is dual-licensed FTL / GPL-2.0, used here under the FTL
+   - Portions of this software are copyright (C) The FreeType Project (https://freetype.org). All rights reserved.
+
 ## License of anafinen
 
 anafinen is licensed under the GNU General Public License v3.0 or later. The full text is in the

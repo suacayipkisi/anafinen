@@ -17,6 +17,7 @@
 
 #include "modelTree.hpp"
 
+#include <guiMaterials/iconAtlas.hpp>
 #include <guiMaterials/theme.hpp>
 
 #include "imgui.h"
@@ -64,8 +65,8 @@ namespace anaf::GUI {
       }
     }
 
-    if (ImGui::TreeNode("Boundary Conditions (fix and forces)")) {
-      ImGui::Text("Applied Fixity");
+    if (ICONS::iconTreeNode("Boundary Conditions", ICONS::E_IconId::SupportPin, "Boundary Conditions (fix and forces)")) {
+      ICONS::iconText(ICONS::E_IconId::SupportFixed, "Applied Fixity");
       if (m_supportedTrussNodes.empty()) {
         ImGui::TextDisabled("No fixed DOFs yet...");
        } else {
@@ -88,7 +89,7 @@ namespace anaf::GUI {
         ImGui::EndChild();
       }
 
-      ImGui::Text("Applied Forces");
+      ICONS::iconText(ICONS::E_IconId::LoadForce, "Applied Forces");
       if (!meshData || meshData->appliedForces.empty()) {
         ImGui::TextDisabled("No applied forces yet...");
       } else {
@@ -108,8 +109,8 @@ namespace anaf::GUI {
       ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode("Truss Elements")) {
-      ImGui::Text("ElementNum / stress");
+    if (ICONS::iconTreeNode("Truss Elements", ICONS::E_IconId::ModelElementBar, "Truss Elements")) {
+      ICONS::iconText(ICONS::E_IconId::ResultStress, "ElementNum / stress");
       if (!meshData || meshData->trussElements.empty()) {
         ImGui::TextDisabled("No element yet...");
       } else {
@@ -128,7 +129,7 @@ namespace anaf::GUI {
         ImGui::EndChild();
       }
 
-      ImGui::Text("NodeNum / disp");
+      ICONS::iconText(ICONS::E_IconId::ResultDisplacement, "NodeNum / disp");
       if (!meshData || meshData->trussNodes.empty()) {
         ImGui::TextDisabled("No nodes yet...");
       } else {
@@ -169,8 +170,8 @@ namespace anaf::GUI {
       return;
     }
 
-    if (ImGui::TreeNode("Supports and Loads")) {
-      ImGui::Text("Supported nodes (fixed DOFs)");
+    if (ICONS::iconTreeNode("Supports and Loads", ICONS::E_IconId::SupportPin, "Supports and Loads")) {
+      ICONS::iconText(ICONS::E_IconId::SupportFixed, "Supported nodes (fixed DOFs)");
       if (m_supportedBeamNodes.empty()) {
         ImGui::TextDisabled("No supports yet...");
       } else {
@@ -182,7 +183,7 @@ namespace anaf::GUI {
         });
         ImGui::EndChild();
       }
-      ImGui::Text("Nodal loads");
+      ICONS::iconText(ICONS::E_IconId::LoadForce, "Nodal loads");
       if (mesh->nodalLoads.empty()) {
         ImGui::TextDisabled("No nodal loads yet...");
       } else {
@@ -194,7 +195,7 @@ namespace anaf::GUI {
         });
         ImGui::EndChild();
       }
-      ImGui::Text("Distributed loads");
+      ICONS::iconText(ICONS::E_IconId::LoadDistributed, "Distributed loads");
       if (mesh->distributedLoads.empty()) {
         ImGui::TextDisabled("No distributed loads yet...");
       } else {
@@ -210,8 +211,8 @@ namespace anaf::GUI {
       ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode("Beam Elements")) {
-      ImGui::Text("Element / max von Mises");
+    if (ICONS::iconTreeNode("Beam Elements", ICONS::E_IconId::ModelElementBeam, "Beam Elements")) {
+      ICONS::iconText(ICONS::E_IconId::ResultStress, "Element / max von Mises");
       if (mesh->elements.empty()) {
         ImGui::TextDisabled("No element yet...");
       } else if (!mesh->hasResults) {
@@ -232,7 +233,7 @@ namespace anaf::GUI {
         ImGui::EndChild();
       }
 
-      ImGui::Text("Node / displacement, rotation");
+      ICONS::iconText(ICONS::E_IconId::ResultDisplacement, "Node / displacement, rotation");
       ImGui::BeginChild("BeamNodeResultList", ImVec2(0, 160), true);
       clippedRows(mesh->nodes.size(), [&](const std::size_t row) {
         const auto& d = mesh->nodes[row].getDisplacement();
@@ -252,12 +253,15 @@ namespace anaf::GUI {
 
     // Read every frame, so the tree follows a type change (and its reset) immediately.
     const anaf::BRIDGE::E_ObjectType latestType = bridge.objectType.load();
-    std::string rootLabel = latestType == anaf::BRIDGE::E_ObjectType::NoType
+    const std::string rootLabel = latestType == anaf::BRIDGE::E_ObjectType::NoType
       ? std::string("Root Assembly")
       : std::string(anaf::BRIDGE::getObjectTypeName(latestType));
-    rootLabel += "###ModelTreeRoot"; // same ImGui ID (open state) for every type
+    const ICONS::E_IconId rootIcon = latestType == anaf::BRIDGE::E_ObjectType::BeamFrame ? ICONS::E_IconId::ModelFrame
+                                   : latestType == anaf::BRIDGE::E_ObjectType::NoType   ? ICONS::E_IconId::ModelMesh
+                                                                                         : ICONS::E_IconId::ModelTruss;
 
-    if (ImGui::TreeNode(rootLabel.c_str())) {
+    // Same ImGui ID (open state) for every type.
+    if (ICONS::iconTreeNode("ModelTreeRoot", rootIcon, rootLabel.c_str())) {
       if (latestType == anaf::BRIDGE::E_ObjectType::BeamFrame) renderBeamTree(bridge);
       else if (latestType != anaf::BRIDGE::E_ObjectType::NoType) renderTrussTree(bridge);
       ImGui::TreePop();
