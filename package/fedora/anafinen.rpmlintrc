@@ -1,0 +1,4 @@
+# rpmlint filters for package/fedora/anafinen.spec
+addFilter("spelling-error .* cli")
+# No man pages yet: anafinen-cli -help is generated from its command table.
+addFilter("no-manual-page-for-binary")

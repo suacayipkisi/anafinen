@@ -50,6 +50,43 @@ Known issue on Debian 13: its `libgmsh4.13` aborts inside second-order 3D
 meshing (an Eigen assertion in Gmsh itself), so the mesh I/O tests abort there.
 The package builds and installs normally.
 
+## Fedora Copr (built by Copr from the repository)
+
+Copr builds the RPM itself, for the latest Fedora release only (the same policy as the RPM on
+GitHub Releases). Files:
+
+| File | Role |
+|---|---|
+| `package/fedora/anafinen.spec` | The spec. Version `0.2.2~alpha` (`%global upstream_version` must match `project(VERSION)` in `CMakeLists.txt`); `%changelog` gets one entry per release |
+| `package/fedora/make-srpm.sh` | Fetches the submodules, packs the tracked files (submodules included, nothing untracked: no build trees, `tests/`, `information/`) into `anafinen-<version>-alpha-source-with-submodules.tar.gz` (reproducible: sorted, commit time) and runs `rpmbuild -bs` |
+| `.copr/Makefile` | Copr's "make srpm" entry point: installs `git-core rpm-build`, runs `make-srpm.sh` into Copr's `outdir` |
+
+GitHub's tag archives leave out the submodules (Dear ImGui, ImPlot, ImGuizmo, Spectra, GLFW), so the
+spec cannot point at them the way a project without submodules can; the "make srpm" method clones
+the repository with network access and builds the SRPM, then the RPM is built from it offline.
+
+One-time setup on <https://copr.fedorainfracloud.org>:
+
+1. New Project: name `anafinen`; Chroots: only the latest `fedora-NN-x86_64`; leave "Follow Fedora
+   branching" off (a new Fedora release is added by hand, with a rebuild).
+2. Packages > New package > SCM: Clone URL `https://github.com/suacayipkisi/anafinen.git`,
+   Committish = the release tag (e.g. `v0.2.2-alpha`), Subdirectory empty, Spec File
+   `package/fedora/anafinen.spec`, Type `git`, SRPM build method **make srpm**.
+3. Rebuild the package. Optionally: Settings > Integrations, GitHub webhook, to build on every push
+   of a tag.
+
+Per release: bump the spec (`upstream_version`, `Release: 1`, `%changelog`), commit, push the tag,
+change the package's Committish to the new tag and rebuild. Users install with:
+
+```bash
+sudo dnf copr enable suacayipkisi/anafinen
+sudo dnf install anafinen
+```
+
+Local check of the spec (same SRPM as Copr's): `package/fedora/make-srpm.sh /tmp/srpm` and
+`rpmbuild --rebuild /tmp/srpm/anafinen-*.src.rpm`, or `mock -r fedora-NN-x86_64 --rebuild` for a
+clean, offline chroot like Copr's.
+
 ## Packaging for Windows
 
 Requirements: Visual Studio 2022 (or Build Tools) with the C++ x64 tools, CMake, Ninja,

@@ -31,7 +31,7 @@
 - **Built-in models:** 49 beam / frame models (buildings, bridges, machines, aerospace, hinged structures, and large structures of about 3000 elements: a stadium, an airport terminal, a complete airliner airframe) and a truss library, each tested against the generator.
 - **Tests:** closed-form checks (cantilevers, clamped beams, three-hinged frame, published section tables) and file round trips through every format, on GCC and Clang with zero warnings.
 
-**Not available yet:** dynamic analysis of any kind (modal, harmonic, transient). The GUI already offers a "Dynamic Load" analysis type that shows the planned inputs (mode count, mass matrix), but it cannot be run in v0.2.1-alpha; every solve is linear static. Modal analysis is the next step.
+**Not available yet:** dynamic analysis of any kind (modal, harmonic, transient). The GUI already offers a "Dynamic Load" analysis type that shows the planned inputs (mode count, mass matrix), but it cannot be run in v0.2.2-alpha; every solve is linear static. Modal analysis is the next step.
 
 ## Roadmap
 
@@ -56,16 +56,17 @@ Dates are estimates; ANAFINEN is a one-person project next to university studies
 
 Every stage ends with closed-form or published reference checks in the test suite before it is released.
 
-## 📦 Downloads (v0.2.1-alpha)
+## 📦 Downloads (v0.2.2-alpha)
 
-Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases). v0.2.1-alpha contains the truss and the beam / frame solvers (linear static analysis only; dynamic analysis is not available yet), the GUI `anafinen` and the command line `anafinen-cli` in one package.
+Pre-compiled binary releases for Windows and Linux are available under [GitHub Releases](https://github.com/suacayipkisi/anafinen/releases). v0.2.2-alpha contains the truss and the beam / frame solvers (linear static analysis only; dynamic analysis is not available yet), the GUI `anafinen` and the command line `anafinen-cli` in one package.
 
 | Platform | File | Quick Run / Install Command |
 | --- | --- | --- |
-| **Windows** (10/11 x64 Portable) | [`anafinen-0.2.1-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-windows-AMD64-alpha.zip) | Extract the `.zip` into a folder you can write to (not `Program Files`) and run `anafinen.exe` (GUI) or `anafinen-cli.exe` (command line). The MSVC runtime is included; no Visual C++ Redistributable is needed. |
-| **Linux** (Fedora 45, Latest Only) | [`anafinen-0.2.1-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-alpha.rpm) | `sudo dnf install ./anafinen-0.2.1-alpha.rpm` |
-| **Linux** (Debian / Ubuntu / DEB-based) | [`anafinen-0.2.1-alpha.deb`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1-alpha.deb) | `sudo apt install ./anafinen-0.2.1-alpha.deb` |
-| **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.2.1_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.1-alpha/anafinen-0.2.1_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.2.1_alpha-1-x86_64.pkg.tar.zst` (needs `gmsh` or `gmsh-bin` from the AUR) |
+| **Windows** (10/11 x64 Portable) | [`anafinen-0.2.2-windows-AMD64-alpha.zip`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.2-alpha/anafinen-0.2.2-windows-AMD64-alpha.zip) | Extract the `.zip` into a folder you can write to (not `Program Files`) and run `anafinen.exe` (GUI) or `anafinen-cli.exe` (command line). The MSVC runtime is included; no Visual C++ Redistributable is needed. |
+| **Linux** (Fedora 45, Latest Only, Copr) | `suacayipkisi/anafinen` | `sudo dnf copr enable suacayipkisi/anafinen` then `sudo dnf install anafinen`; updates come with `dnf upgrade` |
+| **Linux** (Fedora 45, Latest Only) | [`anafinen-0.2.2-alpha.rpm`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.2-alpha/anafinen-0.2.2-alpha.rpm) | `sudo dnf install ./anafinen-0.2.2-alpha.rpm` |
+| **Linux** (Debian / Ubuntu / DEB-based) | [`anafinen-0.2.2-alpha.deb`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.2-alpha/anafinen-0.2.2-alpha.deb) | `sudo apt install ./anafinen-0.2.2-alpha.deb` |
+| **Linux** (Arch/CachyOS/Arch-based) | [`anafinen-0.2.2_alpha-1-x86_64.pkg.tar.zst`](https://github.com/suacayipkisi/anafinen/releases/download/v0.2.2-alpha/anafinen-0.2.2_alpha-1-x86_64.pkg.tar.zst) | `sudo pacman -U anafinen-0.2.2_alpha-1-x86_64.pkg.tar.zst` (needs `gmsh` or `gmsh-bin` from the AUR) |
 
 Each release lists the SHA-256 checksums of its files (`SHA256SUMS.txt`).
 
