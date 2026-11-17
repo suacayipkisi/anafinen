@@ -73,7 +73,14 @@ if(NOT ANAFINEN_SYSTEM_GLFW)
     set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+    # Always static: the patched GLFW is part of the executables and never installed. Fedora's %cmake
+    # passes -DBUILD_SHARED_LIBS=ON, which made it a libglfw.so.3 that the dynamic loader then took
+    # from the distribution's unpatched glfw ("undefined symbol: glfwResizeWindowFromEdge").
+    # GLFW's option(BUILD_SHARED_LIBS) honours this normal variable (CMP0077); restored afterwards.
+    set(_anafinen_build_shared_libs "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS OFF)
     add_subdirectory("${GLFW_PATCHED_DIR}" "${CMAKE_BINARY_DIR}/_deps/glfw-build" EXCLUDE_FROM_ALL)
+    set(BUILD_SHARED_LIBS "${_anafinen_build_shared_libs}")
     # Third-party headers are SYSTEM, like the other externals (add_subdirectory(... SYSTEM) needs CMake 3.25).
     get_target_property(_glfw_includes glfw INTERFACE_INCLUDE_DIRECTORIES)
     set_target_properties(glfw PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_glfw_includes}")

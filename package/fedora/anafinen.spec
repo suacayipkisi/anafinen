@@ -17,7 +17,7 @@
 
 Name:           anafinen
 Version:        %{upstream_version}~%{prerelease}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        3D finite element analysis of trusses and beam frames
 # GPL: anafinen; MIT: Dear ImGui, ImPlot, ImGuizmo, GLAD; Zlib: GLFW, nanosvg; MPL-2.0: Spectra;
 # WTFPL: portable-file-dialogs; OFL-1.1: Inter, Cascadia Code (assets/fonts)
@@ -105,6 +105,11 @@ rm -f %{buildroot}%{_docdir}/%{name}/LICENSE %{buildroot}%{_docdir}/%{name}/THIR
 
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/anafinen.desktop
+# The patched GLFW must be linked in statically, never resolved from the system libglfw.so.3.
+if readelf -d %{buildroot}%{_bindir}/anafinen | grep -q 'libglfw'; then
+  echo "anafinen links a shared libglfw instead of the built-in patched GLFW" >&2
+  exit 1
+fi
 
 %files
 %license LICENSE THIRD_PARTY_LICENSES.md
@@ -116,6 +121,11 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/anafinen.desktop
 %{_datadir}/icons/hicolor/*/apps/anafinen.*
 
 %changelog
+* Tue Nov 17 2026 suacayipkisi <konuki8523@gmail.com> - 0.2.2~alpha-2
+- Link the patched GLFW statically: %%cmake's BUILD_SHARED_LIBS=ON built it as
+  libglfw.so.3, which resolved to the system glfw at run time and the program
+  did not start (undefined symbol glfwResizeWindowFromEdge)
+
 * Tue Nov 17 2026 suacayipkisi <konuki8523@gmail.com> - 0.2.2~alpha-1
 - Integrated title bar: menus, title and window buttons in one row; the window
   system still moves, resizes and snaps the window (Wayland, X11, Windows);
