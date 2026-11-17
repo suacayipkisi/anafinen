@@ -26,8 +26,10 @@
 
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
-#include <span>
 #include <expected>
+#include <span>
+#include <stop_token>
+#include <string>
 
 namespace FEM::TRUSS {
 
