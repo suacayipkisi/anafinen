@@ -69,71 +69,125 @@ namespace anaf::GUI::THEME {
       };
     }
 
-    // CAD-style light theme (the light grey of CAD programs, own colors): neutral greys without a
-    // blue cast in three clear levels (darker menu / tab strip, panel, white framed inputs and
-    // cards), square corners, hovers in grey; the accent only on selection, focus and checks.
-    constexpr ThemePalette professional{
-      .key = "professional",
-      .name = "Professional",
-      .light = true,
-      .paletteColors = true,
-      .style = ThemeStyle{.rounding = 0.0f,
-                          .frameBorderSize = 1.0f,
-                          .framePadding = ImVec2(5.0f, 3.0f),
-                          .itemSpacing = ImVec2(6.0f, 4.0f),
-                          .scrollbarSize = 12.0f,
-                          .focusedTabOverlineOnly = true,
-                          .neutralHover = true},
-      .base = rgb(0xD6D7D9),
-      .panel = rgb(0xEEEEEF),
-      .raised = rgb(0xF8F8F8),
-      .input = rgb(0xFFFFFF),
-      .header = rgb(0xE2E3E5),
-      .border = rgb(0xB3B5B8),
-      .text = rgb(0x1F2124),
-      .textDim = rgb(0x6B6E73),
-      .accent = rgb(0x1A62AE),
-      .primary = rgb(0x1A62AE),
-      .primaryHovered = rgb(0x2272C4),
-      .primaryActive = rgb(0x15518F),
-      .good = rgb(0x1C7F45),
-      .warn = rgb(0x9E6210),
-      .bad = rgb(0xBF3026),
-      .info = rgb(0x1A62AE),
-      .core = rgb(0x0B7A76),
-      .note = rgb(0x575A5F),
-      .sceneTop = rgb(0xE3E4E6),
-      .sceneBottom = rgb(0xE3E4E6),
-      .grid = rgb(0x50545A),
-      .sceneLabel = rgb(0x1B1D20),
-      .member = rgb(0x4F5A66),
-      .memberNoResult = rgb(0x9A9DA2),
-      .overlayBg = rgb(0xFFFFFF, 0.94f),
-      .overlayBorder = rgb(0xB3B5B8),
-      .overlayText = rgb(0x1F2124),
-      .overlayTextDim = rgb(0x62656A),
-    };
+    // Every preset but Old shares the Professional design (2026-11-17): neutral greys without a
+    // colour cast in three clear levels (menu / tab strip, panel, cards and framed inputs), square
+    // corners, grey hovers (ThemeStyle::neutralHover) and the accent only on selection, checks, focus,
+    // the tab overline and the run button. A preset picks light or dark, the accent and the viewport.
+    constexpr ThemeStyle cadStyle{.rounding = 0.0f,
+                                  .frameBorderSize = 1.0f,
+                                  .framePadding = ImVec2(5.0f, 3.0f),
+                                  .itemSpacing = ImVec2(6.0f, 4.0f),
+                                  .scrollbarSize = 12.0f,
+                                  .focusedTabOverlineOnly = true,
+                                  .neutralHover = true};
 
-    constexpr ThemePalette steelCyan = darkTheme("steel_cyan", "Steel Blue / Cyan", rgb(0x2EA8D6), rgb(0x1C7BA2), rgb(0x2690BB),
-                                                 rgb(0x166685), ImVec4(0.12f, 0.14f, 0.17f, 1.0f));
+    // Light family: white framed inputs on a light grey panel, darker strip; deep status colors.
+    constexpr ThemePalette cadLight(const char* key, const char* name, const ImVec4 accent, const ImVec4 primaryHovered,
+                                    const ImVec4 primaryActive, const ImVec4 panel, const ImVec4 scene) {
+      return ThemePalette{
+        .key = key,
+        .name = name,
+        .light = true,
+        .paletteColors = true,
+        .style = cadStyle,
+        .base = mix(panel, rgb(0x000000), 0.10f),
+        .panel = panel,
+        .raised = mix(panel, rgb(0xFFFFFF), 0.65f),
+        .input = rgb(0xFFFFFF),
+        .header = mix(panel, rgb(0x000000), 0.05f),
+        .border = rgb(0xB3B5B8),
+        .text = rgb(0x1F2124),
+        .textDim = rgb(0x6B6E73),
+        .accent = accent,
+        .primary = accent,
+        .primaryHovered = primaryHovered,
+        .primaryActive = primaryActive,
+        .good = rgb(0x1C7F45),
+        .warn = rgb(0x9E6210),
+        .bad = rgb(0xBF3026),
+        .info = accent,
+        .core = rgb(0x0B7A76),
+        .note = rgb(0x575A5F),
+        .sceneTop = scene,
+        .sceneBottom = scene,
+        .grid = rgb(0x50545A),
+        .sceneLabel = rgb(0x1B1D20),
+        .member = rgb(0x4F5A66),
+        .memberNoResult = rgb(0x9A9DA2),
+        .overlayBg = rgb(0xFFFFFF, 0.94f),
+        .overlayBorder = rgb(0xB3B5B8),
+        .overlayText = rgb(0x1F2124),
+        .overlayTextDim = rgb(0x62656A),
+      };
+    }
+
+    // Dark family: graphite panel, darker strip, inputs set into the panel (darker, framed), light text.
+    constexpr ThemePalette cadDark(const char* key, const char* name, const ImVec4 accent, const ImVec4 primary,
+                                   const ImVec4 primaryHovered, const ImVec4 primaryActive, const ImVec4 scene) {
+      return ThemePalette{
+        .key = key,
+        .name = name,
+        .paletteColors = true,
+        .style = cadStyle,
+        .base = rgb(0x1C1D1F),
+        .panel = rgb(0x28292C),
+        .raised = rgb(0x303134),
+        .input = rgb(0x1E1F21),
+        .header = rgb(0x323336),
+        .border = rgb(0x45474B),
+        .text = rgb(0xDCDEE1),
+        .textDim = rgb(0x8D9095),
+        .accent = accent,
+        .primary = primary,
+        .primaryHovered = primaryHovered,
+        .primaryActive = primaryActive,
+        .good = ImVec4(0.45f, 0.85f, 0.52f, 1.0f),
+        .warn = ImVec4(1.0f, 0.72f, 0.32f, 1.0f),
+        .bad = ImVec4(1.0f, 0.45f, 0.42f, 1.0f),
+        .info = ImVec4(0.42f, 0.70f, 1.0f, 1.0f),
+        .core = ImVec4(0.0f, 0.85f, 0.85f, 1.0f),
+        .note = ImVec4(0.70f, 0.70f, 0.70f, 1.0f),
+        .sceneTop = scene,
+        .sceneBottom = scene,
+        .grid = ImVec4(0.62f, 0.68f, 0.75f, 1.0f),
+        .sceneLabel = ImVec4(0.9f, 0.9f, 0.9f, 1.0f),
+        .member = ImVec4(0.64f, 0.70f, 0.78f, 1.0f),
+        .memberNoResult = ImVec4(0.55f, 0.55f, 0.55f, 1.0f),
+        .overlayBg = rgb(0x232427, 0.92f),
+        .overlayBorder = rgb(0x45474B),
+        .overlayText = rgb(0xE4E5E7),
+        .overlayTextDim = rgb(0x8D9095),
+      };
+    }
+
+    // The default (2026-11-17): the light grey of CAD programs, blue accent.
+    constexpr ThemePalette professional =
+      cadLight("professional", "Professional", rgb(0x1A62AE), rgb(0x2272C4), rgb(0x15518F), rgb(0xEEEEEF), rgb(0xE3E4E6));
+
+    // White panels, teal accent, a cooler light viewport.
+    constexpr ThemePalette studioLight =
+      cadLight("studio_light", "Light / Teal", rgb(0x0E7C86), rgb(0x12909B), rgb(0x0B646C), rgb(0xF6F6F7), rgb(0xE6E9EC));
+
+    constexpr ThemePalette steelCyan =
+      cadDark("steel_cyan", "Dark / Cyan", rgb(0x2EA8D6), rgb(0x1C7BA2), rgb(0x2690BB), rgb(0x166685), rgb(0x24272B));
 
     constexpr ThemePalette graphiteOrange = [] {
-      ThemePalette p = darkTheme("graphite_orange", "Graphite / Orange", rgb(0xE8863A), rgb(0xB15E22), rgb(0xC86E2E),
-                                 rgb(0x944D1B), ImVec4(0.14f, 0.14f, 0.15f, 1.0f));
+      ThemePalette p = cadDark("graphite_orange", "Dark / Orange", rgb(0xE8863A), rgb(0xB15E22), rgb(0xC86E2E), rgb(0x944D1B),
+                               rgb(0x262728));
       p.warn = rgb(0xF5CF5A); // yellower than the shared warn, so it does not read as the accent
       return p;
     }();
 
     // Grey viewport like the classic pre / post processors; the dark blue result colors stay readable on it.
-    constexpr ThemePalette classicFem = darkTheme("classic_fem", "Classic FEM", rgb(0x4C95FF), rgb(0x2A68C8), rgb(0x3779DC),
-                                                  rgb(0x2257A8), rgb(0x4B5058));
+    constexpr ThemePalette classicFem =
+      cadDark("classic_fem", "Dark / Blue, grey viewport", rgb(0x4C95FF), rgb(0x2A68C8), rgb(0x3779DC), rgb(0x2257A8), rgb(0x4B5058));
 
-    constexpr ThemePalette midnightViolet = darkTheme("midnight_violet", "Midnight / Violet", rgb(0x9A86FF), rgb(0x6650D8),
-                                                      rgb(0x765FEA), rgb(0x5641B8), ImVec4(0.13f, 0.13f, 0.18f, 1.0f));
+    constexpr ThemePalette midnightViolet =
+      cadDark("midnight_violet", "Dark / Violet", rgb(0x9A86FF), rgb(0x6650D8), rgb(0x765FEA), rgb(0x5641B8), rgb(0x23232C));
 
     constexpr ThemePalette emeraldSlate = [] {
-      ThemePalette p = darkTheme("slate_emerald", "Slate / Emerald", rgb(0x2FC48D), rgb(0x1C8A62), rgb(0x239E71),
-                                 rgb(0x167351), ImVec4(0.12f, 0.15f, 0.14f, 1.0f));
+      ThemePalette p = cadDark("slate_emerald", "Dark / Emerald", rgb(0x2FC48D), rgb(0x1C8A62), rgb(0x239E71), rgb(0x167351),
+                               rgb(0x222826));
       p.good = rgb(0x9BE36A); // lime, so success does not read as the accent
       return p;
     }();
@@ -150,42 +204,7 @@ namespace anaf::GUI::THEME {
       return p;
     }();
 
-    // Light theme: dark text, deeper status colors (readable on white), flat light viewport.
-    constexpr ThemePalette studioLight{
-      .key = "studio_light",
-      .name = "Studio Light",
-      .light = true,
-      .base = rgb(0xD9DDE3),
-      .panel = rgb(0xEBEDF0),
-      .raised = rgb(0xF5F6F8),
-      .input = rgb(0xDCE1E7),
-      .header = rgb(0xD9DEE5),
-      .border = rgb(0xB9C1CC),
-      .text = rgb(0x1D232B),
-      .textDim = rgb(0x66707D),
-      .accent = rgb(0x1F6FD1),
-      .primary = rgb(0x1F6FD1),
-      .primaryHovered = rgb(0x2C80E6),
-      .primaryActive = rgb(0x195BB0),
-      .good = rgb(0x1E8A4C),
-      .warn = rgb(0xA86A12),
-      .bad = rgb(0xC6352A),
-      .info = rgb(0x1F6FD1),
-      .core = rgb(0x0B827E),
-      .note = rgb(0x55606C),
-      .sceneTop = rgb(0xE6E9EE),
-      .sceneBottom = rgb(0xE6E9EE),
-      .grid = rgb(0x4A5563),
-      .sceneLabel = rgb(0x1B2129),
-      .member = rgb(0x56677C),
-      .memberNoResult = rgb(0x9AA3AE),
-      .overlayBg = rgb(0xFFFFFF, 0.88f),
-      .overlayBorder = rgb(0xAEB7C2, 0.95f),
-      .overlayText = rgb(0x1D232B),
-      .overlayTextDim = rgb(0x5E6875),
-    };
-
-    E_ThemeId g_current = E_ThemeId::SteelCyan;  // the default theme is still open
+    E_ThemeId g_current = E_ThemeId::Professional; // the default since 2026-11-17
     std::uint32_t g_revision = 0;
 
     // ImGuiLayer's colors before the themes, set over ImGui's dark defaults (frames lifted, see below).
@@ -362,9 +381,9 @@ namespace anaf::GUI::THEME {
       c[ImGuiCol_Button] = step(p.panel, 0.05f);
       c[ImGuiCol_ButtonHovered] = step(p.panel, 0.10f);
       c[ImGuiCol_ButtonActive] = step(p.panel, 0.16f);
-      c[ImGuiCol_Header] = withAlpha(p.accent, 0.16f);
+      c[ImGuiCol_Header] = withAlpha(p.accent, p.light ? 0.16f : 0.30f);
       c[ImGuiCol_HeaderHovered] = step(p.panel, 0.07f);
-      c[ImGuiCol_HeaderActive] = withAlpha(p.accent, 0.24f);
+      c[ImGuiCol_HeaderActive] = withAlpha(p.accent, p.light ? 0.24f : 0.40f);
       c[ImGuiCol_TitleBgActive] = p.base;
       c[ImGuiCol_TabHovered] = mix(p.base, p.panel, 0.55f);
       c[ImGuiCol_ScrollbarBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -379,23 +398,23 @@ namespace anaf::GUI::THEME {
 
   const ThemePalette& palette(const E_ThemeId id) {
     switch (id) {
-      case E_ThemeId::Professional: return professional;
       case E_ThemeId::GraphiteOrange: return graphiteOrange;
       case E_ThemeId::ClassicFem: return classicFem;
       case E_ThemeId::MidnightViolet: return midnightViolet;
       case E_ThemeId::EmeraldSlate: return emeraldSlate;
       case E_ThemeId::StudioLight: return studioLight;
       case E_ThemeId::Old: return oldTheme;
-      case E_ThemeId::SteelCyan: break;
+      case E_ThemeId::SteelCyan: return steelCyan;
+      case E_ThemeId::Professional: break;
     }
-    return steelCyan;
+    return professional;
   }
 
   E_ThemeId themeFromKey(const std::string_view key) {
     for (const E_ThemeId id : allThemes) {
       if (key == palette(id).key) return id;
     }
-    return E_ThemeId::SteelCyan;
+    return E_ThemeId::Professional;
   }
 
   const ThemePalette& theme() { return palette(g_current); }

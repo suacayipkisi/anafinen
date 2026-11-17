@@ -48,7 +48,7 @@ namespace anaf::GUI::SETTINGS {
   inline constexpr int maxColorBands = 16;
 
   struct UserSettings {
-    std::string theme{"steel_cyan"}; // THEME::ThemePalette::key
+    std::string theme{"professional"}; // THEME::ThemePalette::key
     float uiFontSize{15.0f};
     bool showWelcomeOnStartup{true};
     bool gradientBackground{false}; // viewport background: flat (default) or a vertical gradient from the theme

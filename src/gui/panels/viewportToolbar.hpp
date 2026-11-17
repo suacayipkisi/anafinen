@@ -20,7 +20,6 @@
 #include <guiMaterials/iPanel.hpp>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 
@@ -68,23 +67,6 @@ namespace anaf::GUI {
     std::optional<E_StandardView> viewRequested; // the viewport turns the camera to it and clears it
   };
 
-  // Model commands on the left of the toolbar; gui.cpp routes them to the panels of the active model.
-  enum class E_ModelCommand : std::uint8_t {
-    Library,          // File > Open Example...
-    AddNode,          // Add Node window of the active editor
-    AddElement,       // Add Element / Add Bar window
-    Materials,        // Material Handler
-    Sections,         // Section Handler (beam)
-    Solve,            // run the static solver of the active model
-    AnalysisSettings, // Analysis Settings window
-    Diagrams          // Beam Diagrams panel (beam)
-  };
-
-  struct ModelCommands {
-    std::function<bool(E_ModelCommand)> isAvailable; // empty = always
-    std::function<void(E_ModelCommand)> run;
-  };
-
   // Own window, docked by MainDockSpaceHost as a fixed-height strip above the viewport.
   class ViewportToolbar : public IPanel {
   public:
@@ -96,14 +78,9 @@ namespace anaf::GUI {
     ViewportToolbar(std::shared_ptr<ViewportDisplayOptions> options, const IPanel* viewport);
     void onImGuiRender() override;
 
-    ModelCommands commands;
-
   private:
     std::shared_ptr<ViewportDisplayOptions> m_options;
     const IPanel* m_viewport;
-
-    void renderModelCommands();
-    void renderDeformation();
   };
 
 } // namespace anaf::GUI end

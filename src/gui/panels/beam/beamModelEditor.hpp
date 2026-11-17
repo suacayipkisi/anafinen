@@ -132,6 +132,8 @@ namespace anaf::GUI {
     void openAddElement();
     void openAssignAll();
     void removeAllReleases();
+    void toggleSelfWeight();
+    bool selfWeightOn() const;
     // Starts the static solve of the active model; false when there is nothing to solve.
     bool solve();
     // A 3D portal frame built in code (HEB 200 columns, IPE 300 girder).

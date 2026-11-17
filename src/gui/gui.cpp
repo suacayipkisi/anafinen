@@ -54,6 +54,7 @@
 #include "panels/mainDockSpaceHost.hpp"
 #include "panels/materialHandler.hpp"
 #include "panels/modelTree.hpp"
+#include "panels/ribbon.hpp"
 #include "panels/truss/importedTruss/trussModelEditor.hpp"
 #include "panels/truss/simpleQuadrangleTruss/trussControlPanel.hpp"
 #include "panels/viewportPanel.hpp"
@@ -163,6 +164,7 @@ namespace anaf::GUI {
       ViewportToolbar* toolbar = nullptr;
       LibraryDialog* library = nullptr;
       AnalysisSettingsPanel* analysisSettings = nullptr;
+      Ribbon* ribbon = nullptr;
     };
 
     anaf::BRIDGE::E_ObjectType activeType() { return anaf::BRIDGE::buildBridge().objectType.load(); }
@@ -202,14 +204,18 @@ namespace anaf::GUI {
     }
 
     void bindCommands(UIPanels panels) {
-      panels.toolbar->commands.isAvailable = [](const E_ModelCommand command) {
+      panels.ribbon->commands.isAvailable = [](const E_ModelCommand command) {
         const auto type = activeType();
         const bool editable = type == anaf::BRIDGE::E_ObjectType::BeamFrame || type == anaf::BRIDGE::E_ObjectType::TrussImportedOrEntered;
         const bool busy = anaf::BRIDGE::buildBridge().isRunning.load();
         switch (command) {
-          case E_ModelCommand::Library: return true;
+          case E_ModelCommand::Library:
+          case E_ModelCommand::Import: return true;
+          case E_ModelCommand::Export: return type != anaf::BRIDGE::E_ObjectType::NoType;
           case E_ModelCommand::AddNode:
-          case E_ModelCommand::AddElement: return editable && !busy;
+          case E_ModelCommand::AddElement:
+          case E_ModelCommand::AssignAll: return editable && !busy;
+          case E_ModelCommand::SelfWeight: return type == anaf::BRIDGE::E_ObjectType::BeamFrame && !busy;
           case E_ModelCommand::Materials:
           case E_ModelCommand::AnalysisSettings: return type != anaf::BRIDGE::E_ObjectType::NoType;
           case E_ModelCommand::Sections:
@@ -218,10 +224,24 @@ namespace anaf::GUI {
         }
         return false;
       };
-      panels.toolbar->commands.run = [panels](const E_ModelCommand command) {
+      panels.ribbon->commands.isActive = [panels](const E_ModelCommand command) {
+        if (command == E_ModelCommand::Diagrams) return panels.diagrams->isOpen;
+        if (command != E_ModelCommand::SelfWeight) return false;
+        // Trusses always carry their self weight.
+        return activeType() == anaf::BRIDGE::E_ObjectType::BeamFrame ? panels.beamEditor->selfWeightOn()
+                                                                      : activeType() != anaf::BRIDGE::E_ObjectType::NoType;
+      };
+      panels.ribbon->commands.run = [panels](const E_ModelCommand command) {
         const bool beam = activeType() == anaf::BRIDGE::E_ObjectType::BeamFrame;
         switch (command) {
           case E_ModelCommand::Library: panels.library->open(); break;
+          case E_ModelCommand::Import: panels.fileIo->requestImport(); break;
+          case E_ModelCommand::Export: panels.fileIo->requestExport(); break;
+          case E_ModelCommand::AssignAll:
+            if (beam) panels.beamEditor->openAssignAll();
+            else panels.editor->openAssignAll();
+            break;
+          case E_ModelCommand::SelfWeight: panels.beamEditor->toggleSelfWeight(); break;
           case E_ModelCommand::AddNode:
             if (beam) panels.beamEditor->openAddNode();
             else panels.editor->openAddNode();
@@ -382,6 +402,7 @@ namespace anaf::GUI {
 
     std::shared_ptr<ViewportPanel> openPanels(PanelManager& panelManager, GLFWwindow* window, const std::shared_ptr<Framebuffer>& fbo) {
       auto dock = panelManager.addPanel<MainDockSpaceHost>(window);
+      auto ribbon = panelManager.addPanel<Ribbon>();
       // Both share the display toggles; the viewport reads them in renderSceneOpenGL().
       auto display = std::make_shared<ViewportDisplayOptions>();
       auto viewport = panelManager.addPanel<ViewportPanel>(fbo, display);
@@ -419,7 +440,8 @@ namespace anaf::GUI {
         welcome.get(),
         toolbar.get(),
         library.get(),
-        analysisSettings.get()
+        analysisSettings.get(),
+        ribbon.get()
       };
 
       analysisSelector->isOpen = false;

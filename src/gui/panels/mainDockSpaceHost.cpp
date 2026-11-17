@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "mainDockSpaceHost.hpp"
+#include "ribbon.hpp"
 #include "viewportToolbar.hpp"
 
 #include <guiMaterials/imGuiLayer.hpp>
@@ -29,6 +30,7 @@
 #include <array>
 #include <cmath>
 #include <string>
+#include <utility>
 
 namespace anaf::GUI {
 
@@ -196,6 +198,14 @@ namespace anaf::GUI {
 
       ImGuiID dockMainId = dockspaceId;
 
+      // 0. Ribbon strip under the menu bar, full width, fixed height and no tab bar
+      const float ribbonHeight = Ribbon::windowHeight();
+      ImGuiID dockRibbonId = ImGui::DockBuilderSplitNode(
+        dockMainId, ImGuiDir_Up, std::clamp(ribbonHeight / viewport->WorkSize.y, 0.01f, 0.5f), nullptr, &dockMainId);
+      ImGuiDockNode* ribbonNode = ImGui::DockBuilderGetNode(dockRibbonId);
+      ribbonNode->LocalFlags |= ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoResizeY | ImGuiDockNodeFlags_NoDockingOverMe;
+      ImGui::DockBuilderSetNodeSize(dockRibbonId, ImVec2(ribbonNode->Size.x, ribbonHeight));
+
       // 1. Split Left (Full height)
       ImGuiID dockLeftId = ImGui::DockBuilderSplitNode(
         dockMainId, ImGuiDir_Left, 0.21f, nullptr, &dockMainId);
@@ -226,16 +236,20 @@ namespace anaf::GUI {
       ImGui::DockBuilderDockWindow("Model Tree", dockRightId);
       ImGui::DockBuilderDockWindow("Console", dockBottomId);
       ImGui::DockBuilderDockWindow(ViewportToolbar::windowName, dockToolbarId);
+      ImGui::DockBuilderDockWindow(Ribbon::windowName, dockRibbonId);
       ImGui::DockBuilderDockWindow("3D Simulation Viewport", dockMainId);
 
       ImGui::DockBuilderFinish(dockspaceId);
     }
 
-    // The toolbar strip has a fixed height (NoResizeY), so it follows the frame height by hand when
-    // the UI font size or the theme's frame padding changes.
-    if (const ImGuiWindow* toolbar = ImGui::FindWindowByName(ViewportToolbar::windowName); toolbar && toolbar->DockNode) {
-      ImGuiDockNode* node = toolbar->DockNode;
-      const float height = ViewportToolbar::windowHeight();
+    // The toolbar and ribbon strips have a fixed height (NoResizeY), so they follow the font size and
+    // the theme's frame padding by hand.
+    const std::array<std::pair<const char*, float>, 2> strips{{{ViewportToolbar::windowName, ViewportToolbar::windowHeight()},
+                                                               {Ribbon::windowName, Ribbon::windowHeight()}}};
+    for (const auto& [name, height] : strips) {
+      const ImGuiWindow* strip = ImGui::FindWindowByName(name);
+      if (!strip || !strip->DockNode) continue;
+      ImGuiDockNode* node = strip->DockNode;
       if (node->IsLeafNode() && node->ParentNode && std::abs(node->Size.y - height) > 0.5f) {
         node->Size.y = height;
         node->SizeRef.y = height;

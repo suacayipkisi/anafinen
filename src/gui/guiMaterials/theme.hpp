@@ -30,13 +30,14 @@
 namespace anaf::GUI::THEME {
 
   enum class E_ThemeId : std::uint8_t {
-    Professional,   // CAD-style light: neutral grey chrome, white framed inputs, square corners, grey hovers
-    SteelCyan,      // dark blue-steel surfaces, cyan accent
-    GraphiteOrange, // neutral graphite surfaces, orange accent
-    ClassicFem,     // dark panels, blue accent, neutral grey viewport (classic FEM pre/post look)
-    MidnightViolet, // deep navy surfaces, violet accent
-    EmeraldSlate,   // slate surfaces, emerald accent
-    StudioLight,    // light grey surfaces, blue accent, light viewport
+    // All but Old share the Professional design: neutral greys, framed inputs, square corners, grey hovers.
+    Professional,   // the default: light CAD grey, blue accent
+    SteelCyan,      // dark, cyan accent ("steel_cyan" in the settings)
+    GraphiteOrange, // dark, orange accent
+    ClassicFem,     // dark, blue accent, neutral grey viewport (classic FEM pre/post look)
+    MidnightViolet, // dark, violet accent, dark violet-grey viewport
+    EmeraldSlate,   // dark, emerald accent
+    StudioLight,    // light with white panels, teal accent
     Old,            // the look before themes existed (v0.2.0): grey surfaces, blue marks, flat dark viewport
   };
 

@@ -194,6 +194,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/propertyGrid.cpp
     src/gui/panels/libraryDialog.cpp
     src/gui/panels/analysisSettingsPanel.cpp
+    src/gui/panels/ribbon.cpp
     src/gui/panels/viewportToolbar.cpp
     src/gui/panels/viewportRenderer.cpp
     src/gui/panels/beamSceneRenderer.cpp

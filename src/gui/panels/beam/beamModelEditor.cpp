@@ -219,6 +219,22 @@ namespace anaf::GUI {
     setStatus(removed > 0 ? std::format("End releases removed from {} elements", removed) : "No element has end releases", false);
   }
 
+  void BeamModelEditor::toggleSelfWeight() {
+    auto& bridge = BRIDGE::buildBridge();
+    if (bridge.isRunning.load()) return;
+    const bool on = selfWeightOn();
+    editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
+      mesh.gravity = on ? std::array<double, 3>{} : standardGravity;
+      return true;
+    });
+    setStatus(on ? "Self weight off" : "Self weight on", false);
+  }
+
+  bool BeamModelEditor::selfWeightOn() const {
+    const auto mesh = currentMesh(BRIDGE::buildBridge());
+    return mesh && mesh->gravity != std::array<double, 3>{};
+  }
+
   bool BeamModelEditor::solve() {
     auto& bridge = BRIDGE::buildBridge();
     const auto mesh = currentMesh(bridge);
