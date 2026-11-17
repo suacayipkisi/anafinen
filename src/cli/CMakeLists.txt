@@ -53,12 +53,8 @@ target_link_libraries(anafinen_cli PRIVATE
     project_warnings_and_optimizations
 )
 
-# Runtime DLL copy for local build execution (vcpkg's applocal step copies only vcpkg DLLs).
+# Gmsh DLL next to the executable (vcpkg's applocal step copies only vcpkg DLLs): the same copy
+# target as anafinen (shared output folder, see the top-level CMakeLists.txt).
 if(WIN32)
-    add_custom_command(
-        TARGET anafinen_cli POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${GMSH_DLL}"
-            $<TARGET_FILE_DIR:anafinen_cli>
-    )
+    add_dependencies(anafinen_cli anaf_copy_gmsh_dll)
 endif()

@@ -174,9 +174,31 @@ if(NOT GMSH_INCLUDE_DIR OR NOT GMSH_LIBRARY OR (WIN32 AND NOT GMSH_DLL))
     message(FATAL_ERROR "Gmsh SDK or headers not found! Set GMSH_SDK_DIR properly")
 endif()
 
+# The official Windows SDK is built with MinGW g++ (SDK README.txt), so MSVC cannot link its C++ API
+# (gmsh::initialize, gmsh::model::... stay unresolved: LNK2019 / LNK1120). The SDK ships
+# include/gmsh.h_cwrap, the same C++ API as inline wrappers over the C API (gmshc.h), which has a
+# plain C ABI. With MSVC it is copied into the build tree as gmsh.h, ahead of the SDK's include
+# folder, so the SDK itself stays untouched (and a new SDK works without manual renaming).
+set(GMSH_INTERFACE_INCLUDE_DIRS "${GMSH_INCLUDE_DIR}")
+if(MSVC)
+    set(_gmsh_cwrap_dir "${CMAKE_BINARY_DIR}/_deps/gmsh-cwrap")
+    if(EXISTS "${GMSH_INCLUDE_DIR}/gmsh.h_cwrap")
+        configure_file("${GMSH_INCLUDE_DIR}/gmsh.h_cwrap" "${_gmsh_cwrap_dir}/gmsh.h" COPYONLY)
+        configure_file("${GMSH_INCLUDE_DIR}/gmshc.h" "${_gmsh_cwrap_dir}/gmshc.h" COPYONLY)
+        set(GMSH_INTERFACE_INCLUDE_DIRS "${_gmsh_cwrap_dir}" "${GMSH_INCLUDE_DIR}")
+        message(STATUS "Gmsh: MSVC uses the C API wrapper (gmsh.h_cwrap -> ${_gmsh_cwrap_dir}/gmsh.h)")
+    else()
+        file(STRINGS "${GMSH_INCLUDE_DIR}/gmsh.h" _gmsh_includes_c_api REGEX "#include[ \t]+\"gmshc\.h\"")
+        if(NOT _gmsh_includes_c_api)
+            message(FATAL_ERROR "Gmsh SDK: ${GMSH_INCLUDE_DIR} has no gmsh.h_cwrap, and its gmsh.h is the C++ API "
+                "of a MinGW-built gmsh, which MSVC cannot link. Use an official Windows64 SDK from gmsh.info.")
+        endif()
+    endif()
+endif()
+
 add_library(Gmsh::Gmsh SHARED IMPORTED)
 set_target_properties(Gmsh::Gmsh PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${GMSH_INCLUDE_DIR}"
+    INTERFACE_INCLUDE_DIRECTORIES "${GMSH_INTERFACE_INCLUDE_DIRS}"
 )
 
 if(WIN32)

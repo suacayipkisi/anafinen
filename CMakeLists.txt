@@ -314,14 +314,18 @@ add_custom_command(
         "$<TARGET_FILE_DIR:anafinen>/assets/icons/anafinen-32.png"
 )
 
-# Runtime DLL copy for local build execution
+# Runtime DLL copy for local build execution. One target for both executables (anafinen-cli is
+# built into the same folder): two POST_BUILD copies of the same DLL raced in parallel builds
+# ("open_for_read(...gmsh-4.15.dll): permission denied").
 if(WIN32)
-    add_custom_command(
-        TARGET anafinen POST_BUILD
+    add_custom_target(anaf_copy_gmsh_dll
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:anafinen>
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${GMSH_DLL}"
             $<TARGET_FILE_DIR:anafinen>
+        COMMENT "Copying the Gmsh DLL next to the executables"
     )
+    add_dependencies(anafinen anaf_copy_gmsh_dll)
 endif()
 
 # Installation rules for executable and assets

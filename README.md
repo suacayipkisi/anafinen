@@ -127,6 +127,10 @@ macOS is not supported (no test hardware).
 ## Windows
 
 - Open cmd or PowerShell; Git must be installed.
+- Building from the command line: use the **x64 Native Tools Command Prompt for VS**. Its header must say
+  `Environment initialized for: 'x64'`. The "x64_x86 Cross Tools" prompt targets 32-bit and CMake stops
+  with a 32-bit compiler error; in that case run `vcvars64.bat` (or open the right prompt) and delete the
+  build folder before configuring again.
 
 ### Clone This Repo
 
@@ -182,6 +186,7 @@ Mesh engine:
 - https://gmsh.info/bin/Windows/?C=M;O=D  
 - As of 2 Sep 2026 the latest is "gmsh-4.15.2-Windows64-sdk.zip". Do not use the git snapshots.  
 - Extract the `.zip` anywhere, for example `C:\libs\gmsh-sdk` (the folder must contain `bin`, `include`, `lib` and `share`).
+- Leave the SDK as it is. It is built with MinGW, so MSVC cannot link its C++ API; CMake copies the SDK's `include\gmsh.h_cwrap` (the same API over Gmsh's C interface) into the build folder as `gmsh.h` and uses that instead. No renaming inside the SDK is needed, also after an SDK update.
 - CMake finds the SDK and vcpkg on its own, on any drive: `GMSH_SDK_DIR` / `VCPKG_ROOT` environment variables, `vcpkg` on `PATH`, then folders such as `<drive>:\libs\gmsh-sdk`, `<drive>:\gmsh-*-Windows64-sdk` and `<drive>:\vcpkg`. The configure log prints what it found (`Gmsh SDK auto-detected: ...`). For any other location set `GMSH_SDK_DIR` (environment variable or `-DGMSH_SDK_DIR=...`).
 
 ### Finally Open Visual Studio
