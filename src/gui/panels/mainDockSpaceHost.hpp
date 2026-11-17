@@ -44,6 +44,7 @@ namespace anaf::GUI {
 
     void renderPanelsMenu();
     void renderSettingsMenu(); // Settings > Theme
+    void renderGraphicsMenu(); // Settings > Graphics (GPU choice)
 
   public:
     std::function<void()> onSelectTruss; // Analyze > Truss (1D Element)

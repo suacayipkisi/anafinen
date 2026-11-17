@@ -34,6 +34,7 @@
 #include <vector>
 
 #include <bridge/generalStatus.hpp>
+#include <platform/gpuSelection.hpp>
 #include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
 
@@ -464,6 +465,8 @@ namespace anaf::GUI {
 
   int initgui(){
     platform_utils::setupSystemCursor();
+    // Before glfwInit(): the GL / EGL driver is chosen when it loads (Settings > Graphics, next start).
+    anaf::LOG::info("{}", PLATFORM::applyGpuPreference(SETTINGS::settings().gpuPreference));
 
     // GLFW reports platform failures (e.g. a window manager without _NET_WM_MOVERESIZE) only here.
     glfwSetErrorCallback([](const int code, const char* description) {

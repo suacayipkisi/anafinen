@@ -17,10 +17,12 @@
 
 #pragma once
 
+#include <platform/gpuSelection.hpp>
+
 #include <filesystem>
 #include <string>
 
-// Per-user GUI settings (theme, UI font size, title bar, Welcome panel, viewport background, result colors and legends).
+// Per-user GUI settings (theme, UI font size, title bar, GPU, Welcome panel, viewport background, result colors and legends).
 //
 //   assets/settings/userSettings.json        defaults, shipped with the build and the packages
 //   <user config>/userSettings.json           the user's values (~/.config/anafinen, %APPDATA%\anafinen)
@@ -53,6 +55,8 @@ namespace anaf::GUI::SETTINGS {
     // Title bar: integrated into the menu bar (default; window buttons drawn by the app, menus in the
     // title bar row) or the window system's own title bar above the menu bar.
     bool integratedTitleBar{true};
+    // GPU on hybrid-graphics machines; read once before the OpenGL context exists (next start).
+    PLATFORM::E_GpuPreference gpuPreference{PLATFORM::E_GpuPreference::HighPerformance};
     bool showWelcomeOnStartup{true};
     bool gradientBackground{false}; // viewport background: flat (default) or a vertical gradient from the theme
     bool bandedResults{true};       // result colors and legends in discrete bands (else a continuous scale)

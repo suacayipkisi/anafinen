@@ -85,6 +85,25 @@ namespace anaf::GUI::SETTINGS {
       if (it != object.end() && it->is_number_integer()) value = std::clamp(it->get<int>(), minColorBands, maxColorBands);
     }
 
+    // "high_performance" / "power_saving" / "system"; anything else keeps the earlier value.
+    void readGpuPreference(const nlohmann::json& object, const char* key, PLATFORM::E_GpuPreference& value) {
+      const auto it = object.find(key);
+      if (it == object.end() || !it->is_string()) return;
+      const std::string text = it->get<std::string>();
+      if (text == "high_performance") value = PLATFORM::E_GpuPreference::HighPerformance;
+      else if (text == "power_saving") value = PLATFORM::E_GpuPreference::PowerSaving;
+      else if (text == "system") value = PLATFORM::E_GpuPreference::System;
+    }
+
+    const char* gpuPreferenceKey(const PLATFORM::E_GpuPreference preference) {
+      switch (preference) {
+        case PLATFORM::E_GpuPreference::HighPerformance: return "high_performance";
+        case PLATFORM::E_GpuPreference::PowerSaving: return "power_saving";
+        case PLATFORM::E_GpuPreference::System: return "system";
+      }
+      return "high_performance";
+    }
+
     void readLegend(const nlohmann::json& legends, const char* key, LegendSettings& legend) {
       const auto it = legends.find(key);
       if (it == legends.end() || !it->is_object()) return;
@@ -105,6 +124,9 @@ namespace anaf::GUI::SETTINGS {
       }
       if (const auto window = document.find("window"); window != document.end() && window->is_object()) {
         readChoice(*window, "titleBar", "integrated", "system", settings.integratedTitleBar);
+      }
+      if (const auto graphics = document.find("graphics"); graphics != document.end() && graphics->is_object()) {
+        readGpuPreference(*graphics, "gpu", settings.gpuPreference);
       }
       if (const auto viewport = document.find("viewport"); viewport != document.end() && viewport->is_object()) {
         readChoice(*viewport, "background", "gradient", "flat", settings.gradientBackground);
@@ -176,6 +198,7 @@ namespace anaf::GUI::SETTINGS {
     objectAt(g_document, "ui")["fontSize"] = current.uiFontSize;
     objectAt(g_document, "welcome")["showOnStartup"] = current.showWelcomeOnStartup;
     objectAt(g_document, "window")["titleBar"] = current.integratedTitleBar ? "integrated" : "system";
+    objectAt(g_document, "graphics")["gpu"] = gpuPreferenceKey(current.gpuPreference);
     nlohmann::json& viewport = objectAt(g_document, "viewport");
     viewport["background"] = current.gradientBackground ? "gradient" : "flat";
     viewport["resultColors"] = current.bandedResults ? "banded" : "continuous";

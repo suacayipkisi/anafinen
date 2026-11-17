@@ -29,12 +29,8 @@
 #include "directory/getExecutableDirectory.hpp"
 #include "test/test.hpp"
 
-#ifdef _WIN32
-extern "C" {
-  __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
-  __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-}
-#endif
+// The NvOptimusEnablement / AmdPowerXpressRequestHighPerformance exports live in
+// platform/gpuSelection.cpp: their values follow Settings > Graphics.
 
 int main() {
   anaf::LOG::setCallback(anaf::GUI::anafUILogSink);

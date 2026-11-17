@@ -204,6 +204,7 @@ set(ANAFINEN_SOURCES
     src/gui/panels/welcomePanel.cpp
     src/gui/panels/statusBar.cpp
     src/platform/resourceMonitor.cpp
+    src/platform/gpuSelection.cpp
     src/gui/fileDialogs/nativeFileDialog.cpp
 )
 

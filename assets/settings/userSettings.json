@@ -10,6 +10,9 @@
   "window": {
     "titleBar": "integrated"
   },
+  "graphics": {
+    "gpu": "high_performance"
+  },
   "viewport": {
     "background": "flat",
     "resultColors": "banded",

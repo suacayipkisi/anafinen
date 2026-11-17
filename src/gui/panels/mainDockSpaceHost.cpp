@@ -23,6 +23,9 @@
 #include <guiMaterials/theme.hpp>
 #include <guiMaterials/titleBar.hpp>
 #include <guiMaterials/userSettings.hpp>
+#include <platform/gpuSelection.hpp>
+
+#include <glad/gl.h>
 
 #include "imgui.h"
 #include "imgui_internal.h" // DockBuilder API
@@ -32,6 +35,7 @@
 #include <cmath>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace anaf::GUI {
 
@@ -44,6 +48,49 @@ namespace anaf::GUI {
       if (!available && entry.unavailableHint && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("%s", entry.unavailableHint);
       }
+    }
+    ImGui::EndMenu();
+  }
+
+  void MainDockSpaceHost::renderGraphicsMenu() {
+    if (!ICONS::iconBeginMenu(ICONS::E_IconId::ViewIso, "Graphics")) return;
+    SETTINGS::UserSettings& settings = SETTINGS::settings();
+    // Queried once: the GPU list and the renderer do not change while the program runs.
+    static const std::vector<PLATFORM::GpuDevice> installedGpus = PLATFORM::listGpus();
+    static const std::string rendererName = [] {
+      const auto* text = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+      return std::string(text ? text : "unknown");
+    }();
+
+    ImGui::SeparatorText("GPU");
+    struct Choice {
+      PLATFORM::E_GpuPreference preference;
+      const char* label;
+      const char* tooltip;
+    };
+    static constexpr std::array<Choice, 3> choices{{
+      {PLATFORM::E_GpuPreference::HighPerformance, "High Performance (discrete, default)",
+       "The discrete GPU of a hybrid-graphics laptop (NVIDIA PRIME offload / DRI_PRIME on Linux, Optimus / PowerXpress on Windows)."},
+      {PLATFORM::E_GpuPreference::PowerSaving, "Power Saving (integrated)", "The GPU that drives the displays: longer battery life, slower large models."},
+      {PLATFORM::E_GpuPreference::System, "System Default", "No request: the launcher, the OS graphics settings or the driver profile decide."},
+    }};
+    for (const Choice& choice : choices) {
+      if (ImGui::MenuItem(choice.label, nullptr, settings.gpuPreference == choice.preference)) {
+        settings.gpuPreference = choice.preference;
+        SETTINGS::save();
+      }
+      ImGui::SetItemTooltip("%s", choice.tooltip);
+    }
+
+    ImGui::Separator();
+    ImGui::TextDisabled("In use: %s", rendererName.c_str());
+    if (!installedGpus.empty()) {
+      for (const PLATFORM::GpuDevice& gpu : installedGpus) {
+        ImGui::TextDisabled("  %s  (%s%s)", gpu.name.c_str(), gpu.display ? "displays, " : "", gpu.driver.c_str());
+      }
+    }
+    if (settings.gpuPreference != PLATFORM::appliedGpuPreference()) {
+      ImGui::TextColored(THEME::theme().warn, "Restart anafinen to switch the GPU.");
     }
     ImGui::EndMenu();
   }
@@ -90,6 +137,7 @@ namespace anaf::GUI {
       ImGui::SetItemTooltip("The window system's own title bar above the menu bar.");
       ImGui::EndMenu();
     }
+    renderGraphicsMenu();
     if (ICONS::iconBeginMenu(ICONS::E_IconId::PanelViewport, "Viewport")) {
       SETTINGS::UserSettings& settings = SETTINGS::settings();
       ImGui::SeparatorText("Background");
