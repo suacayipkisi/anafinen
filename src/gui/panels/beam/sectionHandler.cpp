@@ -17,6 +17,7 @@
 
 #include "sectionHandler.hpp"
 
+#include <guiMaterials/iconAtlas.hpp>
 #include <guiMaterials/theme.hpp>
 #include <panels/propertyGrid.hpp>
 
@@ -45,6 +46,9 @@ namespace anaf::GUI {
     constexpr double poisson = 0.3; // shown shear areas only; the solve uses each element's material
     constexpr std::array<const char*, 6> shapeLabels{"General (values)", "Rectangle", "Circle", "Pipe (CHS)", "Box (RHS / SHS)", "I / H section"};
     constexpr std::array<const char*, 6> shapeNames{"general", "rectangle", "circle", "pipe", "box", "I"};
+    constexpr std::array<ICONS::E_IconId, 6> shapeIcons{ICONS::E_IconId::SectionGeneral, ICONS::E_IconId::SectionRectangle,
+                                                        ICONS::E_IconId::SectionCircle,  ICONS::E_IconId::SectionPipe,
+                                                        ICONS::E_IconId::SectionBox,     ICONS::E_IconId::SectionIShape};
 
     // Case-insensitive substring test without copies (it runs for every section every frame).
     bool contains(const std::string_view text, const std::string_view part) {
@@ -206,7 +210,7 @@ namespace anaf::GUI {
             if (section.getIsBuiltin()) ImGui::TextDisabled("Catalogue");
             else ImGui::TextUnformatted("User");
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(shapeNames[section.getShape().index()]);
+            ICONS::iconText(shapeIcons[section.getShape().index()], shapeNames[section.getShape().index()]);
             ImGui::TableNextColumn();
             ImGui::Text("%.4g", p.area / cm2ToM2);
             ImGui::TableNextColumn();
@@ -242,7 +246,7 @@ namespace anaf::GUI {
       ImGui::TextDisabled("Click a section in the table.");
       return;
     }
-    ImGui::TextUnformatted(selected->getName().c_str());
+    ICONS::iconText(shapeIcons[selected->getShape().index()], selected->getName().c_str());
     drawSection("SelectedSectionCanvas", selected->getShape(), ImVec2(-FLT_MIN, 180.0f));
     propertyRows("SelectedSectionProperties", selected->getShape());
   }
@@ -255,7 +259,12 @@ namespace anaf::GUI {
       if (PROPERTY::group("General")) {
         PROPERTY::inputText("Name", d.name.data(), d.name.size(), "Unique name; mesh files refer to the section by it.");
         PROPERTY::row("Shape");
-        ImGui::Combo("##section_shape", &d.shape, shapeLabels.data(), static_cast<int>(shapeLabels.size()));
+        if (ImGui::BeginCombo("##section_shape", shapeLabels[static_cast<std::size_t>(d.shape)])) {
+          for (std::size_t i = 0; i < shapeLabels.size(); ++i) {
+            if (ICONS::iconSelectable(shapeIcons[i], shapeLabels[i], d.shape == static_cast<int>(i))) d.shape = static_cast<int>(i);
+          }
+          ImGui::EndCombo();
+        }
       }
       if (d.shape == 0) {
         if (PROPERTY::group("Values")) {

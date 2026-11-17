@@ -17,6 +17,7 @@
 
 #include "logTerminal.hpp"
 
+#include <guiMaterials/iconAtlas.hpp>
 #include <guiMaterials/theme.hpp>
 
 #include <log/anaf_info.hpp>
@@ -35,7 +36,7 @@ namespace anaf::GUI {
     // The panel (tab, controls, status footer) uses the UI font; only the log lines are monospace.
     ImGui::Begin("Console", &isOpen);
 
-    if (ImGui::Button("Clear")) {
+    if (ICONS::iconTextButton(ICONS::E_IconId::ActionClear, "Clear")) {
       std::lock_guard<std::mutex> lock(g_logMutex);
       g_uiLogs.clear();
     }
@@ -60,7 +61,7 @@ namespace anaf::GUI {
 
     static float s_copiedFeedbackTimer = 0.0f;
     ImGui::SameLine();
-    if (ImGui::Button("Copy Last Log")) {
+    if (ICONS::iconTextButton(ICONS::E_IconId::ActionCopy, "Copy Last Log")) {
       std::lock_guard<std::mutex> lock(g_logMutex);
       if(!g_uiLogs.empty()) {
         ImGui::SetClipboardText(g_uiLogs.back().text.c_str());

@@ -143,5 +143,11 @@ namespace anaf::GUI::ICONS {
   bool iconTreeNode(const char* strId, E_IconId id, const char* label, ImGuiTreeNodeFlags flags = 0);
   // Selectable (popup list entry) with an icon before its label.
   bool iconSelectable(E_IconId id, const char* label, bool selected);
+  // Menu item / sub menu with an icon in the menu's icon column (ImGui's MenuItemEx / BeginMenuEx with a
+  // blank icon text of the icon's width, the icon drawn over it; dimmed when disabled).
+  bool iconMenuItem(E_IconId id, const char* label, const char* shortcut = nullptr, bool selected = false, bool enabled = true);
+  bool iconBeginMenu(E_IconId id, const char* label, bool enabled = true);
+  // Normal framed button with an icon before its label, size like ImGui::Button (0 = fit).
+  bool iconTextButton(E_IconId id, const char* label, ImVec2 size = ImVec2(0.0f, 0.0f));
 
 } // namespace anaf::GUI::ICONS end

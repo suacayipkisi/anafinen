@@ -27,6 +27,7 @@
 // nanosvg (zlib license, external/nanosvg/): the implementation lives in this translation unit only.
 #define NANOSVG_IMPLEMENTATION
 #define NANOSVGRAST_IMPLEMENTATION
+#include "imgui_internal.h" // MenuItemEx / BeginMenuEx, menu column offsets
 #include "nanosvg.h"
 #include "nanosvgrast.h"
 
@@ -274,6 +275,75 @@ namespace anaf::GUI::ICONS {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     const float textX = drawIcon(drawList, id, min, size) ? min.x + size + gap : min.x;
     drawList->AddText(ImVec2(textX, min.y), ImGui::GetColorU32(ImGuiCol_Text), label);
+    return clicked;
+  }
+
+  namespace {
+    // Blank text as wide as a row icon: reserves the menu's icon column.
+    const char* iconPlaceholder() {
+      static std::string s_text;
+      static float s_forSize = 0.0f;
+      const float size = rowSize();
+      if (s_forSize != size) {
+        s_forSize = size;
+        const float space = std::max(ImGui::CalcTextSize(" ").x, 1.0f);
+        s_text.assign(static_cast<std::size_t>(std::ceil(size / space)), ' ');
+      }
+      return s_text.c_str();
+    }
+
+    // Icon in the icon column of a menu row that started at rowPos in window.
+    void drawMenuIcon(ImGuiWindow* window, const E_IconId id, const ImVec2 rowPos, const float baseOffset, const bool enabled) {
+      const float size = rowSize();
+      const std::optional<IconImage> image = icon(id, size);
+      if (!image) return;
+      const ImVec2 min(std::round(rowPos.x + window->DC.MenuColumns.OffsetIcon),
+                       std::round(rowPos.y + baseOffset + (ImGui::GetFontSize() - size) * 0.5f));
+      const ImU32 tint = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, enabled ? 1.0f : ImGui::GetStyle().DisabledAlpha));
+      window->DrawList->AddImage(image->texture, min, ImVec2(min.x + size, min.y + size), image->uv0, image->uv1, tint);
+    }
+  } // namespace end
+
+  bool iconMenuItem(const E_IconId id, const char* label, const char* shortcut, const bool selected, const bool enabled) {
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const ImVec2 pos = window->DC.CursorPos;
+    const float baseOffset = window->DC.CurrLineTextBaseOffset;
+    const bool clicked = ImGui::MenuItemEx(label, iconPlaceholder(), shortcut, selected, enabled);
+    drawMenuIcon(window, id, pos, baseOffset, enabled);
+    return clicked;
+  }
+
+  bool iconBeginMenu(const E_IconId id, const char* label, const bool enabled) {
+    // The row belongs to the parent menu; an open sub menu becomes the current window.
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const ImVec2 pos = window->DC.CursorPos;
+    const float baseOffset = window->DC.CurrLineTextBaseOffset;
+    const bool open = ImGui::BeginMenuEx(label, iconPlaceholder(), enabled);
+    drawMenuIcon(window, id, pos, baseOffset, enabled);
+    return open;
+  }
+
+  bool iconTextButton(const E_IconId id, const char* label, const ImVec2 size) {
+    const float iconSize = rowSize();
+    const float gap = ImGui::GetStyle().ItemInnerSpacing.x;
+    const char* labelEnd = ImGui::FindRenderedTextEnd(label);
+    const ImVec2 textSize = ImGui::CalcTextSize(label, labelEnd);
+    const ImVec2 padding = ImGui::GetStyle().FramePadding;
+    const ImVec2 fit(iconSize + gap + textSize.x + 2.0f * padding.x, ImGui::GetFrameHeight());
+    ImVec2 buttonSize(size.x == 0.0f ? fit.x : size.x, size.y == 0.0f ? fit.y : size.y);
+    if (buttonSize.x < 0.0f) buttonSize.x = std::max(ImGui::GetContentRegionAvail().x + buttonSize.x, 1.0f);
+    ImGui::PushID(label);
+    const bool clicked = ImGui::Button("##iconTextButton", buttonSize);
+    ImGui::PopID();
+    const ImVec2 min = ImGui::GetItemRectMin();
+    const ImVec2 max = ImGui::GetItemRectMax();
+    // Icon and text centered as one block.
+    const float contentWidth = iconSize + gap + textSize.x;
+    const float x = std::max(min.x + padding.x, std::round(min.x + (max.x - min.x - contentWidth) * 0.5f));
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const bool drawn = drawIcon(drawList, id, ImVec2(x, std::round(min.y + (max.y - min.y - iconSize) * 0.5f)), iconSize);
+    const float textX = drawn ? x + iconSize + gap : x + (iconSize + gap) * 0.5f;
+    drawList->AddText(ImVec2(textX, min.y + (max.y - min.y - textSize.y) * 0.5f), ImGui::GetColorU32(ImGuiCol_Text), label, labelEnd);
     return clicked;
   }
 

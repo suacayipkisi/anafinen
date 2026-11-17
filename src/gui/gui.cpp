@@ -27,6 +27,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string_view>
 #include <thread>
@@ -43,10 +44,12 @@
 
 #include "panels/aboutPanel.hpp"
 #include "panels/analysisSelector.hpp"
+#include "panels/analysisSettingsPanel.hpp"
 #include "panels/beam/beamDiagramPanel.hpp"
 #include "panels/beam/beamModelEditor.hpp"
 #include "panels/beam/sectionHandler.hpp"
 #include "panels/fileIoPanel.hpp"
+#include "panels/libraryDialog.hpp"
 #include "panels/logTerminal.hpp"
 #include "panels/mainDockSpaceHost.hpp"
 #include "panels/materialHandler.hpp"
@@ -157,7 +160,106 @@ namespace anaf::GUI {
       SectionHandler* sections = nullptr;
       BeamDiagramPanel* diagrams = nullptr;
       WelcomePanel* welcome = nullptr;
+      ViewportToolbar* toolbar = nullptr;
+      LibraryDialog* library = nullptr;
+      AnalysisSettingsPanel* analysisSettings = nullptr;
     };
+
+    anaf::BRIDGE::E_ObjectType activeType() { return anaf::BRIDGE::buildBridge().objectType.load(); }
+
+    // A static solve can start: a model type with something to solve, no job running, static loads.
+    bool canSolve() {
+      auto& bridge = anaf::BRIDGE::buildBridge();
+      if (bridge.isRunning.load() || bridge.isGeneratingPreview.load()) return false;
+      if (bridge.loadKind.load() == anaf::BRIDGE::E_LoadKind::Dynamic) return false;
+      std::lock_guard lock(bridge.dataMutex);
+      switch (bridge.objectType.load()) {
+        case anaf::BRIDGE::E_ObjectType::BeamFrame: return bridge.activeBeamMesh && !bridge.activeBeamMesh->elements.empty();
+        case anaf::BRIDGE::E_ObjectType::TrussSqpt: return true; // built from the panel inputs
+        case anaf::BRIDGE::E_ObjectType::TrussImportedOrEntered: return bridge.activeMesh && !bridge.activeMesh->trussElements.empty();
+        default: return false;
+      }
+    }
+
+    void solveActive(const UIPanels& panels) {
+      switch (activeType()) {
+        case anaf::BRIDGE::E_ObjectType::BeamFrame: panels.beamEditor->solve(); break;
+        case anaf::BRIDGE::E_ObjectType::TrussSqpt: panels.control->solve(); break;
+        case anaf::BRIDGE::E_ObjectType::TrussImportedOrEntered: panels.editor->solve(); break;
+        default: break;
+      }
+    }
+
+    void clearActiveModel(const UIPanels& panels) {
+      auto& bridge = anaf::BRIDGE::buildBridge();
+      if (bridge.isRunning.load() || bridge.isGeneratingPreview.load()) return;
+      const auto type = activeType();
+      if (type == anaf::BRIDGE::E_ObjectType::NoType) return;
+      bridge.resetModel(type);
+      panels.control->resetState();
+      panels.editor->resetState();
+      panels.beamEditor->resetState();
+    }
+
+    void bindCommands(UIPanels panels) {
+      panels.toolbar->commands.isAvailable = [](const E_ModelCommand command) {
+        const auto type = activeType();
+        const bool editable = type == anaf::BRIDGE::E_ObjectType::BeamFrame || type == anaf::BRIDGE::E_ObjectType::TrussImportedOrEntered;
+        const bool busy = anaf::BRIDGE::buildBridge().isRunning.load();
+        switch (command) {
+          case E_ModelCommand::Library: return true;
+          case E_ModelCommand::AddNode:
+          case E_ModelCommand::AddElement: return editable && !busy;
+          case E_ModelCommand::Materials:
+          case E_ModelCommand::AnalysisSettings: return type != anaf::BRIDGE::E_ObjectType::NoType;
+          case E_ModelCommand::Sections:
+          case E_ModelCommand::Diagrams: return type == anaf::BRIDGE::E_ObjectType::BeamFrame;
+          case E_ModelCommand::Solve: return canSolve();
+        }
+        return false;
+      };
+      panels.toolbar->commands.run = [panels](const E_ModelCommand command) {
+        const bool beam = activeType() == anaf::BRIDGE::E_ObjectType::BeamFrame;
+        switch (command) {
+          case E_ModelCommand::Library: panels.library->open(); break;
+          case E_ModelCommand::AddNode:
+            if (beam) panels.beamEditor->openAddNode();
+            else panels.editor->openAddNode();
+            break;
+          case E_ModelCommand::AddElement:
+            if (beam) panels.beamEditor->openAddElement();
+            else panels.editor->openAddBar();
+            break;
+          case E_ModelCommand::Materials: panels.matWindow->isOpen = true; break;
+          case E_ModelCommand::Sections: panels.sections->isOpen = true; break;
+          case E_ModelCommand::Solve: solveActive(panels); break;
+          case E_ModelCommand::AnalysisSettings: panels.analysisSettings->open(); break;
+          case E_ModelCommand::Diagrams: panels.diagrams->isOpen = !panels.diagrams->isOpen; break;
+        }
+      };
+
+      panels.dock->onOpenLibrary = [panels] { panels.library->open(); };
+      panels.dock->onClearModel = [panels] { clearActiveModel(panels); };
+      panels.dock->onRunSolver = [panels] { solveActive(panels); };
+      panels.dock->canRunSolver = [] { return canSolve(); };
+      panels.dock->onAnalysisSettings = [panels] { panels.analysisSettings->open(); };
+      panels.dock->hasModel = [] { return activeType() != anaf::BRIDGE::E_ObjectType::NoType; };
+
+      // The library models are solved for the static loads, so the editors must show those.
+      panels.library->onLoad = [panels](const std::filesystem::path& path) {
+        anaf::BRIDGE::buildBridge().loadKind = anaf::BRIDGE::E_LoadKind::Constant;
+        panels.fileIo->importFile(path);
+      };
+
+      panels.tree->onAssignAll = [panels] {
+        if (activeType() == anaf::BRIDGE::E_ObjectType::BeamFrame) panels.beamEditor->openAssignAll();
+        else panels.editor->openAssignAll();
+      };
+      panels.tree->onRemoveAllReleases = [panels] { panels.beamEditor->removeAllReleases(); };
+      panels.tree->onOpenMaterials = [panels] { panels.matWindow->isOpen = true; };
+      panels.tree->onOpenSections = [panels] { panels.sections->isOpen = true; };
+      panels.tree->onOpenDiagrams = [panels] { panels.diagrams->isOpen = true; };
+    }
 
     void closeBeamPanels(const UIPanels& panels) {
       panels.beamEditor->isOpen = false;
@@ -208,7 +310,8 @@ namespace anaf::GUI {
       };
       panels.beamEditor->onOpenMaterialHandler = [panels] { panels.matWindow->isOpen = true; };
       panels.beamEditor->onOpenSectionHandler = [panels] { panels.sections->isOpen = true; };
-      panels.beamEditor->onLoadBuiltin = [panels](const std::filesystem::path& path) { panels.fileIo->importFile(path); };
+      panels.beamEditor->onOpenLibrary = [panels] { panels.library->open(); };
+      panels.beamEditor->onOpenDiagrams = [panels] { panels.diagrams->isOpen = true; };
 
       panels.control->onOpenMaterialHandler = [panels] {
         panels.matWindow->isOpen = true;
@@ -217,31 +320,30 @@ namespace anaf::GUI {
         panels.matWindow->isOpen = true;
       };
       panels.editor->onRequestImport = [panels] { panels.fileIo->requestImport(); };
-      panels.editor->onLoadBuiltin = [panels](const std::filesystem::path& path) { panels.fileIo->importFile(path); };
+      panels.editor->onOpenLibrary = [panels] { panels.library->open(); };
 
       // Panels menu: only the panels the active analysis uses can be reopened.
-      const auto activeType = [] { return anaf::BRIDGE::buildBridge().objectType.load(); };
-      panels.dock->addPanelMenuEntry({"3D Simulation Viewport", panels.viewport, {}, nullptr});
-      panels.dock->addPanelMenuEntry({"Truss(1D) Analysis Set", panels.control,
-        [activeType] { return activeType() == anaf::BRIDGE::E_ObjectType::TrussSqpt; },
-        "Only for the Simple Quadrangle truss (Analyze > Truss (1D Element))"});
-      panels.dock->addPanelMenuEntry({"Truss(1D) Model Editor", panels.editor,
-        [activeType] { return activeType() == anaf::BRIDGE::E_ObjectType::TrussImportedOrEntered; },
-        "Only for an imported / self-built truss (Analyze > Truss (1D Element))"});
-      const auto beamActive = [activeType] { return activeType() == anaf::BRIDGE::E_ObjectType::BeamFrame; };
-      panels.dock->addPanelMenuEntry({"Beam(3D) Frame Editor", panels.beamEditor, beamActive,
-        "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))"});
+      panels.dock->addPanelMenuEntry({"3D Simulation Viewport", panels.viewport, {}, nullptr, ICONS::E_IconId::PanelViewport});
+      panels.dock->addPanelMenuEntry({"Grid Truss Generator", panels.control,
+        [] { return activeType() == anaf::BRIDGE::E_ObjectType::TrussSqpt; },
+        "Only for the Simple Quadrangle truss (Analyze > Truss (1D Element))", ICONS::E_IconId::ModelTruss});
+      panels.dock->addPanelMenuEntry({"Properties (Truss)", panels.editor,
+        [] { return activeType() == anaf::BRIDGE::E_ObjectType::TrussImportedOrEntered; },
+        "Only for an imported / self-built truss (Analyze > Truss (1D Element))", ICONS::E_IconId::PanelProperties});
+      const auto beamActive = [] { return activeType() == anaf::BRIDGE::E_ObjectType::BeamFrame; };
+      panels.dock->addPanelMenuEntry({"Properties (Beam / Frame)", panels.beamEditor, beamActive,
+        "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))", ICONS::E_IconId::PanelProperties});
       panels.dock->addPanelMenuEntry({"Beam Diagrams", panels.diagrams, beamActive,
-        "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))"});
+        "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))", ICONS::E_IconId::ResultDiagram});
       panels.dock->addPanelMenuEntry({"Section Handler", panels.sections, beamActive,
-        "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))"});
+        "Only for a beam / frame model (Analyze > Beam / Frame (3D Element))", ICONS::E_IconId::ModelSection});
       panels.dock->addPanelMenuEntry({"Material Handler", panels.matWindow,
-        [activeType] { return activeType() != anaf::BRIDGE::E_ObjectType::NoType; },
-        "Select an analysis first (Analyze menu)"});
+        [] { return activeType() != anaf::BRIDGE::E_ObjectType::NoType; },
+        "Select an analysis first (Analyze menu)", ICONS::E_IconId::ModelMaterial});
       panels.dock->addPanelMenuEntry({"Model Tree", panels.tree,
-        [activeType] { return activeType() != anaf::BRIDGE::E_ObjectType::NoType; },
-        "Select an analysis first (Analyze menu)"});
-      panels.dock->addPanelMenuEntry({"Console", panels.console, {}, nullptr});
+        [] { return activeType() != anaf::BRIDGE::E_ObjectType::NoType; },
+        "Select an analysis first (Analyze menu)", ICONS::E_IconId::PanelTree});
+      panels.dock->addPanelMenuEntry({"Console", panels.console, {}, nullptr, ICONS::E_IconId::PanelConsole});
 
       panels.dock->onShowAbout = [panels] { panels.about->isOpen = true; };
       panels.dock->onShowWelcome = [panels] { panels.welcome->open(); };
@@ -283,7 +385,7 @@ namespace anaf::GUI {
       // Both share the display toggles; the viewport reads them in renderSceneOpenGL().
       auto display = std::make_shared<ViewportDisplayOptions>();
       auto viewport = panelManager.addPanel<ViewportPanel>(fbo, display);
-      panelManager.addPanel<ViewportToolbar>(display, viewport.get());
+      auto toolbar = panelManager.addPanel<ViewportToolbar>(display, viewport.get());
       auto tree = panelManager.addPanel<ModelTree>();
       auto analysisSelector = panelManager.addPanel<AnalysisSelector>();
       auto trussControl = panelManager.addPanel<TrussControlPanel>();
@@ -295,6 +397,8 @@ namespace anaf::GUI {
       auto beamEditor = panelManager.addPanel<BeamModelEditor>();
       auto sections = panelManager.addPanel<SectionHandler>();
       auto diagrams = panelManager.addPanel<BeamDiagramPanel>();
+      auto library = panelManager.addPanel<LibraryDialog>();
+      auto analysisSettings = panelManager.addPanel<AnalysisSettingsPanel>();
       // Last, so it is drawn (and focused) on top of the docked panels.
       auto welcome = panelManager.addPanel<WelcomePanel>();
 
@@ -312,7 +416,10 @@ namespace anaf::GUI {
         beamEditor.get(),
         sections.get(),
         diagrams.get(),
-        welcome.get()
+        welcome.get(),
+        toolbar.get(),
+        library.get(),
+        analysisSettings.get()
       };
 
       analysisSelector->isOpen = false;
@@ -325,6 +432,7 @@ namespace anaf::GUI {
       diagrams->isOpen = false;
 
       bindAnalysisFlow(panels);
+      bindCommands(panels);
 
       return viewport;
     }

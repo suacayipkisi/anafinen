@@ -19,12 +19,16 @@
 
 #include "imgui.h"
 
+#include <bridge/generalStatus.hpp>
 #include <guiMaterials/iconAtlas.hpp>
 #include <guiMaterials/theme.hpp>
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -73,6 +77,34 @@ namespace anaf::GUI {
       ImGui::Dummy(ImVec2(1.0f, height));
       ImGui::SameLine();
     }
+    // Scale that draws the largest nodal displacement as 5 % of the model's bounding-box diagonal.
+    template <typename Nodes>
+    std::optional<double> fittedScale(const Nodes& nodes) {
+      double largest = 0.0;
+      std::array<double, 3> low{1e300, 1e300, 1e300}, high{-1e300, -1e300, -1e300};
+      for (const auto& node : nodes) {
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+          low[axis] = std::min(low[axis], node.getLocation()[axis]);
+          high[axis] = std::max(high[axis], node.getLocation()[axis]);
+        }
+        const auto& d = node.getDisplacement();
+        largest = std::max(largest, std::hypot(d[0], d[1], d[2]));
+      }
+      const double size = std::hypot(high[0] - low[0], high[1] - low[1], high[2] - low[2]);
+      if (!(largest > 0.0) || !(size > 0.0)) return std::nullopt;
+      return 0.05 * size / largest;
+    }
+
+    // Auto scale of the active model's results; nothing without results.
+    std::optional<double> autoDeformationScale(BRIDGE::GuiCalcBridge& bridge) {
+      std::lock_guard lock(bridge.dataMutex);
+      if (bridge.objectType.load() == BRIDGE::E_ObjectType::BeamFrame) {
+        if (!bridge.activeBeamMesh || !bridge.activeBeamMesh->hasResults) return std::nullopt;
+        return fittedScale(bridge.activeBeamMesh->nodes);
+      }
+      if (!bridge.activeMesh || !bridge.activeMesh->hasResults) return std::nullopt;
+      return fittedScale(bridge.activeMesh->trussNodes);
+    }
   } // namespace end
 
   float ViewportToolbar::windowHeight() {
@@ -108,6 +140,9 @@ namespace anaf::GUI {
       }
       ImGui::SetItemTooltip("%s (%s)\n%s", label, value ? "on" : "off", tooltip);
     };
+
+    renderModelCommands();
+    groupSeparator();
 
     // Keeps the camera reset accessible without keyboard focus on the viewport.
     if (ICONS::iconButton("Fit", ICONS::E_IconId::ViewFit, false, "Reset Camera")) {
@@ -161,9 +196,80 @@ namespace anaf::GUI {
                      "Element colors: stress (truss axial, beam von Mises) or displacement")) {
       options.changed = true;
     }
+    ImGui::SameLine();
+    renderDeformation();
 
     ImGui::PopStyleVar(3);
     ImGui::End();
+  }
+
+  void ViewportToolbar::renderModelCommands() {
+    struct Command {
+      E_ModelCommand command;
+      ICONS::E_IconId icon;
+      const char* label;
+      const char* tooltip;
+      bool groupEnd; // separator after it
+    };
+    constexpr std::array<Command, 8> buttons{{
+      {E_ModelCommand::Library, ICONS::E_IconId::ModelLibrary, "Examples", "Open Example...\nBuilt-in beam and truss models", true},
+      {E_ModelCommand::AddNode, ICONS::E_IconId::ModelNode, "Add Node", "Add Node...\nNew node at typed coordinates", false},
+      {E_ModelCommand::AddElement, ICONS::E_IconId::ModelElementBeam, "Add Element", "Add Element...\nNew element between two nodes", false},
+      {E_ModelCommand::Materials, ICONS::E_IconId::ModelMaterial, "Materials", "Material Handler", false},
+      {E_ModelCommand::Sections, ICONS::E_IconId::ModelSection, "Sections", "Section Handler (beam sections)", true},
+      {E_ModelCommand::AnalysisSettings, ICONS::E_IconId::AnalysisStatic, "Analysis", "Analysis Settings...\nStatic or dynamic", false},
+      {E_ModelCommand::Solve, ICONS::E_IconId::ActionSolve, "Solve", "Run Solver (F5)", false},
+      {E_ModelCommand::Diagrams, ICONS::E_IconId::ResultDiagram, "Diagrams", "Beam Diagrams\nSection forces, displacements and stresses along an element", true},
+    }};
+    const bool truss = BRIDGE::buildBridge().objectType.load() != BRIDGE::E_ObjectType::BeamFrame;
+    for (std::size_t i = 0; i < buttons.size(); ++i) {
+      const Command& button = buttons[i];
+      if (i > 0) {
+        if (buttons[i - 1].groupEnd) groupSeparator();
+        else ImGui::SameLine();
+      }
+      const bool available = !commands.isAvailable || commands.isAvailable(button.command);
+      // The element command follows the model: a bar for trusses.
+      const ICONS::E_IconId icon = button.command == E_ModelCommand::AddElement && truss ? ICONS::E_IconId::ModelElementBar : button.icon;
+      const char* tooltip = button.command == E_ModelCommand::AddElement && truss ? "Add Bar...\nNew bar between two nodes" : button.tooltip;
+      ImGui::BeginDisabled(!available);
+      if (ICONS::iconButton(button.label, icon, false, button.label) && commands.run) commands.run(button.command);
+      ImGui::EndDisabled();
+      ImGui::SetItemTooltip("%s", tooltip);
+    }
+  }
+
+  void ViewportToolbar::renderDeformation() {
+    auto& bridge = BRIDGE::buildBridge();
+    const double scale = bridge.deformScale.load();
+    if (ICONS::iconButton("Deformation", ICONS::E_IconId::ResultDisplacement, scale != 1.0, "Deformation", true)) {
+      ImGui::OpenPopup("Deformation");
+    }
+    ImGui::SetItemTooltip("Deformation scale: %.4g\nThe drawn shape is location + displacement x scale (rotations too)", scale);
+    if (!ImGui::BeginPopup("Deformation")) return;
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(5.0f, 3.0f));
+    ImGui::TextDisabled("Deformation scale");
+    double typed = scale;
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.0f);
+    if (ImGui::InputDouble("##deformation_scale", &typed, 0.0, 0.0, "%.4g")) {
+      bridge.deformScale = std::max(typed, 0.0);
+      bridge.dataVersion.fetch_add(1, std::memory_order_release);
+    }
+    const std::optional<double> fitted = autoDeformationScale(bridge);
+    ImGui::BeginDisabled(!fitted);
+    if (ImGui::Button("Auto") && fitted) {
+      bridge.deformScale = *fitted;
+      bridge.dataVersion.fetch_add(1, std::memory_order_release);
+    }
+    ImGui::SetItemTooltip("Draw the largest nodal displacement as 5 %% of the model size (needs results)");
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("True Size")) {
+      bridge.deformScale = 1.0;
+      bridge.dataVersion.fetch_add(1, std::memory_order_release);
+    }
+    ImGui::PopStyleVar();
+    ImGui::EndPopup();
   }
 
 } // namespace anaf::GUI end

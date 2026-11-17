@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <guiMaterials/iconAtlas.hpp>
 #include <guiMaterials/iPanel.hpp>
 
 #include <GLFW/glfw3.h>
@@ -33,6 +34,7 @@ namespace anaf::GUI {
     IPanel* panel{nullptr};
     std::function<bool()> isAvailable; // empty = always; false = the active analysis does not use it
     const char* unavailableHint{nullptr};
+    ICONS::E_IconId icon{ICONS::E_IconId::PanelProperties};
   };
 
   class MainDockSpaceHost : public IPanel {
@@ -50,6 +52,12 @@ namespace anaf::GUI {
     std::function<void()> onExportResults;
     std::function<void()> onShowAbout;
     std::function<void()> onShowWelcome; // Help > Welcome
+    std::function<void()> onOpenLibrary;  // File > Open Example...
+    std::function<void()> onClearModel;   // File > Clear Model
+    std::function<void()> onRunSolver;    // Analyze > Run Solver (F5)
+    std::function<void()> onAnalysisSettings;
+    std::function<bool()> canRunSolver;   // empty = always
+    std::function<bool()> hasModel;       // an analysis type is active (Clear Model, Analysis Settings)
 
     explicit MainDockSpaceHost(GLFWwindow* window) : m_window(window) {}
 

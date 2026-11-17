@@ -36,6 +36,7 @@
 
 #include <bridge/generalStatus.hpp>
 #include <log/anaf_info.hpp>
+#include <guiMaterials/iconAtlas.hpp>
 #include <panels/editorLayout.hpp>
 #include <panels/propertyGrid.hpp>
 #include <panels/truss/materialCombo.hpp>
@@ -115,7 +116,7 @@ namespace anaf::GUI {
       const bool valid = bridge.isValid.load();
       ImGui::TextColored(valid ? THEME::theme().good : THEME::theme().warn, "%s", valid ? "Solved, energy check passed" : "Results shown (energy check not passed)");
     } else {
-      ImGui::TextDisabled("No results yet: run the solver below.");
+      ImGui::TextDisabled("No results yet: Run Solver (F5).");
     }
     LAYOUT::endCard();
   }
@@ -272,35 +273,22 @@ namespace anaf::GUI {
     ImGui::TextDisabled("Self weight is always applied.");
   }
 
-  void TrussControlPanel::renderSolve(BRIDGE::GuiCalcBridge& bridge) {
-    LAYOUT::field("Deformation");
-    double currentScale = bridge.deformScale.load();
-    if (ImGui::InputDouble("##deformation_scale", &currentScale, 0.0, 0.0, "%.3f")) {
-      bridge.deformScale = currentScale;
-      bridge.dataVersion.fetch_add(1, std::memory_order_release);
-    }
-    ImGui::SetItemTooltip("Deformation scale of the drawn shape (1 = true size)");
-
+  bool TrussControlPanel::solve() {
+    auto& bridge = BRIDGE::buildBridge();
     std::uint32_t materialIndex{};
-    if (bridge.isRunning) {
-      ImGui::ProgressBar(bridge.progress.load(), ImVec2(-FLT_MIN, 0.0f));
-      ImGui::BeginDisabled();
-      LAYOUT::primaryButton("Calculating...");
-      ImGui::EndDisabled();
-    }
-    else if (LAYOUT::primaryButton("Run Solver for Truss") && resolveMaterialIndex(bridge, m_materialID, materialIndex)) {
-      // The grid is rebuilt from the current inputs on the worker, like the preview.
-      TRUSS_WORKER::startSolve(bridge,
-        [cubeNumX = m_cubeNumX, cubeNumY = m_cubeNumY, cubeNumZ = m_cubeNumZ, cubeEdgeLength = m_cubeEdgeLength,
-         crossSectionalArea = m_crossSectionalArea, type = materialIndex,
-         forcesToApply = m_appliedForces, supports = m_supports]() -> std::expected<std::shared_ptr<const FEM::TRUSS::MeshData>, std::string> {
-          auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
-          if (!built) return std::unexpected(built.error());
-          built->appliedForces = forcesToApply;
-          applySupports(*built, supports);
-          return std::make_shared<const FEM::TRUSS::MeshData>(std::move(*built));
-        });
-    }
+    if (bridge.isRunning.load() || bridge.isGeneratingPreview.load() || !resolveMaterialIndex(bridge, m_materialID, materialIndex)) return false;
+    // The grid is rebuilt from the current inputs on the worker, like the preview.
+    TRUSS_WORKER::startSolve(bridge,
+      [cubeNumX = m_cubeNumX, cubeNumY = m_cubeNumY, cubeNumZ = m_cubeNumZ, cubeEdgeLength = m_cubeEdgeLength,
+       crossSectionalArea = m_crossSectionalArea, type = materialIndex,
+       forcesToApply = m_appliedForces, supports = m_supports]() -> std::expected<std::shared_ptr<const FEM::TRUSS::MeshData>, std::string> {
+        auto built = FEM::TRUSS::buildSimpleTruss({cubeNumX, cubeNumY, cubeNumZ}, cubeEdgeLength, crossSectionalArea * 1e-4, type);
+        if (!built) return std::unexpected(built.error());
+        built->appliedForces = forcesToApply;
+        applySupports(*built, supports);
+        return std::make_shared<const FEM::TRUSS::MeshData>(std::move(*built));
+      });
+    return true;
   }
 
   void TrussControlPanel::onImGuiRender() {
@@ -312,12 +300,11 @@ namespace anaf::GUI {
       currentSelectedNode = bridge.selectedNodeId;
     }
 
-    const auto loadKind = bridge.loadKind.load();
-    const bool dynamic = loadKind == BRIDGE::E_LoadKind::Dynamic;
-    // Footer rows: deformation scale (+ progress bar) and Clear All; one run button.
-    const float footer = dynamic ? LAYOUT::footerHeight(1, 1) : LAYOUT::footerHeight(bridge.isRunning ? 3 : 2, 1);
+    const bool dynamic = bridge.loadKind.load() == BRIDGE::E_LoadKind::Dynamic;
+    // Footer: Clear All (solving is a toolbar / Analyze menu command).
+    const float footer = LAYOUT::footerHeight(1, 0);
 
-    ImGui::Begin("Truss(1D) Analysis Set", &isOpen);
+    ImGui::Begin("Grid Truss Generator", &isOpen);
     renderSummary(bridge);
 
     if (ImGui::BeginTabBar("##sqpt_tabs")) {
@@ -334,19 +321,10 @@ namespace anaf::GUI {
         LAYOUT::endBody();
         ImGui::EndTabItem();
       }
-      if (ImGui::BeginTabItem("Analysis")) {
-        LAYOUT::beginBody("##sqpt_analysis_tab", footer);
-        renderAnalysisTab(loadKind, m_dynamic);
-        LAYOUT::endBody();
-        ImGui::EndTabItem();
-      }
       ImGui::EndTabBar();
     }
 
-    if (dynamic) renderDynamicRunButton();
-    else renderSolve(bridge);
-
-    if (ImGui::Button("Clear All", ImVec2(-FLT_MIN, 0.0f))) {
+    if (ICONS::iconTextButton(ICONS::E_IconId::ActionClear, "Clear All", ImVec2(-FLT_MIN, 0.0f))) {
       bridge.resetModel(BRIDGE::E_ObjectType::TrussSqpt);
       resetState();
       m_cubeNumX = 1;

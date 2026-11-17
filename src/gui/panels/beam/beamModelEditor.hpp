@@ -15,30 +15,37 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+
 #pragma once
 
-#include <beam/beamTypes/beamLibrary.hpp>
 #include <guiMaterials/iPanel.hpp>
-#include <panels/dynamicAnalysisInputs.hpp>
 #include <common/supportBasis.hpp>
 
 #include <array>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <limits>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace anaf::GUI {
 
-  // Editor and solver front end for BeamFrame: nodes, beam elements (material, section,
-  // formulation, orientation, end releases / hinges), supports (6 DOFs), nodal and distributed loads, self weight.
-  // Every edit publishes a new snapshot into bridge.activeBeamMesh and drops stale results.
+  // "Properties" panel of a BeamFrame model, driven by the selection (viewport or Model Tree):
+  //
+  //   nothing selected   model summary, self weight, Assign to All Elements..., start hints
+  //   a node             position, support (presets, translations, rotations), nodal load, results
+  //   an element         nodes, length, material, section, formulation, orientation, end releases,
+  //                      distributed loads, results
+  //
+  // Creating nodes and elements are commands (toolbar, Add Node / Add Element windows); built-in
+  // models, solving and the analysis settings live in their own windows. Every edit publishes a new
+  // snapshot into bridge.activeBeamMesh and drops stale results.
   class BeamModelEditor : public IPanel {
   private:
     static constexpr std::uint32_t noSelection = std::numeric_limits<std::uint32_t>::max();
+
+    // What the panel shows: the latest valid selection, else the model.
+    enum class E_Focus : std::uint8_t { Model, Node, Element };
 
     // Input of one support group (translations or rotations). Both modes end up as a basis
     // of allowed directions (allowedBasis()), the only form the node stores.
@@ -56,67 +63,79 @@ namespace anaf::GUI {
       void setGlobal(bool fixAll);
     };
 
-    std::array<double, 3> m_newNode{0.0, 0.0, 0.0};
+    // Element properties: the selected element's in the panel, the next element's in Add Element.
+    struct ElementInput {
+      std::uint32_t materialID{0}; // stable IDs, resolved to indices on use
+      std::uint32_t sectionID{0};
+      int formulation{0};          // FEM::BEAM::E_Formulation
+      std::array<double, 3> orientation{0.0, 0.0, 0.0};
+      unsigned int releases{0};    // FEM::BEAM::RELEASE bits
+      bool customReleases{false};  // the 12 check boxes are shown although the bits match a preset
+    };
+
+    E_Focus m_focus{E_Focus::Model};
+    std::uint32_t m_loadedNode{noSelection};    // node whose values are in the node inputs
+    std::uint32_t m_loadedElement{noSelection}; // element whose values are in m_element
+
+    // Selected node.
     std::array<double, 3> m_nodePosition{0.0, 0.0, 0.0};
     SupportInput m_motion;
     SupportInput m_rotation;
     std::array<double, 3> m_force{0.0, 0.0, 0.0};
     std::array<double, 3> m_moment{0.0, 0.0, 0.0};
-    std::uint32_t m_loadedNode{noSelection};    // node whose values are in the inputs above
 
-    std::uint32_t m_elementNodeA{0};
-    std::uint32_t m_elementNodeB{1};
-    std::uint32_t m_materialID{0};        // stable IDs, resolved to indices on use
-    std::uint32_t m_sectionID{0};
-    int m_formulation{0};                 // FEM::BEAM::E_Formulation
-    std::array<double, 3> m_orientation{0.0, 0.0, 0.0};
-    unsigned int m_releases{0};           // FEM::BEAM::RELEASE bits
+    // Selected element.
+    ElementInput m_element;
     std::array<double, 3> m_distributed{0.0, 0.0, 0.0};
-    int m_distributedFrame{0};            // FEM::BEAM::E_LoadFrame
-    std::uint32_t m_loadedElement{noSelection};
+    int m_distributedFrame{0}; // FEM::BEAM::E_LoadFrame
 
+    // Add Node / Add Element / Assign to All Elements windows.
+    bool m_addNodeOpen{false};
+    std::array<double, 3> m_newNode{0.0, 0.0, 0.0};
+    bool m_addElementOpen{false};
+    std::uint32_t m_newNodeA{0};
+    std::uint32_t m_newNodeB{1};
+    ElementInput m_newElement;
+    bool m_assignAllOpen{false};
     std::uint32_t m_wholeMaterialID{0};
     std::uint32_t m_wholeSectionID{0};
     int m_wholeFormulation{0};
 
     std::string m_status;
     bool m_statusIsError{false};
-    DynamicAnalysisInputs m_dynamic; // shown for LoadKind::Dynamic
-
-    // Built-in library (assets/objects/beam/beam3D), read once on first use.
-    bool m_libraryRead{false};
-    std::filesystem::path m_libraryDir;
-    std::vector<FEM::BEAM::LIBRARY::Entry> m_library;
-    std::string m_libraryError;
-    int m_librarySelected{0};
 
     void setStatus(std::string message, bool error);
     void syncSelection(std::uint32_t node, std::uint32_t element);
-    void renderSummary();
-    void renderNodes(std::uint32_t node);
-    // withLoads false (dynamic load kind): supports only.
-    void renderSupportsAndLoads(std::uint32_t node, bool withLoads);
+    void renderHeader(std::uint32_t node, std::uint32_t element);
+    void renderModel();
+    void renderNode(std::uint32_t node, bool withLoads);
     // Inputs of one group (a property grid group titled title); returns its allowed basis or
     // nothing when the input is invalid, also while the group is folded.
     std::optional<FEM::SUPPORT::Basis> renderSupportGroup(const char* id, const char* title, const char* axisNames, SupportInput& input);
-    void renderElements(std::uint32_t element);
-    void renderReleaseInputs();
-    void renderElementLoads(std::uint32_t element);
-    void renderWholeModel();
-    void renderSolve();
-    // Load Example Frame / Clear Model, shown for both load kinds.
-    void renderModelButtons();
-    void loadExample();
-    void readLibrary();
-    void renderLibrary();
+    void renderElement(std::uint32_t element, bool withLoads);
+    // Material, section, formulation, orientation and end release rows of a property grid.
+    void elementRows(ElementInput& input, const char* id);
+    void renderAddNodeWindow();
+    void renderAddElementWindow();
+    void renderAssignAllWindow();
 
   public:
     ~BeamModelEditor() override = default;
 
     std::function<void()> onOpenMaterialHandler;
     std::function<void()> onOpenSectionHandler;
-    // Imports a built-in model or solved-result file (the file is only read; edits stay in memory).
-    std::function<void(const std::filesystem::path&)> onLoadBuiltin;
+    std::function<void()> onOpenLibrary;  // Open Example...
+    std::function<void()> onOpenDiagrams; // Beam Diagrams of the selected element
+
+    // Commands (toolbar, menus, Model Tree).
+    void openAddNode();
+    void openAddElement();
+    void openAssignAll();
+    void removeAllReleases();
+    // Starts the static solve of the active model; false when there is nothing to solve.
+    bool solve();
+    // A 3D portal frame built in code (HEB 200 columns, IPE 300 girder).
+    void loadExample();
 
     // Back to the default inputs. The model itself is cleared with GuiCalcBridge::resetModel().
     void resetState();

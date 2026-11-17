@@ -15,14 +15,15 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+
 #include "beamModelEditor.hpp"
 
+#include <guiMaterials/iconAtlas.hpp>
 #include <guiMaterials/theme.hpp>
 
 #include <beam/beamEngine/beamSolver/deformationUnderConstForce.hpp> // localAxes()
 #include <beam/beamProperties/meshEdit.hpp>
 #include <bridge/generalStatus.hpp>
-#include <directory/getExecutableDirectory.hpp>
 #include <log/anaf_info.hpp>
 #include <common/supportBasis.hpp>
 #include <panels/beam/beamWorker.hpp>
@@ -59,18 +60,20 @@ namespace anaf::GUI {
     constexpr std::array<const char*, 2> loadFrames{"Global axes", "Local axes"};
     constexpr auto standardGravity = CONSTANTS::g_gravity;
 
-    const char* formulationShort(const FEM::BEAM::E_Formulation formulation) {
-      return formulation == FEM::BEAM::E_Formulation::Timoshenko ? "TI" : "EB";
-    }
-
-    // "", "  hinge A", "  hinge B" or "  hinge A B" for the element list.
-    std::string releaseLabel(const std::uint16_t releases) {
-      if (releases == 0) return {};
-      std::string label = "  hinge";
-      if (FEM::BEAM::RELEASE::ofEnd(releases, 0) != 0) label += " A";
-      if (FEM::BEAM::RELEASE::ofEnd(releases, 1) != 0) label += " B";
-      return label;
-    }
+    // End release presets of the combo; Custom shows the 12 check boxes.
+    struct ReleasePreset {
+      const char* name;
+      unsigned int bits;
+    };
+    constexpr std::array<ReleasePreset, 4> releasePresets{{{"None (rigid)", 0U},
+                                                            {"Hinge at A", FEM::BEAM::RELEASE::hinge},
+                                                            {"Hinge at B", FEM::BEAM::RELEASE::atNode2(FEM::BEAM::RELEASE::hinge)},
+                                                            {"Pinned both ends", FEM::BEAM::RELEASE::hinge | FEM::BEAM::RELEASE::atNode2(FEM::BEAM::RELEASE::hinge)}}};
+    constexpr const char* releaseRules =
+      "A released force is zero at that element end; the end moves on its own in that direction (local axes).\n"
+      "My + Mz = a bending hinge (pin), torsion still carried. Release only one side of a joint: when every\n"
+      "element end at a node is free about an axis, the node rotation there is undefined (held at zero; a moment\n"
+      "on it is a mechanism). N or T released at both ends of an element is a mechanism too.";
 
     // Runs edit on a copy of the active beam snapshot (an empty one if there is none) under
     // dataMutex and publishes the copy. edit returns false to publish nothing.
@@ -105,14 +108,13 @@ namespace anaf::GUI {
       return std::ranges::all_of(basis, [](const std::array<double, 3>& v) { return std::ranges::count(v, 0.0) == 2; });
     }
 
-    void setSelectedNode(BRIDGE::GuiCalcBridge& bridge, const std::uint32_t node) {
-      std::lock_guard lock(bridge.dataMutex);
-      bridge.selectedNodeId = node;
-    }
-
-    void setSelectedElement(BRIDGE::GuiCalcBridge& bridge, const std::uint32_t element) {
-      std::lock_guard lock(bridge.dataMutex);
-      bridge.selectedElementId = element;
+    void select(BRIDGE::GuiCalcBridge& bridge, const std::uint32_t node, const std::uint32_t element) {
+      {
+        std::lock_guard lock(bridge.dataMutex);
+        bridge.selectedNodeId = node;
+        bridge.selectedElementId = element;
+      }
+      bridge.dataVersion.fetch_add(1, std::memory_order_release); // redraw the highlight
     }
 
     std::uint32_t findSectionByName(const BRIDGE::GuiCalcBridge& bridge, const char* name) {
@@ -120,6 +122,21 @@ namespace anaf::GUI {
         if (FEM::BEAM::sameSectionName(bridge.allSections[i].getName(), name)) return i;
       }
       return 0;
+    }
+
+    // Floating tool window opened from a command, near the top left of the viewport area.
+    bool beginToolWindow(const char* name, bool& open, const float widthEm) {
+      if (!open) return false;
+      const ImGuiViewport* viewport = ImGui::GetMainViewport();
+      const float fontSize = ImGui::GetFontSize();
+      ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.25f, viewport->WorkPos.y + fontSize * 6.0f),
+                              ImGuiCond_FirstUseEver);
+      ImGui::SetNextWindowSize(ImVec2(fontSize * widthEm, 0.0f), ImGuiCond_Always);
+      if (!ImGui::Begin(name, &open, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::End();
+        return false;
+      }
+      return true;
     }
 
   } // namespace end
@@ -159,21 +176,21 @@ namespace anaf::GUI {
   }
 
   void BeamModelEditor::resetState() {
-    m_newNode = {0.0, 0.0, 0.0};
+    m_focus = E_Focus::Model;
     m_nodePosition = {0.0, 0.0, 0.0};
     m_motion = SupportInput{};
     m_rotation = SupportInput{};
     m_force = {0.0, 0.0, 0.0};
     m_moment = {0.0, 0.0, 0.0};
     m_loadedNode = noSelection;
-    m_elementNodeA = 0;
-    m_elementNodeB = 1;
-    m_formulation = 0;
-    m_orientation = {0.0, 0.0, 0.0};
-    m_releases = 0;
+    m_loadedElement = noSelection;
+    m_element = ElementInput{};
     m_distributed = {0.0, 0.0, 0.0};
     m_distributedFrame = 0;
-    m_loadedElement = noSelection;
+    m_newNode = {0.0, 0.0, 0.0};
+    m_newNodeA = 0;
+    m_newNodeB = 1;
+    m_newElement = ElementInput{};
     m_status.clear();
     m_statusIsError = false;
   }
@@ -184,8 +201,41 @@ namespace anaf::GUI {
     m_statusIsError = error;
   }
 
+  void BeamModelEditor::openAddNode() { m_addNodeOpen = true; }
+  void BeamModelEditor::openAddElement() { m_addElementOpen = true; }
+  void BeamModelEditor::openAssignAll() { m_assignAllOpen = true; }
+
+  void BeamModelEditor::removeAllReleases() {
+    std::size_t removed = 0;
+    editModel(BRIDGE::buildBridge(), [&](FEM::BEAM::MeshData& mesh) {
+      for (auto& element : mesh.elements) {
+        if (element.endReleases == 0) continue;
+        element.endReleases = 0;
+        ++removed;
+      }
+      return removed > 0;
+    });
+    m_loadedElement = noSelection; // reload the selected element's releases
+    setStatus(removed > 0 ? std::format("End releases removed from {} elements", removed) : "No element has end releases", false);
+  }
+
+  bool BeamModelEditor::solve() {
+    auto& bridge = BRIDGE::buildBridge();
+    const auto mesh = currentMesh(bridge);
+    if (bridge.isRunning.load() || !mesh || mesh->elements.empty()) return false;
+    m_status.clear();
+    BEAM_WORKER::startSolve(bridge, mesh);
+    return true;
+  }
+
   void BeamModelEditor::syncSelection(const std::uint32_t node, const std::uint32_t element) {
     auto& bridge = BRIDGE::buildBridge();
+    // The latest valid pick decides what the panel shows; a lost pick falls back to the other one.
+    if (node != m_loadedNode && node != noSelection) m_focus = E_Focus::Node;
+    if (element != m_loadedElement && element != noSelection) m_focus = E_Focus::Element;
+    if (m_focus == E_Focus::Node && node == noSelection) m_focus = element != noSelection ? E_Focus::Element : E_Focus::Model;
+    if (m_focus == E_Focus::Element && element == noSelection) m_focus = node != noSelection ? E_Focus::Node : E_Focus::Model;
+
     if (node != m_loadedNode) {
       m_loadedNode = node;
       m_force = {0.0, 0.0, 0.0};
@@ -210,42 +260,87 @@ namespace anaf::GUI {
       std::lock_guard lock(bridge.dataMutex);
       if (element != noSelection && bridge.activeBeamMesh && element < bridge.activeBeamMesh->elements.size()) {
         const auto& selected = bridge.activeBeamMesh->elements[element];
-        m_elementNodeA = selected.node1;
-        m_elementNodeB = selected.node2;
-        if (selected.materialID < bridge.allMaterials.size()) m_materialID = bridge.allMaterials[selected.materialID].getMaterialID();
-        if (selected.sectionID < bridge.allSections.size()) m_sectionID = bridge.allSections[selected.sectionID].getSectionID();
-        m_formulation = static_cast<int>(selected.formulation);
-        m_orientation = selected.orientation;
-        m_releases = selected.endReleases;
+        if (selected.materialID < bridge.allMaterials.size()) m_element.materialID = bridge.allMaterials[selected.materialID].getMaterialID();
+        if (selected.sectionID < bridge.allSections.size()) m_element.sectionID = bridge.allSections[selected.sectionID].getSectionID();
+        m_element.formulation = static_cast<int>(selected.formulation);
+        m_element.orientation = selected.orientation;
+        m_element.releases = selected.endReleases;
+        m_element.customReleases = false;
+        // The next new element starts like the last one looked at.
+        m_newElement = m_element;
+        m_newElement.releases = 0;
       }
     }
   }
 
-  void BeamModelEditor::renderSummary() {
+  void BeamModelEditor::renderHeader(const std::uint32_t node, const std::uint32_t element) {
+    std::string title = "Model";
+    ICONS::E_IconId icon = ICONS::E_IconId::ModelFrame;
+    if (m_focus == E_Focus::Node) {
+      title = std::format("Node {}", node);
+      icon = ICONS::E_IconId::ModelNode;
+    } else if (m_focus == E_Focus::Element) {
+      const auto mesh = currentMesh(BRIDGE::buildBridge());
+      title = mesh && element < mesh->elements.size()
+        ? std::format("Element {}  ({} - {})", element, mesh->elements[element].node1, mesh->elements[element].node2)
+        : std::format("Element {}", element);
+      icon = ICONS::E_IconId::ModelElementBeam;
+    }
+    const float right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+    ImGui::AlignTextToFramePadding();
+    ICONS::iconText(icon, title.c_str());
+    if (m_focus != E_Focus::Model) {
+      const float width = ImGui::CalcTextSize("Deselect").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+      ImGui::SameLine(std::max(right - width, ImGui::GetCursorPosX()));
+      if (ImGui::Button("Deselect")) select(BRIDGE::buildBridge(), noSelection, noSelection);
+      ImGui::SetItemTooltip("Back to the model (a click on empty viewport space does the same)");
+    }
+    ImGui::Separator();
+  }
+
+  void BeamModelEditor::renderModel() {
     auto& bridge = BRIDGE::buildBridge();
     const auto mesh = currentMesh(bridge);
-    LAYOUT::beginCard("##beam_summary");
+
     if (!mesh || mesh->nodes.empty()) {
-      ImGui::TextWrapped("No model yet. Pick a built-in model or add nodes and elements in the Model tab.");
-    } else {
-      const auto supported = std::ranges::count_if(mesh->nodes, [](const FEM::BEAM::Node& node) { return node.isSupported(); });
-      if (LAYOUT::beginStats("##beam_stats")) {
-        LAYOUT::stat("Nodes", std::to_string(mesh->nodes.size()));
-        LAYOUT::stat("Elements", std::to_string(mesh->elements.size()));
-        LAYOUT::stat("Supports", std::to_string(supported));
-        LAYOUT::stat("Self weight", mesh->gravity == std::array<double, 3>{} ? "off" : "on");
-        LAYOUT::stat("Nodal loads", std::to_string(mesh->nodalLoads.size()));
-        LAYOUT::stat("Line loads", std::to_string(mesh->distributedLoads.size()));
-        ImGui::EndTable();
+      ImGui::PushTextWrapPos(0.0f);
+      ImGui::TextDisabled("No model yet. Start from a built-in model, the example frame, or add nodes and elements.");
+      ImGui::PopTextWrapPos();
+      if (ICONS::iconTextButton(ICONS::E_IconId::ModelLibrary, "Open Example...", ImVec2(-FLT_MIN, 0.0f)) && onOpenLibrary) onOpenLibrary();
+      if (ICONS::iconTextButton(ICONS::E_IconId::ModelFrame, "Load Example Frame", ImVec2(-FLT_MIN, 0.0f))) loadExample();
+      ImGui::SetItemTooltip("A 3D portal frame: HEB 200 columns, an IPE 300 girder with a uniform load, clamped bases.");
+      if (ICONS::iconTextButton(ICONS::E_IconId::ModelNode, "Add Node...", ImVec2(-FLT_MIN, 0.0f))) openAddNode();
+      return;
+    }
+
+    const auto supported = std::ranges::count_if(mesh->nodes, [](const FEM::BEAM::Node& n) { return n.isSupported(); });
+    const bool selfWeightOn = mesh->gravity != std::array<double, 3>{};
+    if (PROPERTY::beginFixed("##beam_model")) {
+      if (PROPERTY::group("Model")) {
+        PROPERTY::value("Nodes", std::to_string(mesh->nodes.size()));
+        PROPERTY::value("Elements", std::to_string(mesh->elements.size()));
+        PROPERTY::value("Supports", std::to_string(supported));
+        PROPERTY::value("Nodal loads", std::to_string(mesh->nodalLoads.size()));
+        PROPERTY::value("Line loads", std::to_string(mesh->distributedLoads.size()));
+        PROPERTY::row("Self weight", "Density x area x g along -Y, on every element.");
+        bool selfWeight = selfWeightOn;
+        if (ImGui::Checkbox("##self_weight", &selfWeight)) {
+          editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+            edited.gravity = selfWeight ? standardGravity : std::array<double, 3>{};
+            return true;
+          });
+        }
       }
-      ImGui::Separator();
-      if (mesh->hasResults) {
+      if (mesh->hasResults && PROPERTY::group("Results")) {
         double maxDisplacement = 0.0, maxVonMises = 0.0;
         std::size_t exceeded = 0, withoutStress = 0;
-        std::uint32_t worst = noSelection;
-        for (const auto& node : mesh->nodes) {
-          const auto& d = node.getDisplacement();
-          maxDisplacement = std::max(maxDisplacement, std::hypot(d[0], d[1], d[2]));
+        std::uint32_t worst = noSelection, farthest = noSelection;
+        for (std::uint32_t n = 0; n < mesh->nodes.size(); ++n) {
+          const auto& d = mesh->nodes[n].getDisplacement();
+          if (const double length = std::hypot(d[0], d[1], d[2]); length > maxDisplacement) {
+            maxDisplacement = length;
+            farthest = n;
+          }
         }
         for (std::uint32_t e = 0; e < mesh->elements.size(); ++e) {
           const auto& stress = mesh->elements[e].stress;
@@ -259,154 +354,142 @@ namespace anaf::GUI {
             worst = e;
           }
         }
-        const bool valid = bridge.isValid.load();
-        LAYOUT::wrappedColored(valid ? THEME::theme().good : THEME::theme().warn,
-                               valid ? "Solved, energy check passed" : "Results shown (from a file, or energy check not passed)");
-        ImGui::TextDisabled("Max displacement");
-        ImGui::SameLine();
-        ImGui::Text("%.4g mm", maxDisplacement * 1e3);
-        if (worst != noSelection) {
-          ImGui::TextDisabled("Max von Mises");
-          ImGui::SameLine();
-          ImGui::Text("%.4g MPa (element %u)", maxVonMises / 1e6, worst);
-        }
-        if (exceeded > 0) ImGui::TextColored(THEME::theme().bad, "%zu elements exceed the yield strength", exceeded);
-        if (withoutStress > 0) ImGui::TextDisabled("%zu elements with a general section (no stresses)", withoutStress);
-      } else {
-        ImGui::TextDisabled("No results yet: run the solver below.");
+        PROPERTY::value("Max |u|", std::format("{:.4g}  (node {})", maxDisplacement * 1e3, farthest), "mm",
+                        "Largest nodal displacement; Results in the Model Tree select it.");
+        if (worst != noSelection) PROPERTY::value("Max von Mises", std::format("{:.4g}  (element {})", maxVonMises / 1e6, worst), "MPa");
+        PROPERTY::value("Over yield", std::to_string(exceeded), nullptr, "Elements whose von Mises stress exceeds the yield strength.");
+        if (withoutStress > 0) PROPERTY::value("No stresses", std::to_string(withoutStress), nullptr, "Elements with a general section.");
       }
+      PROPERTY::end();
     }
-    if (!m_status.empty()) LAYOUT::wrappedColored(m_statusIsError ? THEME::theme().bad : THEME::theme().note, m_status);
-    LAYOUT::endCard();
+    if (mesh->hasResults) {
+      const bool valid = bridge.isValid.load();
+      ICONS::iconText(valid ? ICONS::E_IconId::StatusSuccess : ICONS::E_IconId::StatusWarning,
+                      valid ? "Solved, energy check passed" : "Results from a file, or energy check not passed");
+    } else {
+      ICONS::iconText(ICONS::E_IconId::StatusInfo, "No results yet: Run Solver (F5).");
+    }
+    ImGui::Spacing();
+    if (ICONS::iconTextButton(ICONS::E_IconId::ModelElementBeam, "Assign to All Elements...", ImVec2(-FLT_MIN, 0.0f))) openAssignAll();
+    ImGui::SetItemTooltip("Formulation, material and section of every element; end releases off");
+    ImGui::Spacing();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("Click a node or an element in the viewport or in the Model Tree to edit it.");
+    ImGui::PopTextWrapPos();
   }
 
-  void BeamModelEditor::renderNodes(const std::uint32_t node) {
-    if (!PROPERTY::header("Nodes")) return;
+  void BeamModelEditor::renderNode(const std::uint32_t node, const bool withLoads) {
     auto& bridge = BRIDGE::buildBridge();
+    const auto mesh = currentMesh(bridge);
+    if (!mesh || node >= mesh->nodes.size()) return;
 
-    if (PROPERTY::beginFixed("##beam_new_node")) {
-      PROPERTY::inputVector3("New node", m_newNode.data(), "m");
+    if (PROPERTY::beginFixed("##beam_node_geometry")) {
+      if (PROPERTY::group("Geometry")) PROPERTY::inputVector3("Position", m_nodePosition.data(), "m");
       PROPERTY::end();
     }
-    if (ImGui::Button("Add Node##beam", ImVec2(-FLT_MIN, 0.0f))) {
-      std::uint32_t added = 0;
-      editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
-        added = static_cast<std::uint32_t>(mesh.nodes.size());
-        mesh.nodes.emplace_back(added, m_newNode[0], m_newNode[1], m_newNode[2]);
-        return true;
-      });
-      setSelectedNode(bridge, added);
-      setStatus(std::format("Node {} added", added), false);
-    }
-
-    ImGui::Spacing();
-    std::uint32_t typed = node;
-    if (PROPERTY::beginFixed("##beam_selected_node")) {
-      if (PROPERTY::inputId("Selected node", &typed, noSelection, "Type an id and press Enter, or click a node in the viewport.")) {
-        const auto mesh = currentMesh(bridge);
-        setSelectedNode(bridge, mesh && typed < mesh->nodes.size() ? typed : noSelection);
-      }
-      if (node != noSelection) PROPERTY::inputVector3("Position", m_nodePosition.data(), "m");
-      PROPERTY::end();
-    }
-    if (node == noSelection) {
-      ImGui::TextDisabled("Click a node in the viewport or type its id.");
-      return;
-    }
-    if (ImGui::Button("Move Node##beam", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
-      if (editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
-            if (node >= mesh.nodes.size()) return false;
-            mesh.nodes[node].setLocation(m_nodePosition);
+    if (ICONS::iconTextButton(ICONS::E_IconId::ModelNode, "Move", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
+      if (editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+            if (node >= edited.nodes.size()) return false;
+            edited.nodes[node].setLocation(m_nodePosition);
             return true;
           })) {
         setStatus(std::format("Node {} moved", node), false);
       }
     }
     ImGui::SameLine();
-    if (ImGui::Button("Delete Node##beam", ImVec2(-FLT_MIN, 0.0f))) {
-      if (editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
-            if (node >= mesh.nodes.size()) return false;
-            FEM::BEAM::deleteNode(mesh, node);
+    if (ICONS::iconTextButton(ICONS::E_IconId::ActionRemove, "Delete Node", ImVec2(-FLT_MIN, 0.0f))) {
+      if (editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+            if (node >= edited.nodes.size()) return false;
+            FEM::BEAM::deleteNode(edited, node);
             return true;
           })) {
-        setSelectedNode(bridge, noSelection);
-        setSelectedElement(bridge, noSelection);
+        select(bridge, noSelection, noSelection);
         m_loadedNode = noSelection;
         setStatus(std::format("Node {} deleted with its elements; later node ids moved down by one", node), false);
+        return;
       }
     }
-  }
+    ImGui::SetItemTooltip("Removes the node, its elements and their loads; later node ids move down by one");
 
-  void BeamModelEditor::renderSupportsAndLoads(const std::uint32_t node, const bool withLoads) {
-    // ### keeps one ID (open state) for both labels.
-    if (!PROPERTY::header(withLoads ? "Supports & Nodal Loads###beam_supports" : "Supports###beam_supports")) return;
-    if (node == noSelection) {
-      ImGui::TextDisabled("Click a node in the viewport (or type its id in the Model tab).");
-      return;
-    }
-    auto& bridge = BRIDGE::buildBridge();
-    ImGui::Text("Node %u", node);
-    ImGui::SameLine();
-    ImGui::TextDisabled("presets:");
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Fixed##beam_preset")) {
-      m_motion.setGlobal(true);
-      m_rotation.setGlobal(true);
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Pinned##beam_preset")) {
-      m_motion.setGlobal(true);
-      m_rotation.setGlobal(false);
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Free##beam_preset")) {
-      m_motion.setGlobal(false);
-      m_rotation.setGlobal(false);
+    ImGui::Spacing();
+    if (PROPERTY::beginFixed("##beam_node_preset")) {
+      PROPERTY::row("Support preset", "Fixed: every DOF held. Pinned: translations held, rotations free. Free: no support.");
+      const float third = (ImGui::GetContentRegionAvail().x - 2.0f * ImGui::GetStyle().ItemSpacing.x) / 3.0f;
+      if (ImGui::Button("Fixed", ImVec2(third, 0.0f))) {
+        m_motion.setGlobal(true);
+        m_rotation.setGlobal(true);
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Pinned", ImVec2(third, 0.0f))) {
+        m_motion.setGlobal(true);
+        m_rotation.setGlobal(false);
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Free", ImVec2(-FLT_MIN, 0.0f))) {
+        m_motion.setGlobal(false);
+        m_rotation.setGlobal(false);
+      }
+      PROPERTY::end();
     }
     const auto motion = renderSupportGroup("motion", "Translation", "U", m_motion);
     const auto rotation = renderSupportGroup("rotation", "Rotation", "R", m_rotation);
-
     ImGui::BeginDisabled(!motion || !rotation);
-    if (ImGui::Button("Apply Support##beam", ImVec2(-FLT_MIN, 0.0f))) {
-      if (editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
-            if (node >= mesh.nodes.size()) return false;
-            mesh.nodes[node].setAllowedMotionDirections(*motion);
-            mesh.nodes[node].setAllowedRotationAxes(*rotation);
+    if (ICONS::iconTextButton(ICONS::E_IconId::SupportFixed, "Apply Support", ImVec2(-FLT_MIN, 0.0f))) {
+      if (editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+            if (node >= edited.nodes.size()) return false;
+            edited.nodes[node].setAllowedMotionDirections(*motion);
+            edited.nodes[node].setAllowedRotationAxes(*rotation);
             return true;
           })) {
         setStatus(std::format("Support of node {} updated", node), false);
       }
     }
     ImGui::EndDisabled();
-    if (!withLoads) return;
 
-    ImGui::Spacing();
-    bool loadOpen = false;
-    if (PROPERTY::beginFixed("##beam_nodal_load")) {
-      loadOpen = PROPERTY::group("Nodal Load");
-      if (loadOpen) {
-        PROPERTY::inputVector3("Force", m_force.data(), "N", "%.4g", "Global axes.");
-        PROPERTY::inputVector3("Moment", m_moment.data(), "N m", "%.4g", "About the global axes.");
+    if (withLoads) {
+      ImGui::Spacing();
+      bool loadOpen = false;
+      if (PROPERTY::beginFixed("##beam_nodal_load")) {
+        loadOpen = PROPERTY::group("Nodal Load");
+        if (loadOpen) {
+          PROPERTY::inputVector3("Force", m_force.data(), "N", "%.4g", "Global axes.");
+          PROPERTY::inputVector3("Moment", m_moment.data(), "N m", "%.4g", "About the global axes.");
+        }
+        PROPERTY::end();
       }
-      PROPERTY::end();
+      if (loadOpen) {
+        const auto setLoad = [&](const std::array<double, 3>& force, const std::array<double, 3>& moment) {
+          return editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+            if (node >= edited.nodes.size()) return false;
+            std::erase_if(edited.nodalLoads, [&](const FEM::BEAM::NodalLoad& load) { return load.node == node; });
+            if (force != std::array<double, 3>{} || moment != std::array<double, 3>{}) edited.nodalLoads.push_back({node, force, moment});
+            return true;
+          });
+        };
+        if (ICONS::iconTextButton(ICONS::E_IconId::LoadForce, "Apply Load", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
+          if (setLoad(m_force, m_moment)) setStatus(std::format("Load on node {} updated", node), false);
+        }
+        ImGui::SameLine();
+        if (ICONS::iconTextButton(ICONS::E_IconId::ActionRemove, "Remove Load", ImVec2(-FLT_MIN, 0.0f))) {
+          m_force = {0.0, 0.0, 0.0};
+          m_moment = {0.0, 0.0, 0.0};
+          if (setLoad(m_force, m_moment)) setStatus(std::format("Load on node {} removed", node), false);
+        }
+      }
     }
-    if (!loadOpen) return;
-    const auto setLoad = [&](const std::array<double, 3>& force, const std::array<double, 3>& moment) {
-      return editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
-        if (node >= mesh.nodes.size()) return false;
-        std::erase_if(mesh.nodalLoads, [&](const FEM::BEAM::NodalLoad& load) { return load.node == node; });
-        if (force != std::array<double, 3>{} || moment != std::array<double, 3>{}) mesh.nodalLoads.push_back({node, force, moment});
-        return true;
-      });
-    };
-    if (ImGui::Button("Apply Load##beam", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
-      if (setLoad(m_force, m_moment)) setStatus(std::format("Load on node {} updated", node), false);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Remove Load##beam", ImVec2(-FLT_MIN, 0.0f))) {
-      m_force = {0.0, 0.0, 0.0};
-      m_moment = {0.0, 0.0, 0.0};
-      if (setLoad(m_force, m_moment)) setStatus(std::format("Load on node {} removed", node), false);
+
+    if (mesh->hasResults) {
+      ImGui::Spacing();
+      if (PROPERTY::beginFixed("##beam_node_results")) {
+        if (PROPERTY::group("Results")) {
+          const auto& d = mesh->nodes[node].getDisplacement();
+          const auto& r = mesh->nodes[node].getRotation();
+          PROPERTY::value("Displacement", std::format("{:.4g}, {:.4g}, {:.4g}", d[0] * 1e3, d[1] * 1e3, d[2] * 1e3), "mm");
+          PROPERTY::value("Magnitude", std::format("{:.4g}", std::hypot(d[0], d[1], d[2]) * 1e3), "mm");
+          PROPERTY::value("Rotation", std::format("{:.4g}, {:.4g}, {:.4g}", r[0] * 1e3, r[1] * 1e3, r[2] * 1e3), "mrad");
+        }
+        PROPERTY::end();
+      }
     }
   }
 
@@ -477,10 +560,9 @@ namespace anaf::GUI {
     std::string error;
     const auto allowed = input.allowedBasis(error);
     if (open) {
+      ImGui::PushTextWrapPos(0.0f);
       if (input.inclined && std::string_view(id) == "rotation") {
-        ImGui::PushTextWrapPos(0.0f);
         ImGui::TextDisabled("Solved as given; files store rotation supports per global axis only (export warns).");
-        ImGui::PopTextWrapPos();
       }
       if (!allowed) {
         ImGui::TextColored(THEME::theme().bad, "%s", error.c_str());
@@ -493,72 +575,236 @@ namespace anaf::GUI {
           ImGui::TextDisabled("Held along (%.3f, %.3f, %.3f) only.", normal[0], normal[1], normal[2]);
         }
       }
+      ImGui::PopTextWrapPos();
     }
     ImGui::PopID();
     return allowed;
   }
 
-  void BeamModelEditor::renderElements(const std::uint32_t selected) {
-    if (!PROPERTY::header("Elements")) return;
+  void BeamModelEditor::elementRows(ElementInput& input, const char* id) {
     auto& bridge = BRIDGE::buildBridge();
+    ImGui::PushID(id);
+    PROPERTY::row("Material");
+    PROPERTY::reserveBrowse();
+    materialCombo(bridge, "##material", input.materialID);
+    if (PROPERTY::browseButton("##materials", "Open the Material Handler") && onOpenMaterialHandler) onOpenMaterialHandler();
+    PROPERTY::row("Section");
+    PROPERTY::reserveBrowse();
+    sectionCombo(bridge, "##section", input.sectionID);
+    if (PROPERTY::browseButton("##sections", "Open the Section Handler") && onOpenSectionHandler) onOpenSectionHandler();
+    PROPERTY::row("Formulation", "Euler-Bernoulli: no shear deformation. Timoshenko: with shear deformation (deep members).");
+    ImGui::Combo("##formulation", &input.formulation, formulations.data(), static_cast<int>(formulations.size()));
+    PROPERTY::inputVector3("Orientation v", input.orientation.data(), nullptr, "%.3g",
+                           "Vector in the local x-y plane (global axes). 0 0 0 = automatic: local y as close to +Y as\n"
+                           "possible, +X for vertical members. A section's height lies along local y.");
 
-    if (PROPERTY::beginFixed("##beam_element_properties")) {
-      if (PROPERTY::group("Properties")) {
-        PROPERTY::row("Material", "Used by Add Element and Apply to Selected.");
-        PROPERTY::reserveBrowse();
-        materialCombo(bridge, "##beam_element_material", m_materialID);
-        if (PROPERTY::browseButton("##beam_materials", "Open the Material Handler") && onOpenMaterialHandler) onOpenMaterialHandler();
-        PROPERTY::row("Section", "Used by Add Element and Apply to Selected.");
-        PROPERTY::reserveBrowse();
-        sectionCombo(bridge, "##beam_element_section", m_sectionID);
-        if (PROPERTY::browseButton("##beam_sections", "Open the Section Handler") && onOpenSectionHandler) onOpenSectionHandler();
-        PROPERTY::row("Formulation");
-        ImGui::Combo("##beam_element_formulation", &m_formulation, formulations.data(), static_cast<int>(formulations.size()));
-        PROPERTY::inputVector3("Orientation v", m_orientation.data(), nullptr, "%.3g",
-                               "Vector in the local x-y plane (global axes). 0 0 0 = automatic: local y as close to +Y as\n"
-                               "possible, +X for vertical members. A section's height lies along local y.");
+    // End releases: a preset, or Custom with the 12 section-force check boxes.
+    const auto preset = std::ranges::find_if(releasePresets, [&](const ReleasePreset& p) { return p.bits == input.releases; });
+    const bool custom = preset == releasePresets.end();
+    PROPERTY::row("End releases", releaseRules);
+    if (ImGui::BeginCombo("##releases", custom ? "Custom" : preset->name)) {
+      for (const ReleasePreset& p : releasePresets) {
+        const ICONS::E_IconId icon = p.bits == 0 ? ICONS::E_IconId::ModelElementBeam : ICONS::E_IconId::ReleaseHinge;
+        if (ICONS::iconSelectable(icon, p.name, !custom && !input.customReleases && p.bits == input.releases)) {
+          input.releases = p.bits;
+          input.customReleases = false;
+        }
+      }
+      // Custom starts from the current bits.
+      if (ICONS::iconSelectable(ICONS::E_IconId::ReleaseTorsion, "Custom...", custom || input.customReleases)) input.customReleases = true;
+      ImGui::EndCombo();
+    }
+    if (custom || input.customReleases) {
+      PROPERTY::row("", releaseRules);
+      constexpr std::array<const char*, 6> sectionForceNames{"N", "Vy", "Vz", "T", "My", "Mz"};
+      if (ImGui::BeginTable("##releases_table", 7, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV)) {
+        ImGui::TableSetupColumn("End");
+        for (const char* force : sectionForceNames) ImGui::TableSetupColumn(force);
+        ImGui::TableHeadersRow();
+        for (int end = 0; end < 2; ++end) {
+          ImGui::TableNextRow();
+          ImGui::TableNextColumn();
+          ImGui::TextUnformatted(end == 0 ? "A" : "B");
+          for (int dof = 0; dof < 6; ++dof) {
+            ImGui::TableNextColumn();
+            ImGui::PushID(end * 6 + dof);
+            ImGui::CheckboxFlags("##release", &input.releases, 1U << (6 * end + dof));
+            ImGui::PopID();
+          }
+        }
+        ImGui::EndTable();
+      }
+    }
+    ImGui::PopID();
+  }
+
+  void BeamModelEditor::renderElement(const std::uint32_t element, const bool withLoads) {
+    auto& bridge = BRIDGE::buildBridge();
+    const auto mesh = currentMesh(bridge);
+    if (!mesh || element >= mesh->elements.size()) return;
+    const auto& selected = mesh->elements[element];
+    const auto& a = mesh->nodes[selected.node1].getLocation();
+    const auto& b = mesh->nodes[selected.node2].getLocation();
+
+    if (PROPERTY::beginFixed("##beam_element")) {
+      if (PROPERTY::group("Element")) {
+        PROPERTY::value("Nodes", std::format("{} - {}", selected.node1, selected.node2));
+        PROPERTY::value("Length", std::format("{:.4g}", std::hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])), "m");
+        elementRows(m_element, "selected");
       }
       PROPERTY::end();
     }
 
-    renderReleaseInputs();
-
-    ImGui::SeparatorText("Add / Edit");
-    if (PROPERTY::beginFixed("##beam_element_nodes")) {
-      PROPERTY::row("Nodes A - B", "Ids of the two end nodes; after Add, A takes B for the next element of a chain.");
-      ImGui::SetNextItemWidth(LAYOUT::splitWidth(2));
-      ImGui::InputScalar("##beam_node_a", ImGuiDataType_U32, &m_elementNodeA);
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(-FLT_MIN);
-      ImGui::InputScalar("##beam_node_b", ImGuiDataType_U32, &m_elementNodeB);
-      PROPERTY::end();
-    }
-
-    // Writes the chosen properties into element; an error message if they are unusable.
-    // Caller holds dataMutex (editModel).
-    const auto assign = [&](FEM::BEAM::BeamElement& element, const FEM::BEAM::MeshData& mesh) -> std::string {
-      const auto material = bridge.findMaterialIndex(m_materialID);
-      const auto section = bridge.findSectionIndex(m_sectionID);
+    // Writes the inputs into an element; an error message if they are unusable. Caller holds dataMutex (editModel).
+    const auto assign = [&](FEM::BEAM::BeamElement& target, const FEM::BEAM::MeshData& edited) -> std::string {
+      const auto material = bridge.findMaterialIndex(m_element.materialID);
+      const auto section = bridge.findSectionIndex(m_element.sectionID);
       if (!material || !section) return "choose a material and a section";
       try {
-        (void)FEM::BEAM::localAxes(mesh.nodes[element.node1].getLocation(), mesh.nodes[element.node2].getLocation(), m_orientation);
+        (void)FEM::BEAM::localAxes(edited.nodes[target.node1].getLocation(), edited.nodes[target.node2].getLocation(), m_element.orientation);
       } catch (const std::exception& exception) {
         return exception.what();
       }
-      element.materialID = *material;
-      element.sectionID = *section;
-      element.formulation = static_cast<FEM::BEAM::E_Formulation>(m_formulation);
-      element.orientation = m_orientation;
-      element.endReleases = static_cast<std::uint16_t>(m_releases & FEM::BEAM::RELEASE::allMask);
+      target.materialID = *material;
+      target.sectionID = *section;
+      target.formulation = static_cast<FEM::BEAM::E_Formulation>(m_element.formulation);
+      target.orientation = m_element.orientation;
+      target.endReleases = static_cast<std::uint16_t>(m_element.releases & FEM::BEAM::RELEASE::allMask);
       return {};
     };
+    if (ICONS::iconTextButton(ICONS::E_IconId::ModelElementBeam, "Apply", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
+      std::string error = "element not found";
+      const bool ok = editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+        if (element >= edited.elements.size()) return false;
+        error = assign(edited.elements[element], edited);
+        return error.empty();
+      });
+      if (ok) setStatus(std::format("Element {} updated", element), false);
+      else setStatus("Element not updated: " + error, true);
+    }
+    ImGui::SetItemTooltip("Writes material, section, formulation, orientation and end releases into the element");
+    ImGui::SameLine();
+    if (ICONS::iconTextButton(ICONS::E_IconId::ActionRemove, "Delete Element", ImVec2(-FLT_MIN, 0.0f))) {
+      if (editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+            if (element >= edited.elements.size()) return false;
+            std::uint32_t index = 0;
+            FEM::BEAM::removeElements(edited, [&](const FEM::BEAM::BeamElement&) { return index++ == element; });
+            return true;
+          })) {
+        select(bridge, noSelection, noSelection);
+        setStatus(std::format("Element {} deleted", element), false);
+        return;
+      }
+    }
 
-    if (ImGui::Button("Add Element##beam", ImVec2(-FLT_MIN, 0.0f))) {
+    if (withLoads) {
+      ImGui::Spacing();
+      bool loadOpen = false;
+      std::size_t onElement = 0;
+      if (PROPERTY::beginFixed("##beam_element_loads")) {
+        loadOpen = PROPERTY::group("Distributed Loads");
+        if (loadOpen) {
+          for (const auto& load : mesh->distributedLoads) {
+            if (load.element != element) continue;
+            ++onElement;
+            PROPERTY::value(std::format("q{}  ({})", onElement, load.frame == FEM::BEAM::E_LoadFrame::Local ? "local" : "global").c_str(),
+                            std::format("{:.4g}, {:.4g}, {:.4g}", load.value[0], load.value[1], load.value[2]), "N/m");
+          }
+          if (onElement == 0) PROPERTY::value("On element", "none");
+          PROPERTY::inputVector3("New load q", m_distributed.data(), "N/m");
+          PROPERTY::row("Axes");
+          ImGui::Combo("##q_frame", &m_distributedFrame, loadFrames.data(), static_cast<int>(loadFrames.size()));
+        }
+        PROPERTY::end();
+      }
+      if (loadOpen) {
+        if (ICONS::iconTextButton(ICONS::E_IconId::LoadDistributed, "Add Load", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
+          if (m_distributed == std::array<double, 3>{}) {
+            setStatus("Enter a non-zero load", true);
+          } else if (editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+                       if (element >= edited.elements.size()) return false;
+                       edited.distributedLoads.push_back({element, m_distributed, static_cast<FEM::BEAM::E_LoadFrame>(m_distributedFrame)});
+                       return true;
+                     })) {
+            setStatus(std::format("Uniform load added to element {}", element), false);
+          }
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(onElement == 0);
+        if (ICONS::iconTextButton(ICONS::E_IconId::ActionRemove, "Remove Loads", ImVec2(-FLT_MIN, 0.0f))) {
+          if (editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
+                std::erase_if(edited.distributedLoads, [&](const FEM::BEAM::DistributedLoad& load) { return load.element == element; });
+                return true;
+              })) {
+            setStatus(std::format("Uniform loads of element {} removed", element), false);
+          }
+        }
+        ImGui::EndDisabled();
+      }
+    }
+
+    if (mesh->hasResults) {
+      ImGui::Spacing();
+      if (PROPERTY::beginFixed("##beam_element_results")) {
+        if (PROPERTY::group("Results")) {
+          const auto& stress = selected.stress;
+          if (stress.available) {
+            PROPERTY::value("Max von Mises", std::format("{:.4g}", stress.maxVonMises / 1e6), "MPa");
+            PROPERTY::value("Yield check", stress.isStressExceeded ? "exceeded" : "ok");
+          } else {
+            PROPERTY::value("Stresses", "none (general section)");
+          }
+        }
+        PROPERTY::end();
+      }
+      if (ICONS::iconTextButton(ICONS::E_IconId::ResultDiagram, "Show Diagrams", ImVec2(-FLT_MIN, 0.0f)) && onOpenDiagrams) onOpenDiagrams();
+      ImGui::SetItemTooltip("Section forces, displacements and stresses along this element");
+    }
+  }
+
+  void BeamModelEditor::renderAddNodeWindow() {
+    if (!beginToolWindow("Add Node", m_addNodeOpen, 22.0f)) return;
+    auto& bridge = BRIDGE::buildBridge();
+    ImGui::BeginDisabled(bridge.isRunning.load());
+    if (PROPERTY::beginFixed("##add_node", 5.0f)) {
+      PROPERTY::inputVector3("Position", m_newNode.data(), "m");
+      PROPERTY::end();
+    }
+    if (ICONS::iconTextButton(ICONS::E_IconId::ActionAdd, "Add Node", ImVec2(-FLT_MIN, 0.0f))) {
+      std::uint32_t added = 0;
+      editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
+        added = static_cast<std::uint32_t>(mesh.nodes.size());
+        mesh.nodes.emplace_back(added, m_newNode[0], m_newNode[1], m_newNode[2]);
+        return true;
+      });
+      select(bridge, added, noSelection);
+      setStatus(std::format("Node {} added", added), false);
+    }
+    ImGui::EndDisabled();
+    ImGui::TextDisabled("The new node is selected; the window stays open.");
+    ImGui::End();
+  }
+
+  void BeamModelEditor::renderAddElementWindow() {
+    if (!beginToolWindow("Add Element", m_addElementOpen, 26.0f)) return;
+    auto& bridge = BRIDGE::buildBridge();
+    ImGui::BeginDisabled(bridge.isRunning.load());
+    if (PROPERTY::beginFixed("##add_element")) {
+      PROPERTY::row("Nodes A - B", "Ids of the two end nodes; after Add, A takes B for the next element of a chain.");
+      ImGui::SetNextItemWidth(LAYOUT::splitWidth(2));
+      ImGui::InputScalar("##node_a", ImGuiDataType_U32, &m_newNodeA);
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(-FLT_MIN);
+      ImGui::InputScalar("##node_b", ImGuiDataType_U32, &m_newNodeB);
+      elementRows(m_newElement, "new");
+      PROPERTY::end();
+    }
+    if (ICONS::iconTextButton(ICONS::E_IconId::ActionAdd, "Add Element", ImVec2(-FLT_MIN, 0.0f))) {
       std::string error;
       std::uint32_t added = 0;
       const bool ok = editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
         const auto count = mesh.nodes.size();
-        const auto a = m_elementNodeA, b = m_elementNodeB;
+        const auto a = m_newNodeA, b = m_newNodeB;
         if (a >= count || b >= count) {
           error = std::format("nodes {} and {} must both exist (the model has {} nodes)", a, b, count);
           return false;
@@ -567,213 +813,84 @@ namespace anaf::GUI {
           error = "an element needs two different nodes";
           return false;
         }
-        const bool duplicate = std::ranges::any_of(mesh.elements, [&](const FEM::BEAM::BeamElement& element) {
-          return (element.node1 == a && element.node2 == b) || (element.node1 == b && element.node2 == a);
+        const bool duplicate = std::ranges::any_of(mesh.elements, [&](const FEM::BEAM::BeamElement& e) {
+          return (e.node1 == a && e.node2 == b) || (e.node1 == b && e.node2 == a);
         });
         if (duplicate) {
           error = std::format("an element between nodes {} and {} already exists", a, b);
           return false;
         }
+        const auto material = bridge.findMaterialIndex(m_newElement.materialID);
+        const auto section = bridge.findSectionIndex(m_newElement.sectionID);
+        if (!material || !section) {
+          error = "choose a material and a section";
+          return false;
+        }
+        try {
+          (void)FEM::BEAM::localAxes(mesh.nodes[a].getLocation(), mesh.nodes[b].getLocation(), m_newElement.orientation);
+        } catch (const std::exception& exception) {
+          error = exception.what();
+          return false;
+        }
         FEM::BEAM::BeamElement element;
         element.node1 = a;
         element.node2 = b;
-        error = assign(element, mesh);
-        if (!error.empty()) return false;
+        element.materialID = *material;
+        element.sectionID = *section;
+        element.formulation = static_cast<FEM::BEAM::E_Formulation>(m_newElement.formulation);
+        element.orientation = m_newElement.orientation;
+        element.endReleases = static_cast<std::uint16_t>(m_newElement.releases & FEM::BEAM::RELEASE::allMask);
         added = static_cast<std::uint32_t>(mesh.elements.size());
         mesh.elements.push_back(element);
         return true;
       });
       if (ok) {
-        setStatus(std::format("Element {} ({} - {}) added", added, m_elementNodeA, m_elementNodeB), false);
-        m_elementNodeA = m_elementNodeB; // ready for the next element of a chain
+        setStatus(std::format("Element {} ({} - {}) added", added, m_newNodeA, m_newNodeB), false);
+        m_newNodeA = m_newNodeB; // ready for the next element of a chain
       } else {
         setStatus("Element not added: " + error, true);
       }
     }
-
-    const auto mesh = currentMesh(bridge);
-    const std::size_t count = mesh ? mesh->elements.size() : 0;
-    ImGui::BeginChild("BeamElementList", ImVec2(0.0f, 150.0f), true);
-    if (mesh) {
-      std::lock_guard lock(bridge.dataMutex); // section names
-      ImGuiListClipper clipper;
-      clipper.Begin(static_cast<int>(count));
-      while (clipper.Step()) {
-        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
-          const auto index = static_cast<std::uint32_t>(row);
-          const auto& element = mesh->elements[index];
-          const std::string section = element.sectionID < bridge.allSections.size() ? bridge.allSections[element.sectionID].getName() : "?";
-          std::string label = std::format("{}: {} - {}  {}  {}{}", index, element.node1, element.node2, section,
-                                          formulationShort(element.formulation), releaseLabel(element.endReleases));
-          if (element.stress.available) label += std::format("  {:.1f} MPa", element.stress.maxVonMises / 1e6);
-          ImGui::PushID(row);
-          if (element.stress.isStressExceeded) ImGui::PushStyleColor(ImGuiCol_Text, THEME::theme().bad);
-          if (ImGui::Selectable(label.c_str(), selected == index)) {
-            bridge.selectedElementId = selected == index ? noSelection : index; // dataMutex held
-          }
-          if (element.stress.isStressExceeded) ImGui::PopStyleColor();
-          ImGui::PopID();
-        }
-      }
-    }
-    ImGui::EndChild();
-
-    ImGui::BeginDisabled(selected == noSelection);
-    if (ImGui::Button("Apply to Selected##beam", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
-      std::string error = "no element selected";
-      const bool ok = editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
-        if (selected >= edited.elements.size()) return false;
-        error = assign(edited.elements[selected], edited);
-        return error.empty();
-      });
-      if (ok) setStatus(std::format("Element {} updated", selected), false);
-      else setStatus("Element not updated: " + error, true);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Delete Element##beam", ImVec2(-FLT_MIN, 0.0f))) {
-      if (editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
-            if (selected >= edited.elements.size()) return false;
-            std::uint32_t index = 0;
-            FEM::BEAM::removeElements(edited, [&](const FEM::BEAM::BeamElement&) { return index++ == selected; });
-            return true;
-          })) {
-        setSelectedElement(bridge, noSelection);
-        setStatus(std::format("Element {} deleted", selected), false);
-      }
-    }
     ImGui::EndDisabled();
+    if (!m_status.empty()) LAYOUT::wrappedColored(m_statusIsError ? THEME::theme().bad : THEME::theme().note, m_status);
+    ImGui::End();
   }
 
-  void BeamModelEditor::renderReleaseInputs() {
-    namespace R = FEM::BEAM::RELEASE;
-    ImGui::SeparatorText("End Releases (Hinges)");
-    ImGui::SameLine();
-    ImGui::TextDisabled("(?)");
-    ImGui::SetItemTooltip("A released force is zero at that element end; the end moves on its own in that\n"
-                          "direction (local axes). My + Mz = a bending hinge (pin), torsion still carried.\n"
-                          "Release only one side of a joint: when every element end at a node is free about\n"
-                          "an axis, the node rotation there is undefined (held at zero; a moment on it is a\n"
-                          "mechanism). N or T released at both ends of an element is a mechanism too.");
-    constexpr std::array<const char*, 6> sectionForceNames{"N", "Vy", "Vz", "T", "My", "Mz"};
-    if (ImGui::BeginTable("##beam_releases", 7, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV)) {
-      ImGui::TableSetupColumn("End");
-      for (const char* force : sectionForceNames) ImGui::TableSetupColumn(force);
-      ImGui::TableHeadersRow();
-      for (int end = 0; end < 2; ++end) {
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted(end == 0 ? "Node A" : "Node B");
-        for (int dof = 0; dof < 6; ++dof) {
-          ImGui::TableNextColumn();
-          ImGui::PushID(end * 6 + dof);
-          ImGui::CheckboxFlags("##release", &m_releases, 1U << (6 * end + dof));
-          ImGui::PopID();
-        }
-      }
-      ImGui::EndTable();
-    }
-    if (ImGui::SmallButton("Hinge A##beam_release")) m_releases = R::hinge;
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Hinge B##beam_release")) m_releases = R::atNode2(R::hinge);
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Pinned Both Ends##beam_release")) m_releases = R::hinge | R::atNode2(R::hinge);
-    ImGui::SetItemTooltip("My and Mz released at both ends: the member carries axial force, shear from its own\n"
-                          "load and torsion, like a pin-jointed strut or a simply supported beam.");
-    ImGui::SameLine();
-    if (ImGui::SmallButton("None##beam_release")) m_releases = 0;
-  }
-
-  void BeamModelEditor::renderElementLoads(const std::uint32_t element) {
-    if (!PROPERTY::header("Distributed Loads & Self Weight")) return;
+  void BeamModelEditor::renderAssignAllWindow() {
+    if (!beginToolWindow("Assign to All Elements", m_assignAllOpen, 26.0f)) return;
     auto& bridge = BRIDGE::buildBridge();
-    const auto mesh = currentMesh(bridge);
-
-    bool selfWeight = !mesh || mesh->gravity != std::array<double, 3>{};
-    if (PROPERTY::beginFixed("##beam_self_weight")) {
-      PROPERTY::row("Self weight", "Density x area x g along -Y, on every element.");
-      if (ImGui::Checkbox("##self_weight", &selfWeight)) {
-        editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
-          edited.gravity = selfWeight ? standardGravity : std::array<double, 3>{};
-          return true;
-        });
-      }
-      PROPERTY::end();
-    }
-
-    if (element == noSelection || !mesh || element >= mesh->elements.size()) {
-      ImGui::PushTextWrapPos(0.0f);
-      ImGui::TextDisabled("Click an element in the viewport (or the Model tab list) for uniform loads.");
-      ImGui::PopTextWrapPos();
-      return;
-    }
-    ImGui::Text("Element %u", element);
-    std::size_t onElement = 0;
-    for (const auto& load : mesh->distributedLoads) {
-      if (load.element != element) continue;
-      ++onElement;
-      ImGui::BulletText("q = (%.4g, %.4g, %.4g) N/m, %s", load.value[0], load.value[1], load.value[2],
-                        load.frame == FEM::BEAM::E_LoadFrame::Local ? "local" : "global");
-    }
-    if (onElement == 0) ImGui::TextDisabled("No uniform load on this element.");
-
-    if (PROPERTY::beginFixed("##beam_uniform_load")) {
-      PROPERTY::inputVector3("Uniform load q", m_distributed.data(), "N/m");
-      PROPERTY::row("Axes");
-      ImGui::Combo("##beam_q_frame", &m_distributedFrame, loadFrames.data(), static_cast<int>(loadFrames.size()));
-      PROPERTY::end();
-    }
-    if (ImGui::Button("Add Load##beam_q", ImVec2(LAYOUT::splitWidth(2), 0.0f))) {
-      if (m_distributed == std::array<double, 3>{}) {
-        setStatus("Enter a non-zero load", true);
-      } else if (editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
-                   if (element >= edited.elements.size()) return false;
-                   edited.distributedLoads.push_back({element, m_distributed, static_cast<FEM::BEAM::E_LoadFrame>(m_distributedFrame)});
-                   return true;
-                 })) {
-        setStatus(std::format("Uniform load added to element {}", element), false);
-      }
-    }
-    ImGui::SameLine();
-    ImGui::BeginDisabled(onElement == 0);
-    if (ImGui::Button("Remove Loads##beam_q", ImVec2(-FLT_MIN, 0.0f))) {
-      if (editModel(bridge, [&](FEM::BEAM::MeshData& edited) {
-            std::erase_if(edited.distributedLoads, [&](const FEM::BEAM::DistributedLoad& load) { return load.element == element; });
-            return true;
-          })) {
-        setStatus(std::format("Uniform loads of element {} removed", element), false);
-      }
-    }
-    ImGui::EndDisabled();
-  }
-
-  void BeamModelEditor::renderWholeModel() {
-    if (!PROPERTY::header("Whole Model", false)) return;
-    auto& bridge = BRIDGE::buildBridge();
-    ImGui::TextWrapped("Sets the formulation, or material and section, on every element; single elements can be "
-                       "changed afterwards.");
-    if (PROPERTY::beginFixed("##beam_whole_formulation_grid")) {
+    ImGui::BeginDisabled(bridge.isRunning.load());
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("Sets the formulation, or material and section, on every element; single elements can be changed afterwards.");
+    ImGui::PopTextWrapPos();
+    if (PROPERTY::beginFixed("##assign_formulation")) {
       PROPERTY::row("Formulation");
-      ImGui::Combo("##beam_whole_formulation", &m_wholeFormulation, formulations.data(), static_cast<int>(formulations.size()));
+      ImGui::Combo("##whole_formulation", &m_wholeFormulation, formulations.data(), static_cast<int>(formulations.size()));
       PROPERTY::end();
     }
-    if (ImGui::Button("Apply Formulation to All##beam", ImVec2(-FLT_MIN, 0.0f))) {
+    if (ImGui::Button("Apply Formulation to All", ImVec2(-FLT_MIN, 0.0f))) {
       if (editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
             if (mesh.elements.empty()) return false;
             FEM::BEAM::setFormulationForAll(mesh, static_cast<FEM::BEAM::E_Formulation>(m_wholeFormulation));
             return true;
           })) {
+        m_loadedElement = noSelection;
         setStatus(std::format("{} set on every element", formulations[static_cast<std::size_t>(m_wholeFormulation)]), false);
       }
     }
     ImGui::Spacing();
-    if (PROPERTY::beginFixed("##beam_whole_material_grid")) {
+    if (PROPERTY::beginFixed("##assign_material")) {
       PROPERTY::row("Material");
-      materialCombo(bridge, "##beam_whole_material", m_wholeMaterialID);
+      PROPERTY::reserveBrowse();
+      materialCombo(bridge, "##whole_material", m_wholeMaterialID);
+      if (PROPERTY::browseButton("##whole_materials", "Open the Material Handler") && onOpenMaterialHandler) onOpenMaterialHandler();
       PROPERTY::row("Section");
-      sectionCombo(bridge, "##beam_whole_section", m_wholeSectionID);
+      PROPERTY::reserveBrowse();
+      sectionCombo(bridge, "##whole_section", m_wholeSectionID);
+      if (PROPERTY::browseButton("##whole_sections", "Open the Section Handler") && onOpenSectionHandler) onOpenSectionHandler();
       PROPERTY::end();
     }
-    if (ImGui::Button("Apply Material & Section to All##beam", ImVec2(-FLT_MIN, 0.0f))) {
+    if (ImGui::Button("Apply Material & Section to All", ImVec2(-FLT_MIN, 0.0f))) {
       const bool ok = editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
         const auto material = bridge.findMaterialIndex(m_wholeMaterialID); // dataMutex held
         const auto section = bridge.findSectionIndex(m_wholeSectionID);
@@ -784,22 +901,15 @@ namespace anaf::GUI {
         }
         return true;
       });
+      m_loadedElement = noSelection;
       if (ok) setStatus("Material and section set on every element", false);
       else setStatus("Nothing changed: the model has no elements", true);
     }
     ImGui::Spacing();
-    if (ImGui::Button("Remove All End Releases##beam", ImVec2(-FLT_MIN, 0.0f))) {
-      std::size_t removed = 0;
-      editModel(bridge, [&](FEM::BEAM::MeshData& mesh) {
-        for (auto& element : mesh.elements) {
-          if (element.endReleases == 0) continue;
-          element.endReleases = 0;
-          ++removed;
-        }
-        return removed > 0;
-      });
-      setStatus(removed > 0 ? std::format("End releases removed from {} elements", removed) : "No element has end releases", false);
-    }
+    if (ICONS::iconTextButton(ICONS::E_IconId::ReleaseHinge, "Remove All End Releases", ImVec2(-FLT_MIN, 0.0f))) removeAllReleases();
+    ImGui::EndDisabled();
+    if (!m_status.empty()) LAYOUT::wrappedColored(m_statusIsError ? THEME::theme().bad : THEME::theme().note, m_status);
+    ImGui::End();
   }
 
   void BeamModelEditor::loadExample() {
@@ -830,132 +940,6 @@ namespace anaf::GUI {
     setStatus("Example frame loaded (material: the first in the list)", false);
   }
 
-  void BeamModelEditor::readLibrary() {
-    m_libraryRead = true;
-    m_library.clear();
-    m_libraryDir = anaf::DIRECTORY::findAssetPath(std::filesystem::path(FEM::BEAM::LIBRARY::librarySubdir));
-    if (m_libraryDir.empty()) {
-      m_libraryError = std::format("assets/{} not found", FEM::BEAM::LIBRARY::librarySubdir);
-      anaf::LOG::warn("Built-in beam library: {}", m_libraryError);
-      return;
-    }
-    auto index = FEM::BEAM::LIBRARY::loadIndex(m_libraryDir / std::filesystem::path(FEM::BEAM::LIBRARY::indexFileName));
-    if (!index) {
-      m_libraryError = index.error();
-      anaf::LOG::warn("Built-in beam library: {}", m_libraryError);
-      return;
-    }
-    std::ranges::stable_sort(*index, {}, &FEM::BEAM::LIBRARY::Entry::category); // grouped in the combo
-    m_library = std::move(*index);
-    m_libraryError.clear();
-  }
-
-  void BeamModelEditor::renderLibrary() {
-    if (!PROPERTY::header("Built-in Models", false)) return;
-    if (!m_libraryRead) readLibrary();
-    if (m_library.empty()) {
-      ImGui::TextDisabled("%s", m_libraryError.empty() ? "No built-in models" : m_libraryError.c_str());
-      return;
-    }
-    m_librarySelected = std::clamp(m_librarySelected, 0, static_cast<int>(m_library.size()) - 1);
-    const auto& selected = m_library[static_cast<std::size_t>(m_librarySelected)];
-    const std::string preview = selected.category + ": " + selected.name;
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::BeginCombo("##builtin_beam", preview.c_str(), ImGuiComboFlags_HeightLarge)) {
-      std::string_view category;
-      for (int i = 0; i < static_cast<int>(m_library.size()); ++i) {
-        const auto& entry = m_library[static_cast<std::size_t>(i)];
-        if (entry.category != category) {
-          category = entry.category;
-          ImGui::SeparatorText(entry.category.c_str());
-        }
-        ImGui::PushID(i);
-        if (ImGui::Selectable(entry.name.c_str(), i == m_librarySelected)) m_librarySelected = i;
-        ImGui::PopID();
-      }
-      ImGui::EndCombo();
-    }
-    // Long descriptions scroll inside a box of at most five lines.
-    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, ImGui::GetTextLineHeightWithSpacing() * 5.0f + 8.0f));
-    ImGui::BeginChild("##builtin_beam_description", ImVec2(0.0f, 0.0f), ImGuiChildFlags_FrameStyle | ImGuiChildFlags_AutoResizeY);
-    ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("%s", selected.description.c_str());
-    ImGui::PopTextWrapPos();
-    ImGui::EndChild();
-    if (ImGui::Button("Load Model##builtin_beam", ImVec2(LAYOUT::splitWidth(2), 0.0f)) && onLoadBuiltin) {
-      onLoadBuiltin(FEM::BEAM::LIBRARY::modelFile(m_libraryDir, selected));
-    }
-    ImGui::SetItemTooltip("The model only: loads, supports, sections; run the solver yourself.");
-    ImGui::SameLine();
-    if (ImGui::Button("Load Solved##builtin_beam", ImVec2(-FLT_MIN, 0.0f)) && onLoadBuiltin) {
-      onLoadBuiltin(FEM::BEAM::LIBRARY::solvedFile(m_libraryDir, selected));
-    }
-    ImGui::SetItemTooltip("The same model with its results (solved by anaf_beam_library_tool).\n"
-                          "Read-only: loading makes a copy; save changes with File > Export.");
-  }
-
-  void BeamModelEditor::renderSolve() {
-    auto& bridge = BRIDGE::buildBridge();
-    const auto mesh = currentMesh(bridge);
-
-    // The viewport draws location + displacement * scale (rotations scaled the same way).
-    double scale = bridge.deformScale.load();
-    LAYOUT::field("Deformation");
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Auto").x - ImGui::GetStyle().FramePadding.x * 2.0f -
-                            ImGui::GetStyle().ItemSpacing.x);
-    if (ImGui::InputDouble("##beam_deformation_scale", &scale, 0.0, 0.0, "%.4g")) {
-      bridge.deformScale = std::max(scale, 0.0);
-      bridge.dataVersion.fetch_add(1, std::memory_order_release);
-    }
-    ImGui::SetItemTooltip("Deformation scale of the drawn shape (1 = true size)");
-    ImGui::SameLine();
-    ImGui::BeginDisabled(!mesh || !mesh->hasResults);
-    if (ImGui::Button("Auto##beam_scale")) {
-      double size = 0.0, largest = 0.0;
-      std::array<double, 3> low{1e300, 1e300, 1e300}, high{-1e300, -1e300, -1e300};
-      for (const auto& node : mesh->nodes) {
-        for (std::size_t axis = 0; axis < 3; ++axis) {
-          low[axis] = std::min(low[axis], node.getLocation()[axis]);
-          high[axis] = std::max(high[axis], node.getLocation()[axis]);
-        }
-        const auto& d = node.getDisplacement();
-        largest = std::max(largest, std::hypot(d[0], d[1], d[2]));
-      }
-      size = std::hypot(high[0] - low[0], high[1] - low[1], high[2] - low[2]);
-      if (largest > 0.0 && size > 0.0) {
-        bridge.deformScale = 0.05 * size / largest;
-        bridge.dataVersion.fetch_add(1, std::memory_order_release);
-      }
-    }
-    ImGui::SetItemTooltip("Draw the largest nodal displacement as 5 %% of the model size");
-    ImGui::EndDisabled();
-    if (bridge.isRunning.load()) {
-      ImGui::ProgressBar(bridge.progress.load(), ImVec2(-FLT_MIN, 0.0f));
-      ImGui::BeginDisabled();
-      LAYOUT::primaryButton("Calculating...##beam");
-      ImGui::EndDisabled();
-    } else {
-      ImGui::BeginDisabled(!mesh || mesh->elements.empty());
-      if (LAYOUT::primaryButton("Run Solver for Beam##beam")) {
-        m_status.clear();
-        BEAM_WORKER::startSolve(bridge, mesh);
-      }
-      ImGui::EndDisabled();
-    }
-  }
-
-  void BeamModelEditor::renderModelButtons() {
-    auto& bridge = BRIDGE::buildBridge();
-    ImGui::BeginDisabled(bridge.isRunning.load());
-    if (ImGui::Button("Load Example Frame##beam", ImVec2(LAYOUT::splitWidth(2), 0.0f))) loadExample();
-    ImGui::SameLine();
-    if (ImGui::Button("Clear Model##beam", ImVec2(-FLT_MIN, 0.0f))) {
-      bridge.resetModel(BRIDGE::E_ObjectType::BeamFrame);
-      resetState();
-    }
-    ImGui::EndDisabled();
-  }
-
   void BeamModelEditor::onImGuiRender() {
     if (!isOpen) return;
     auto& bridge = BRIDGE::buildBridge();
@@ -968,54 +952,31 @@ namespace anaf::GUI {
       if (mesh && bridge.selectedElementId < mesh->elements.size()) element = bridge.selectedElementId;
     }
     syncSelection(node, element);
-
-    const auto loadKind = bridge.loadKind.load();
-    const bool dynamic = loadKind == BRIDGE::E_LoadKind::Dynamic;
+    const bool withLoads = bridge.loadKind.load() != BRIDGE::E_LoadKind::Dynamic;
     const bool running = bridge.isRunning.load();
-    // Footer rows: deformation scale (+ progress bar) and the model buttons; one run button.
-    const float footer = dynamic ? LAYOUT::footerHeight(1, 1) : LAYOUT::footerHeight(running ? 3 : 2, 1);
 
-    ImGui::Begin("Beam(3D) Frame Editor", &isOpen);
-    renderSummary();
-
-    // The solve works on a copy; edits made meanwhile would be overwritten by its result.
-    if (ImGui::BeginTabBar("##beam_tabs")) {
-      if (ImGui::BeginTabItem("Model")) {
-        LAYOUT::beginBody("##beam_model_tab", footer);
-        ImGui::BeginDisabled(running);
-        renderLibrary();
-        renderNodes(node);
-        renderElements(element);
-        renderWholeModel();
-        ImGui::EndDisabled();
-        LAYOUT::endBody();
-        ImGui::EndTabItem();
+    if (ImGui::Begin("Properties###beam_properties", &isOpen)) {
+      renderHeader(node, element);
+      // The status line keeps its place at the bottom; the content scrolls above it.
+      const float statusHeight = m_status.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing() * 2.0f + ImGui::GetStyle().ItemSpacing.y;
+      ImGui::BeginChild("##beam_properties_body", ImVec2(0.0f, -statusHeight));
+      // The solve works on a copy; edits made meanwhile would be overwritten by its result.
+      ImGui::BeginDisabled(running);
+      if (m_focus == E_Focus::Node) renderNode(node, withLoads);
+      else if (m_focus == E_Focus::Element) renderElement(element, withLoads);
+      else renderModel();
+      ImGui::EndDisabled();
+      ImGui::EndChild();
+      if (!m_status.empty()) {
+        ImGui::Separator();
+        LAYOUT::wrappedColored(m_statusIsError ? THEME::theme().bad : THEME::theme().note, m_status);
       }
-      // ### keeps one tab (and its selection) for both labels.
-      if (ImGui::BeginTabItem(dynamic ? "Supports###beam_loads_tab" : "Supports & Loads###beam_loads_tab")) {
-        LAYOUT::beginBody("##beam_loads_tab", footer);
-        ImGui::BeginDisabled(running);
-        renderSupportsAndLoads(node, !dynamic);
-        if (!dynamic) renderElementLoads(element);
-        ImGui::EndDisabled();
-        LAYOUT::endBody();
-        ImGui::EndTabItem();
-      }
-      if (ImGui::BeginTabItem("Analysis")) {
-        LAYOUT::beginBody("##beam_analysis_tab", footer);
-        ImGui::BeginDisabled(running);
-        renderAnalysisTab(loadKind, m_dynamic);
-        ImGui::EndDisabled();
-        LAYOUT::endBody();
-        ImGui::EndTabItem();
-      }
-      ImGui::EndTabBar();
     }
-
-    if (dynamic) renderDynamicRunButton();
-    else renderSolve();
-    renderModelButtons();
     ImGui::End();
+
+    renderAddNodeWindow();
+    renderAddElementWindow();
+    renderAssignAllWindow();
   }
 
 } // namespace anaf::GUI end

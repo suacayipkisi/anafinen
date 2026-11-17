@@ -37,7 +37,7 @@ namespace anaf::GUI {
     for (auto& entry : m_panelMenu) {
       const bool available = !entry.isAvailable || entry.isAvailable();
       // A panel of another analysis type stays closed; the checkmark shows what is open now.
-      ImGui::MenuItem(entry.label, nullptr, &entry.panel->isOpen, available);
+      if (ICONS::iconMenuItem(entry.icon, entry.label, nullptr, entry.panel->isOpen, available)) entry.panel->isOpen = !entry.panel->isOpen;
       if (!available && entry.unavailableHint && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("%s", entry.unavailableHint);
       }
@@ -47,7 +47,7 @@ namespace anaf::GUI {
 
   void MainDockSpaceHost::renderSettingsMenu() {
     if (!ImGui::BeginMenu("Settings")) return;
-    if (ImGui::BeginMenu("Theme")) {
+    if (ICONS::iconBeginMenu(ICONS::E_IconId::ActionSettings, "Theme")) {
       for (const THEME::E_ThemeId id : THEME::allThemes) {
         if (ImGui::MenuItem(THEME::palette(id).name, nullptr, THEME::currentTheme() == id)) {
           THEME::applyTheme(id);
@@ -57,7 +57,7 @@ namespace anaf::GUI {
       }
       ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("UI Font Size")) {
+    if (ICONS::iconBeginMenu(ICONS::E_IconId::PanelProperties, "UI Font Size")) {
       constexpr std::array<float, 6> sizes{13.0f, 14.0f, 15.0f, 16.0f, 17.0f, 18.0f};
       for (const float size : sizes) {
         const std::string label = std::to_string(static_cast<int>(size)) + " px" + (size == 15.0f ? " (default)" : "");
@@ -69,7 +69,7 @@ namespace anaf::GUI {
       }
       ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Viewport")) {
+    if (ICONS::iconBeginMenu(ICONS::E_IconId::PanelViewport, "Viewport")) {
       SETTINGS::UserSettings& settings = SETTINGS::settings();
       ImGui::SeparatorText("Background");
       if (ImGui::MenuItem("Flat (default)", nullptr, !settings.gradientBackground)) {
@@ -138,13 +138,14 @@ namespace anaf::GUI {
     ImGui::PopStyleVar(3);
 
     if (ImGui::BeginMenuBar()) {
+      const bool modelActive = !hasModel || hasModel();
+      const bool solvable = !canRunSolver || canRunSolver();
       if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("Import Mesh / CAD...", "Ctrl+O")) {
-          if (onImportMesh) onImportMesh();
-        }
-        if (ImGui::MenuItem("Export Model...", "Ctrl+E")) {
-          if (onExportResults) onExportResults();
-        }
+        if (ICONS::iconMenuItem(ICONS::E_IconId::ModelLibrary, "Open Example...") && onOpenLibrary) onOpenLibrary();
+        if (ICONS::iconMenuItem(ICONS::E_IconId::ActionImport, "Import Mesh / CAD...", "Ctrl+O") && onImportMesh) onImportMesh();
+        if (ICONS::iconMenuItem(ICONS::E_IconId::ActionExport, "Export Model...", "Ctrl+E") && onExportResults) onExportResults();
+        ImGui::Separator();
+        if (ICONS::iconMenuItem(ICONS::E_IconId::ActionClear, "Clear Model", nullptr, false, modelActive) && onClearModel) onClearModel();
         ImGui::Separator();
         if (ImGui::MenuItem("Exit", "Alt+F4")) {
           glfwSetWindowShouldClose(m_window, GLFW_TRUE);
@@ -153,8 +154,13 @@ namespace anaf::GUI {
       }
 
       if (ImGui::BeginMenu("Analyze")) {
-        if (ImGui::MenuItem("Truss (1D Element)") && onSelectTruss) onSelectTruss();
-        if (ImGui::MenuItem("Beam / Frame (3D Element)") && onSelectBeam) onSelectBeam();
+        if (ICONS::iconMenuItem(ICONS::E_IconId::ModelTruss, "Truss (1D Element)...") && onSelectTruss) onSelectTruss();
+        if (ICONS::iconMenuItem(ICONS::E_IconId::ModelFrame, "Beam / Frame (3D Element)...") && onSelectBeam) onSelectBeam();
+        ImGui::Separator();
+        if (ICONS::iconMenuItem(ICONS::E_IconId::AnalysisStatic, "Analysis Settings...", nullptr, false, modelActive) && onAnalysisSettings) {
+          onAnalysisSettings();
+        }
+        if (ICONS::iconMenuItem(ICONS::E_IconId::ActionSolve, "Run Solver", "F5", false, solvable) && onRunSolver) onRunSolver();
         ImGui::EndMenu();
       }
 
@@ -162,16 +168,14 @@ namespace anaf::GUI {
       renderSettingsMenu();
 
       if (ImGui::BeginMenu("Help")) {
-        if (ImGui::MenuItem("Welcome...")) {
-          if (onShowWelcome) onShowWelcome();
-        }
-        if (ImGui::MenuItem("About anafinen...")) {
-          if (onShowAbout) onShowAbout();
-        }
+        if (ICONS::iconMenuItem(ICONS::E_IconId::ActionHelp, "Welcome...") && onShowWelcome) onShowWelcome();
+        if (ICONS::iconMenuItem(ICONS::E_IconId::ActionInfo, "About anafinen...") && onShowAbout) onShowAbout();
         ImGui::EndMenu();
       }
 
       ImGui::EndMenuBar();
+      // F5 anywhere except while typing into a field.
+      if (solvable && onRunSolver && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F5, false)) onRunSolver();
     }
 
     ImGuiID dockspaceId = ImGui::GetID("AppMainDockSpace");
@@ -214,9 +218,10 @@ namespace anaf::GUI {
       ImGui::DockBuilderSetNodeSize(dockToolbarId, ImVec2(toolbarNode->Size.x, toolbarHeight));
 
       // Dock windows into respective nodes
-      ImGui::DockBuilderDockWindow("Truss(1D) Analysis Set", dockLeftId);
-      ImGui::DockBuilderDockWindow("Truss(1D) Model Editor", dockLeftId);
-      ImGui::DockBuilderDockWindow("Beam(3D) Frame Editor", dockLeftId);
+      ImGui::DockBuilderDockWindow("Grid Truss Generator", dockLeftId);
+      // The Properties panels share a title; "###" gives each its own window (and dock) ID.
+      ImGui::DockBuilderDockWindow("Properties###truss_properties", dockLeftId);
+      ImGui::DockBuilderDockWindow("Properties###beam_properties", dockLeftId);
       // "Beam Diagrams" splits the Model Tree's node itself when it opens (BeamDiagramPanel).
       ImGui::DockBuilderDockWindow("Model Tree", dockRightId);
       ImGui::DockBuilderDockWindow("Console", dockBottomId);

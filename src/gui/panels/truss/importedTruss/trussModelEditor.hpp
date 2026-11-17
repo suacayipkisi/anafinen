@@ -15,37 +15,41 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+
 #pragma once
 
 #include <guiMaterials/iPanel.hpp>
-#include <panels/dynamicAnalysisInputs.hpp>
 #include <common/supportBasis.hpp>
-#include <truss_1D/trussTypes/trussLibrary.hpp>
 
 #include <array>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <limits>
 #include <string>
-#include <vector>
 
 namespace anaf::GUI {
 
-  // Editor and solver front end for TrussImportedOrEntered: the model comes from
-  // File > Import or is built here node by node and bar by bar. Every edit publishes a new
-  // snapshot into bridge.activeMesh (node ids stay 0..n-1) and drops stale results.
+  // "Properties" panel of a TrussImportedOrEntered model (File > Import or built node by node),
+  // driven by the selection (viewport for nodes, Model Tree for nodes and bars):
+  //
+  //   nothing selected   model summary, Assign to All Bars..., start hints
+  //   a node             position, support (global axes or inclined vectors), nodal load, results
+  //   a bar              nodes, length, material, area, results
+  //
+  // Add Node / Add Bar are command windows. Every edit publishes a new snapshot into
+  // bridge.activeMesh (node ids stay 0..n-1) and drops stale results.
   class TrussModelEditor : public IPanel {
   private:
     static constexpr std::uint32_t noSelection = std::numeric_limits<std::uint32_t>::max();
 
-    std::array<double, 3> m_newNode{0.0, 0.0, 0.0};
+    enum class E_Focus : std::uint8_t { Model, Node, Bar };
+
+    E_Focus m_focus{E_Focus::Model};
+    std::uint32_t m_loadedNode{noSelection}; // node whose values are in the node inputs
+    std::uint32_t m_loadedBar{noSelection};  // bar whose values are in m_materialID / m_areaCm2
+
+    // Selected node.
     std::array<double, 3> m_nodePosition{0.0, 0.0, 0.0};
-    std::uint32_t m_barNodeA{0};
-    std::uint32_t m_barNodeB{1};
-    std::uint32_t m_materialID{0};       // stable Material ID, resolved to an index on use
-    double m_areaCm2{80.0};              // entered in cm^2, stored in m^2 like the SQPT panel
-    std::uint32_t m_selectedBar{noSelection};  // index into MeshData::trussElements
     std::array<double, 3> m_force{0.0, 0.0, 0.0};
     std::array<bool, 3> m_fixed{false, false, false};
     // Inclined / skewed support: 1..3 direction vectors, read as the restrained directions
@@ -54,46 +58,51 @@ namespace anaf::GUI {
     bool m_vectorsRestrained{true};
     int m_supportVectorCount{1};
     std::array<std::array<double, 3>, 3> m_supportVectors{{{0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {0.0, 0.0, 1.0}}};
-    std::uint32_t m_loadedNode{noSelection};   // node whose values are in the inputs above
-    std::string m_status;                // last edit result shown under the summary
-    bool m_statusIsError{false};
-    DynamicAnalysisInputs m_dynamic;     // shown for LoadKind::Dynamic
 
-    // Whole model: one section and material for every bar at once.
+    // Selected bar.
+    std::uint32_t m_materialID{0}; // stable Material ID, resolved to an index on use
+    double m_areaCm2{80.0};        // entered in cm^2, stored in m^2 like the SQPT panel
+
+    // Add Node / Add Bar / Assign to All Bars windows.
+    bool m_addNodeOpen{false};
+    std::array<double, 3> m_newNode{0.0, 0.0, 0.0};
+    bool m_addBarOpen{false};
+    std::uint32_t m_barNodeA{0};
+    std::uint32_t m_barNodeB{1};
+    std::uint32_t m_newMaterialID{0};
+    double m_newAreaCm2{80.0};
+    bool m_assignAllOpen{false};
     std::uint32_t m_wholeMaterialID{0};
     double m_wholeAreaCm2{80.0};
-    bool m_includeWireframe{false};      // also turn wireframe edges into bars
+    bool m_includeWireframe{false}; // also turn wireframe edges into bars
 
-    // Built-in library (assets/objects/truss/truss1D), read once on first use.
-    bool m_libraryRead{false};
-    std::filesystem::path m_libraryDir;
-    std::vector<FEM::TRUSS::LIBRARY::Entry> m_library;
-    std::string m_libraryError;
-    int m_librarySelected{0};
+    std::string m_status;
+    bool m_statusIsError{false};
 
     void setStatus(std::string message, bool error);
-    void syncSelection(std::uint32_t selectedNode);
-    void readLibrary();
-    void renderLibrary();
-    void renderWholeModel();
-    void renderSummary();
-    void renderNodes(std::uint32_t selectedNode);
-    void renderBars();
-    // withLoads false (dynamic load kind): supports only.
-    void renderSupportsAndLoads(std::uint32_t selectedNode, bool withLoads);
+    void syncSelection(std::uint32_t node, std::uint32_t bar);
+    void renderHeader(std::uint32_t node, std::uint32_t bar);
+    void renderModel();
+    void renderNode(std::uint32_t node, bool withLoads);
     void renderInclinedSupportInputs();
     void setSupportVectors(const FEM::SUPPORT::Basis& vectors);
-    void renderSolve();
-    // Import File... / Clear Model, shown for both load kinds.
-    void renderModelButtons();
+    void renderBar(std::uint32_t bar);
+    void renderAddNodeWindow();
+    void renderAddBarWindow();
+    void renderAssignAllWindow();
 
   public:
     ~TrussModelEditor() override = default;
 
     std::function<void()> onOpenMaterialHandler;
     std::function<void()> onRequestImport;
-    // Imports a built-in model file (the file is only read; edits stay in memory).
-    std::function<void(const std::filesystem::path&)> onLoadBuiltin;
+    std::function<void()> onOpenLibrary;
+
+    void openAddNode();
+    void openAddBar();
+    void openAssignAll();
+    // Starts the static solve of the active model; false when there is nothing to solve.
+    bool solve();
 
     // Back to the default inputs and no selection. The model itself lives in the bridge and
     // is cleared with GuiCalcBridge::resetModel().

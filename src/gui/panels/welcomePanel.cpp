@@ -17,6 +17,8 @@
 
 #include "welcomePanel.hpp"
 
+#include <guiMaterials/iconAtlas.hpp>
+
 #include <beam/beamTypes/beamLibrary.hpp>
 #include <bridge/generalStatus.hpp>
 #include <directory/getExecutableDirectory.hpp>
@@ -43,7 +45,7 @@ namespace anaf::GUI {
 
     // Button on the left, wrapped explanation next to it, both centered on the taller of the two;
     // true when clicked.
-    bool actionRow(const char* label, const char* text, const bool enabled = true) {
+    bool actionRow(const ICONS::E_IconId icon, const char* label, const char* text, const bool enabled = true) {
       ImGui::TableNextRow();
       const float buttonHeight = LAYOUT::runButtonHeight;
 
@@ -59,7 +61,7 @@ namespace anaf::GUI {
       ImGui::TableSetColumnIndex(0);
       ImGui::SetCursorPosY(rowTop + (rowHeight - buttonHeight) * 0.5f);
       ImGui::BeginDisabled(!enabled);
-      const bool clicked = ImGui::Button(label, ImVec2(-FLT_MIN, buttonHeight));
+      const bool clicked = ICONS::iconTextButton(icon, label, ImVec2(-FLT_MIN, buttonHeight));
       ImGui::EndDisabled();
       return clicked;
     }
@@ -112,21 +114,21 @@ namespace anaf::GUI {
       const std::string exampleText = m_examplePath.empty()
         ? std::string("The example model was not found in the installed assets.")
         : std::format("{}: solved, with stress colors and section force diagrams. "
-                      "Edit it in the Frame Editor and run it again.", exampleName);
-      if (actionRow("Open Example", exampleText.c_str(), !m_examplePath.empty()) && onOpenExample) {
+                      "Click a member to edit it in Properties and run it again (F5).", exampleName);
+      if (actionRow(ICONS::E_IconId::ModelLibrary, "Open Example", exampleText.c_str(), !m_examplePath.empty()) && onOpenExample) {
         onOpenExample(m_examplePath);
         close = true;
       }
-      if (actionRow("New Beam / Frame", "Build a frame node by node, or load one of the built-in models "
+      if (actionRow(ICONS::E_IconId::ModelFrame, "New Beam / Frame", "Build a frame node by node, or load one of the built-in models "
                     "(Analyze > Beam / Frame).") && onNewBeam) {
         onNewBeam();
         close = true;
       }
-      if (actionRow("New Truss", "Generate a grid truss or build one node by node (Analyze > Truss).") && onNewTruss) {
+      if (actionRow(ICONS::E_IconId::ModelTruss, "New Truss", "Generate a grid truss or build one node by node (Analyze > Truss).") && onNewTruss) {
         onNewTruss();
         close = true;
       }
-      if (actionRow("Import File...", "Mesh, result or CAD file: MSH, VTK / VTU, STEP / IGES / BREP (File > Import).") && onImport) {
+      if (actionRow(ICONS::E_IconId::ActionImport, "Import File...", "Mesh, result or CAD file: MSH, VTK / VTU, STEP / IGES / BREP (File > Import).") && onImport) {
         onImport();
         close = true;
       }
