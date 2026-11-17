@@ -8,7 +8,7 @@
 # Version: the upstream tag is v<version>-alpha; "~alpha" sorts before the final <version>.
 # Keep upstream_version equal to project(VERSION) in CMakeLists.txt (make-srpm.sh checks it).
 
-%global upstream_version 0.2.2
+%global upstream_version 0.3.0
 %global prerelease alpha
 %global source_name anafinen-%{upstream_version}-%{prerelease}
 
@@ -17,7 +17,7 @@
 
 Name:           anafinen
 Version:        %{upstream_version}~%{prerelease}
-Release:        2%{?dist}
+Release:        1%{?dist}
 Summary:        3D finite element analysis of trusses and beam frames
 # GPL: anafinen; MIT: Dear ImGui, ImPlot, ImGuizmo, GLAD; Zlib: GLFW, nanosvg; MPL-2.0: Spectra;
 # WTFPL: portable-file-dialogs; OFL-1.1: Inter, Cascadia Code (assets/fonts)
