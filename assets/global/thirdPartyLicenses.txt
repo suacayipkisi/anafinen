@@ -21,9 +21,12 @@ This project incorporates and builds upon the following third-party software and
    - License: MIT License
    - Copyright (C) Omar Cornut, Cedric Guillemet, Evan Pezent
 
-5. **GLFW**
+5. **GLFW** (3.4, `external/glfw` submodule, built in statically)
    - License: zlib/libpng License
    - Copyright (C) Camilla Löwy
+   - Altered: anafinen applies `external/patches/glfw-3.4-anafinen.patch` at build time (window drag,
+     edge resize and window menu for the integrated title bar); every changed block is marked
+     `ANAFINEN PATCH` in the patched sources.
 
 6. **GLAD**
    - License: Public Domain / MIT

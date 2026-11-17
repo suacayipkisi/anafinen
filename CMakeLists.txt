@@ -174,6 +174,7 @@ set(ANAFINEN_SOURCES
     src/gui/guiMaterials/imGuiLayer.cpp
     src/gui/guiMaterials/iconAtlas.cpp
     src/gui/guiMaterials/theme.cpp
+    src/gui/guiMaterials/titleBar.cpp
     src/gui/guiMaterials/userSettings.cpp
     src/gui/guiMaterials/framebuffer.cpp
     src/gui/guiMaterials/shaderProgram.cpp
@@ -257,6 +258,11 @@ target_link_libraries(anafinen PRIVATE
 target_include_directories(anafinen PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/gui
 )
+
+# Integrated title bar (titleBar.cpp): window procedure, auto-hide taskbar query.
+if(WIN32)
+    target_link_libraries(anafinen PRIVATE user32 shell32)
+endif()
 
 # Native file chooser (header-only, WTFPL): Windows common dialogs, zenity / kdialog on Linux.
 target_include_directories(anafinen SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/portable-file-dialogs)

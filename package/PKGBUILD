@@ -8,9 +8,12 @@ url="https://github.com/suacayipkisi/anafinen"
 license=('GPL-3.0-or-later')
 # Header-only libraries (eigen, glm, nlohmann-json) are build-time only; Spectra comes from the
 # external/spectra submodule. OpenMP is GCC's libgomp (gcc-libs). gmsh is in the AUR (gmsh or gmsh-bin).
-depends=('glibc' 'gcc-libs' 'glfw' 'libglvnd' 'gmsh' 'suitesparse' 'libpng' 'zlib' 'hdf5' 'freetype2')
+# GLFW is built in from the external/glfw submodule (patched for the integrated title bar); it loads
+# the Wayland / X11 libraries at run time, so they are listed here instead of 'glfw'.
+depends=('glibc' 'gcc-libs' 'wayland' 'libxkbcommon' 'libx11' 'libxrandr' 'libxinerama' 'libxcursor' 'libxi' 'libxext' 'libglvnd' 'gmsh' 'suitesparse' 'libpng' 'zlib' 'hdf5' 'freetype2')
 makedepends=('cmake' 'ninja' 'git' 'eigen' 'glm' 'nlohmann-json' 'librsvg')
-optdepends=('zenity: native file dialog for File > Import / Export'
+optdepends=('libdecor: window decorations when the system title bar is chosen on GNOME Wayland'
+            'zenity: native file dialog for File > Import / Export'
             'kdialog: native file dialog on KDE')
 options=('!lto')
 source=()

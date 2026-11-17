@@ -133,7 +133,7 @@ macOS is not supported (no test hardware).
 git clone --recursive https://github.com/suacayipkisi/anafinen.git
 ```
 
-`--recursive` also fetches the submodules (Dear ImGui, ImPlot, ImGuizmo, Spectra). For an existing clone run `git submodule update --init --recursive` inside `anafinen`.
+`--recursive` also fetches the submodules (Dear ImGui, ImPlot, ImGuizmo, Spectra, GLFW). For an existing clone run `git submodule update --init --recursive` inside `anafinen`.
 
 ### Install vcpkg
 
@@ -163,9 +163,9 @@ built-in sparse LDLT solver.
 
 Windows builds use MSVC with vcpkg; a MinGW (cross-)build is not supported.
 
-GUI and visualization:
+GUI and visualization (GLFW is not a vcpkg port here: it is built from the `external/glfw`
+submodule with the patch in `external/patches/`, for the integrated title bar):
 ```cmd
-.\vcpkg install glfw3:x64-windows
 .\vcpkg install freetype:x64-windows
 .\vcpkg install glad:x64-windows
 .\vcpkg install "imgui[core,docking-experimental,freetype,glfw-binding,opengl3-binding]:x64-windows" --recurse
@@ -217,7 +217,14 @@ sudo dnf install -y \
     suitesparse-devel \
     mesa-libGL-devel \
     gmsh-devel \
-    glfw-devel \
+    wayland-devel \
+    libxkbcommon-devel \
+    libX11-devel \
+    libXrandr-devel \
+    libXinerama-devel \
+    libXcursor-devel \
+    libXi-devel \
+    libXext-devel \
     spectra-devel \
     libpng-devel \
     zlib-devel \
@@ -233,7 +240,7 @@ sudo dnf install -y \
 #### Libraries Arch-CachyOS
 ```bash
 # Spectra comes from the git submodule (it is not in the official repos); OpenMP is GCC's libgomp (gcc-libs).
-sudo pacman -S glibc gcc-libs eigen suitesparse glfw mesa cmake ninja git glm libpng zlib nlohmann-json hdf5 freetype2 librsvg zenity
+sudo pacman -S glibc gcc-libs eigen suitesparse wayland libxkbcommon libx11 libxrandr libxinerama libxcursor libxi libxext mesa cmake ninja git glm libpng zlib nlohmann-json hdf5 freetype2 librsvg zenity
 
 # gmsh comes from the AUR (user-maintained packages): review the PKGBUILD before installing,
 # or use the official Gmsh SDK from gmsh.info as on Windows.
@@ -243,7 +250,7 @@ paru -S gmsh-bin
 #### Libraries Debian-Ubuntu
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev libhdf5-dev libfreetype-dev librsvg2-bin zenity
+sudo apt-get install -y cmake ninja-build build-essential pkg-config libeigen3-dev libsuitesparse-dev libpng-dev libwayland-dev libxkbcommon-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev nlohmann-json3-dev libhdf5-dev libfreetype-dev librsvg2-bin zenity
 ```
 
 ### Clone This Repo

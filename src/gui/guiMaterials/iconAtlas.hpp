@@ -29,6 +29,7 @@
 // GUI thread only. Every widget here falls back to its text label when an icon is missing.
 
 // X(enumerator, file name without ".svg"). The file name is the stable key, the enumerator follows it.
+// AppLogo is the application logo (assets/icons/anafinen-small.svg), the same file in both sets.
 #define ANAFINEN_ICON_LIST(X)                                 \
   X(ActionAdd, "action-add")                                  \
   X(ActionClear, "action-clear")                              \
@@ -45,6 +46,7 @@
   X(AnalysisDynamic, "analysis-dynamic")                      \
   X(AnalysisModal, "analysis-modal")                          \
   X(AnalysisStatic, "analysis-static")                        \
+  X(AppLogo, "app-logo")                                      \
   X(DisplayColorDisplacement, "display-color-displacement")   \
   X(DisplayColorStress, "display-color-stress")               \
   X(DisplayHidden, "display-hidden")                          \

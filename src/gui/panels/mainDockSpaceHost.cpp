@@ -21,6 +21,7 @@
 
 #include <guiMaterials/imGuiLayer.hpp>
 #include <guiMaterials/theme.hpp>
+#include <guiMaterials/titleBar.hpp>
 #include <guiMaterials/userSettings.hpp>
 
 #include "imgui.h"
@@ -69,6 +70,24 @@ namespace anaf::GUI {
           SETTINGS::save();
         }
       }
+      ImGui::EndMenu();
+    }
+    if (ICONS::iconBeginMenu(ICONS::E_IconId::AppLogo, "Title Bar")) {
+      SETTINGS::UserSettings& settings = SETTINGS::settings();
+      const bool supported = TITLEBAR::platformSupported();
+      if (ImGui::MenuItem("Integrated (default)", nullptr, settings.integratedTitleBar, supported)) {
+        settings.integratedTitleBar = true;
+        TITLEBAR::setIntegrated(true);
+        SETTINGS::save();
+      }
+      ImGui::SetItemTooltip(supported ? "Menus, title and window buttons in one row; the window system still moves, resizes and snaps the window."
+                                      : "Not available on this window system.");
+      if (ImGui::MenuItem("System", nullptr, !settings.integratedTitleBar || !supported, supported)) {
+        settings.integratedTitleBar = false;
+        TITLEBAR::setIntegrated(false);
+        SETTINGS::save();
+      }
+      ImGui::SetItemTooltip("The window system's own title bar above the menu bar.");
       ImGui::EndMenu();
     }
     if (ICONS::iconBeginMenu(ICONS::E_IconId::PanelViewport, "Viewport")) {
@@ -132,14 +151,22 @@ namespace anaf::GUI {
                    ImGuiWindowFlags_NoBackground |
                    ImGuiWindowFlags_MenuBar;
 
+    // The integrated title bar is a taller menu bar: its height comes from the frame padding at Begin.
+    const ImVec2 menuBarPadding(ImGui::GetStyle().FramePadding.x, TITLEBAR::menuBarFramePaddingY());
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, menuBarPadding);
 
     ImGui::Begin("MainDockSpaceHostWindow", nullptr, hostFlags);
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleVar(4);
 
-    if (ImGui::BeginMenuBar()) {
+    // BeginMenuBar aligns the row's text to the frame padding; the menus' popups keep the theme's.
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, menuBarPadding);
+    const bool menuBarOpen = ImGui::BeginMenuBar();
+    ImGui::PopStyleVar();
+    if (menuBarOpen) {
+      TITLEBAR::beginMenuBar();
       const bool modelActive = !hasModel || hasModel();
       const bool solvable = !canRunSolver || canRunSolver();
       if (ImGui::BeginMenu("File")) {
@@ -175,6 +202,7 @@ namespace anaf::GUI {
         ImGui::EndMenu();
       }
 
+      TITLEBAR::endMenuBar();
       ImGui::EndMenuBar();
       // F5 anywhere except while typing into a field.
       if (solvable && onRunSolver && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F5, false)) onRunSolver();

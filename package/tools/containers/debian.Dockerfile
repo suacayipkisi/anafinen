@@ -23,8 +23,9 @@ RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y \
       sudo git ccache file ca-certificates \
       cmake ninja-build build-essential pkg-config librsvg2-bin libeigen3-dev libsuitesparse-dev \
-      libpng-dev libglfw3-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev \
+      libpng-dev libgmsh-dev libspectra-dev libgl1-mesa-dev libglm-dev zlib1g-dev \
       nlohmann-json3-dev libhdf5-dev libfreetype-dev \
+      libwayland-dev libxkbcommon-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # Unprivileged build user with passwordless sudo (package.sh calls sudo apt-get).

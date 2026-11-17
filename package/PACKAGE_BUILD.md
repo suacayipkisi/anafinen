@@ -55,7 +55,8 @@ The package builds and installs normally.
 Requirements: Visual Studio 2022 (or Build Tools) with the C++ x64 tools, CMake, Ninja,
 vcpkg (with the packages listed in the README, including `hdf5:x64-windows`) and the Gmsh SDK.
 vcpkg compiles each port once; the anafinen build only links them, and `RUNTIME_DEPENDENCIES`
-copies the DLLs the executables import (`gmsh-4.15.dll`, `cholmod.dll`, `glfw3.dll`, `z.dll`, ...)
+copies the DLLs the executables import (`gmsh-4.15.dll`, `cholmod.dll`, `z.dll`, ...; GLFW is linked statically from the
+`external/glfw` submodule)
 into the ZIP. `hdf5.dll` is copied only once a program calls the HDF5 array store; the GUI and the
 CLI do not yet, so the MSVC linker drops the import and the v0.2.1 ZIP has no `hdf5.dll`.
 

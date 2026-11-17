@@ -7,6 +7,9 @@
   "welcome": {
     "showOnStartup": true
   },
+  "window": {
+    "titleBar": "integrated"
+  },
   "viewport": {
     "background": "flat",
     "resultColors": "banded",

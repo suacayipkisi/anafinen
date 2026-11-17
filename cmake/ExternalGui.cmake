@@ -10,14 +10,73 @@ target_include_directories(glad_local SYSTEM PUBLIC "${GLAD_DIR}/include")
 set(GLAD_TARGET glad_local)
 
 # GLFW
-set(GLFW_TARGET "")
+#
+# external/glfw is the GLFW 3.4 submodule, kept as released; external/patches/glfw-3.4-anafinen.patch
+# adds glfwDragWindow / glfwResizeWindowFromEdge / glfwShowWindowMenu (Wayland xdg_toplevel move /
+# resize / window menu, X11 _NET_WM_MOVERESIZE, Win32) for the integrated title bar. The submodule is
+# copied into the build tree and patched there, so its checkout stays clean; the copy is redone when
+# the submodule commit or the patch changes.
+option(ANAFINEN_SYSTEM_GLFW
+    "Link the system GLFW instead of external/glfw + the anafinen patch (no integrated title bar on Linux)" OFF)
 
-if(EXISTS "${EXTERNAL_DIR}/glfw/CMakeLists.txt")
+set(GLFW_TARGET "")
+set(GLFW_PATCH_FILE "${EXTERNAL_DIR}/patches/glfw-3.4-anafinen.patch")
+
+if(NOT ANAFINEN_SYSTEM_GLFW)
+    if(NOT EXISTS "${EXTERNAL_DIR}/glfw/CMakeLists.txt")
+        message(FATAL_ERROR "external/glfw is missing. Run: git submodule update --init external/glfw "
+                            "(or configure with -DANAFINEN_SYSTEM_GLFW=ON to use the system GLFW).")
+    endif()
+    find_package(Git REQUIRED)
+
+    set(GLFW_PATCHED_DIR "${CMAKE_BINARY_DIR}/_deps/glfw-patched")
+    set(GLFW_PATCH_STAMP "${CMAKE_BINARY_DIR}/_deps/glfw-patched.stamp")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${EXTERNAL_DIR}/glfw" rev-parse HEAD
+        OUTPUT_VARIABLE _glfw_revision OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET RESULT_VARIABLE _glfw_rev_result)
+    if(NOT _glfw_rev_result EQUAL 0)
+        # Source tree without git metadata (an exported archive): hash the version header instead.
+        file(SHA256 "${EXTERNAL_DIR}/glfw/include/GLFW/glfw3.h" _glfw_revision)
+    endif()
+    file(SHA256 "${GLFW_PATCH_FILE}" _glfw_patch_hash)
+    set(_glfw_stamp_value "${_glfw_revision} ${_glfw_patch_hash}")
+    set(_glfw_old_stamp "")
+    if(EXISTS "${GLFW_PATCH_STAMP}")
+        file(READ "${GLFW_PATCH_STAMP}" _glfw_old_stamp)
+    endif()
+
+    if(NOT _glfw_old_stamp STREQUAL _glfw_stamp_value OR NOT EXISTS "${GLFW_PATCHED_DIR}/CMakeLists.txt")
+        message(STATUS "Patching GLFW (${GLFW_PATCH_FILE})")
+        file(REMOVE_RECURSE "${GLFW_PATCHED_DIR}")
+        file(COPY "${EXTERNAL_DIR}/glfw/" DESTINATION "${GLFW_PATCHED_DIR}"
+            PATTERN ".git" EXCLUDE
+            PATTERN "docs" EXCLUDE
+            PATTERN "examples" EXCLUDE
+            PATTERN "tests" EXCLUDE)
+        # The build tree may sit inside the anafinen checkout: the ceiling keeps git from treating the
+        # copy as part of that repository, so "git apply" patches the copy like plain patch(1).
+        execute_process(
+            COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${CMAKE_BINARY_DIR}/_deps"
+                    "${GIT_EXECUTABLE}" apply --whitespace=nowarn "${GLFW_PATCH_FILE}"
+            WORKING_DIRECTORY "${GLFW_PATCHED_DIR}"
+            RESULT_VARIABLE _glfw_patch_result
+            ERROR_VARIABLE _glfw_patch_error)
+        if(NOT _glfw_patch_result EQUAL 0)
+            file(REMOVE_RECURSE "${GLFW_PATCHED_DIR}")
+            message(FATAL_ERROR "The GLFW patch does not apply to external/glfw (expected GLFW 3.4):\n${_glfw_patch_error}")
+        endif()
+        file(WRITE "${GLFW_PATCH_STAMP}" "${_glfw_stamp_value}")
+    endif()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${GLFW_PATCH_FILE}")
+
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${EXTERNAL_DIR}/glfw" EXCLUDE_FROM_ALL)
+    add_subdirectory("${GLFW_PATCHED_DIR}" "${CMAKE_BINARY_DIR}/_deps/glfw-build" EXCLUDE_FROM_ALL)
+    # Third-party headers are SYSTEM, like the other externals (add_subdirectory(... SYSTEM) needs CMake 3.25).
+    get_target_property(_glfw_includes glfw INTERFACE_INCLUDE_DIRECTORIES)
+    set_target_properties(glfw PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_glfw_includes}")
     set(GLFW_TARGET glfw)
 else()
     find_package(glfw3 CONFIG QUIET)
@@ -36,8 +95,10 @@ else()
             endif()
         endif()
     endif()
+    message(WARNING "ANAFINEN_SYSTEM_GLFW=ON: the integrated title bar is not available on Linux.")
 endif()
 
+# ANAFINEN_SYSTEM_GLFW without a system GLFW: plain GLFW 3.4 from GitHub (also without the patch).
 if(NOT GLFW_TARGET)
     include(FetchContent)
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)

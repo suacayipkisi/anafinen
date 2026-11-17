@@ -98,7 +98,11 @@ namespace anaf::GUI::ICONS {
       std::string missing;
       std::size_t missingCount = 0;
       for (std::size_t i = 0; i < iconCount; ++i) {
-        const std::filesystem::path resolved = anaf::DIRECTORY::findAssetPath(setSubpath / (std::string(fileNames[i]) + ".svg"));
+        // The logo keeps its own colors on both backgrounds, so it is not part of the dark / light sets.
+        const std::filesystem::path subpath = static_cast<E_IconId>(i) == E_IconId::AppLogo
+                                                ? std::filesystem::path("icons") / "anafinen-small.svg"
+                                                : setSubpath / (std::string(fileNames[i]) + ".svg");
+        const std::filesystem::path resolved = anaf::DIRECTORY::findAssetPath(subpath);
         g_atlas.images[i] = resolved.empty() ? nullptr : parseSvg(resolved);
         if (!g_atlas.images[i]) {
           if (missingCount < 8) missing += (missingCount == 0 ? "" : ", ") + std::string(fileNames[i]);

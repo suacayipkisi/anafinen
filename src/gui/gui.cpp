@@ -41,6 +41,8 @@
 #include "guiMaterials/iconAtlas.hpp"
 #include "guiMaterials/imGuiLayer.hpp"
 #include "guiMaterials/iPanel.hpp"
+#include "guiMaterials/titleBar.hpp"
+#include "guiMaterials/userSettings.hpp"
 
 #include "panels/aboutPanel.hpp"
 #include "panels/analysisSelector.hpp"
@@ -463,6 +465,11 @@ namespace anaf::GUI {
   int initgui(){
     platform_utils::setupSystemCursor();
 
+    // GLFW reports platform failures (e.g. a window manager without _NET_WM_MOVERESIZE) only here.
+    glfwSetErrorCallback([](const int code, const char* description) {
+      anaf::LOG::warn("[GLFW] {} (error 0x{:X})", description ? description : "unknown error", code);
+    });
+
     // GLFW picks the platform itself (Wayland or X11 on Linux); a retry would change nothing.
     if (!glfwInit()) {
       anaf::LOG::error("Failed to initialize GLFW");
@@ -479,6 +486,7 @@ namespace anaf::GUI {
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
+    TITLEBAR::applyWindowHints(SETTINGS::settings().integratedTitleBar);
 #ifdef __linux__
     glfwWindowHintString(GLFW_WAYLAND_APP_ID, "anafinen");
     glfwWindowHintString(GLFW_X11_CLASS_NAME, "anafinen");
@@ -494,7 +502,8 @@ namespace anaf::GUI {
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
-    setWindowIcon(window);
+    // Wayland has no window icons: the compositor takes the icon of the desktop entry (app id "anafinen").
+    if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND) setWindowIcon(window);
     if (gladLoadGL(glfwGetProcAddress) == 0) {
       anaf::LOG::error("Failed to load the OpenGL 4.6 functions");
       glfwDestroyWindow(window);
@@ -504,6 +513,7 @@ namespace anaf::GUI {
 
     ImGuiLayer imguiLayer;
     imguiLayer.init(window);
+    TITLEBAR::install(window, SETTINGS::settings().integratedTitleBar);
 
     // Every object owning GL resources lives in this scope, so its destructor
     // runs while the GL context and the ImGui context are still alive.
@@ -531,6 +541,7 @@ namespace anaf::GUI {
         ICONS::beginFrame(); // drops the icon textures after a scale or dark / light change
 
         panelManager.onImGuiRender();
+        TITLEBAR::endFrame();
         imguiLayer.endFrame();
 
         glfwSwapBuffers(window);
@@ -542,6 +553,7 @@ namespace anaf::GUI {
       ICONS::release(); // icon textures
     } // GL resources released here, before the context is destroyed
 
+    TITLEBAR::uninstall();
     imguiLayer.shutdown();
     glfwDestroyWindow(window);
     glfwTerminate();

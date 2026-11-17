@@ -103,6 +103,9 @@ namespace anaf::GUI::SETTINGS {
       if (const auto welcome = document.find("welcome"); welcome != document.end() && welcome->is_object()) {
         readValue(*welcome, "showOnStartup", settings.showWelcomeOnStartup);
       }
+      if (const auto window = document.find("window"); window != document.end() && window->is_object()) {
+        readChoice(*window, "titleBar", "integrated", "system", settings.integratedTitleBar);
+      }
       if (const auto viewport = document.find("viewport"); viewport != document.end() && viewport->is_object()) {
         readChoice(*viewport, "background", "gradient", "flat", settings.gradientBackground);
         readChoice(*viewport, "resultColors", "banded", "continuous", settings.bandedResults);
@@ -172,6 +175,7 @@ namespace anaf::GUI::SETTINGS {
     g_document["theme"] = current.theme;
     objectAt(g_document, "ui")["fontSize"] = current.uiFontSize;
     objectAt(g_document, "welcome")["showOnStartup"] = current.showWelcomeOnStartup;
+    objectAt(g_document, "window")["titleBar"] = current.integratedTitleBar ? "integrated" : "system";
     nlohmann::json& viewport = objectAt(g_document, "viewport");
     viewport["background"] = current.gradientBackground ? "gradient" : "flat";
     viewport["resultColors"] = current.bandedResults ? "banded" : "continuous";

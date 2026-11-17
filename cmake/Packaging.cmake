@@ -125,16 +125,21 @@ elseif(UNIX AND NOT APPLE)
             "/usr/share/icons/hicolor/${_size}" "/usr/share/icons/hicolor/${_size}/apps")
     endforeach()
     # AUTOREQPROV adds the shared-library requirements; these name the packages for readers.
-    set(CPACK_RPM_PACKAGE_REQUIRES "hdf5, freetype")
+    # The built-in GLFW (external/glfw) opens the Wayland / X11 libraries with dlopen, which
+    # AUTOREQPROV and SHLIBDEPS cannot see.
+    set(CPACK_RPM_PACKAGE_REQUIRES
+        "hdf5, freetype, libwayland-client, libwayland-cursor, libwayland-egl, libxkbcommon, libX11, libXcursor, libXrandr, libXi")
     if(ANAFINEN_HAS_CHOLMOD)
         string(APPEND CPACK_RPM_PACKAGE_REQUIRES ", suitesparse")
     endif()
     set(CPACK_DEBIAN_PACKAGE_VERSION "${PROJECT_VERSION}~alpha1")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     set(CPACK_DEBIAN_PACKAGE_SECTION "science")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS
+        "libwayland-client0, libwayland-cursor0, libwayland-egl1, libxkbcommon0, libx11-6, libxcursor1, libxrandr2, libxi6")
     # File > Import / Export needs a native dialog helper at run time.
     set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "zenity | kdialog")
-    set(CPACK_RPM_PACKAGE_SUGGESTS "zenity")
+    set(CPACK_RPM_PACKAGE_SUGGESTS "zenity, libdecor")
 endif()
 
 # Packages must run on any x86-64 CPU. A build tree configured with

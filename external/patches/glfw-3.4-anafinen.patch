@@ -1,0 +1,548 @@
+diff --git a/include/GLFW/glfw3.h b/include/GLFW/glfw3.h
+--- a/include/GLFW/glfw3.h
++++ b/include/GLFW/glfw3.h
+@@ -3995,6 +3995,36 @@
+  */
+ GLFWAPI void glfwRequestWindowAttention(GLFWwindow* window);
+ 
++/* ANAFINEN PATCH BEGIN: client-side title bar support (see external/glfw/ANAFINEN_PATCH.md).
++ *
++ * An application that draws its own title bar (GLFW_DECORATED off on Linux) hands
++ * the interactive move / resize and the window menu back to the window system with
++ * these calls. They must be made while the triggering mouse button is held down,
++ * ideally from the mouse button callback of that press: on Wayland the compositor
++ * checks the input serial of the press.
++ */
++#define GLFW_ANAFINEN_CLIENT_DECORATIONS 1
++
++/* Edges for glfwResizeWindowFromEdge; corners are combinations (top | left). The
++ * values match xdg_toplevel.resize_edge. */
++#define GLFW_WINDOW_EDGE_TOP     1
++#define GLFW_WINDOW_EDGE_BOTTOM  2
++#define GLFW_WINDOW_EDGE_LEFT    4
++#define GLFW_WINDOW_EDGE_RIGHT   8
++
++/* Starts an interactive, window system driven move of the window (Wayland
++ * xdg_toplevel.move, X11 _NET_WM_MOVERESIZE, Win32 HTCAPTION drag). */
++GLFWAPI void glfwDragWindow(GLFWwindow* window);
++
++/* Starts an interactive resize from the given edge or corner (a combination of
++ * GLFW_WINDOW_EDGE_* values). */
++GLFWAPI void glfwResizeWindowFromEdge(GLFWwindow* window, int edges);
++
++/* Shows the window system's window menu (move, resize, always on top, ...) at the
++ * cursor. */
++GLFWAPI void glfwShowWindowMenu(GLFWwindow* window);
++/* ANAFINEN PATCH END */
++
+ /*! @brief Returns the monitor that the window uses for full screen mode.
+  *
+  *  This function returns the handle of the monitor that the specified window is
+diff --git a/src/win32_platform.h b/src/win32_platform.h
+--- a/src/win32_platform.h
++++ b/src/win32_platform.h
+@@ -561,6 +561,11 @@
+ void _glfwShowWindowWin32(_GLFWwindow* window);
+ void _glfwHideWindowWin32(_GLFWwindow* window);
+ void _glfwRequestWindowAttentionWin32(_GLFWwindow* window);
++// ANAFINEN PATCH BEGIN: client-side title bar support
++void _glfwDragWindowWin32(_GLFWwindow* window);
++void _glfwResizeWindowFromEdgeWin32(_GLFWwindow* window, int edges);
++void _glfwShowWindowMenuWin32(_GLFWwindow* window);
++// ANAFINEN PATCH END
+ void _glfwFocusWindowWin32(_GLFWwindow* window);
+ void _glfwSetWindowMonitorWin32(_GLFWwindow* window, _GLFWmonitor* monitor, int xpos, int ypos, int width, int height, int refreshRate);
+ GLFWbool _glfwWindowFocusedWin32(_GLFWwindow* window);
+diff --git a/src/win32_window.c b/src/win32_window.c
+--- a/src/win32_window.c
++++ b/src/win32_window.c
+@@ -2004,6 +2004,73 @@
+     updateWindowStyles(window);
+ }
+ 
++// ANAFINEN PATCH BEGIN: client-side title bar support
++//
++// The non-client mouse-down starts the system's own modal move / size loop, so
++// Aero Snap and the move / size animations behave as with a native title bar.
++static void startNonClientDrag(_GLFWwindow* window, WPARAM hitTest)
++{
++    POINT pos;
++    if (!GetCursorPos(&pos))
++        return;
++
++    ReleaseCapture();
++    SendMessageW(window->win32.handle, WM_NCLBUTTONDOWN, hitTest, MAKELPARAM(pos.x, pos.y));
++}
++
++void _glfwDragWindowWin32(_GLFWwindow* window)
++{
++    startNonClientDrag(window, HTCAPTION);
++}
++
++void _glfwResizeWindowFromEdgeWin32(_GLFWwindow* window, int edges)
++{
++    WPARAM hitTest;
++
++    switch (edges)
++    {
++        case GLFW_WINDOW_EDGE_TOP | GLFW_WINDOW_EDGE_LEFT:     hitTest = HTTOPLEFT; break;
++        case GLFW_WINDOW_EDGE_TOP:                             hitTest = HTTOP; break;
++        case GLFW_WINDOW_EDGE_TOP | GLFW_WINDOW_EDGE_RIGHT:    hitTest = HTTOPRIGHT; break;
++        case GLFW_WINDOW_EDGE_RIGHT:                           hitTest = HTRIGHT; break;
++        case GLFW_WINDOW_EDGE_BOTTOM | GLFW_WINDOW_EDGE_RIGHT: hitTest = HTBOTTOMRIGHT; break;
++        case GLFW_WINDOW_EDGE_BOTTOM:                          hitTest = HTBOTTOM; break;
++        case GLFW_WINDOW_EDGE_BOTTOM | GLFW_WINDOW_EDGE_LEFT:  hitTest = HTBOTTOMLEFT; break;
++        case GLFW_WINDOW_EDGE_LEFT:                            hitTest = HTLEFT; break;
++        default: return;
++    }
++
++    startNonClientDrag(window, hitTest);
++}
++
++void _glfwShowWindowMenuWin32(_GLFWwindow* window)
++{
++    HWND handle = window->win32.handle;
++    HMENU menu = GetSystemMenu(handle, FALSE);
++    POINT pos;
++    const BOOL maximized = IsZoomed(handle);
++    UINT command;
++
++    if (!menu || !GetCursorPos(&pos))
++        return;
++
++    // The entries follow the window state, as in the menu of a native title bar
++    EnableMenuItem(menu, SC_RESTORE, MF_BYCOMMAND | (maximized ? MF_ENABLED : MF_GRAYED));
++    EnableMenuItem(menu, SC_MOVE, MF_BYCOMMAND | (maximized ? MF_GRAYED : MF_ENABLED));
++    EnableMenuItem(menu, SC_SIZE, MF_BYCOMMAND |
++                   ((maximized || !window->resizable) ? MF_GRAYED : MF_ENABLED));
++    EnableMenuItem(menu, SC_MINIMIZE, MF_BYCOMMAND | MF_ENABLED);
++    EnableMenuItem(menu, SC_MAXIMIZE, MF_BYCOMMAND |
++                   ((maximized || !window->resizable) ? MF_GRAYED : MF_ENABLED));
++    SetMenuDefaultItem(menu, SC_CLOSE, FALSE);
++
++    command = (UINT) TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
++                                    pos.x, pos.y, 0, handle, NULL);
++    if (command)
++        PostMessageW(handle, WM_SYSCOMMAND, command, 0);
++}
++// ANAFINEN PATCH END
++
+ void _glfwSetWindowDecoratedWin32(_GLFWwindow* window, GLFWbool enabled)
+ {
+     updateWindowStyles(window);
+diff --git a/src/window.c b/src/window.c
+--- a/src/window.c
++++ b/src/window.c
+@@ -839,6 +839,131 @@
+     _glfw.platform.requestWindowAttention(window);
+ }
+ 
++// ANAFINEN PATCH BEGIN: client-side title bar support
++//
++static GLFWbool validWindowEdges(int edges)
++{
++    const int vertical = edges & (GLFW_WINDOW_EDGE_TOP | GLFW_WINDOW_EDGE_BOTTOM);
++    const int horizontal = edges & (GLFW_WINDOW_EDGE_LEFT | GLFW_WINDOW_EDGE_RIGHT);
++
++    if (edges == 0 || (edges & ~15))
++        return GLFW_FALSE;
++    if (vertical == (GLFW_WINDOW_EDGE_TOP | GLFW_WINDOW_EDGE_BOTTOM))
++        return GLFW_FALSE;
++    if (horizontal == (GLFW_WINDOW_EDGE_LEFT | GLFW_WINDOW_EDGE_RIGHT))
++        return GLFW_FALSE;
++    return GLFW_TRUE;
++}
++
++GLFWAPI void glfwDragWindow(GLFWwindow* handle)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    assert(window != NULL);
++
++    _GLFW_REQUIRE_INIT();
++
++    if (window->monitor)
++        return;
++
++    switch (_glfw.platform.platformID)
++    {
++#if defined(_GLFW_WIN32)
++        case GLFW_PLATFORM_WIN32:
++            _glfwDragWindowWin32(window);
++            return;
++#endif
++#if defined(_GLFW_X11)
++        case GLFW_PLATFORM_X11:
++            _glfwDragWindowX11(window);
++            return;
++#endif
++#if defined(_GLFW_WAYLAND)
++        case GLFW_PLATFORM_WAYLAND:
++            _glfwDragWindowWayland(window);
++            return;
++#endif
++        default:
++            _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
++                            "Window dragging is not available on this platform");
++            return;
++    }
++}
++
++GLFWAPI void glfwResizeWindowFromEdge(GLFWwindow* handle, int edges)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    assert(window != NULL);
++
++    _GLFW_REQUIRE_INIT();
++
++    if (!validWindowEdges(edges))
++    {
++        _glfwInputError(GLFW_INVALID_ENUM, "Invalid window edges 0x%x", edges);
++        return;
++    }
++
++    if (window->monitor || !window->resizable)
++        return;
++
++    switch (_glfw.platform.platformID)
++    {
++#if defined(_GLFW_WIN32)
++        case GLFW_PLATFORM_WIN32:
++            _glfwResizeWindowFromEdgeWin32(window, edges);
++            return;
++#endif
++#if defined(_GLFW_X11)
++        case GLFW_PLATFORM_X11:
++            _glfwResizeWindowFromEdgeX11(window, edges);
++            return;
++#endif
++#if defined(_GLFW_WAYLAND)
++        case GLFW_PLATFORM_WAYLAND:
++            _glfwResizeWindowFromEdgeWayland(window, edges);
++            return;
++#endif
++        default:
++            _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
++                            "Window edge resizing is not available on this platform");
++            return;
++    }
++}
++
++GLFWAPI void glfwShowWindowMenu(GLFWwindow* handle)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    assert(window != NULL);
++
++    _GLFW_REQUIRE_INIT();
++
++    if (window->monitor)
++        return;
++
++    switch (_glfw.platform.platformID)
++    {
++#if defined(_GLFW_WIN32)
++        case GLFW_PLATFORM_WIN32:
++            _glfwShowWindowMenuWin32(window);
++            return;
++#endif
++#if defined(_GLFW_X11)
++        case GLFW_PLATFORM_X11:
++            _glfwShowWindowMenuX11(window);
++            return;
++#endif
++#if defined(_GLFW_WAYLAND)
++        case GLFW_PLATFORM_WAYLAND:
++            _glfwShowWindowMenuWayland(window);
++            return;
++#endif
++        default:
++            _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
++                            "The window menu is not available on this platform");
++            return;
++    }
++}
++// ANAFINEN PATCH END
++
+ GLFWAPI void glfwHideWindow(GLFWwindow* handle)
+ {
+     _GLFWwindow* window = (_GLFWwindow*) handle;
+diff --git a/src/wl_platform.h b/src/wl_platform.h
+--- a/src/wl_platform.h
++++ b/src/wl_platform.h
+@@ -457,6 +457,8 @@
+     int                         cursorTimerfd;
+     uint32_t                    serial;
+     uint32_t                    pointerEnterSerial;
++    // ANAFINEN PATCH: serial of the last pointer button press, for xdg_toplevel move / resize / menu
++    uint32_t                    pointerButtonSerial;
+ 
+     int                         keyRepeatTimerfd;
+     int32_t                     keyRepeatRate;
+@@ -631,6 +633,11 @@
+ void _glfwShowWindowWayland(_GLFWwindow* window);
+ void _glfwHideWindowWayland(_GLFWwindow* window);
+ void _glfwRequestWindowAttentionWayland(_GLFWwindow* window);
++// ANAFINEN PATCH BEGIN: client-side title bar support
++void _glfwDragWindowWayland(_GLFWwindow* window);
++void _glfwResizeWindowFromEdgeWayland(_GLFWwindow* window, int edges);
++void _glfwShowWindowMenuWayland(_GLFWwindow* window);
++// ANAFINEN PATCH END
+ void _glfwFocusWindowWayland(_GLFWwindow* window);
+ void _glfwSetWindowMonitorWayland(_GLFWwindow* window, _GLFWmonitor* monitor, int xpos, int ypos, int width, int height, int refreshRate);
+ GLFWbool _glfwWindowFocusedWayland(_GLFWwindow* window);
+diff --git a/src/wl_window.c b/src/wl_window.c
+--- a/src/wl_window.c
++++ b/src/wl_window.c
+@@ -1541,6 +1541,9 @@
+     if (window->wl.hovered)
+     {
+         _glfw.wl.serial = serial;
++        // ANAFINEN PATCH: kept apart from serial, which key events overwrite
++        if (state == WL_POINTER_BUTTON_STATE_PRESSED)
++            _glfw.wl.pointerButtonSerial = serial;
+ 
+         _glfwInputMouseClick(window,
+                              button - BTN_LEFT,
+@@ -2570,6 +2573,72 @@
+         updateXdgSizeLimits(window);
+ }
+ 
++// ANAFINEN PATCH BEGIN: client-side title bar support
++//
++// libdecor owns the xdg_toplevel when it is in use; the request goes to the same
++// object libdecor itself would use for its own title bar.
++static struct xdg_toplevel* getXdgToplevel(_GLFWwindow* window)
++{
++    if (window->wl.libdecor.frame)
++        return libdecor_frame_get_xdg_toplevel(window->wl.libdecor.frame);
++
++    return window->wl.xdg.toplevel;
++}
++
++static GLFWbool canStartPointerGrab(_GLFWwindow* window, struct xdg_toplevel** toplevel)
++{
++    *toplevel = getXdgToplevel(window);
++    if (!*toplevel || !_glfw.wl.seat)
++    {
++        _glfwInputError(GLFW_PLATFORM_ERROR,
++                        "Wayland: The window has no toplevel or there is no seat");
++        return GLFW_FALSE;
++    }
++
++    if (_glfw.wl.pointerFocus != window || _glfw.wl.pointerButtonSerial == 0)
++    {
++        _glfwInputError(GLFW_PLATFORM_ERROR,
++                        "Wayland: Window move / resize needs a button press on the window");
++        return GLFW_FALSE;
++    }
++
++    return GLFW_TRUE;
++}
++
++void _glfwDragWindowWayland(_GLFWwindow* window)
++{
++    struct xdg_toplevel* toplevel;
++    if (!canStartPointerGrab(window, &toplevel))
++        return;
++
++    xdg_toplevel_move(toplevel, _glfw.wl.seat, _glfw.wl.pointerButtonSerial);
++    wl_display_flush(_glfw.wl.display);
++}
++
++void _glfwResizeWindowFromEdgeWayland(_GLFWwindow* window, int edges)
++{
++    struct xdg_toplevel* toplevel;
++    if (!canStartPointerGrab(window, &toplevel))
++        return;
++
++    // GLFW_WINDOW_EDGE_* use the xdg_toplevel.resize_edge values
++    xdg_toplevel_resize(toplevel, _glfw.wl.seat, _glfw.wl.pointerButtonSerial, (uint32_t) edges);
++    wl_display_flush(_glfw.wl.display);
++}
++
++void _glfwShowWindowMenuWayland(_GLFWwindow* window)
++{
++    struct xdg_toplevel* toplevel;
++    if (!canStartPointerGrab(window, &toplevel))
++        return;
++
++    xdg_toplevel_show_window_menu(toplevel, _glfw.wl.seat, _glfw.wl.pointerButtonSerial,
++                                  (int32_t) window->wl.cursorPosX,
++                                  (int32_t) window->wl.cursorPosY);
++    wl_display_flush(_glfw.wl.display);
++}
++// ANAFINEN PATCH END
++
+ void _glfwSetWindowDecoratedWayland(_GLFWwindow* window, GLFWbool enabled)
+ {
+     if (window->wl.libdecor.frame)
+diff --git a/src/x11_init.c b/src/x11_init.c
+--- a/src/x11_init.c
++++ b/src/x11_init.c
+@@ -595,6 +595,11 @@
+         getAtomIfSupported(supportedAtoms, atomCount, "_NET_FRAME_EXTENTS");
+     _glfw.x11.NET_REQUEST_FRAME_EXTENTS =
+         getAtomIfSupported(supportedAtoms, atomCount, "_NET_REQUEST_FRAME_EXTENTS");
++    // ANAFINEN PATCH: client-side title bar support
++    _glfw.x11.NET_WM_MOVERESIZE =
++        getAtomIfSupported(supportedAtoms, atomCount, "_NET_WM_MOVERESIZE");
++    _glfw.x11.GTK_SHOW_WINDOW_MENU =
++        getAtomIfSupported(supportedAtoms, atomCount, "_GTK_SHOW_WINDOW_MENU");
+ 
+     if (supportedAtoms)
+         XFree(supportedAtoms);
+diff --git a/src/x11_platform.h b/src/x11_platform.h
+--- a/src/x11_platform.h
++++ b/src/x11_platform.h
+@@ -608,6 +608,9 @@
+     Atom            NET_WM_BYPASS_COMPOSITOR;
+     Atom            NET_WM_FULLSCREEN_MONITORS;
+     Atom            NET_WM_WINDOW_OPACITY;
++    // ANAFINEN PATCH: interactive move / resize and the window menu for client-side title bars
++    Atom            NET_WM_MOVERESIZE;
++    Atom            GTK_SHOW_WINDOW_MENU;
+     Atom            NET_WM_CM_Sx;
+     Atom            NET_WORKAREA;
+     Atom            NET_CURRENT_DESKTOP;
+@@ -920,6 +923,11 @@
+ void _glfwShowWindowX11(_GLFWwindow* window);
+ void _glfwHideWindowX11(_GLFWwindow* window);
+ void _glfwRequestWindowAttentionX11(_GLFWwindow* window);
++// ANAFINEN PATCH BEGIN: client-side title bar support
++void _glfwDragWindowX11(_GLFWwindow* window);
++void _glfwResizeWindowFromEdgeX11(_GLFWwindow* window, int edges);
++void _glfwShowWindowMenuX11(_GLFWwindow* window);
++// ANAFINEN PATCH END
+ void _glfwFocusWindowX11(_GLFWwindow* window);
+ void _glfwSetWindowMonitorX11(_GLFWwindow* window, _GLFWmonitor* monitor, int xpos, int ypos, int width, int height, int refreshRate);
+ GLFWbool _glfwWindowFocusedX11(_GLFWwindow* window);
+diff --git a/src/x11_window.c b/src/x11_window.c
+--- a/src/x11_window.c
++++ b/src/x11_window.c
+@@ -2621,6 +2621,127 @@
+     updateNormalHints(window, width, height);
+ }
+ 
++// ANAFINEN PATCH BEGIN: client-side title bar support
++//
++// _NET_WM_MOVERESIZE directions (EWMH 1.5)
++#define _NET_WM_MOVERESIZE_SIZE_TOPLEFT      0
++#define _NET_WM_MOVERESIZE_SIZE_TOP          1
++#define _NET_WM_MOVERESIZE_SIZE_TOPRIGHT     2
++#define _NET_WM_MOVERESIZE_SIZE_RIGHT        3
++#define _NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT  4
++#define _NET_WM_MOVERESIZE_SIZE_BOTTOM       5
++#define _NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT   6
++#define _NET_WM_MOVERESIZE_SIZE_LEFT         7
++#define _NET_WM_MOVERESIZE_MOVE              8
++
++// The pointer position on the root window, which the window manager wants with the request
++static GLFWbool queryRootPointer(_GLFWwindow* window, int* rootX, int* rootY)
++{
++    Window root, child;
++    int childX, childY;
++    unsigned int mask;
++
++    return XQueryPointer(_glfw.x11.display, window->x11.handle,
++                         &root, &child, rootX, rootY, &childX, &childY, &mask) ? GLFW_TRUE : GLFW_FALSE;
++}
++
++static void sendMoveResize(_GLFWwindow* window, long direction)
++{
++    int rootX, rootY;
++
++    if (!_glfw.x11.NET_WM_MOVERESIZE)
++    {
++        _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
++                        "X11: The window manager does not support _NET_WM_MOVERESIZE");
++        return;
++    }
++
++    if (!queryRootPointer(window, &rootX, &rootY))
++        return;
++
++    // The window manager takes the pointer grab over; release the implicit grab
++    // of the button press first
++    XUngrabPointer(_glfw.x11.display, CurrentTime);
++
++    XEvent event = { ClientMessage };
++    event.xclient.window = window->x11.handle;
++    event.xclient.format = 32; // Data is 32-bit longs
++    event.xclient.message_type = _glfw.x11.NET_WM_MOVERESIZE;
++    event.xclient.data.l[0] = rootX;
++    event.xclient.data.l[1] = rootY;
++    event.xclient.data.l[2] = direction;
++    event.xclient.data.l[3] = Button1;
++    event.xclient.data.l[4] = 1; // Normal application
++
++    XSendEvent(_glfw.x11.display, _glfw.x11.root, False,
++               SubstructureNotifyMask | SubstructureRedirectMask, &event);
++    XFlush(_glfw.x11.display);
++}
++
++void _glfwDragWindowX11(_GLFWwindow* window)
++{
++    sendMoveResize(window, _NET_WM_MOVERESIZE_MOVE);
++}
++
++void _glfwResizeWindowFromEdgeX11(_GLFWwindow* window, int edges)
++{
++    long direction;
++
++    switch (edges)
++    {
++        case GLFW_WINDOW_EDGE_TOP | GLFW_WINDOW_EDGE_LEFT:
++            direction = _NET_WM_MOVERESIZE_SIZE_TOPLEFT; break;
++        case GLFW_WINDOW_EDGE_TOP:
++            direction = _NET_WM_MOVERESIZE_SIZE_TOP; break;
++        case GLFW_WINDOW_EDGE_TOP | GLFW_WINDOW_EDGE_RIGHT:
++            direction = _NET_WM_MOVERESIZE_SIZE_TOPRIGHT; break;
++        case GLFW_WINDOW_EDGE_RIGHT:
++            direction = _NET_WM_MOVERESIZE_SIZE_RIGHT; break;
++        case GLFW_WINDOW_EDGE_BOTTOM | GLFW_WINDOW_EDGE_RIGHT:
++            direction = _NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT; break;
++        case GLFW_WINDOW_EDGE_BOTTOM:
++            direction = _NET_WM_MOVERESIZE_SIZE_BOTTOM; break;
++        case GLFW_WINDOW_EDGE_BOTTOM | GLFW_WINDOW_EDGE_LEFT:
++            direction = _NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT; break;
++        case GLFW_WINDOW_EDGE_LEFT:
++            direction = _NET_WM_MOVERESIZE_SIZE_LEFT; break;
++        default:
++            return;
++    }
++
++    sendMoveResize(window, direction);
++}
++
++void _glfwShowWindowMenuX11(_GLFWwindow* window)
++{
++    int rootX, rootY;
++
++    if (!_glfw.x11.GTK_SHOW_WINDOW_MENU)
++    {
++        _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
++                        "X11: The window manager does not support _GTK_SHOW_WINDOW_MENU");
++        return;
++    }
++
++    if (!queryRootPointer(window, &rootX, &rootY))
++        return;
++
++    XUngrabPointer(_glfw.x11.display, CurrentTime);
++
++    XEvent event = { ClientMessage };
++    event.xclient.window = window->x11.handle;
++    event.xclient.format = 32;
++    event.xclient.message_type = _glfw.x11.GTK_SHOW_WINDOW_MENU;
++    event.xclient.data.l[0] = 0; // Core pointer device
++    event.xclient.data.l[1] = rootX;
++    event.xclient.data.l[2] = rootY;
++
++    XSendEvent(_glfw.x11.display, _glfw.x11.root, False,
++               SubstructureNotifyMask | SubstructureRedirectMask, &event);
++    XFlush(_glfw.x11.display);
++}
++// ANAFINEN PATCH END
++
+ void _glfwSetWindowDecoratedX11(_GLFWwindow* window, GLFWbool enabled)
+ {
+     struct

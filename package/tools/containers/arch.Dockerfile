@@ -22,7 +22,7 @@ FROM docker.io/library/archlinux:latest
 RUN pacman -Syu --noconfirm --needed \
       base-devel git sudo ccache file \
       cmake ninja eigen glm nlohmann-json librsvg \
-      glfw libglvnd suitesparse libpng zlib hdf5 freetype2 \
+      wayland libxkbcommon libx11 libxrandr libxinerama libxcursor libxi libxext libglvnd suitesparse libpng zlib hdf5 freetype2 \
  && pacman -Scc --noconfirm
 
 # Unprivileged build user with passwordless sudo (makepkg refuses to run as root).

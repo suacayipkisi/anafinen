@@ -20,7 +20,7 @@
 #include <filesystem>
 #include <string>
 
-// Per-user GUI settings (theme, UI font size, Welcome panel, viewport background, result colors and legends).
+// Per-user GUI settings (theme, UI font size, title bar, Welcome panel, viewport background, result colors and legends).
 //
 //   assets/settings/userSettings.json        defaults, shipped with the build and the packages
 //   <user config>/userSettings.json           the user's values (~/.config/anafinen, %APPDATA%\anafinen)
@@ -50,6 +50,9 @@ namespace anaf::GUI::SETTINGS {
   struct UserSettings {
     std::string theme{"professional"}; // THEME::ThemePalette::key
     float uiFontSize{15.0f};
+    // Title bar: integrated into the menu bar (default; window buttons drawn by the app, menus in the
+    // title bar row) or the window system's own title bar above the menu bar.
+    bool integratedTitleBar{true};
     bool showWelcomeOnStartup{true};
     bool gradientBackground{false}; // viewport background: flat (default) or a vertical gradient from the theme
     bool bandedResults{true};       // result colors and legends in discrete bands (else a continuous scale)
